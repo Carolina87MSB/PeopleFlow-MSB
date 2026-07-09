@@ -20,7 +20,8 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
 
   const [form, setForm] = useState<NovaMovimentacaoForm>(blankForm());
-  const [erro, setErro] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   const departamentos = useMemo(() => [...new Set(colaboradores.map((c) => c.depto))].sort(), [colaboradores]);
   const gestores = useMemo(() => [...contarPorGestor(colaboradores).keys()].sort(), [colaboradores]);
@@ -29,10 +30,12 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function handleSubmit() {
-    const result = criarMovimentacao(form);
+  async function handleSubmit() {
+    setEnviando(true);
+    const result = await criarMovimentacao(form);
+    setEnviando(false);
     if (!result.ok) {
-      setErro(true);
+      setErro(result.error ?? "Preencha todos os campos obrigatórios antes de enviar.");
       return;
     }
     flash(`Movimentação ${result.movimentacao.id} enviada para aprovação.`);
@@ -51,11 +54,11 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
       width={620}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose} disabled={enviando}>
             Cancelar
           </Button>
-          <Button variant="primary" icon={<Check size={16} />} onClick={handleSubmit}>
-            Enviar para aprovação
+          <Button variant="primary" icon={<Check size={16} />} onClick={handleSubmit} disabled={enviando}>
+            {enviando ? "Enviando..." : "Enviar para aprovação"}
           </Button>
         </>
       }
@@ -320,7 +323,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
         </label>
       </div>
 
-      {erro && <div className={styles.error}>Preencha todos os campos obrigatórios antes de enviar.</div>}
+      {erro && <div className={styles.error}>{erro}</div>}
     </Modal>
   );
 }

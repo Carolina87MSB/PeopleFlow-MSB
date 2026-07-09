@@ -30,9 +30,9 @@ function NavItem({ to, icon, label, badge, badgeTone }: { to: string; icon: Reac
 }
 
 export function Sidebar() {
-  const { conta, logout } = useAuth();
+  const { logout } = useAuth();
   const { state } = usePortalStore();
-  const { colaboradoresVisiveis, movimentacoesVisiveis, podeVerColaboradores, podeVerCadastros } = usePortalData();
+  const { conta, colaboradoresVisiveis, movimentacoesVisiveis, podeVerColaboradores, podeVerCadastros } = usePortalData();
 
   const totalDeptos = agregarDepartamentos(colaboradoresVisiveis).length;
   const totalCargos = agregarCargos(colaboradoresVisiveis, state.cargosCustom).length;

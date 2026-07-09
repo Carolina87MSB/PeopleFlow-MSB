@@ -133,74 +133,35 @@
   margin-top: 4px;
 }
 
-.submit:hover {
+.submit:hover:not(:disabled) {
   background: var(--color-brand-dark);
 }
 
-.divider {
+.submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.linkButton {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--color-brand-dark);
+  font: 700 12.5px/1 var(--font-sans);
+  padding: 10px;
   text-align: center;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: #b6c3c9;
-  margin: 20px 0 12px;
-  position: relative;
+}
+.linkButton:hover {
+  text-decoration: underline;
 }
 
-.demoList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.demoItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
-  padding: 9px 12px;
-  text-align: left;
-}
-
-.demoItem:hover {
-  background: var(--color-surface-alt);
-  border-color: var(--color-border-strong);
-}
-
-.demoInfo {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.demoName {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--color-navy);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.demoEmail {
+.footer {
+  text-align: center;
   font-size: 10.5px;
   color: var(--color-muted-light);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.demoBadge {
-  flex: none;
-  background: var(--color-brand-pale);
-  color: var(--color-navy-soft);
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
+  line-height: 1.5;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-divider);
 }

@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:supabase": "node --env-file=.env.local scripts/seed-supabase.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.2",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

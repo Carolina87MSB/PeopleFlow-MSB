@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Mapeamento local (nome -> matrícula/depto_code/nivel/gestor/admissao) usado
+# por scripts/seed-supabase.mjs para popular os campos do PeopleFlow na tabela
+# `colaboradores` compartilhada com o Portal SST. Repositório é PÚBLICO —
+# nunca commitar dado real. Ver src/data/colaboradores.example.json.
+src/data/colaboradores.local.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

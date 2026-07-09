@@ -1,74 +1,91 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { buildAccess } from "../domain/hierarquia";
-import type { Colaborador, Conta } from "../types/domain";
+import type { Session } from "@supabase/supabase-js";
+import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 
 const DOMINIO_CORPORATIVO = "@msbbrasil.com";
-const STORAGE_KEY = "msb_peopleflow_conta_v1";
 
-export type LoginResult = { ok: true } | { ok: false; error: string };
+type AuthStatus = "loading" | "signed-out" | "signed-in";
+
+export type MagicLinkResult = { ok: true } | { ok: false; error: string };
 
 interface AuthContextValue {
-  conta: Conta | null;
-  contasDemo: Conta[];
-  login: (email: string) => LoginResult;
-  logout: () => void;
+  email: string | null;
+  status: AuthStatus;
+  /** Envia o link de acesso por e-mail. Não cria conta nova — só contas já provisionadas no Supabase funcionam. */
+  requestMagicLink: (email: string) => Promise<MagicLinkResult>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function loadPersisted(): Conta | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Conta) : null;
-  } catch {
-    return null;
-  }
-}
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null);
+  const [status, setStatus] = useState<AuthStatus>("loading");
 
-export function AuthProvider({ children, colaboradores }: { children: ReactNode; colaboradores: Colaborador[] }) {
-  const [conta, setConta] = useState<Conta | null>(loadPersisted);
-
-  const contasDemo = useMemo(() => buildAccess(colaboradores), [colaboradores]);
-
-  const login = useCallback(
-    (rawEmail: string): LoginResult => {
-      const email = (rawEmail || "").trim().toLowerCase();
-      if (!email) return { ok: false, error: "Informe seu e-mail corporativo." };
-      if (!email.endsWith(DOMINIO_CORPORATIVO)) {
-        return {
-          ok: false,
-          error: "Acesso permitido apenas com e-mail corporativo @msbbrasil.com — e-mails pessoais não são aceitos.",
-        };
-      }
-      const acc = buildAccess(colaboradores).find((a) => a.email === email);
-      if (!acc) {
-        return {
-          ok: false,
-          error: "E-mail corporativo válido, mas sem perfil de gestor cadastrado. O acesso ao portal é restrito a gestores.",
-        };
-      }
-      setConta(acc);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(acc));
-      } catch {
-        // armazenamento indisponível — sessão segue apenas em memória
-      }
-      return { ok: true };
-    },
-    [colaboradores],
-  );
-
-  const logout = useCallback(() => {
-    setConta(null);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignora
+  useEffect(() => {
+    if (!supabaseConfigured) {
+      setStatus("signed-out");
+      return;
     }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setStatus(data.session ? "signed-in" : "signed-out");
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      setStatus(newSession ? "signed-in" : "signed-out");
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  const value = useMemo<AuthContextValue>(() => ({ conta, contasDemo, login, logout }), [conta, contasDemo, login, logout]);
+  const requestMagicLink = useCallback(async (rawEmail: string): Promise<MagicLinkResult> => {
+    const email = rawEmail.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return { ok: false, error: "Informe um e-mail válido." };
+    }
+    if (!email.endsWith(DOMINIO_CORPORATIVO)) {
+      return { ok: false, error: "Acesso permitido apenas com e-mail corporativo @msbbrasil.com — e-mails pessoais não são aceitos." };
+    }
+    if (!supabaseConfigured) {
+      return { ok: false, error: "Supabase não configurado nesta instalação — veja .env.example." };
+    }
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        // Sem isso, o Supabase usa a "Site URL" configurada no painel como destino do link —
+        // se estiver com o valor padrão (ex.: localhost), o link quebra em outro ambiente.
+        // Precisa estar também na lista de "Redirect URLs" permitidas no painel do Supabase.
+        emailRedirectTo: window.location.origin,
+      },
+    });
+    if (error) {
+      // Supabase retorna algo como "Signups not allowed for otp" quando o e-mail não tem
+      // conta provisionada — traduzimos para a mensagem que faz sentido para quem usa o portal.
+      if (/signup|not allowed|not found/i.test(error.message)) {
+        return {
+          ok: false,
+          error: "E-mail corporativo válido, mas sem acesso provisionado. Peça ao RH para liberar seu acesso ao portal.",
+        };
+      }
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  }, []);
+
+  const logout = useCallback(async () => {
+    if (supabaseConfigured) await supabase.auth.signOut();
+    setSession(null);
+    setStatus("signed-out");
+  }, []);
+
+  const value = useMemo<AuthContextValue>(() => {
+    const email = session?.user?.email ?? null;
+    return { email, status, requestMagicLink, logout };
+  }, [session, status, requestMagicLink, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -12,14 +12,18 @@ export const initialPortalState: PortalState = {
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
   switch (action.type) {
-    case "CARREGAR_SEED":
+    case "CARREGAR_DADOS":
       return {
         ...state,
         colaboradores: action.colaboradores,
         movimentacoes: action.movimentacoes,
+        cargosCustom: action.cargosCustom,
         tipos: action.tipos,
         perfis: action.perfis,
       };
+
+    case "RESET":
+      return initialPortalState;
 
     case "APROVAR_ETAPA": {
       const { movimentacoes, cargoRegistrado } = aprovarEtapa(state.movimentacoes, action.id);

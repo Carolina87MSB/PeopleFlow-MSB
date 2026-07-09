@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { RequireAuth } from "./auth/RequireAuth";
-import { PortalStoreProvider, usePortalStore } from "./store/PortalStoreContext";
+import { PortalStoreProvider } from "./store/PortalStoreContext";
 import { ToastProvider } from "./components/shared/ToastContext";
 import { AppShell } from "./components/layout/AppShell";
 import { LoginPage } from "./features/auth/LoginPage";
@@ -14,15 +14,10 @@ import { WorkflowPage } from "./features/workflow/WorkflowPage";
 import { AprovadasPage } from "./features/aprovadas/AprovadasPage";
 import { HistoricoPage } from "./features/historico/HistoricoPage";
 
-function AuthProviderBridge({ children }: { children: React.ReactNode }) {
-  const { state } = usePortalStore();
-  return <AuthProvider colaboradores={state.colaboradores}>{children}</AuthProvider>;
-}
-
 function App() {
   return (
-    <PortalStoreProvider>
-      <AuthProviderBridge>
+    <AuthProvider>
+      <PortalStoreProvider>
         <ToastProvider>
           <BrowserRouter>
             <Routes>
@@ -48,8 +43,8 @@ function App() {
             </Routes>
           </BrowserRouter>
         </ToastProvider>
-      </AuthProviderBridge>
-    </PortalStoreProvider>
+      </PortalStoreProvider>
+    </AuthProvider>
   );
 }
 

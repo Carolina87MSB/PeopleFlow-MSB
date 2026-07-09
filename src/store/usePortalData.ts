@@ -1,9 +1,13 @@
 import { useCallback, useMemo } from "react";
-import { useAuth } from "../auth/AuthContext";
+import { useToast } from "../components/shared/ToastContext";
+import { atualizarDescricaoCargoCustom, criarCargoCustom } from "../repositories/cargosCustomRepository";
+import { atualizarMovimentacao, criarMovimentacao as criarMovimentacaoNoSupabase } from "../repositories/movimentacoesRepository";
 import { descendants } from "../domain/hierarquia";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
+import { aprovarEtapa as aprovarEtapaDomain, cargoCustomDeNovoCargo, reprovarEtapa as reprovarEtapaDomain } from "../domain/workflow";
 import { usePortalStore } from "./PortalStoreContext";
+import { useConta } from "./useConta";
 import type { Colaborador, Conta, Movimentacao, NovaMovimentacaoForm, Perfil } from "../types/domain";
 
 export interface PortalData {
@@ -21,7 +25,7 @@ export interface PortalData {
   loading: boolean;
   aprovarEtapa: (id: string) => void;
   reprovarEtapa: (id: string) => void;
-  criarMovimentacao: (form: NovaMovimentacaoForm) => { ok: true; movimentacao: Movimentacao } | { ok: false };
+  criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   toggleDescricaoCargo: (nome: string) => void;
 }
 
@@ -29,12 +33,18 @@ export interface PortalData {
  * Central read/write seam for feature pages: combines the authenticated conta
  * with the portal store to produce role-scoped colaboradores/movimentacoes and
  * the workflow actions, mirroring the prototype's renderVals() derivations.
+ *
+ * As ações de escrita (aprovar/reprovar/criar/alternar) gravam primeiro no
+ * Supabase (peopleflow_movimentacoes / peopleflow_cargos_custom) e só então
+ * atualizam o estado local — se a gravação falhar, o estado local não muda e
+ * um toast de erro aparece, evitando que a UI mostre algo que não foi salvo.
  */
 export function usePortalData(): PortalData {
-  const { conta } = useAuth();
+  const conta = useConta();
   const { state, dispatch, loading } = usePortalStore();
+  const { flash } = useToast();
 
-  if (!conta) throw new Error("usePortalData requer uma conta autenticada — use dentro de <RequireAuth>");
+  if (!conta) throw new Error("usePortalData requer uma conta resolvida — use dentro de <AppShell>, depois que os colaboradores carregarem");
 
   const perfil = conta.perfil;
   const me = conta.nome;
@@ -56,20 +66,77 @@ export function usePortalData(): PortalData {
     [perfil, me, scopeSet, state.movimentacoes],
   );
 
-  const aprovarEtapaFn = useCallback((id: string) => dispatch({ type: "APROVAR_ETAPA", id }), [dispatch]);
-  const reprovarEtapaFn = useCallback((id: string) => dispatch({ type: "REPROVAR_ETAPA", id }), [dispatch]);
-  const toggleDescricaoCargoFn = useCallback((nome: string) => dispatch({ type: "TOGGLE_DESCRICAO_CARGO", nome }), [dispatch]);
+  const aprovarEtapaFn = useCallback(
+    (id: string) => {
+      const { movimentacoes, cargoRegistrado } = aprovarEtapaDomain(state.movimentacoes, id);
+      const atualizada = movimentacoes.find((m) => m.id === id);
+      if (!atualizada) return;
+      (async () => {
+        try {
+          await atualizarMovimentacao(atualizada);
+          if (cargoRegistrado) await criarCargoCustom(cargoCustomDeNovoCargo(cargoRegistrado));
+          dispatch({ type: "APROVAR_ETAPA", id });
+          flash(cargoRegistrado ? `Cargo "${cargoRegistrado.nome}" aprovado e incorporado ao cadastro oficial.` : "Etapa aprovada — movimentação atualizada.");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao aprovar etapa.");
+        }
+      })();
+    },
+    [dispatch, state.movimentacoes, flash],
+  );
+
+  const reprovarEtapaFn = useCallback(
+    (id: string) => {
+      const movimentacoes = reprovarEtapaDomain(state.movimentacoes, id);
+      const atualizada = movimentacoes.find((m) => m.id === id);
+      if (!atualizada) return;
+      (async () => {
+        try {
+          await atualizarMovimentacao(atualizada);
+          dispatch({ type: "REPROVAR_ETAPA", id });
+          flash("Movimentação reprovada e registrada na trilha.");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao reprovar etapa.");
+        }
+      })();
+    },
+    [dispatch, state.movimentacoes, flash],
+  );
+
+  const toggleDescricaoCargoFn = useCallback(
+    (nome: string) => {
+      const atual = state.cargosCustom.find((c) => c.nome === nome);
+      if (!atual) return;
+      const novaDescricao = atual.descricao === "OK" ? "Pendente" : "OK";
+      (async () => {
+        try {
+          await atualizarDescricaoCargoCustom(nome, novaDescricao);
+          dispatch({ type: "TOGGLE_DESCRICAO_CARGO", nome });
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao atualizar descrição de cargo.");
+        }
+      })();
+    },
+    [dispatch, state.cargosCustom, flash],
+  );
 
   const criarMovimentacaoFn = useCallback(
-    (form: NovaMovimentacaoForm) => {
+    async (form: NovaMovimentacaoForm) => {
       const validacao = validarForm(form);
       if (!validacao.ok) return { ok: false as const };
       const ctx: FormContext = { perfil, me, tipos: state.tipos, colaboradores: state.colaboradores, movimentacoes: state.movimentacoes };
       const movimentacao = construirMovimentacao(form, ctx);
-      dispatch({ type: "CRIAR_MOVIMENTACAO", movimentacao });
-      return { ok: true as const, movimentacao };
+      try {
+        await criarMovimentacaoNoSupabase(movimentacao);
+        dispatch({ type: "CRIAR_MOVIMENTACAO", movimentacao });
+        return { ok: true as const, movimentacao };
+      } catch (err) {
+        const error = err instanceof Error ? err.message : "Falha ao criar movimentação.";
+        flash(error);
+        return { ok: false as const, error };
+      }
     },
-    [dispatch, perfil, me, state.tipos, state.colaboradores, state.movimentacoes],
+    [dispatch, perfil, me, state.tipos, state.colaboradores, state.movimentacoes, flash],
   );
 
   return {

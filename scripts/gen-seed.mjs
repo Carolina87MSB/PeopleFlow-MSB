@@ -1,4 +1,7 @@
-// One-off generator that ports the prototype's buildSeed() algorithm into static JSON seed data.
+// One-off generator that ported the prototype's buildSeed() algorithm into fictitious example
+// data. The app no longer reads this file directly (colaboradores now comes from Supabase, shared
+// with Portal SST) — kept only to regenerate colaboradores.example.json if the reference shape
+// needs to change.
 import { writeFileSync } from "node:fs";
 
 const RAW = [
@@ -155,6 +158,5 @@ const colaboradores = RAW.map((t, i) => {
   };
 });
 
-writeFileSync(new URL("../src/data/colaboradores.json", import.meta.url), JSON.stringify(colaboradores, null, 2));
-writeFileSync(new URL("../src/data/deptoCodes.json", import.meta.url), JSON.stringify(CODE, null, 2));
-console.log("Generated", colaboradores.length, "colaboradores");
+writeFileSync(new URL("../src/data/colaboradores.example.json", import.meta.url), JSON.stringify(colaboradores, null, 2));
+console.log("Generated", colaboradores.length, "colaboradores (fictitious example data)");
