@@ -1,0 +1,142 @@
+:root {
+  --font-sans: "Montserrat", "Helvetica Neue", Arial, sans-serif;
+
+  --color-navy: #33485a;
+  --color-navy-soft: #2c6679;
+  --color-navy-medium: #3d8499;
+  --color-text: #51606b;
+  --color-muted: #7d8c93;
+  --color-muted-light: #9aa9af;
+  --color-muted-lighter: #a8b4ba;
+
+  --color-brand: #56a4bb;
+  --color-brand-dark: #3d8499;
+  --color-brand-pale: #e3f0f4;
+  --color-cyan: #9ce5ee;
+
+  --color-bg: #eef5f7;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f6fafb;
+  --color-surface-soft: #f8fbfc;
+  --color-border: #e6eef1;
+  --color-border-soft: #e2ebee;
+  --color-border-strong: #dbe6ea;
+  --color-divider: #eef2f4;
+  --color-divider-soft: #f1f5f6;
+
+  --color-success: #2f8f6b;
+  --color-success-bg: #e4f3ed;
+  --color-success-fg: #1f6b4f;
+  --color-warning: #c08a2e;
+  --color-warning-bg: #f8efdc;
+  --color-warning-fg: #8a5e18;
+  --color-danger: #c0584e;
+  --color-danger-bg: #f8e7e4;
+  --color-danger-fg: #99413a;
+  --color-neutral-bg: #eef2f4;
+  --color-neutral-fg: #6b7780;
+
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(51, 72, 90, 0.05);
+  --shadow-hover: 0 12px 28px -14px rgba(51, 72, 90, 0.28);
+  --shadow-pop: 0 32px 70px -20px rgba(34, 46, 52, 0.5);
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cdd9de;
+  border-radius: 8px;
+  border: 3px solid var(--color-bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b7c7cd;
+}
+
+.text-muted {
+  color: var(--color-muted-light);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@keyframes msbfade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes msbslide {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes msbpulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}

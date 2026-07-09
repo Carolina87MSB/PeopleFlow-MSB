@@ -1,0 +1,19 @@
+.cargoCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+
+.descricaoToggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.ocupantes {
+  font-weight: 700;
+  color: var(--color-navy);
+}

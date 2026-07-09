@@ -1,0 +1,198 @@
+[
+  {
+    "id": "M-2026-020",
+    "tipo": "Novo Cargo",
+    "tipoCod": "NOV",
+    "colaborador": "Analista de Dados Industriais",
+    "depto": "Engenharia",
+    "resumo": "Criação de cargo — 1 vaga(s) · R$ 6.500 – R$ 8.200",
+    "solicitante": "Victor Antunes Silva Barbosa",
+    "dataSolicitacao": "18/jun/2026",
+    "prioridade": "Alta",
+    "status": "Em Aprovação",
+    "novoCargo": { "nome": "Analista de Dados Industriais", "depto": "Engenharia", "gestor": "Victor Antunes Silva Barbosa", "vagas": "1", "faixa": "R$ 6.500 – R$ 8.200", "data": "01/ago/2026", "obs": "Apoio à digitalização do chão de fábrica (Indústria 4.0)." },
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Victor Antunes Silva Barbosa", "status": "Aprovado", "data": "18/jun/2026", "comentario": "Necessário para o projeto de Indústria 4.0." },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Em análise", "data": "" },
+      { "papel": "CEO", "aprovador": "Daniel Emiliano Suguer", "status": "Aguardando", "data": "" },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aguardando", "data": "" }
+    ]
+  },
+  {
+    "id": "M-2026-019",
+    "tipo": "Promoção",
+    "tipoCod": "PRO",
+    "colaborador": "Leslie Silva Souza",
+    "depto": "Recursos Humanos",
+    "resumo": "Assistente de Gente e Gestão → Analista de RH",
+    "solicitante": "Carolina Matos da Cruz",
+    "dataSolicitacao": "17/jun/2026",
+    "prioridade": "Média",
+    "status": "Rascunho",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Carolina Matos da Cruz", "status": "Aguardando", "data": "" },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aguardando", "data": "" },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Aguardando", "data": "" }
+    ]
+  },
+  {
+    "id": "M-2026-018",
+    "tipo": "Promoção",
+    "tipoCod": "PRO",
+    "colaborador": "Alice Coutinho da Cruz",
+    "depto": "Produção",
+    "resumo": "Auxiliar de Produção I → Auxiliar de Produção II",
+    "solicitante": "Tainara Correia dos Santos",
+    "dataSolicitacao": "16/jun/2026",
+    "prioridade": "Média",
+    "status": "Em Aprovação",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Tainara Correia dos Santos", "status": "Aprovado", "data": "16/jun/2026", "comentario": "De acordo — desempenho consistente, apta à evolução." },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Em análise", "data": "" },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Aguardando", "data": "" }
+    ]
+  },
+  {
+    "id": "M-2026-017",
+    "tipo": "Transferência",
+    "tipoCod": "TRF",
+    "colaborador": "Italo da Silva Figueiredo",
+    "depto": "Logística",
+    "resumo": "Logística → PCP e Compras (Assistente de Planejamento)",
+    "solicitante": "Tassio Antonio Lima Sant Ana",
+    "dataSolicitacao": "15/jun/2026",
+    "prioridade": "Alta",
+    "status": "Em Aprovação",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Tassio Antonio Lima Sant Ana", "status": "Aprovado", "data": "15/jun/2026", "comentario": "Liberado da Logística para PCP e Compras." },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Em análise", "data": "" },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aguardando", "data": "" }
+    ]
+  },
+  {
+    "id": "M-2026-016",
+    "tipo": "Mudança de Função",
+    "tipoCod": "FUN",
+    "colaborador": "Felipe Marcos Peixoto Pereira",
+    "depto": "Controle da Qualidade",
+    "resumo": "Assistente de Controle da Qualidade → Inspetor da Qualidade",
+    "solicitante": "Ravena Peixoto dos Santos",
+    "dataSolicitacao": "11/jun/2026",
+    "prioridade": "Média",
+    "justificativa": "Reenquadramento de função após capacitação interna e validação no plano de inspeção da qualidade.",
+    "dados": [
+      { "label": "Função atual", "value": "Assistente de Controle da Qualidade" },
+      { "label": "Nova função", "value": "Inspetor da Qualidade" },
+      { "label": "Motivo da alteração", "value": "Conclusão do programa de qualificação de inspetores." }
+    ],
+    "status": "Aprovado",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Ravena Peixoto dos Santos", "status": "Aprovado", "data": "11/jun/2026", "comentario": "Aprovado." },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aprovado", "data": "12/jun/2026", "comentario": "Enquadramento concluído." },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Aprovado", "data": "12/jun/2026", "comentario": "Homologado." }
+    ],
+    "aprovacaoFinal": { "data": "12/jun/2026", "hora": "16:40" }
+  },
+  {
+    "id": "M-2026-015",
+    "tipo": "Alteração Salarial",
+    "tipoCod": "SAL",
+    "colaborador": "Drielly Mitie Mizushima Victor",
+    "depto": "Financeiro",
+    "resumo": "Reajuste salarial por mérito — Analista Financeiro",
+    "solicitante": "Pedro Henrique Lages Rocha",
+    "dataSolicitacao": "09/jun/2026",
+    "prioridade": "Média",
+    "justificativa": "Reajuste por mérito reconhecendo o desempenho consistente e a assunção de novas responsabilidades no fechamento contábil.",
+    "dados": [
+      { "label": "Salário atual", "value": "R$ 4.800" },
+      { "label": "Novo salário", "value": "R$ 5.300" },
+      { "label": "Percentual de alteração", "value": "10,4%" }
+    ],
+    "status": "Aprovado",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Pedro Henrique Lages Rocha", "status": "Aprovado", "data": "09/jun/2026" },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Aprovado", "data": "10/jun/2026", "comentario": "Reajuste por mérito homologado." },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aprovado", "data": "11/jun/2026", "comentario": "Folha atualizada." }
+    ],
+    "aprovacaoFinal": { "data": "11/jun/2026", "hora": "10:15" }
+  },
+  {
+    "id": "M-2026-014",
+    "tipo": "Admissão",
+    "tipoCod": "ADM",
+    "colaborador": "Rafael Augusto Lima (novo)",
+    "depto": "Produção",
+    "resumo": "Admissão — Auxiliar de Produção I",
+    "solicitante": "Tainara Correia dos Santos",
+    "dataSolicitacao": "02/jun/2026",
+    "prioridade": "Alta",
+    "justificativa": "Aumento de quadro para atender ao incremento de demanda na linha de produção.",
+    "dados": [
+      { "label": "Motivo da contratação", "value": "Aumento de quadro" },
+      { "label": "Cargo solicitado", "value": "Auxiliar de Produção I" },
+      { "label": "Quantidade de vagas", "value": "1" },
+      { "label": "Data prevista de admissão", "value": "09/jun/2026" }
+    ],
+    "status": "Concluído",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Tainara Correia dos Santos", "status": "Aprovado", "data": "02/jun/2026" },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aprovado", "data": "03/jun/2026" },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Aprovado", "data": "04/jun/2026", "comentario": "Admissão homologada — início em 09/jun." }
+    ],
+    "aprovacaoFinal": { "data": "04/jun/2026", "hora": "09:30" }
+  },
+  {
+    "id": "M-2026-013",
+    "tipo": "Desligamento",
+    "tipoCod": "DES",
+    "colaborador": "João Pedro Alves (a pedido)",
+    "depto": "Produção",
+    "resumo": "Desligamento a pedido — Auxiliar de Produção III",
+    "solicitante": "Tainara Correia dos Santos",
+    "dataSolicitacao": "14/jun/2026",
+    "prioridade": "Alta",
+    "status": "Em Aprovação",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Tainara Correia dos Santos", "status": "Aprovado", "data": "14/jun/2026", "comentario": "Aviso prévio em curso." },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Em análise", "data": "" },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aguardando", "data": "" }
+    ]
+  },
+  {
+    "id": "M-2026-012",
+    "tipo": "Afastamento (tipo legado)",
+    "tipoCod": "AFA",
+    "legado": true,
+    "colaborador": "Marina Costa Ribeiro",
+    "depto": "Logística",
+    "resumo": "Afastamento INSS — Assistente de Logística",
+    "solicitante": "Tassio Antonio Lima Sant Ana",
+    "dataSolicitacao": "06/jun/2026",
+    "prioridade": "Média",
+    "justificativa": "Afastamento previdenciário (INSS) registrado conforme atestado médico apresentado.",
+    "status": "Aprovado",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Tassio Antonio Lima Sant Ana", "status": "Aprovado", "data": "06/jun/2026" },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aprovado", "data": "06/jun/2026", "comentario": "Afastamento INSS registrado." }
+    ],
+    "aprovacaoFinal": { "data": "06/jun/2026", "hora": "14:05" }
+  },
+  {
+    "id": "M-2026-011",
+    "tipo": "Promoção",
+    "tipoCod": "PRO",
+    "colaborador": "Lucas Pugliesi Di Girolamo",
+    "depto": "PCP e Compras",
+    "resumo": "Assistente de Planejamento → Analista de Planejamento",
+    "solicitante": "Tassio Antonio Lima Sant Ana",
+    "dataSolicitacao": "03/jun/2026",
+    "prioridade": "Média",
+    "status": "Reprovado",
+    "etapas": [
+      { "papel": "Gestor Solicitante", "aprovador": "Tassio Antonio Lima Sant Ana", "status": "Aprovado", "data": "03/jun/2026" },
+      { "papel": "RH", "aprovador": "Carolina Matos da Cruz", "status": "Aprovado", "data": "04/jun/2026" },
+      { "papel": "Diretor Industrial", "aprovador": "Yuri Ivonei Crispim", "status": "Reprovado", "data": "05/jun/2026", "comentario": "Sem espaço no orçamento neste trimestre; reavaliar em Q3/2026." }
+    ]
+  }
+]

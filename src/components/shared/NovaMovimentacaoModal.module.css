@@ -1,0 +1,58 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-navy);
+}
+
+.field.full {
+  grid-column: 1 / -1;
+}
+
+.field input,
+.field select,
+.field textarea {
+  border: 1px solid var(--color-border-strong);
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.field input:disabled {
+  background: var(--color-surface-alt);
+  color: var(--color-muted);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(86, 164, 187, 0.16);
+}
+
+.field textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.error {
+  margin-top: 14px;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}

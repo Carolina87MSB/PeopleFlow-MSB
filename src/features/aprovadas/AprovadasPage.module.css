@@ -1,0 +1,256 @@
+.detalhe {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.detalheHeader {
+  background: linear-gradient(160deg, #2c6679, #3d8499);
+  color: #fff;
+  padding: 20px 24px;
+}
+
+.voltar {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 0 16px;
+}
+.voltar:hover {
+  color: #fff;
+}
+
+.detalheHeaderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.detalheHeaderInfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tipoBadgeGrande {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: var(--radius-md);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.detalheNome {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.detalheId {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.detalheDepto {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: 2px;
+}
+
+.detalheHeaderRight {
+  text-align: right;
+  flex: none;
+}
+
+.pillAprovado {
+  display: inline-block;
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+}
+
+.detalheAprovacaoData {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 8px;
+}
+
+.detalhePrioridade {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 4px;
+}
+
+.detalheBody {
+  padding: 24px;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 32px;
+  margin-bottom: 20px;
+}
+
+.infoItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.infoLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted-light);
+}
+
+.infoValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.justificativaBox {
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.justificativaTexto {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+.sectionTitle {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+
+.duasColunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+
+.aprovacoesList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aprovacaoItem {
+  display: flex;
+  gap: 12px;
+}
+
+.aprovacaoInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.aprovacaoTopo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.aprovacaoPapel {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+
+.aprovacaoData {
+  font-size: 11px;
+  color: var(--color-muted-light);
+  white-space: nowrap;
+}
+
+.aprovacaoAprovador {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 2px;
+}
+
+.aprovacaoComentario {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.documentosList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.documentoItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+
+.documentoNome {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.pillGerado,
+.pillPendente {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.pillGerado {
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+}
+
+.pillPendente {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+
+@media (max-width: 1024px) {
+  .infoGrid,
+  .duasColunas {
+    grid-template-columns: 1fr;
+  }
+}

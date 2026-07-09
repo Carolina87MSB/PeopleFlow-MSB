@@ -1,0 +1,552 @@
+[
+  {
+    "matricula": "MSB-101",
+    "nome": "Cintia Santos Silva Batista",
+    "cargo": "Analista Administrativo",
+    "depto": "Administrativo",
+    "deptoCode": "ADM",
+    "nivel": "Analista",
+    "gestor": "Daniel Emiliano Suguer",
+    "admissao": "01/jan/2019"
+  },
+  {
+    "matricula": "MSB-102",
+    "nome": "Miguel Cruz Cambeses",
+    "cargo": "Jovem Aprendiz",
+    "depto": "Aprendiz",
+    "deptoCode": "APR",
+    "nivel": "Aprendiz / Estágio",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "08/jun/2020"
+  },
+  {
+    "matricula": "MSB-103",
+    "nome": "Patricio Fe de Oliveira",
+    "cargo": "Analista Contábil",
+    "depto": "Contabilidade",
+    "deptoCode": "CTB",
+    "nivel": "Analista",
+    "gestor": "Daiana Leite",
+    "admissao": "15/nov/2021"
+  },
+  {
+    "matricula": "MSB-104",
+    "nome": "Felipe Marcos Peixoto Pereira",
+    "cargo": "Assistente de Controle da Qualidade",
+    "depto": "Controle da Qualidade",
+    "deptoCode": "CQ",
+    "nivel": "Operacional",
+    "gestor": "Ravena Peixoto dos Santos",
+    "admissao": "22/abr/2022"
+  },
+  {
+    "matricula": "MSB-105",
+    "nome": "Manuela Fraga Fernandes e Silva",
+    "cargo": "Assistente de Controle da Qualidade",
+    "depto": "Controle da Qualidade",
+    "deptoCode": "CQ",
+    "nivel": "Operacional",
+    "gestor": "Ravena Peixoto dos Santos",
+    "admissao": "02/set/2023"
+  },
+  {
+    "matricula": "MSB-106",
+    "nome": "Fabiana Santos Sousa",
+    "cargo": "Inspetora da Qualidade",
+    "depto": "Controle da Qualidade",
+    "deptoCode": "CQ",
+    "nivel": "Técnico",
+    "gestor": "Ravena Peixoto dos Santos",
+    "admissao": "09/fev/2024"
+  },
+  {
+    "matricula": "MSB-107",
+    "nome": "Ravena Peixoto dos Santos",
+    "cargo": "Supervisora de Controle da Qualidade",
+    "depto": "Controle da Qualidade",
+    "deptoCode": "CQ",
+    "nivel": "Liderança",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "16/jul/2025"
+  },
+  {
+    "matricula": "MSB-108",
+    "nome": "Italo Rafael Araujo Zorzetto",
+    "cargo": "Analista de Engenharia",
+    "depto": "Engenharia",
+    "deptoCode": "ENG",
+    "nivel": "Analista",
+    "gestor": "Victor Antunes Silva Barbosa",
+    "admissao": "23/dez/2019"
+  },
+  {
+    "matricula": "MSB-109",
+    "nome": "Lucas Prata Oliveira",
+    "cargo": "Analista de Engenharia",
+    "depto": "Engenharia",
+    "deptoCode": "ENG",
+    "nivel": "Analista",
+    "gestor": "Victor Antunes Silva Barbosa",
+    "admissao": "03/mai/2020"
+  },
+  {
+    "matricula": "MSB-110",
+    "nome": "Rodrigo Araujo Porto Bomfim",
+    "cargo": "Analista de Engenharia",
+    "depto": "Engenharia",
+    "deptoCode": "ENG",
+    "nivel": "Analista",
+    "gestor": "Victor Antunes Silva Barbosa",
+    "admissao": "10/out/2021"
+  },
+  {
+    "matricula": "MSB-111",
+    "nome": "Rebeca Santos Souza Oliveira",
+    "cargo": "Analista de Melhoria Contínua",
+    "depto": "Engenharia",
+    "deptoCode": "ENG",
+    "nivel": "Analista",
+    "gestor": "Victor Antunes Silva Barbosa",
+    "admissao": "17/mar/2022"
+  },
+  {
+    "matricula": "MSB-112",
+    "nome": "Elen Pereira Barboza Brandão",
+    "cargo": "Analista de Projetos de Engenharia",
+    "depto": "Engenharia",
+    "deptoCode": "ENG",
+    "nivel": "Analista",
+    "gestor": "Victor Antunes Silva Barbosa",
+    "admissao": "24/ago/2023"
+  },
+  {
+    "matricula": "MSB-113",
+    "nome": "Victor Antunes Silva Barbosa",
+    "cargo": "Coordenador de Engenharia",
+    "depto": "Engenharia",
+    "deptoCode": "ENG",
+    "nivel": "Liderança",
+    "gestor": "Yuri Ivonei Crispim",
+    "admissao": "04/jan/2024"
+  },
+  {
+    "matricula": "MSB-114",
+    "nome": "Marcelo Ricardo Araújo Bacelar de Lima",
+    "cargo": "Estagiário (a)",
+    "depto": "Engenharia",
+    "deptoCode": "ENG",
+    "nivel": "Aprendiz / Estágio",
+    "gestor": "Victor Antunes Silva Barbosa",
+    "admissao": "11/jun/2025"
+  },
+  {
+    "matricula": "MSB-115",
+    "nome": "Drielly Mitie Mizushima Victor",
+    "cargo": "Analista Financeiro",
+    "depto": "Financeiro",
+    "deptoCode": "FIN",
+    "nivel": "Analista",
+    "gestor": "Pedro Henrique Lages Rocha",
+    "admissao": "18/nov/2019"
+  },
+  {
+    "matricula": "MSB-116",
+    "nome": "Ednalva Nascimento da Silva",
+    "cargo": "Assistente de Logística",
+    "depto": "Logística",
+    "deptoCode": "LOG",
+    "nivel": "Operacional",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "25/abr/2020"
+  },
+  {
+    "matricula": "MSB-117",
+    "nome": "Italo da Silva Figueiredo",
+    "cargo": "Assistente de Logística",
+    "depto": "Logística",
+    "deptoCode": "LOG",
+    "nivel": "Operacional",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "05/set/2021"
+  },
+  {
+    "matricula": "MSB-118",
+    "nome": "Leandro de Jesus Silva",
+    "cargo": "Assistente de Logística",
+    "depto": "Logística",
+    "deptoCode": "LOG",
+    "nivel": "Operacional",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "12/fev/2022"
+  },
+  {
+    "matricula": "MSB-119",
+    "nome": "Mirailton de Santana Santana",
+    "cargo": "Assistente de Logística",
+    "depto": "Logística",
+    "deptoCode": "LOG",
+    "nivel": "Operacional",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "19/jul/2023"
+  },
+  {
+    "matricula": "MSB-120",
+    "nome": "Iago Rosas Iung",
+    "cargo": "Líder de Manutenção",
+    "depto": "Manutenção",
+    "deptoCode": "MNT",
+    "nivel": "Liderança",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "26/dez/2024"
+  },
+  {
+    "matricula": "MSB-121",
+    "nome": "Jaqueline Lima Teixeira",
+    "cargo": "Assistente de Operações de Vendas",
+    "depto": "Operações de Vendas",
+    "deptoCode": "OPV",
+    "nivel": "Operacional",
+    "gestor": "Selma Ribeiro Bispo",
+    "admissao": "06/mai/2025"
+  },
+  {
+    "matricula": "MSB-122",
+    "nome": "Luciana Kelly Rocha Santos",
+    "cargo": "Assistente de Operações de Vendas",
+    "depto": "Operações de Vendas",
+    "deptoCode": "OPV",
+    "nivel": "Operacional",
+    "gestor": "Selma Ribeiro Bispo",
+    "admissao": "13/out/2019"
+  },
+  {
+    "matricula": "MSB-123",
+    "nome": "Selma Ribeiro Bispo",
+    "cargo": "Supervisor(a) de Operação de Vendas",
+    "depto": "Operações de Vendas",
+    "deptoCode": "OPV",
+    "nivel": "Liderança",
+    "gestor": "Daniel Emiliano Suguer",
+    "admissao": "20/mar/2020"
+  },
+  {
+    "matricula": "MSB-124",
+    "nome": "Maria Lívia de Oliveira Ferreira",
+    "cargo": "Analista de Planejamento",
+    "depto": "PCP e Compras",
+    "deptoCode": "PCP",
+    "nivel": "Analista",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "27/ago/2021"
+  },
+  {
+    "matricula": "MSB-125",
+    "nome": "Lucas Pugliesi Di Girolamo",
+    "cargo": "Assistente de Planejamento",
+    "depto": "PCP e Compras",
+    "deptoCode": "PCP",
+    "nivel": "Operacional",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "07/jan/2022"
+  },
+  {
+    "matricula": "MSB-126",
+    "nome": "Alice Coutinho da Cruz",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "14/jun/2023"
+  },
+  {
+    "matricula": "MSB-127",
+    "nome": "Ana Beatriz Souza Figueiredo",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "21/nov/2024"
+  },
+  {
+    "matricula": "MSB-128",
+    "nome": "Bruna Fernanda dos Santos Silva",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "01/abr/2025"
+  },
+  {
+    "matricula": "MSB-129",
+    "nome": "Bruna Santos Nascimento",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "08/set/2019"
+  },
+  {
+    "matricula": "MSB-130",
+    "nome": "Leildes de Queiros Bonfim",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "15/fev/2020"
+  },
+  {
+    "matricula": "MSB-131",
+    "nome": "Poliana Aline de Cerqueira Vieira",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "22/jul/2021"
+  },
+  {
+    "matricula": "MSB-132",
+    "nome": "Silvana Trindade Pires dos Santos",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "02/dez/2022"
+  },
+  {
+    "matricula": "MSB-133",
+    "nome": "Taísa Trindade da Cruz",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "09/mai/2023"
+  },
+  {
+    "matricula": "MSB-134",
+    "nome": "Yasmin Batista Santos",
+    "cargo": "Auxiliar de Produção I",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "16/out/2024"
+  },
+  {
+    "matricula": "MSB-135",
+    "nome": "Ana Maria Alves Santos",
+    "cargo": "Auxiliar de Produção II",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "23/mar/2025"
+  },
+  {
+    "matricula": "MSB-136",
+    "nome": "Edilcelia Souza de Jesus",
+    "cargo": "Auxiliar de Produção III",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "03/ago/2019"
+  },
+  {
+    "matricula": "MSB-137",
+    "nome": "Janete Carvalho de Jesus",
+    "cargo": "Auxiliar de Produção III",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "10/jan/2020"
+  },
+  {
+    "matricula": "MSB-138",
+    "nome": "Joice Melo dos Santos",
+    "cargo": "Auxiliar de Produção III",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Operacional",
+    "gestor": "Tainara Correia dos Santos",
+    "admissao": "17/jun/2021"
+  },
+  {
+    "matricula": "MSB-139",
+    "nome": "Tainara Correia dos Santos",
+    "cargo": "Supervisora de Produção",
+    "depto": "Produção",
+    "deptoCode": "PRD",
+    "nivel": "Liderança",
+    "gestor": "Tassio Antonio Lima Sant Ana",
+    "admissao": "24/nov/2022"
+  },
+  {
+    "matricula": "MSB-140",
+    "nome": "Mateus Chaves Moura",
+    "cargo": "Assistente de T.I",
+    "depto": "Projetos e TI",
+    "deptoCode": "TI",
+    "nivel": "Técnico",
+    "gestor": "Yuri Ivonei Crispim",
+    "admissao": "04/abr/2023"
+  },
+  {
+    "matricula": "MSB-141",
+    "nome": "Juliana Ranzan Matos",
+    "cargo": "Analista da Qualidade e Assuntos Regulatórios",
+    "depto": "Qualidade e Regulatório",
+    "deptoCode": "QR",
+    "nivel": "Analista",
+    "gestor": "Raissa Rayane Santos Laurindo Caldas",
+    "admissao": "11/set/2024"
+  },
+  {
+    "matricula": "MSB-142",
+    "nome": "Cidália Pereira Cardoso",
+    "cargo": "Auxiliar de Serviços Gerais",
+    "depto": "Qualidade e Regulatório",
+    "deptoCode": "QR",
+    "nivel": "Operacional",
+    "gestor": "Raissa Rayane Santos Laurindo Caldas",
+    "admissao": "18/fev/2025"
+  },
+  {
+    "matricula": "MSB-143",
+    "nome": "Tais Batista Santos Araújo",
+    "cargo": "Auxiliar de Serviços Gerais",
+    "depto": "Qualidade e Regulatório",
+    "deptoCode": "QR",
+    "nivel": "Operacional",
+    "gestor": "Raissa Rayane Santos Laurindo Caldas",
+    "admissao": "25/jul/2019"
+  },
+  {
+    "matricula": "MSB-144",
+    "nome": "William Alves Cruz",
+    "cargo": "Auxiliar de Serviços Gerais",
+    "depto": "Qualidade e Regulatório",
+    "deptoCode": "QR",
+    "nivel": "Operacional",
+    "gestor": "Raissa Rayane Santos Laurindo Caldas",
+    "admissao": "05/dez/2020"
+  },
+  {
+    "matricula": "MSB-145",
+    "nome": "Raissa Rayane Santos Laurindo Caldas",
+    "cargo": "Coordenador(a) da Garantia da Qualidade",
+    "depto": "Qualidade e Regulatório",
+    "deptoCode": "QR",
+    "nivel": "Liderança",
+    "gestor": "Yuri Ivonei Crispim",
+    "admissao": "12/mai/2021"
+  },
+  {
+    "matricula": "MSB-146",
+    "nome": "Carolina Matos da Cruz",
+    "cargo": "Analista de RH",
+    "depto": "Recursos Humanos",
+    "deptoCode": "RH",
+    "nivel": "Analista",
+    "gestor": "Yuri Ivonei Crispim",
+    "admissao": "19/out/2022"
+  },
+  {
+    "matricula": "MSB-147",
+    "nome": "Leslie Silva Souza",
+    "cargo": "Assistente de Gente e Gestão",
+    "depto": "Recursos Humanos",
+    "deptoCode": "RH",
+    "nivel": "Operacional",
+    "gestor": "Carolina Matos da Cruz",
+    "admissao": "26/mar/2023"
+  },
+  {
+    "matricula": "MSB-148",
+    "nome": "Manuele Rodrigues dos Santos",
+    "cargo": "Jovem Aprendiz",
+    "depto": "Aprendiz",
+    "deptoCode": "APR",
+    "nivel": "Aprendiz / Estágio",
+    "gestor": "Cintia Santos Silva Batista",
+    "admissao": "06/ago/2024"
+  },
+  {
+    "matricula": "MSB-149",
+    "nome": "Davi Cunha Barbosa Moreira",
+    "cargo": "Técnico de Manutenção",
+    "depto": "Manutenção",
+    "deptoCode": "MNT",
+    "nivel": "Técnico",
+    "gestor": "Iago Rosas Iung",
+    "admissao": "13/jan/2025"
+  },
+  {
+    "matricula": "MSB-150",
+    "nome": "Tassio Antonio Lima Sant Ana",
+    "cargo": "Gerente Industrial",
+    "depto": "Industrial e Diretoria",
+    "deptoCode": "DIR",
+    "nivel": "Gerência",
+    "gestor": "Yuri Ivonei Crispim",
+    "admissao": "20/jun/2019"
+  },
+  {
+    "matricula": "MSB-151",
+    "nome": "Yuri Ivonei Crispim",
+    "cargo": "Diretor Industrial",
+    "depto": "Industrial e Diretoria",
+    "deptoCode": "DIR",
+    "nivel": "Diretoria",
+    "gestor": "Daniel Emiliano Suguer",
+    "admissao": "27/nov/2020"
+  },
+  {
+    "matricula": "MSB-152",
+    "nome": "Daniel Emiliano Suguer",
+    "cargo": "CEO",
+    "depto": "Industrial e Diretoria",
+    "deptoCode": "DIR",
+    "nivel": "Diretoria",
+    "gestor": "Bernardo Machado",
+    "admissao": "07/abr/2021"
+  },
+  {
+    "matricula": "MSB-153",
+    "nome": "Ana Lucia Noto",
+    "cargo": "Consultor(a) Comercial",
+    "depto": "Comercial",
+    "deptoCode": "COM",
+    "nivel": "Especialista",
+    "gestor": "Daniel Emiliano Suguer",
+    "admissao": "14/set/2022"
+  },
+  {
+    "matricula": "MSB-154",
+    "nome": "Cristiane Andrade",
+    "cargo": "Key Account Manager",
+    "depto": "Comercial",
+    "deptoCode": "COM",
+    "nivel": "Especialista",
+    "gestor": "Daniel Emiliano Suguer",
+    "admissao": "21/fev/2023"
+  },
+  {
+    "matricula": "MSB-155",
+    "nome": "Laisa Rocha Ferreira Machado dos Santos",
+    "cargo": "Key Account Manager",
+    "depto": "Comercial",
+    "deptoCode": "COM",
+    "nivel": "Especialista",
+    "gestor": "Daniel Emiliano Suguer",
+    "admissao": "01/jul/2024"
+  }
+]

@@ -1,0 +1,51 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(34, 46, 52, 0.32);
+  z-index: 41;
+}
+
+.panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 100%;
+  background: #fff;
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  animation: msbslide 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.header {
+  position: relative;
+  padding: 24px 26px;
+  background: linear-gradient(160deg, #2c6679, #3d8499);
+  color: #fff;
+}
+
+.close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px 26px 30px;
+}

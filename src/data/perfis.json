@@ -1,0 +1,5 @@
+[
+  { "papel": "Gestor", "desc": "Abre e acompanha movimentações da sua área e aprova/reprova quando faz parte do fluxo. Visualiza somente os colaboradores da sua equipe — nunca de outras áreas.", "pode": "Solicitar · Aprovar etapa do gestor", "cor": "#56A4BB" },
+  { "papel": "Recursos Humanos", "desc": "Visão completa de todas as movimentações da empresa. Cria, edita, valida e acompanha processos e gerencia cadastros, regras e indicadores.", "pode": "Acesso completo", "cor": "#5F88A1" },
+  { "papel": "Diretoria", "desc": "Visualiza e decide as movimentações encaminhadas para a sua aprovação conforme a matriz. Acesso restrito às informações necessárias para a tomada de decisão.", "pode": "Aprovar etapa de diretoria", "cor": "#2c6679" }
+]
