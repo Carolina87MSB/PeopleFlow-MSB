@@ -19,19 +19,23 @@ export function perfilOf(colaborador: Colaborador): Perfil {
   return "Gestor";
 }
 
-/** Managers referenced by at least one direct report are the only ones granted portal access. */
+/**
+ * Toda linha de colaborador vira uma conta em potencial (perfil calculado via
+ * perfilOf). O verdadeiro portão de acesso é a conta do Supabase Auth — só
+ * quem o RH provisiona lá consegue pedir o link mágico (ver AuthContext) —
+ * então não há necessidade (nem é seguro) inferir "é gestor" a partir do
+ * campo `gestor` de outras linhas: isso quebraria o login de todo mundo
+ * (inclusive RH) enquanto a hierarquia real ainda não foi populada via
+ * `npm run seed:supabase`.
+ */
 export function buildAccess(colaboradores: Colaborador[]): Conta[] {
-  const byName = new Map(colaboradores.map((c) => [c.nome, c] as const));
-  const gestorCount = new Map<string, number>();
-  colaboradores.forEach((c) => gestorCount.set(c.gestor, (gestorCount.get(c.gestor) || 0) + 1));
-
-  const access: Conta[] = [];
-  gestorCount.forEach((_count, nome) => {
-    const c = byName.get(nome);
-    if (!c) return;
-    access.push({ nome: c.nome, cargo: c.cargo, depto: c.depto, email: emailOf(c.nome), perfil: perfilOf(c) });
-  });
-  return access;
+  return colaboradores.map((c) => ({
+    nome: c.nome,
+    cargo: c.cargo,
+    depto: c.depto,
+    email: emailOf(c.nome),
+    perfil: perfilOf(c),
+  }));
 }
 
 /** Walks the manager tree to find every employee reporting up to `nome`, directly or transitively. */
