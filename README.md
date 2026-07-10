@@ -11,7 +11,7 @@ Pré-requisito: [Node.js](https://nodejs.org) 20+ e um projeto Supabase já conf
 1. **Rode o schema deste portal**: abra _SQL Editor_ no painel do MESMO projeto Supabase usado pelo SST, cole o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e execute. Isso:
    - adiciona 5 colunas novas (`matricula`, `depto_code`, `nivel`, `gestor`, `admissao`) à tabela `colaboradores` já existente do SST — **não remove nem altera nada que o SST já usa**;
    - cria duas tabelas exclusivas deste portal: `peopleflow_movimentacoes` e `peopleflow_cargos_custom`, com RLS liberando leitura/escrita para qualquer usuário autenticado.
-2. **Provisione as contas de acesso**: diferente do SST (só RH tem conta), aqui **todo Gestor, Diretor e RH que for usar o portal precisa de uma conta no Supabase Auth**. Em _Authentication → Users → Add user_, crie uma entrada para cada e-mail `@msbbrasil.com` correspondente a um gestor cadastrado na tabela `colaboradores` (o login é por link mágico, sem senha — não há autocadastro).
+2. **Provisione a primeira conta (a sua, do RH)**: diferente do SST (só RH tem conta), aqui **todo Gestor, Diretor e RH que for usar o portal precisa de uma conta no Supabase Auth**. Para a primeiríssima conta (RH, que vai gerenciar as demais pela tela `/acessos` do próprio app — ver abaixo), crie manualmente em _Authentication → Users → Add user_. As contas seguintes não precisam mais do painel do Supabase.
 3. **Configure o ambiente local**:
    ```bash
    cd portal-peopleflow
@@ -34,21 +34,33 @@ Pré-requisito: [Node.js](https://nodejs.org) 20+ e um projeto Supabase já conf
 ## Deploy na Vercel
 
 1. Importe o repositório na Vercel (framework detectado automaticamente: Vite).
-2. Em _Settings → Environment Variables_, adicione `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` — os **mesmos valores já usados no deploy do SST** (mesmo projeto Supabase). Lembre do prefixo `VITE_` (Vite, não Next.js).
+2. Em _Settings → Environment Variables_, adicione:
+   - `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` — os **mesmos valores já usados no deploy do SST** (mesmo projeto Supabase). Lembre do prefixo `VITE_` (Vite, não Next.js).
+   - `SUPABASE_SERVICE_ROLE_KEY` — **sem** prefixo `VITE_` (fica só no servidor, nunca chega ao navegador). Usada pelas Serverless Functions em `api/*.ts` para a tela de administração de acessos.
 3. Em Supabase → _Authentication → URL Configuration_, adicione a URL da Vercel deste projeto (diferente da URL do SST) na lista de _Redirect URLs_ permitidas — senão o link mágico do e-mail quebra em produção.
 
 ## Acesso
 
-Login por **link mágico** (e-mail corporativo `@msbbrasil.com`, sem senha) via Supabase Auth — ver `src/auth/AuthContext.tsx`. Só entram e-mails com conta previamente criada no Supabase (`shouldCreateUser: false`); não há cadastro aberto. Depois de autenticado, o app cruza o e-mail com a tabela `colaboradores` (`buildAccess()` em `src/domain/hierarquia.ts`) para descobrir nome/cargo/perfil — se o e-mail não corresponder a nenhum gestor cadastrado, a tela mostra um aviso pedindo para falar com o RH (ver `AppShell.tsx`).
+Login por **link mágico** (e-mail corporativo `@msbbrasil.com`, sem senha) via Supabase Auth — ver `src/auth/AuthContext.tsx`. Só entram e-mails com conta previamente criada no Supabase (`shouldCreateUser: false`); não há cadastro aberto. Depois de autenticado, o app cruza o e-mail com a tabela `colaboradores` (`buildAccess()` em `src/domain/hierarquia.ts`) para descobrir nome/cargo/perfil — se o e-mail não corresponder a NENHUM colaborador cadastrado (nome diferente do que o app deriva o e-mail), a tela mostra um aviso pedindo para falar com o RH (ver `AppShell.tsx`).
 
 Três perfis, com visão e permissões diferentes (ver `src/domain/permissoes.ts`):
-- **RH** — acesso completo: todos os colaboradores, todas as movimentações, cadastros de departamentos/cargos.
+- **RH** — acesso completo: todos os colaboradores, todas as movimentações, cadastros de departamentos/cargos, e a tela de **Acessos** (`/acessos`).
 - **Gestor** — vê apenas sua equipe (hierarquia direta e indireta, via `descendants()`), pode solicitar movimentações e aprovar a etapa "Gestor Solicitante".
 - **Diretoria** — não vê o cadastro de colaboradores; vê apenas movimentações encaminhadas para sua aprovação.
+
+### Tela de administração de acessos (`/acessos`, RH-only)
+
+Depois que a primeira conta do RH estiver provisionada manualmente (passo 2 acima), o próprio RH consegue liberar o acesso de qualquer Gestor/Diretor direto pelo app, sem entrar no painel do Supabase: a tela lista todo colaborador cadastrado com o e-mail derivado do nome e um status "Provisionado"/"Sem acesso", com um botão "Liberar acesso" por linha.
+
+Isso funciona via duas Vercel Serverless Functions (`api/listar-acessos.ts`, `api/provisionar-acesso.ts`) que rodam só no servidor: confirmam que quem chamou é RH autenticado e então usam a `SUPABASE_SERVICE_ROLE_KEY` para criar a conta no Supabase Auth — essa chave nunca é enviada ao navegador. **Essas duas functions só funcionam em produção (Vercel) ou com `vercel dev`** — `npm run dev` (Vite puro) não executa `/api/*`, então localmente a tela mostra erro de carregamento; isso é esperado.
 
 ## Arquitetura
 
 ```
+api/                        Vercel Serverless Functions (Node, só servidor — nunca no bundle do navegador)
+  _lib/adminAuth.ts           confere que quem chamou é RH autenticado; client admin com a service_role key
+  listar-acessos.ts            GET — lista colaboradores + status de provisionamento no Supabase Auth
+  provisionar-acesso.ts        POST — cria a conta no Supabase Auth para um e-mail de colaborador válido
 src/
   types/domain.ts            entidades de domínio (Colaborador, Cargo, Departamento, Movimentacao, Etapa, ...)
   data/*.json                catálogos estáticos (tipos de movimentação, perfis de acesso) + example data
@@ -58,6 +70,8 @@ src/
                                  que o PeopleFlow usa, nunca escreve nela
     movimentacoesRepository.ts   CRUD em `peopleflow_movimentacoes` (exclusiva deste portal)
     cargosCustomRepository.ts    CRUD em `peopleflow_cargos_custom` (exclusiva deste portal)
+    acessosRepository.ts          chama as Serverless Functions em api/*.ts (nunca fala com o Supabase
+                                 Auth admin direto do navegador)
     portalRepository.ts          catálogos estáticos (tipos, perfis) — sem backend
   domain/                     regras de negócio puras, sem React (testáveis isoladamente):
     hierarquia.ts              e-mail/perfil por colaborador, hierarquia de gestores, aprovador por papel

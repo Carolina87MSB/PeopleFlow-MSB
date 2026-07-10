@@ -9,6 +9,7 @@ const PAGE_META: Record<string, PageMeta> = {
   departamentos: { eyebrow: "Cadastro", title: "Departamentos" },
   cargos: { eyebrow: "Cadastro", title: "Cargos" },
   tipos: { eyebrow: "Cadastro", title: "Tipos de movimentação" },
+  acessos: { eyebrow: "Cadastro", title: "Acessos" },
   workflow: { eyebrow: "Operação", title: "Workflow de aprovação" },
   aprovadas: { eyebrow: "Operação", title: "Movimentações aprovadas" },
   historico: { eyebrow: "Operação", title: "Histórico" },

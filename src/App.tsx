@@ -10,6 +10,7 @@ import { ColaboradoresPage } from "./features/colaboradores/ColaboradoresPage";
 import { DepartamentosPage } from "./features/departamentos/DepartamentosPage";
 import { CargosPage } from "./features/cargos/CargosPage";
 import { TiposPage } from "./features/tipos/TiposPage";
+import { AcessosPage } from "./features/acessos/AcessosPage";
 import { WorkflowPage } from "./features/workflow/WorkflowPage";
 import { AprovadasPage } from "./features/aprovadas/AprovadasPage";
 import { HistoricoPage } from "./features/historico/HistoricoPage";
@@ -35,6 +36,7 @@ function App() {
                 <Route path="/departamentos" element={<DepartamentosPage />} />
                 <Route path="/cargos" element={<CargosPage />} />
                 <Route path="/tipos" element={<TiposPage />} />
+                <Route path="/acessos" element={<AcessosPage />} />
                 <Route path="/workflow" element={<WorkflowPage />} />
                 <Route path="/aprovadas" element={<AprovadasPage />} />
                 <Route path="/historico" element={<HistoricoPage />} />

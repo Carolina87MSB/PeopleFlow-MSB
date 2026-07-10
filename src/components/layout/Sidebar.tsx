@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardList,
   History,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Users,
@@ -67,6 +68,7 @@ export function Sidebar() {
           </>
         )}
         <NavItem to="/tipos" icon={<ArrowLeftRight size={18} strokeWidth={1.9} />} label="Tipos de movimentação" />
+        {podeVerCadastros && <NavItem to="/acessos" icon={<KeyRound size={18} strokeWidth={1.9} />} label="Acessos" />}
 
         <div className={styles.sectionLabel}>Operação</div>
         <NavItem to="/workflow" icon={<ClipboardList size={18} strokeWidth={1.9} />} label="Workflow de aprovação" badge={pendentesCount} badgeTone="warning" />
