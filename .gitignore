@@ -18,6 +18,11 @@ dist-ssr
 # nunca commitar dado real. Ver src/data/colaboradores.example.json.
 src/data/colaboradores.local.json
 
+# SQL com nomes reais de colaboradores gerado sob demanda (ex.: a partir de
+# planilhas de RH) para rodar manualmente no Supabase Dashboard. Nunca
+# commitar — repositório é PÚBLICO.
+supabase/*.local.sql
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
