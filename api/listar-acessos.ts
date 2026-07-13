@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireRH, supabaseAdmin } from "./_lib/adminAuth.js";
-import { emailOf, perfilOf } from "../src/domain/hierarquia.js";
+import { buildAccess } from "../src/domain/hierarquia.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -31,17 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (data.users.length < perPage) break;
     }
 
-    const contas = auth.colaboradores.map((c) => {
-      const email = emailOf(c.nome);
-      return {
-        nome: c.nome,
-        cargo: c.cargo,
-        depto: c.depto,
-        email,
-        perfil: perfilOf(c),
-        provisionado: emailsComConta.has(email),
-      };
-    });
+    const contas = buildAccess(auth.colaboradores).map((conta) => ({
+      ...conta,
+      provisionado: emailsComConta.has(conta.email),
+    }));
 
     res.status(200).json({ contas });
   } catch (err) {

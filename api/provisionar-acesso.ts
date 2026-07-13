@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireRH, supabaseAdmin } from "./_lib/adminAuth.js";
-import { emailOf } from "../src/domain/hierarquia.js";
+import { buildAccess } from "../src/domain/hierarquia.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -23,11 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Defesa extra: só provisiona e-mail que corresponde a um colaborador real
-    // (o mesmo cálculo que o app usa para decidir quem pode logar).
-    const colaboradorAlvo = auth.colaboradores.find((c) => emailOf(c.nome) === email);
-    if (!colaboradorAlvo) {
-      res.status(400).json({ error: "E-mail não corresponde a nenhum colaborador cadastrado." });
+    // Defesa extra: só provisiona e-mail de conta elegível (RH/Diretoria ou
+    // gestor imediato de alguém) — o mesmo cálculo que decide quem pode logar
+    // e quem aparece na tela /acessos.
+    const contaAlvo = buildAccess(auth.colaboradores).find((c) => c.email === email);
+    if (!contaAlvo) {
+      res.status(400).json({ error: "E-mail não corresponde a nenhuma conta elegível (RH, Diretoria ou gestor imediato)." });
       return;
     }
 

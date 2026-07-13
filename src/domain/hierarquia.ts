@@ -20,22 +20,33 @@ export function perfilOf(colaborador: Colaborador): Perfil {
 }
 
 /**
- * Toda linha de colaborador vira uma conta em potencial (perfil calculado via
- * perfilOf). O verdadeiro portão de acesso é a conta do Supabase Auth — só
- * quem o RH provisiona lá consegue pedir o link mágico (ver AuthContext) —
- * então não há necessidade (nem é seguro) inferir "é gestor" a partir do
- * campo `gestor` de outras linhas: isso quebraria o login de todo mundo
- * (inclusive RH) enquanto a hierarquia real ainda não foi populada via
- * `npm run seed:supabase`.
+ * Contas elegíveis para acessar o portal: RH e Diretoria sempre (por cargo/
+ * depto, ver perfilOf), e perfil Gestor só para quem de fato aparece como
+ * gestor imediato de pelo menos um colaborador (tem reporte direto na coluna
+ * `gestor`). Colaborador individual (sem reporte, não-RH, não-Diretoria) não
+ * entra na lista — o portal é para quem participa do fluxo de aprovação
+ * (solicitar/aprovar movimentações da própria equipe), não para todo mundo.
+ *
+ * O verdadeiro portão de acesso continua sendo a conta do Supabase Auth (só
+ * quem o RH provisiona lá consegue pedir o link mágico — ver AuthContext);
+ * este filtro é sobre QUEM deve aparecer como candidato a receber acesso
+ * (tela /acessos) e qual perfil a conta assume ao logar.
  */
 export function buildAccess(colaboradores: Colaborador[]): Conta[] {
-  return colaboradores.map((c) => ({
-    nome: c.nome,
-    cargo: c.cargo,
-    depto: c.depto,
-    email: emailOf(c.nome),
-    perfil: perfilOf(c),
-  }));
+  const gestoresImediatos = new Set(colaboradores.map((c) => c.gestor));
+
+  return colaboradores
+    .filter((c) => {
+      const perfil = perfilOf(c);
+      return perfil === "RH" || perfil === "Diretoria" || gestoresImediatos.has(c.nome);
+    })
+    .map((c) => ({
+      nome: c.nome,
+      cargo: c.cargo,
+      depto: c.depto,
+      email: emailOf(c.nome),
+      perfil: perfilOf(c),
+    }));
 }
 
 /** Walks the manager tree to find every employee reporting up to `nome`, directly or transitively. */
