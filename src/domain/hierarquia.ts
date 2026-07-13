@@ -1,4 +1,4 @@
-import type { Colaborador, Conta, Perfil } from "../types/domain";
+import type { Colaborador, Conta, Perfil } from "../types/domain.js";
 
 const DIACRITICS = new RegExp("[" + String.fromCharCode(0x0300) + "-" + String.fromCharCode(0x036f) + "]", "g");
 

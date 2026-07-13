@@ -5,8 +5,8 @@
 // nunca pode fazer diretamente.
 
 import { createClient } from "@supabase/supabase-js";
-import { buildAccess } from "../../src/domain/hierarquia";
-import type { Colaborador } from "../../src/types/domain";
+import { buildAccess } from "../../src/domain/hierarquia.js";
+import type { Colaborador } from "../../src/types/domain.js";
 
 const url = process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
