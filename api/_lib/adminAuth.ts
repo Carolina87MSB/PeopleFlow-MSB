@@ -53,6 +53,14 @@ export type RequireRHResult =
 
 /** Confere que quem chamou a function está autenticado no Supabase E tem perfil RH. */
 export async function requireRH(authHeader: string | string[] | undefined): Promise<RequireRHResult> {
+  if (!url || !serviceRoleKey) {
+    return {
+      ok: false,
+      status: 500,
+      error: "SUPABASE_SERVICE_ROLE_KEY (ou VITE_SUPABASE_URL) não configurada nas variáveis de ambiente da Vercel.",
+    };
+  }
+
   const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
   const token = raw?.replace(/^Bearer\s+/i, "").trim();
   if (!token) return { ok: false, status: 401, error: "Token de autenticação ausente." };
