@@ -13,8 +13,18 @@ export function emailOf(nome: string): string {
   return (last ? `${first}.${last}` : first) + "@msbbrasil.com";
 }
 
+const CARGO_DIRETORIA = /^(ceo|diretor(a)?)\b/;
+
+/**
+ * Classifica o perfil pelo cargo/depto. O cargo precisa COMEÇAR com "CEO" ou
+ * "Diretor(a)" para contar como Diretoria — antes bastava a palavra aparecer
+ * em qualquer lugar do texto, o que classificava cargos de apoio como
+ * "Assistente de Diretoria" ou "Secretária de Diretoria" (que contêm
+ * "Diretor" dentro de "Diretoria") como Diretoria por engano, tirando o
+ * acesso de Gestor dessas pessoas (ex.: botão "Nova movimentação").
+ */
 export function perfilOf(colaborador: Colaborador): Perfil {
-  if (/CEO|Diretor/i.test(colaborador.cargo)) return "Diretoria";
+  if (CARGO_DIRETORIA.test(norm(colaborador.cargo))) return "Diretoria";
   if (colaborador.depto === "Recursos Humanos") return "RH";
   return "Gestor";
 }
