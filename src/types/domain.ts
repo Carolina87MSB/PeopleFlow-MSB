@@ -195,3 +195,34 @@ export interface HistoricoEvento {
   data: string;
   autor: string;
 }
+
+export interface DescricaoCargo {
+  cargoNome: string;
+  codigoFormulario: string;
+  revisaoFormulario: string;
+  dataFormulario: string;
+  dataRevisaoCargo: string;
+  subordinacao: string;
+  localidade: string;
+  nivelDocumento: string;
+  sumario: string;
+  responsabilidades: string;
+  escolaridade: string;
+  experiencia: string;
+  habilidadesTecnicas: string;
+  habilidadesComportamentais: string;
+  epis: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface HistoricoDescricaoCargo {
+  id: number;
+  cargoNome: string;
+  campo: string;
+  campoLabel: string;
+  valorAnterior: string;
+  valorNovo: string;
+  editadoPor: string;
+  editadoEm: string;
+}

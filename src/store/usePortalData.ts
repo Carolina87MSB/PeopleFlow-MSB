@@ -2,15 +2,29 @@ import { useCallback, useMemo } from "react";
 import { useToast } from "../components/shared/ToastContext";
 import { atualizarDescricaoCargoCustom, criarCargoCustom } from "../repositories/cargosCustomRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
+import {
+  atualizarCampoDescricaoCargo as atualizarCampoDescricaoCargoNoSupabase,
+  getHistoricoDescricaoCargo,
+} from "../repositories/descricoesCargoRepository";
 import { atualizarMovimentacao, criarMovimentacao as criarMovimentacaoNoSupabase } from "../repositories/movimentacoesRepository";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
+import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
 import { descendants } from "../domain/hierarquia";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
 import { aprovarEtapa as aprovarEtapaDomain, cargoCustomDeNovoCargo, reprovarEtapa as reprovarEtapaDomain } from "../domain/workflow";
 import { usePortalStore } from "./PortalStoreContext";
 import { useConta } from "./useConta";
-import type { Colaborador, Conta, DesligamentoFinanceiro, Movimentacao, NovaMovimentacaoForm, Perfil } from "../types/domain";
+import type {
+  Colaborador,
+  Conta,
+  DescricaoCargo,
+  DesligamentoFinanceiro,
+  HistoricoDescricaoCargo,
+  Movimentacao,
+  NovaMovimentacaoForm,
+  Perfil,
+} from "../types/domain";
 
 export interface PortalData {
   conta: Conta;
@@ -22,6 +36,8 @@ export interface PortalData {
   desligados: Colaborador[];
   desligamentosFinanceiros: DesligamentoFinanceiro[];
   pendenciasFinanceirasCount: number;
+  descricoesCargo: DescricaoCargo[];
+  podeEditarDescricaoCargo: boolean;
   scopeSet: Set<string> | null;
   podeCriar: boolean;
   podeVerColaboradores: boolean;
@@ -33,6 +49,8 @@ export interface PortalData {
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   toggleDescricaoCargo: (nome: string) => void;
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
+  atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
+  carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
 }
 
 /**
@@ -152,6 +170,31 @@ export function usePortalData(): PortalData {
     [dispatch, perfil, me, state.tipos, state.colaboradores, state.movimentacoes, flash],
   );
 
+  const atualizarCampoDescricaoCargoFn = useCallback(
+    async (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => {
+      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome) ?? descricaoCargoVazia(cargoNome);
+      const valorAnterior = atual[campo];
+      try {
+        await atualizarCampoDescricaoCargoNoSupabase(cargoNome, campo, valorAnterior, valorNovo, me);
+        dispatch({
+          type: "ATUALIZAR_DESCRICAO_CARGO",
+          descricao: { ...atual, [campo]: valorNovo, updatedAt: new Date().toISOString(), updatedBy: me },
+        });
+        flash("Descrição de cargo atualizada.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao atualizar descrição de cargo.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, state.descricoesCargo, flash],
+  );
+
+  const carregarHistoricoDescricaoCargoFn = useCallback(
+    (cargoNome: string) => getHistoricoDescricaoCargo(cargoNome),
+    [],
+  );
+
   const salvarFechamentoFinanceiroFn = useCallback(
     async (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => {
       try {
@@ -180,6 +223,8 @@ export function usePortalData(): PortalData {
     desligados,
     desligamentosFinanceiros: state.desligamentosFinanceiros,
     pendenciasFinanceirasCount,
+    descricoesCargo: state.descricoesCargo,
+    podeEditarDescricaoCargo: perfil === "RH",
     scopeSet,
     podeCriar: canCreate(perfil),
     podeVerColaboradores: navColab(perfil),
@@ -191,5 +236,7 @@ export function usePortalData(): PortalData {
     criarMovimentacao: criarMovimentacaoFn,
     toggleDescricaoCargo: toggleDescricaoCargoFn,
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,
+    atualizarCampoDescricaoCargo: atualizarCampoDescricaoCargoFn,
+    carregarHistoricoDescricaoCargo: carregarHistoricoDescricaoCargoFn,
   };
 }

@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { FileText } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { Header } from "../../components/layout/Header";
 import { Badge, tableStyles } from "../../components/ui";
@@ -6,11 +7,13 @@ import { agregarCargos } from "../../domain/agregados";
 import { nivelMeta } from "../../domain/colors";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
+import { DescricaoCargoDrawer } from "./DescricaoCargoDrawer";
 import styles from "./CargosPage.module.css";
 
 export function CargosPage() {
   const { state } = usePortalStore();
-  const { colaboradoresVisiveis, podeVerCadastros, toggleDescricaoCargo } = usePortalData();
+  const { colaboradoresVisiveis, podeVerCadastros, toggleDescricaoCargo, descricoesCargo, podeEditarDescricaoCargo } = usePortalData();
+  const [cargoAberto, setCargoAberto] = useState<string | null>(null);
 
   const cargos = useMemo(
     () => agregarCargos(colaboradoresVisiveis, state.cargosCustom),
@@ -56,7 +59,11 @@ export function CargosPage() {
                   </td>
                   <td>{[...c.deptos].join(", ")}</td>
                   <td>
-                    {c.novo ? (
+                    {descricoesCargo.some((d) => d.cargoNome === c.nome) ? (
+                      <button type="button" className={styles.descricaoLink} onClick={() => setCargoAberto(c.nome)}>
+                        <FileText size={13} /> Ver descrição
+                      </button>
+                    ) : c.novo ? (
                       <button
                         type="button"
                         className={styles.descricaoToggle}
@@ -68,6 +75,10 @@ export function CargosPage() {
                         >
                           {c.descricao === "OK" ? "OK" : "Pendente"}
                         </Badge>
+                      </button>
+                    ) : podeEditarDescricaoCargo ? (
+                      <button type="button" className={styles.descricaoLink} onClick={() => setCargoAberto(c.nome)}>
+                        + Adicionar descrição
                       </button>
                     ) : (
                       "—"
@@ -82,6 +93,8 @@ export function CargosPage() {
           </tbody>
         </table>
       </div>
+
+      {cargoAberto ? <DescricaoCargoDrawer cargoNome={cargoAberto} onClose={() => setCargoAberto(null)} /> : null}
     </>
   );
 }

@@ -65,6 +65,18 @@ Colaboradores desligados somem das telas normais (Colaboradores, headcount do Da
 
 Enquanto rescisão ou GRRF não estiverem preenchidos, o colaborador conta como **pendência** — aparece no badge do menu lateral e num card no Dashboard ("Desligamentos pendentes"), visível só para RH.
 
+### Descrição de cargo (`/cargos`, formulário POP-RH-001)
+
+Na tela **Cargos**, a coluna "Descrição de cargo" mostra um link **"Ver descrição"** para todo cargo que já tenha o formulário oficial (POP-RH-001) cadastrado em `peopleflow_descricoes_cargo`. Clicar abre uma ficha com todos os campos do formulário:
+
+- **Dados do formulário (auditoria)** — código (ex.: `POP-RH-001-01`), revisão, data do formulário e data de revisão do cargo. Ficam em destaque no topo por serem o dado consultado em auditorias.
+- Subordinação, localidade e nível declarados no documento;
+- Sumário do cargo, principais responsabilidades, requisitos (escolaridade/experiência), competências (habilidades técnicas/comportamentais) e EPIs.
+
+Cada campo tem um botão de editar (ícone de lápis) visível **só para perfil RH** (`podeEditarDescricaoCargo` em `usePortalData.ts` — na prática, os únicos colaboradores no departamento "Recursos Humanos", hoje Carolina e Leslie). Toda edição grava em `peopleflow_descricoes_cargo` e também insere uma linha em `peopleflow_descricoes_cargo_historico` (valor anterior, valor novo, quem editou, quando) — a ficha mostra esse histórico completo na seção "Histórico de atualizações". Cargo sem descrição cadastrada mostra "—"; RH pode clicar em "+ Adicionar descrição" para começar a preencher do zero (cria a linha na primeira edição salva).
+
+Os 22 formulários reais (pasta "Descrição de Cargos 2026") foram convertidos para SQL em `supabase/descricoes_cargo_seed.local.sql` (gitignorado — conteúdo proprietário da empresa). Ao rodar, confira se cada cargo aparece com o link "Ver descrição" na tela — o nome do cargo (`cargo_nome`) precisa bater exatamente com o texto usado em `colaboradores.cargo`; como o Claude não tem acesso direto ao banco, os nomes foram normalizados a partir do texto em CAIXA ALTA de cada formulário e podem divergir da grafia real. Cargo sem o link após rodar o seed provavelmente só precisa de um `UPDATE ... SET cargo_nome = '<nome real>'`.
+
 ## Arquitetura
 
 ```
@@ -125,5 +137,7 @@ Os dois portais MSB usam o **mesmo projeto Supabase**, mas cada um só lê/escre
 | `peopleflow_movimentacoes` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
 | `peopleflow_cargos_custom` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
 | `peopleflow_desligamentos` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) — valor da rescisão e da GRRF, editados na tela `/desligados` |
+| `peopleflow_descricoes_cargo` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador) — escrita liberada por RLS a qualquer autenticado, mas a UI só mostra o botão de editar para perfil RH |
+| `peopleflow_descricoes_cargo_historico` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow — log append-only, uma linha por campo editado em `peopleflow_descricoes_cargo` |
 
 Isso significa: **qualquer pessoa cadastrada no SST também aparece automaticamente no PeopleFlow** (mesmo nome/cargo/departamento), mas só consegue **entrar** no PeopleFlow se tiver uma conta Supabase Auth provisionada (passo 2 acima) — ter conta no SST não dá acesso automático ao PeopleFlow, e vice-versa.

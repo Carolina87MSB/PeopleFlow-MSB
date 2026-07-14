@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { getColaboradores } from "../repositories/colaboradoresRepository";
 import { getCargosCustom } from "../repositories/cargosCustomRepository";
 import { getDesligamentosFinanceiros } from "../repositories/desligadosRepository";
+import { getDescricoesCargo } from "../repositories/descricoesCargoRepository";
 import { getMovimentacoes } from "../repositories/movimentacoesRepository";
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
 import type { PortalAction } from "./actions";
@@ -41,10 +42,18 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
     let cancelado = false;
     setLoading(true);
     setError(null);
-    Promise.all([getColaboradores(), getMovimentacoes(), getCargosCustom(), getTiposMovimentacao(), getPerfis(), getDesligamentosFinanceiros()])
-      .then(([colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros]) => {
+    Promise.all([
+      getColaboradores(),
+      getMovimentacoes(),
+      getCargosCustom(),
+      getTiposMovimentacao(),
+      getPerfis(),
+      getDesligamentosFinanceiros(),
+      getDescricoesCargo(),
+    ])
+      .then(([colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros, descricoesCargo]) => {
         if (cancelado) return;
-        dispatch({ type: "CARREGAR_DADOS", colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros });
+        dispatch({ type: "CARREGAR_DADOS", colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros, descricoesCargo });
       })
       .catch((err: Error) => {
         if (cancelado) return;

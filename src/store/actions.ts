@@ -1,4 +1,4 @@
-import type { CargoCustom, Colaborador, DesligamentoFinanceiro, Movimentacao, Perfil2Info, TipoMovimentacao } from "../types/domain";
+import type { CargoCustom, Colaborador, DescricaoCargo, DesligamentoFinanceiro, Movimentacao, Perfil2Info, TipoMovimentacao } from "../types/domain";
 
 export type PortalAction =
   | {
@@ -9,6 +9,7 @@ export type PortalAction =
       tipos: TipoMovimentacao[];
       perfis: Perfil2Info[];
       desligamentosFinanceiros: DesligamentoFinanceiro[];
+      descricoesCargo: DescricaoCargo[];
     }
   | { type: "APROVAR_ETAPA"; id: string }
   | { type: "REPROVAR_ETAPA"; id: string }
@@ -16,4 +17,5 @@ export type PortalAction =
   | { type: "REGISTRAR_CARGO_CUSTOM"; cargo: CargoCustom }
   | { type: "TOGGLE_DESCRICAO_CARGO"; nome: string }
   | { type: "SALVAR_FECHAMENTO_FINANCEIRO"; desligamento: DesligamentoFinanceiro }
+  | { type: "ATUALIZAR_DESCRICAO_CARGO"; descricao: DescricaoCargo }
   | { type: "RESET" };

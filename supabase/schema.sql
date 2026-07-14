@@ -138,3 +138,74 @@ create policy "authenticated_rw_desligamentos"
   to authenticated
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 4) Descrição de cargo — formulário oficial (POP-RH-001) por cargo
+-- ─────────────────────────────────────────────────────────────────────────
+-- Uma linha por cargo (chave = nome do cargo, igual ao usado em
+-- colaboradores.cargo / peopleflow_cargos_custom.nome). Guarda o conteúdo
+-- completo do formulário de descrição de cargo, incluindo os dados de
+-- controle documental (código, revisão, data do formulário) usados em
+-- auditorias. Edição por campo é exclusiva do RH (ver
+-- src/domain/permissoes.ts — perfil "RH"), mas a leitura é liberada a
+-- qualquer autenticado, assim como as demais tabelas deste portal.
+create table if not exists public.peopleflow_descricoes_cargo (
+  cargo_nome text primary key,
+  codigo_formulario text,
+  revisao_formulario text,
+  data_formulario text,
+  data_revisao_cargo text,
+  subordinacao text,
+  localidade text,
+  nivel_documento text,
+  sumario text,
+  responsabilidades text,
+  escolaridade text,
+  experiencia text,
+  habilidades_tecnicas text,
+  habilidades_comportamentais text,
+  epis text,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+comment on table public.peopleflow_descricoes_cargo is
+  'Conteúdo do formulário de descrição de cargo (POP-RH-001) por cargo — cargo_nome referencia colaboradores.cargo. Exclusiva do Portal PeopleFlow.';
+comment on column public.peopleflow_descricoes_cargo.codigo_formulario is 'Código do documento controlado (ex.: POP-RH-001-01) — usado em auditorias.';
+comment on column public.peopleflow_descricoes_cargo.data_formulario is 'Data/revisão do template do formulário (cabeçalho do POP), distinta de data_revisao_cargo.';
+comment on column public.peopleflow_descricoes_cargo.data_revisao_cargo is 'Data em que o conteúdo deste cargo específico foi revisado (ex.: "março/2026").';
+comment on column public.peopleflow_descricoes_cargo.nivel_documento is 'Nível declarado no formulário (ex.: "PLENO", "I, II ou III") — não confundir com colaboradores.nivel.';
+
+-- Log append-only de alterações campo a campo — alimenta o "Histórico de
+-- atualizações" exibido junto com a descrição de cargo.
+create table if not exists public.peopleflow_descricoes_cargo_historico (
+  id bigint generated always as identity primary key,
+  cargo_nome text not null,
+  campo text not null,
+  valor_anterior text,
+  valor_novo text,
+  editado_por text not null,
+  editado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_descricoes_cargo_historico is
+  'Histórico append-only de edições campo a campo de peopleflow_descricoes_cargo.';
+
+alter table public.peopleflow_descricoes_cargo enable row level security;
+alter table public.peopleflow_descricoes_cargo_historico enable row level security;
+
+drop policy if exists "authenticated_rw_descricoes_cargo" on public.peopleflow_descricoes_cargo;
+create policy "authenticated_rw_descricoes_cargo"
+  on public.peopleflow_descricoes_cargo
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "authenticated_rw_descricoes_cargo_historico" on public.peopleflow_descricoes_cargo_historico;
+create policy "authenticated_rw_descricoes_cargo_historico"
+  on public.peopleflow_descricoes_cargo_historico
+  for all
+  to authenticated
+  using (true)
+  with check (true);
