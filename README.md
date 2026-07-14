@@ -9,7 +9,7 @@ Reconstruído a partir de um protótipo visual (`Portal PeopleFlow MSB.zip`, for
 Pré-requisito: [Node.js](https://nodejs.org) 20+ e um projeto Supabase já configurado para o Portal SST (mesmo `.env.local` dele funciona aqui).
 
 1. **Rode o schema deste portal**: abra _SQL Editor_ no painel do MESMO projeto Supabase usado pelo SST, cole o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e execute. Isso:
-   - adiciona colunas novas à tabela `colaboradores` já existente do SST — `matricula`, `depto_code`, `nivel`, `gestor`, `admissao` (organograma) e `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by` (essas últimas também gravadas pelo próprio Portal SST ao desligar alguém — ver `api/desligar-colaborador.ts` dele) — **não remove nem altera nada que o SST já usa**;
+   - adiciona colunas novas à tabela `colaboradores` já existente do SST — `vinculo` (CLT/PJ/Estágio), `depto_code`, `nivel`, `gestor`, `admissao` (organograma) e `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by` (essas últimas também gravadas pelo próprio Portal SST ao desligar alguém — ver `api/desligar-colaborador.ts` dele) — **não remove nem altera nada que o SST já usa** (a coluna antiga `matricula` continua existindo, só não é mais lida/gravada pelo app);
    - cria três tabelas exclusivas deste portal: `peopleflow_movimentacoes`, `peopleflow_cargos_custom` e `peopleflow_desligamentos` (fechamento financeiro), com RLS liberando leitura/escrita para qualquer usuário autenticado.
 2. **Provisione a primeira conta (a sua, do RH)**: diferente do SST (só RH tem conta), aqui **todo Gestor, Diretor e RH que for usar o portal precisa de uma conta no Supabase Auth**. Para a primeiríssima conta (RH, que vai gerenciar as demais pela tela `/acessos` do próprio app — ver abaixo), crie manualmente em _Authentication → Users → Add user_. As contas seguintes não precisam mais do painel do Supabase.
 3. **Configure o ambiente local**:
@@ -19,7 +19,7 @@ Pré-requisito: [Node.js](https://nodejs.org) 20+ e um projeto Supabase já conf
    # preencha com VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY do MESMO projeto do SST
    npm install
    ```
-4. **Popule os campos do PeopleFlow para os colaboradores reais** (opcional, mas necessário para o organograma/hierarquia funcionar corretamente — sem isso, matrícula/gestor/nível/admissão aparecem como "—" para todo mundo): crie um `src/data/colaboradores.local.json` (gitignored) no formato de [`src/data/colaboradores.example.json`](src/data/colaboradores.example.json) — só precisa de `{ nome, matricula, deptoCode, nivel, gestor, admissao }`, o `nome` tem que bater exatamente com o `nome` já cadastrado no SST — e rode:
+4. **Popule os campos do PeopleFlow para os colaboradores reais** (opcional, mas necessário para o organograma/hierarquia funcionar corretamente — sem isso, vínculo/gestor/nível/admissão aparecem como "—" para todo mundo): crie um `src/data/colaboradores.local.json` (gitignored) no formato de [`src/data/colaboradores.example.json`](src/data/colaboradores.example.json) — só precisa de `{ nome, vinculo, deptoCode, nivel, gestor, admissao }`, o `nome` tem que bater exatamente com o `nome` já cadastrado no SST — e rode:
    ```bash
    npm run seed:supabase src/data/colaboradores.local.json
    ```
@@ -133,7 +133,7 @@ Os dois portais MSB usam o **mesmo projeto Supabase**, mas cada um só lê/escre
 
 | Tabela | Dono | Quem lê | Quem escreve |
 |---|---|---|---|
-| `colaboradores` | Portal SST | SST (tudo) e PeopleFlow (nome/cargo/departamento/matricula/depto_code/nivel/gestor/admissao/desligado/data_desligamento/motivo_desligamento/desligado_by) | Cadastro base: só o SST (via `npm run seed:supabase` dele, service role). `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by`: só o SST, via `api/desligar-colaborador.ts` dele (service role) — PeopleFlow só lê, nunca escreve em `colaboradores`. Campos de organograma (`matricula`/`depto_code`/`nivel`/`gestor`/`admissao`): só via `npm run seed:supabase` deste projeto |
+| `colaboradores` | Portal SST | SST (tudo) e PeopleFlow (nome/cargo/departamento/vinculo/depto_code/nivel/gestor/admissao/desligado/data_desligamento/motivo_desligamento/desligado_by) | Cadastro base: só o SST (via `npm run seed:supabase` dele, service role). `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by`: só o SST, via `api/desligar-colaborador.ts` dele (service role) — PeopleFlow só lê, nunca escreve em `colaboradores`. Campos de organograma (`vinculo`/`depto_code`/`nivel`/`gestor`/`admissao`): só via `npm run seed:supabase` deste projeto |
 | `peopleflow_movimentacoes` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
 | `peopleflow_cargos_custom` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
 | `peopleflow_desligamentos` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) — valor da rescisão e da GRRF, editados na tela `/desligados` |

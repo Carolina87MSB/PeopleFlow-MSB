@@ -91,18 +91,20 @@ export function ColaboradoresPage() {
           <table className={tableStyles.table}>
             <thead>
               <tr>
-                <th>Matrícula</th>
+                <th>Vínculo</th>
                 <th>Colaborador</th>
                 <th>Cargo</th>
                 <th>Departamento</th>
                 <th>Gestor imediato</th>
+                <th>Data de admissão</th>
+                <th>Tempo de empresa</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {filtrados.map((c) => (
-                <tr key={c.matricula} className={tableStyles.clickable} onClick={() => setSelecionado(c.nome)}>
-                  <td>{c.matricula}</td>
+                <tr key={c.nome} className={tableStyles.clickable} onClick={() => setSelecionado(c.nome)}>
+                  <td>{c.vinculo}</td>
                   <td>
                     <div className={styles.pessoa}>
                       <Avatar nome={c.nome} size={30} />
@@ -119,6 +121,8 @@ export function ColaboradoresPage() {
                     </span>
                   </td>
                   <td>{c.gestor}</td>
+                  <td>{c.admissao}</td>
+                  <td>{c.tempoDeEmpresa}</td>
                   <td>
                     <Badge bg="var(--color-success-bg)" fg="var(--color-success-fg)" dot="var(--color-success)">
                       Ativo
@@ -146,8 +150,8 @@ export function ColaboradoresPage() {
         >
           <div className={styles.detalhes}>
             <div className={styles.detalheItem}>
-              <span className={styles.detalheLabel}>Matrícula</span>
-              <span className={styles.detalheValor}>{colaboradorSelecionado.matricula}</span>
+              <span className={styles.detalheLabel}>Vínculo</span>
+              <span className={styles.detalheValor}>{colaboradorSelecionado.vinculo}</span>
             </div>
             <div className={styles.detalheItem}>
               <span className={styles.detalheLabel}>Cargo</span>
@@ -172,6 +176,10 @@ export function ColaboradoresPage() {
             <div className={styles.detalheItem}>
               <span className={styles.detalheLabel}>Admissão</span>
               <span className={styles.detalheValor}>{colaboradorSelecionado.admissao}</span>
+            </div>
+            <div className={styles.detalheItem}>
+              <span className={styles.detalheLabel}>Tempo de empresa</span>
+              <span className={styles.detalheValor}>{colaboradorSelecionado.tempoDeEmpresa}</span>
             </div>
           </div>
         </Drawer>

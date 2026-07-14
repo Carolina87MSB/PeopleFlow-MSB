@@ -11,7 +11,7 @@ export type Nivel =
   | "Aprendiz / Estágio";
 
 export interface Colaborador {
-  matricula: string;
+  vinculo: string;
   nome: string;
   cargo: string;
   depto: string;
@@ -19,6 +19,8 @@ export interface Colaborador {
   nivel: Nivel;
   gestor: string;
   admissao: string;
+  /** Calculado a partir de `admissao` — ver tempoDeEmpresa() em domain/dates.ts. */
+  tempoDeEmpresa: string;
   desligado: boolean;
   dataDesligamento: string; // "dd/mmm/aaaa" ou "" se não desligado
   motivoDesligamento: string;

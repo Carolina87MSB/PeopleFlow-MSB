@@ -209,3 +209,15 @@ create policy "authenticated_rw_descricoes_cargo_historico"
   to authenticated
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 5) Vínculo — substitui a coluna `matricula` na tela Colaboradores
+-- ─────────────────────────────────────────────────────────────────────────
+-- `matricula` nunca chegou a ser preenchida com dado real (sempre "—" na UI)
+-- e foi substituída por `vinculo` (CLT/PJ/Estágio etc.) por pedido do RH. A
+-- coluna `matricula` continua existindo na tabela (schema aditivo — nunca
+-- removemos coluna), só não é mais lida/gravada pelo app.
+alter table public.colaboradores
+  add column if not exists vinculo text;
+
+comment on column public.colaboradores.vinculo is 'PeopleFlow: tipo de vínculo do colaborador (ex.: CLT, PJ, Estágio).';

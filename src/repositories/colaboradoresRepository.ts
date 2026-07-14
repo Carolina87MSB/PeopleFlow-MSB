@@ -7,7 +7,7 @@
 // Trocar a fonte de novo no futuro é uma mudança isolada neste arquivo; nada
 // mais no app importa o Supabase diretamente para dados de colaborador.
 
-import { formatarDataIso } from "../domain/dates";
+import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import type { Colaborador, Nivel } from "../types/domain";
 
@@ -15,7 +15,7 @@ interface ColaboradorRow {
   nome: string;
   cargo: string | null;
   departamento: string | null;
-  matricula: string | null;
+  vinculo: string | null;
   depto_code: string | null;
   nivel: string | null;
   gestor: string | null;
@@ -40,7 +40,7 @@ const NIVEIS_VALIDOS: Nivel[] = [
 function fromRow(row: ColaboradorRow): Colaborador {
   const nivel = NIVEIS_VALIDOS.includes(row.nivel as Nivel) ? (row.nivel as Nivel) : "Operacional";
   return {
-    matricula: row.matricula ?? "—",
+    vinculo: row.vinculo ?? "—",
     nome: row.nome,
     cargo: row.cargo ?? "",
     depto: row.departamento ?? "",
@@ -48,6 +48,7 @@ function fromRow(row: ColaboradorRow): Colaborador {
     nivel,
     gestor: row.gestor ?? "—",
     admissao: formatarDataIso(row.admissao),
+    tempoDeEmpresa: tempoDeEmpresa(row.admissao),
     desligado: row.desligado ?? false,
     dataDesligamento: formatarDataIso(row.data_desligamento),
     motivoDesligamento: row.motivo_desligamento ?? "",
@@ -70,7 +71,7 @@ export async function getColaboradores(): Promise<Colaborador[]> {
 
   const { data, error } = await supabase
     .from("colaboradores")
-    .select("nome, cargo, departamento, matricula, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by")
+    .select("nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by")
     .order("nome", { ascending: true });
 
   if (error) {

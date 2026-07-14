@@ -6,6 +6,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { buildAccess } from "../../src/domain/hierarquia.js";
+import { tempoDeEmpresa } from "../../src/domain/dates.js";
 import type { Colaborador } from "../../src/types/domain.js";
 
 const url = process.env.VITE_SUPABASE_URL;
@@ -27,7 +28,7 @@ interface ColaboradorRow {
   nome: string;
   cargo: string | null;
   departamento: string | null;
-  matricula: string | null;
+  vinculo: string | null;
   depto_code: string | null;
   nivel: string | null;
   gestor: string | null;
@@ -40,7 +41,7 @@ interface ColaboradorRow {
 
 function fromRow(row: ColaboradorRow): Colaborador {
   return {
-    matricula: row.matricula ?? "—",
+    vinculo: row.vinculo ?? "—",
     nome: row.nome,
     cargo: row.cargo ?? "",
     depto: row.departamento ?? "",
@@ -48,6 +49,7 @@ function fromRow(row: ColaboradorRow): Colaborador {
     nivel: (row.nivel as Colaborador["nivel"]) ?? "Operacional",
     gestor: row.gestor ?? "—",
     admissao: row.admissao ?? "",
+    tempoDeEmpresa: tempoDeEmpresa(row.admissao),
     desligado: row.desligado ?? false,
     dataDesligamento: row.data_desligamento ?? "",
     motivoDesligamento: row.motivo_desligamento ?? "",
@@ -80,7 +82,7 @@ export async function requireRH(authHeader: string | string[] | undefined): Prom
 
   const { data, error } = await supabaseAdmin
     .from("colaboradores")
-    .select("nome, cargo, departamento, matricula, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by");
+    .select("nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by");
   if (error) return { ok: false, status: 500, error: error.message };
 
   const colaboradores = (data as ColaboradorRow[]).map(fromRow);

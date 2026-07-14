@@ -149,7 +149,7 @@ const colaboradores = RAW.map((t, i) => {
   const mo = (i * 5) % 12;
   const dy = ((i * 7) % 27) + 1;
   return {
-    matricula: "MSB-" + String(101 + i),
+    vinculo: "CLT",
     nome, cargo, depto,
     deptoCode: CODE[depto],
     nivel: NIVEL[cargo] || "Operacional",

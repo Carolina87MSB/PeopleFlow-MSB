@@ -1,6 +1,6 @@
 [
   {
-    "matricula": "MSB-101",
+    "vinculo": "CLT",
     "nome": "Cintia Santos Silva Batista",
     "cargo": "Analista Administrativo",
     "depto": "Administrativo",
@@ -10,7 +10,7 @@
     "admissao": "01/jan/2019"
   },
   {
-    "matricula": "MSB-102",
+    "vinculo": "CLT",
     "nome": "Miguel Cruz Cambeses",
     "cargo": "Jovem Aprendiz",
     "depto": "Aprendiz",
@@ -20,7 +20,7 @@
     "admissao": "08/jun/2020"
   },
   {
-    "matricula": "MSB-103",
+    "vinculo": "CLT",
     "nome": "Patricio Fe de Oliveira",
     "cargo": "Analista Contábil",
     "depto": "Contabilidade",
@@ -30,7 +30,7 @@
     "admissao": "15/nov/2021"
   },
   {
-    "matricula": "MSB-104",
+    "vinculo": "CLT",
     "nome": "Felipe Marcos Peixoto Pereira",
     "cargo": "Assistente de Controle da Qualidade",
     "depto": "Controle da Qualidade",
@@ -40,7 +40,7 @@
     "admissao": "22/abr/2022"
   },
   {
-    "matricula": "MSB-105",
+    "vinculo": "CLT",
     "nome": "Manuela Fraga Fernandes e Silva",
     "cargo": "Assistente de Controle da Qualidade",
     "depto": "Controle da Qualidade",
@@ -50,7 +50,7 @@
     "admissao": "02/set/2023"
   },
   {
-    "matricula": "MSB-106",
+    "vinculo": "CLT",
     "nome": "Fabiana Santos Sousa",
     "cargo": "Inspetora da Qualidade",
     "depto": "Controle da Qualidade",
@@ -60,7 +60,7 @@
     "admissao": "09/fev/2024"
   },
   {
-    "matricula": "MSB-107",
+    "vinculo": "CLT",
     "nome": "Ravena Peixoto dos Santos",
     "cargo": "Supervisora de Controle da Qualidade",
     "depto": "Controle da Qualidade",
@@ -70,7 +70,7 @@
     "admissao": "16/jul/2025"
   },
   {
-    "matricula": "MSB-108",
+    "vinculo": "CLT",
     "nome": "Italo Rafael Araujo Zorzetto",
     "cargo": "Analista de Engenharia",
     "depto": "Engenharia",
@@ -80,7 +80,7 @@
     "admissao": "23/dez/2019"
   },
   {
-    "matricula": "MSB-109",
+    "vinculo": "CLT",
     "nome": "Lucas Prata Oliveira",
     "cargo": "Analista de Engenharia",
     "depto": "Engenharia",
@@ -90,7 +90,7 @@
     "admissao": "03/mai/2020"
   },
   {
-    "matricula": "MSB-110",
+    "vinculo": "CLT",
     "nome": "Rodrigo Araujo Porto Bomfim",
     "cargo": "Analista de Engenharia",
     "depto": "Engenharia",
@@ -100,7 +100,7 @@
     "admissao": "10/out/2021"
   },
   {
-    "matricula": "MSB-111",
+    "vinculo": "CLT",
     "nome": "Rebeca Santos Souza Oliveira",
     "cargo": "Analista de Melhoria Contínua",
     "depto": "Engenharia",
@@ -110,7 +110,7 @@
     "admissao": "17/mar/2022"
   },
   {
-    "matricula": "MSB-112",
+    "vinculo": "CLT",
     "nome": "Elen Pereira Barboza Brandão",
     "cargo": "Analista de Projetos de Engenharia",
     "depto": "Engenharia",
@@ -120,7 +120,7 @@
     "admissao": "24/ago/2023"
   },
   {
-    "matricula": "MSB-113",
+    "vinculo": "CLT",
     "nome": "Victor Antunes Silva Barbosa",
     "cargo": "Coordenador de Engenharia",
     "depto": "Engenharia",
@@ -130,7 +130,7 @@
     "admissao": "04/jan/2024"
   },
   {
-    "matricula": "MSB-114",
+    "vinculo": "CLT",
     "nome": "Marcelo Ricardo Araújo Bacelar de Lima",
     "cargo": "Estagiário (a)",
     "depto": "Engenharia",
@@ -140,7 +140,7 @@
     "admissao": "11/jun/2025"
   },
   {
-    "matricula": "MSB-115",
+    "vinculo": "CLT",
     "nome": "Drielly Mitie Mizushima Victor",
     "cargo": "Analista Financeiro",
     "depto": "Financeiro",
@@ -150,7 +150,7 @@
     "admissao": "18/nov/2019"
   },
   {
-    "matricula": "MSB-116",
+    "vinculo": "CLT",
     "nome": "Ednalva Nascimento da Silva",
     "cargo": "Assistente de Logística",
     "depto": "Logística",
@@ -160,7 +160,7 @@
     "admissao": "25/abr/2020"
   },
   {
-    "matricula": "MSB-117",
+    "vinculo": "CLT",
     "nome": "Italo da Silva Figueiredo",
     "cargo": "Assistente de Logística",
     "depto": "Logística",
@@ -170,7 +170,7 @@
     "admissao": "05/set/2021"
   },
   {
-    "matricula": "MSB-118",
+    "vinculo": "CLT",
     "nome": "Leandro de Jesus Silva",
     "cargo": "Assistente de Logística",
     "depto": "Logística",
@@ -180,7 +180,7 @@
     "admissao": "12/fev/2022"
   },
   {
-    "matricula": "MSB-119",
+    "vinculo": "CLT",
     "nome": "Mirailton de Santana Santana",
     "cargo": "Assistente de Logística",
     "depto": "Logística",
@@ -190,7 +190,7 @@
     "admissao": "19/jul/2023"
   },
   {
-    "matricula": "MSB-120",
+    "vinculo": "CLT",
     "nome": "Iago Rosas Iung",
     "cargo": "Líder de Manutenção",
     "depto": "Manutenção",
@@ -200,7 +200,7 @@
     "admissao": "26/dez/2024"
   },
   {
-    "matricula": "MSB-121",
+    "vinculo": "CLT",
     "nome": "Jaqueline Lima Teixeira",
     "cargo": "Assistente de Operações de Vendas",
     "depto": "Operações de Vendas",
@@ -210,7 +210,7 @@
     "admissao": "06/mai/2025"
   },
   {
-    "matricula": "MSB-122",
+    "vinculo": "CLT",
     "nome": "Luciana Kelly Rocha Santos",
     "cargo": "Assistente de Operações de Vendas",
     "depto": "Operações de Vendas",
@@ -220,7 +220,7 @@
     "admissao": "13/out/2019"
   },
   {
-    "matricula": "MSB-123",
+    "vinculo": "CLT",
     "nome": "Selma Ribeiro Bispo",
     "cargo": "Supervisor(a) de Operação de Vendas",
     "depto": "Operações de Vendas",
@@ -230,7 +230,7 @@
     "admissao": "20/mar/2020"
   },
   {
-    "matricula": "MSB-124",
+    "vinculo": "CLT",
     "nome": "Maria Lívia de Oliveira Ferreira",
     "cargo": "Analista de Planejamento",
     "depto": "PCP e Compras",
@@ -240,7 +240,7 @@
     "admissao": "27/ago/2021"
   },
   {
-    "matricula": "MSB-125",
+    "vinculo": "CLT",
     "nome": "Lucas Pugliesi Di Girolamo",
     "cargo": "Assistente de Planejamento",
     "depto": "PCP e Compras",
@@ -250,7 +250,7 @@
     "admissao": "07/jan/2022"
   },
   {
-    "matricula": "MSB-126",
+    "vinculo": "CLT",
     "nome": "Alice Coutinho da Cruz",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -260,7 +260,7 @@
     "admissao": "14/jun/2023"
   },
   {
-    "matricula": "MSB-127",
+    "vinculo": "CLT",
     "nome": "Ana Beatriz Souza Figueiredo",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -270,7 +270,7 @@
     "admissao": "21/nov/2024"
   },
   {
-    "matricula": "MSB-128",
+    "vinculo": "CLT",
     "nome": "Bruna Fernanda dos Santos Silva",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -280,7 +280,7 @@
     "admissao": "01/abr/2025"
   },
   {
-    "matricula": "MSB-129",
+    "vinculo": "CLT",
     "nome": "Bruna Santos Nascimento",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -290,7 +290,7 @@
     "admissao": "08/set/2019"
   },
   {
-    "matricula": "MSB-130",
+    "vinculo": "CLT",
     "nome": "Leildes de Queiros Bonfim",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -300,7 +300,7 @@
     "admissao": "15/fev/2020"
   },
   {
-    "matricula": "MSB-131",
+    "vinculo": "CLT",
     "nome": "Poliana Aline de Cerqueira Vieira",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -310,7 +310,7 @@
     "admissao": "22/jul/2021"
   },
   {
-    "matricula": "MSB-132",
+    "vinculo": "CLT",
     "nome": "Silvana Trindade Pires dos Santos",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -320,7 +320,7 @@
     "admissao": "02/dez/2022"
   },
   {
-    "matricula": "MSB-133",
+    "vinculo": "CLT",
     "nome": "Taísa Trindade da Cruz",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -330,7 +330,7 @@
     "admissao": "09/mai/2023"
   },
   {
-    "matricula": "MSB-134",
+    "vinculo": "CLT",
     "nome": "Yasmin Batista Santos",
     "cargo": "Auxiliar de Produção I",
     "depto": "Produção",
@@ -340,7 +340,7 @@
     "admissao": "16/out/2024"
   },
   {
-    "matricula": "MSB-135",
+    "vinculo": "CLT",
     "nome": "Ana Maria Alves Santos",
     "cargo": "Auxiliar de Produção II",
     "depto": "Produção",
@@ -350,7 +350,7 @@
     "admissao": "23/mar/2025"
   },
   {
-    "matricula": "MSB-136",
+    "vinculo": "CLT",
     "nome": "Edilcelia Souza de Jesus",
     "cargo": "Auxiliar de Produção III",
     "depto": "Produção",
@@ -360,7 +360,7 @@
     "admissao": "03/ago/2019"
   },
   {
-    "matricula": "MSB-137",
+    "vinculo": "CLT",
     "nome": "Janete Carvalho de Jesus",
     "cargo": "Auxiliar de Produção III",
     "depto": "Produção",
@@ -370,7 +370,7 @@
     "admissao": "10/jan/2020"
   },
   {
-    "matricula": "MSB-138",
+    "vinculo": "CLT",
     "nome": "Joice Melo dos Santos",
     "cargo": "Auxiliar de Produção III",
     "depto": "Produção",
@@ -380,7 +380,7 @@
     "admissao": "17/jun/2021"
   },
   {
-    "matricula": "MSB-139",
+    "vinculo": "CLT",
     "nome": "Tainara Correia dos Santos",
     "cargo": "Supervisora de Produção",
     "depto": "Produção",
@@ -390,7 +390,7 @@
     "admissao": "24/nov/2022"
   },
   {
-    "matricula": "MSB-140",
+    "vinculo": "CLT",
     "nome": "Mateus Chaves Moura",
     "cargo": "Assistente de T.I",
     "depto": "Projetos e TI",
@@ -400,7 +400,7 @@
     "admissao": "04/abr/2023"
   },
   {
-    "matricula": "MSB-141",
+    "vinculo": "CLT",
     "nome": "Juliana Ranzan Matos",
     "cargo": "Analista da Qualidade e Assuntos Regulatórios",
     "depto": "Qualidade e Regulatório",
@@ -410,7 +410,7 @@
     "admissao": "11/set/2024"
   },
   {
-    "matricula": "MSB-142",
+    "vinculo": "CLT",
     "nome": "Cidália Pereira Cardoso",
     "cargo": "Auxiliar de Serviços Gerais",
     "depto": "Qualidade e Regulatório",
@@ -420,7 +420,7 @@
     "admissao": "18/fev/2025"
   },
   {
-    "matricula": "MSB-143",
+    "vinculo": "CLT",
     "nome": "Tais Batista Santos Araújo",
     "cargo": "Auxiliar de Serviços Gerais",
     "depto": "Qualidade e Regulatório",
@@ -430,7 +430,7 @@
     "admissao": "25/jul/2019"
   },
   {
-    "matricula": "MSB-144",
+    "vinculo": "CLT",
     "nome": "William Alves Cruz",
     "cargo": "Auxiliar de Serviços Gerais",
     "depto": "Qualidade e Regulatório",
@@ -440,7 +440,7 @@
     "admissao": "05/dez/2020"
   },
   {
-    "matricula": "MSB-145",
+    "vinculo": "CLT",
     "nome": "Raissa Rayane Santos Laurindo Caldas",
     "cargo": "Coordenador(a) da Garantia da Qualidade",
     "depto": "Qualidade e Regulatório",
@@ -450,7 +450,7 @@
     "admissao": "12/mai/2021"
   },
   {
-    "matricula": "MSB-146",
+    "vinculo": "CLT",
     "nome": "Carolina Matos da Cruz",
     "cargo": "Analista de RH",
     "depto": "Recursos Humanos",
@@ -460,7 +460,7 @@
     "admissao": "19/out/2022"
   },
   {
-    "matricula": "MSB-147",
+    "vinculo": "CLT",
     "nome": "Leslie Silva Souza",
     "cargo": "Assistente de Gente e Gestão",
     "depto": "Recursos Humanos",
@@ -470,7 +470,7 @@
     "admissao": "26/mar/2023"
   },
   {
-    "matricula": "MSB-148",
+    "vinculo": "CLT",
     "nome": "Manuele Rodrigues dos Santos",
     "cargo": "Jovem Aprendiz",
     "depto": "Aprendiz",
@@ -480,7 +480,7 @@
     "admissao": "06/ago/2024"
   },
   {
-    "matricula": "MSB-149",
+    "vinculo": "CLT",
     "nome": "Davi Cunha Barbosa Moreira",
     "cargo": "Técnico de Manutenção",
     "depto": "Manutenção",
@@ -490,7 +490,7 @@
     "admissao": "13/jan/2025"
   },
   {
-    "matricula": "MSB-150",
+    "vinculo": "CLT",
     "nome": "Tassio Antonio Lima Sant Ana",
     "cargo": "Gerente Industrial",
     "depto": "Industrial e Diretoria",
@@ -500,7 +500,7 @@
     "admissao": "20/jun/2019"
   },
   {
-    "matricula": "MSB-151",
+    "vinculo": "CLT",
     "nome": "Yuri Ivonei Crispim",
     "cargo": "Diretor Industrial",
     "depto": "Industrial e Diretoria",
@@ -510,7 +510,7 @@
     "admissao": "27/nov/2020"
   },
   {
-    "matricula": "MSB-152",
+    "vinculo": "CLT",
     "nome": "Daniel Emiliano Suguer",
     "cargo": "CEO",
     "depto": "Industrial e Diretoria",
@@ -520,7 +520,7 @@
     "admissao": "07/abr/2021"
   },
   {
-    "matricula": "MSB-153",
+    "vinculo": "CLT",
     "nome": "Ana Lucia Noto",
     "cargo": "Consultor(a) Comercial",
     "depto": "Comercial",
@@ -530,7 +530,7 @@
     "admissao": "14/set/2022"
   },
   {
-    "matricula": "MSB-154",
+    "vinculo": "CLT",
     "nome": "Cristiane Andrade",
     "cargo": "Key Account Manager",
     "depto": "Comercial",
@@ -540,7 +540,7 @@
     "admissao": "21/fev/2023"
   },
   {
-    "matricula": "MSB-155",
+    "vinculo": "CLT",
     "nome": "Laisa Rocha Ferreira Machado dos Santos",
     "cargo": "Key Account Manager",
     "depto": "Comercial",

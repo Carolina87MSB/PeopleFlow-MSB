@@ -1,4 +1,4 @@
-// Preenche os campos exclusivos do PeopleFlow (matricula, depto_code, nivel,
+// Preenche os campos exclusivos do PeopleFlow (vinculo, depto_code, nivel,
 // gestor, admissao) nas linhas JÁ EXISTENTES da tabela `colaboradores`
 // compartilhada com o Portal SST. NUNCA cria linha nova nem toca em
 // cpf/nome/cargo/departamento/epis/exames — essas colunas são do SST.
@@ -15,7 +15,7 @@
 //
 // Formato esperado do arquivo de entrada — ver src/data/colaboradores.example.json
 // (fictício, versionado) para o shape completo: array de
-//   { nome, matricula, deptoCode, nivel, gestor, admissao }
+//   { nome, vinculo, deptoCode, nivel, gestor, admissao }
 
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
@@ -35,7 +35,7 @@ if (!url || !serviceRoleKey) {
 const jsonPath = process.argv[2];
 if (!jsonPath) {
   console.error(
-    "Informe o arquivo com o mapeamento nome -> matrícula/depto_code/nivel/gestor/admissao.\n" +
+    "Informe o arquivo com o mapeamento nome -> vínculo/depto_code/nivel/gestor/admissao.\n" +
       "Ex.: node --env-file=.env.local scripts/seed-supabase.mjs src/data/colaboradores.local.json\n" +
       "Veja src/data/colaboradores.example.json para o formato esperado (arquivo fictício, versionado).",
   );
@@ -67,7 +67,7 @@ for (const r of registros) {
   const { data, error } = await supabase
     .from("colaboradores")
     .update({
-      matricula: r.matricula ?? null,
+      vinculo: r.vinculo ?? null,
       depto_code: r.deptoCode ?? null,
       nivel: r.nivel ?? null,
       gestor: r.gestor ?? null,
