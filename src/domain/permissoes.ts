@@ -8,8 +8,14 @@ export function navRegistro(perfil: Perfil): boolean {
   return perfil === "RH";
 }
 
+/**
+ * RH, Gestor e Diretoria podem solicitar movimentações — Diretor Industrial e
+ * CEO também têm reportes diretos (aparecem na coluna `gestor` de algum
+ * colaborador) e precisam do botão "Nova movimentação" para essas pessoas,
+ * não só o papel de aprovar etapas de outros.
+ */
 export function canCreate(perfil: Perfil): boolean {
-  return perfil === "RH" || perfil === "Gestor";
+  return perfil === "RH" || perfil === "Gestor" || perfil === "Diretoria";
 }
 
 export function showEquipes(perfil: Perfil): boolean {
@@ -24,7 +30,14 @@ export function canSeeMov(
   scopeSet: Set<string> | null,
 ): boolean {
   if (perfil === "RH") return true;
-  if (perfil === "Diretoria") return m.status !== "Rascunho" && m.etapas.some((e) => e.aprovador === me);
+  if (perfil === "Diretoria") {
+    // Além do que precisa aprovar, também precisa ver o que ela mesma
+    // solicitou (agora que Diretoria também pode criar movimentação — ver
+    // canCreate) — nem toda movimentação que ela cria tem "Diretor
+    // Industrial"/"CEO" como aprovador de alguma etapa (ex.: tipos sem CEO na
+    // matriz), então sem isso a própria solicitação sumiria da tela dela.
+    return m.solicitante === me || (m.status !== "Rascunho" && m.etapas.some((e) => e.aprovador === me));
+  }
   return (scopeSet !== null && scopeSet.has(m.colaborador)) || m.solicitante === me || m.etapas.some((e) => e.aprovador === me);
 }
 
