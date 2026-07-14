@@ -1,9 +1,9 @@
 [
-  { "cod": "ADM", "nome": "Admissão", "desc": "Entrada de novo colaborador no quadro de pessoal.", "etapas": ["Gestor Solicitante", "RH", "Diretor Industrial"], "sla": 5, "impacto": "Estrutura + Orçamento" },
-  { "cod": "PRO", "nome": "Promoção", "desc": "Evolução vertical de cargo, com impacto salarial e de estrutura.", "etapas": ["Gestor Solicitante", "RH", "Diretor Industrial"], "sla": 7, "impacto": "Cargo + Orçamento" },
+  { "cod": "ADM", "nome": "Admissão", "desc": "Entrada de novo colaborador no quadro de pessoal.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 5, "impacto": "Estrutura + Orçamento" },
+  { "cod": "PRO", "nome": "Promoção", "desc": "Evolução vertical de cargo, com impacto salarial e de estrutura.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 7, "impacto": "Cargo + Orçamento" },
   { "cod": "SAL", "nome": "Alteração Salarial", "desc": "Reajuste salarial por mérito, equiparação ou reenquadramento.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 7, "impacto": "Orçamento" },
   { "cod": "TRF", "nome": "Transferência", "desc": "Mudança de centro de custo / área de atuação do colaborador.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 5, "impacto": "Estrutura" },
-  { "cod": "FUN", "nome": "Mudança de Função", "desc": "Alteração de função/cargo sem promoção (movimento lateral).", "etapas": ["Gestor Solicitante", "RH", "Diretor Industrial"], "sla": 5, "impacto": "Cargo / Função" },
+  { "cod": "FUN", "nome": "Mudança de Função", "desc": "Alteração de função/cargo sem promoção (movimento lateral).", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 5, "impacto": "Cargo / Função" },
   { "cod": "DES", "nome": "Desligamento", "desc": "Saída do colaborador, a pedido ou por iniciativa da empresa.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 5, "impacto": "Estrutura + Orçamento" },
   { "cod": "NOV", "nome": "Novo Cargo", "desc": "Criação de um novo cargo na estrutura. Após a aprovação final é incorporado automaticamente ao cadastro oficial de cargos.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "CEO", "RH"], "sla": 10, "impacto": "Estrutura + Cadastro" }
 ]
