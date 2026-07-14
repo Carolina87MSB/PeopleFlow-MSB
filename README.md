@@ -1,6 +1,6 @@
 # Portal PeopleFlow · MSB
 
-Portal interno de RH da MSB para gestão de **movimentações de pessoal** (admissão, promoção, transferência, alteração salarial, mudança de função, desligamento e criação de cargo), com fluxo de aprovação em etapas (Gestor → RH/Diretoria → CEO, conforme o tipo) e visão de dashboard, cadastros (colaboradores, departamentos, cargos) e trilha de auditoria.
+Portal interno de RH da MSB para gestão de **movimentações de pessoal** (admissão, promoção, transferência, alteração salarial, mudança de função, desligamento e criação de cargo), com fluxo de aprovação em etapas (Gestor → RH/Diretoria → CEO, conforme o tipo), visão de dashboard, cadastros (colaboradores, departamentos, cargos), trilha de auditoria e fechamento financeiro de desligamentos (rescisão, GRRF).
 
 Reconstruído a partir de um protótipo visual (`Portal PeopleFlow MSB.zip`, formato proprietário de prototipagem) como uma aplicação real em **React 19 + TypeScript + Vite**, com arquitetura em camadas e **Supabase** como backend — o **mesmo projeto Supabase do [Portal SST MSB](https://github.com/Carolina87MSB/Portal-SST-MSB)**, deploy na **Vercel**.
 
@@ -9,8 +9,8 @@ Reconstruído a partir de um protótipo visual (`Portal PeopleFlow MSB.zip`, for
 Pré-requisito: [Node.js](https://nodejs.org) 20+ e um projeto Supabase já configurado para o Portal SST (mesmo `.env.local` dele funciona aqui).
 
 1. **Rode o schema deste portal**: abra _SQL Editor_ no painel do MESMO projeto Supabase usado pelo SST, cole o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e execute. Isso:
-   - adiciona 5 colunas novas (`matricula`, `depto_code`, `nivel`, `gestor`, `admissao`) à tabela `colaboradores` já existente do SST — **não remove nem altera nada que o SST já usa**;
-   - cria duas tabelas exclusivas deste portal: `peopleflow_movimentacoes` e `peopleflow_cargos_custom`, com RLS liberando leitura/escrita para qualquer usuário autenticado.
+   - adiciona colunas novas à tabela `colaboradores` já existente do SST — `matricula`, `depto_code`, `nivel`, `gestor`, `admissao` (organograma) e `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by` (essas últimas também gravadas pelo próprio Portal SST ao desligar alguém — ver `api/desligar-colaborador.ts` dele) — **não remove nem altera nada que o SST já usa**;
+   - cria três tabelas exclusivas deste portal: `peopleflow_movimentacoes`, `peopleflow_cargos_custom` e `peopleflow_desligamentos` (fechamento financeiro), com RLS liberando leitura/escrita para qualquer usuário autenticado.
 2. **Provisione a primeira conta (a sua, do RH)**: diferente do SST (só RH tem conta), aqui **todo Gestor, Diretor e RH que for usar o portal precisa de uma conta no Supabase Auth**. Para a primeiríssima conta (RH, que vai gerenciar as demais pela tela `/acessos` do próprio app — ver abaixo), crie manualmente em _Authentication → Users → Add user_. As contas seguintes não precisam mais do painel do Supabase.
 3. **Configure o ambiente local**:
    ```bash
@@ -54,6 +54,17 @@ Depois que a primeira conta do RH estiver provisionada manualmente (passo 2 acim
 
 Isso funciona via duas Vercel Serverless Functions (`api/listar-acessos.ts`, `api/provisionar-acesso.ts`) que rodam só no servidor: confirmam que quem chamou é RH autenticado e então usam a `SUPABASE_SERVICE_ROLE_KEY` para criar a conta no Supabase Auth — essa chave nunca é enviada ao navegador. **Essas duas functions só funcionam em produção (Vercel) ou com `vercel dev`** — `npm run dev` (Vite puro) não executa `/api/*`, então localmente a tela mostra erro de carregamento; isso é esperado.
 
+### Desligados (`/desligados`, RH-only)
+
+Quando alguém é desligado no **Portal SST** (botão "Desligar colaborador"), esse colaborador aparece automaticamente aqui — os dois portais leem a mesma linha da tabela `colaboradores` (`desligado`, `data_desligamento`, `motivo_desligamento`), não há sincronização própria do PeopleFlow, é a mesma tabela.
+
+Colaboradores desligados somem das telas normais (Colaboradores, headcount do Dashboard, seletor de "Nova movimentação" — ver o filtro `!c.desligado` em `usePortalData.ts`) e passam a aparecer só aqui, com:
+- Dados do desligamento (data, motivo, quem registrou no SST);
+- Histórico completo das movimentações desse colaborador no PeopleFlow (promoções, transferências etc. antes do desligamento);
+- Dois campos editáveis, exclusivos do PeopleFlow — **valor da rescisão** e **valor da GRRF** —, salvos em `peopleflow_desligamentos` (colaborador não tem esses campos no SST).
+
+Enquanto rescisão ou GRRF não estiverem preenchidos, o colaborador conta como **pendência** — aparece no badge do menu lateral e num card no Dashboard ("Desligamentos pendentes"), visível só para RH.
+
 ## Arquitetura
 
 ```
@@ -70,31 +81,36 @@ src/
                                  que o PeopleFlow usa, nunca escreve nela
     movimentacoesRepository.ts   CRUD em `peopleflow_movimentacoes` (exclusiva deste portal)
     cargosCustomRepository.ts    CRUD em `peopleflow_cargos_custom` (exclusiva deste portal)
+    desligadosRepository.ts       CRUD em `peopleflow_desligamentos` (rescisão/GRRF, exclusiva deste portal)
     acessosRepository.ts          chama as Serverless Functions em api/*.ts (nunca fala com o Supabase
                                  Auth admin direto do navegador)
     portalRepository.ts          catálogos estáticos (tipos, perfis) — sem backend
   domain/                     regras de negócio puras, sem React (testáveis isoladamente):
     hierarquia.ts              e-mail/perfil por colaborador, hierarquia de gestores, aprovador por papel
+                              (buildAccess já exclui colaborador desligado)
     permissoes.ts              o que cada perfil pode ver/fazer
     workflow.ts                motor de aprovação: gera etapas, aprova/reprova, gera próximo ID
     formMovimentacao.ts        valida e monta uma Movimentacao a partir do formulário "Nova movimentação"
     agregados.ts                agregações derivadas (headcount por depto, cargos, contagem por gestor)
+    desligados.ts                filtra colaboradores desligados e calcula pendência de fechamento financeiro
+    historico.ts                 reconstrói a trilha de eventos (criação + etapas) de uma lista de
+                              movimentações — usado por Histórico e pelo detalhe de Desligados
     colors.ts / avatar.ts / documentos.ts / dates.ts   utilitários de apresentação
   store/                      estado da aplicação via useReducer + Context (`PortalStoreContext`);
-                              carrega colaboradores/movimentações/cargos do Supabase assim que há sessão
-                              autenticada e zera tudo ao deslogar. `useConta()` cruza o e-mail autenticado
-                              com os colaboradores para achar a Conta (nome/cargo/perfil). `usePortalData()`
-                              combina Conta + store e expõe dados já filtrados por perfil + as ações de
-                              workflow (que gravam no Supabase antes de atualizar o estado local) — é o
-                              principal hook consumido pelas páginas
+                              carrega colaboradores/movimentações/cargos/desligamentos financeiros do
+                              Supabase assim que há sessão autenticada e zera tudo ao deslogar.
+                              `useConta()` cruza o e-mail autenticado com os colaboradores para achar a
+                              Conta (nome/cargo/perfil). `usePortalData()` combina Conta + store e expõe
+                              dados já filtrados por perfil + as ações de workflow (que gravam no Supabase
+                              antes de atualizar o estado local) — é o principal hook consumido pelas páginas
   auth/                       AuthContext (Supabase Auth, magic link) + guarda de rotas (RequireAuth)
   components/
     ui/                        biblioteca de componentes visuais (Badge, Card, Button, Modal, Drawer, ...)
     layout/                    Sidebar, Header, AppShell (com navegação sensível a perfil)
     shared/                    ToastContext, NovaMovimentacaoModal (reusado por Dashboard e Workflow)
   features/                   uma pasta por página (dashboard, colaboradores, departamentos, cargos,
-                              tipos, workflow, aprovadas, historico, auth), cada uma com seu .tsx +
-                              .module.css
+                              tipos, workflow, aprovadas, historico, desligados, acessos, auth), cada
+                              uma com seu .tsx + .module.css
 ```
 
 Estilo: CSS Modules (sem framework de UI), tokens de design (cores, raios, sombras) como variáveis CSS em `src/index.css`, fonte Montserrat. Roteamento com React Router v7, ícones via `lucide-react`.
@@ -105,8 +121,9 @@ Os dois portais MSB usam o **mesmo projeto Supabase**, mas cada um só lê/escre
 
 | Tabela | Dono | Quem lê | Quem escreve |
 |---|---|---|---|
-| `colaboradores` | Portal SST | SST (tudo) e PeopleFlow (só nome/cargo/departamento/matricula/depto_code/nivel/gestor/admissao) | Só o SST (via `npm run seed:supabase` dele, service role) — PeopleFlow só faz `UPDATE` das 5 colunas extras via seu próprio `seed:supabase` |
+| `colaboradores` | Portal SST | SST (tudo) e PeopleFlow (nome/cargo/departamento/matricula/depto_code/nivel/gestor/admissao/desligado/data_desligamento/motivo_desligamento/desligado_by) | Cadastro base: só o SST (via `npm run seed:supabase` dele, service role). `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by`: só o SST, via `api/desligar-colaborador.ts` dele (service role) — PeopleFlow só lê, nunca escreve em `colaboradores`. Campos de organograma (`matricula`/`depto_code`/`nivel`/`gestor`/`admissao`): só via `npm run seed:supabase` deste projeto |
 | `peopleflow_movimentacoes` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
 | `peopleflow_cargos_custom` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
+| `peopleflow_desligamentos` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) — valor da rescisão e da GRRF, editados na tela `/desligados` |
 
 Isso significa: **qualquer pessoa cadastrada no SST também aparece automaticamente no PeopleFlow** (mesmo nome/cargo/departamento), mas só consegue **entrar** no PeopleFlow se tiver uma conta Supabase Auth provisionada (passo 2 acima) — ter conta no SST não dá acesso automático ao PeopleFlow, e vice-versa.

@@ -13,7 +13,17 @@ import styles from "./DashboardPage.module.css";
 
 export function DashboardPage() {
   const { state } = usePortalStore();
-  const { conta, colaboradoresVisiveis, movimentacoesVisiveis, mostrarEquipes, podeCriar, aprovarEtapa, reprovarEtapa } = usePortalData();
+  const {
+    conta,
+    colaboradoresVisiveis,
+    movimentacoesVisiveis,
+    mostrarEquipes,
+    podeCriar,
+    podeVerCadastros,
+    pendenciasFinanceirasCount,
+    aprovarEtapa,
+    reprovarEtapa,
+  } = usePortalData();
   const [modalAberto, setModalAberto] = useState(false);
   const [busca, setBusca] = useState("");
 
@@ -58,6 +68,16 @@ export function DashboardPage() {
           hint={`${meusPendCount} aguardando você`}
           highlight
         />
+        {podeVerCadastros && (
+          <Link to="/desligados" className={styles.kpiLink}>
+            <KpiCard
+              label="Desligamentos pendentes"
+              value={pendenciasFinanceirasCount}
+              hint="rescisão ou GRRF sem valor lançado"
+              highlight={pendenciasFinanceirasCount > 0}
+            />
+          </Link>
+        )}
       </div>
 
       <div className={styles.mainGrid}>

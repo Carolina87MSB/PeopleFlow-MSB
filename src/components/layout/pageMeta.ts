@@ -13,6 +13,7 @@ const PAGE_META: Record<string, PageMeta> = {
   workflow: { eyebrow: "Operação", title: "Workflow de aprovação" },
   aprovadas: { eyebrow: "Operação", title: "Movimentações aprovadas" },
   historico: { eyebrow: "Operação", title: "Histórico" },
+  desligados: { eyebrow: "Operação", title: "Desligados" },
 };
 
 export function pageMetaFromPath(pathname: string): PageMeta {

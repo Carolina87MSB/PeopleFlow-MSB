@@ -32,6 +32,10 @@ interface ColaboradorRow {
   nivel: string | null;
   gestor: string | null;
   admissao: string | null;
+  desligado: boolean | null;
+  data_desligamento: string | null;
+  motivo_desligamento: string | null;
+  desligado_by: string | null;
 }
 
 function fromRow(row: ColaboradorRow): Colaborador {
@@ -44,6 +48,10 @@ function fromRow(row: ColaboradorRow): Colaborador {
     nivel: (row.nivel as Colaborador["nivel"]) ?? "Operacional",
     gestor: row.gestor ?? "—",
     admissao: row.admissao ?? "",
+    desligado: row.desligado ?? false,
+    dataDesligamento: row.data_desligamento ?? "",
+    motivoDesligamento: row.motivo_desligamento ?? "",
+    desligadoBy: row.desligado_by ?? "",
   };
 }
 
@@ -72,7 +80,7 @@ export async function requireRH(authHeader: string | string[] | undefined): Prom
 
   const { data, error } = await supabaseAdmin
     .from("colaboradores")
-    .select("nome, cargo, departamento, matricula, depto_code, nivel, gestor, admissao");
+    .select("nome, cargo, departamento, matricula, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by");
   if (error) return { ok: false, status: 500, error: error.message };
 
   const colaboradores = (data as ColaboradorRow[]).map(fromRow);

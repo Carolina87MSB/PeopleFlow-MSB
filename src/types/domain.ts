@@ -19,6 +19,18 @@ export interface Colaborador {
   nivel: Nivel;
   gestor: string;
   admissao: string;
+  desligado: boolean;
+  dataDesligamento: string; // "dd/mmm/aaaa" ou "" se não desligado
+  motivoDesligamento: string;
+  desligadoBy: string;
+}
+
+export interface DesligamentoFinanceiro {
+  colaboradorNome: string;
+  valorRescisao: number | null;
+  valorGrrf: number | null;
+  updatedAt: string;
+  updatedBy: string;
 }
 
 export interface CargoCustom {

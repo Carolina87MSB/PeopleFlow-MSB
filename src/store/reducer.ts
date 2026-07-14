@@ -8,6 +8,7 @@ export const initialPortalState: PortalState = {
   cargosCustom: [],
   tipos: [],
   perfis: [],
+  desligamentosFinanceiros: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -20,7 +21,16 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         cargosCustom: action.cargosCustom,
         tipos: action.tipos,
         perfis: action.perfis,
+        desligamentosFinanceiros: action.desligamentosFinanceiros,
       };
+
+    case "SALVAR_FECHAMENTO_FINANCEIRO": {
+      const existe = state.desligamentosFinanceiros.some((d) => d.colaboradorNome === action.desligamento.colaboradorNome);
+      const desligamentosFinanceiros = existe
+        ? state.desligamentosFinanceiros.map((d) => (d.colaboradorNome === action.desligamento.colaboradorNome ? action.desligamento : d))
+        : [...state.desligamentosFinanceiros, action.desligamento];
+      return { ...state, desligamentosFinanceiros };
+    }
 
     case "RESET":
       return initialPortalState;

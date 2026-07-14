@@ -102,3 +102,39 @@ create policy "authenticated_rw_cargos_custom"
   to authenticated
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 3) Desligamento — colunas compartilhadas com o SST + fechamento financeiro
+-- ─────────────────────────────────────────────────────────────────────────
+-- O SST grava desligado/data_desligamento/motivo_desligamento (ação "Desligar
+-- colaborador" por lá, via api/desligar-colaborador.ts dele). Aqui só
+-- garantimos que as colunas existem (idempotente — repetir este ADD COLUMN
+-- no schema do SST ou daqui não causa conflito, são as mesmas colunas).
+alter table public.colaboradores
+  add column if not exists desligado boolean not null default false,
+  add column if not exists data_desligamento date,
+  add column if not exists motivo_desligamento text,
+  add column if not exists desligado_by text;
+
+-- Valor da rescisão e da GRRF são preenchidos manualmente pelo RH no
+-- PeopleFlow (o SST não tem esses campos) — tabela exclusiva deste portal.
+create table if not exists public.peopleflow_desligamentos (
+  colaborador_nome text primary key,
+  valor_rescisao numeric,
+  valor_grrf numeric,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+comment on table public.peopleflow_desligamentos is
+  'Fechamento financeiro do desligamento (rescisão, GRRF) — preenchido pelo RH no PeopleFlow. Exclusiva deste portal; colaborador_nome referencia colaboradores.nome.';
+
+alter table public.peopleflow_desligamentos enable row level security;
+
+drop policy if exists "authenticated_rw_desligamentos" on public.peopleflow_desligamentos;
+create policy "authenticated_rw_desligamentos"
+  on public.peopleflow_desligamentos
+  for all
+  to authenticated
+  using (true)
+  with check (true);

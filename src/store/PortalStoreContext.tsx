@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { getColaboradores } from "../repositories/colaboradoresRepository";
 import { getCargosCustom } from "../repositories/cargosCustomRepository";
+import { getDesligamentosFinanceiros } from "../repositories/desligadosRepository";
 import { getMovimentacoes } from "../repositories/movimentacoesRepository";
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
 import type { PortalAction } from "./actions";
@@ -40,10 +41,10 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
     let cancelado = false;
     setLoading(true);
     setError(null);
-    Promise.all([getColaboradores(), getMovimentacoes(), getCargosCustom(), getTiposMovimentacao(), getPerfis()])
-      .then(([colaboradores, movimentacoes, cargosCustom, tipos, perfis]) => {
+    Promise.all([getColaboradores(), getMovimentacoes(), getCargosCustom(), getTiposMovimentacao(), getPerfis(), getDesligamentosFinanceiros()])
+      .then(([colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros]) => {
         if (cancelado) return;
-        dispatch({ type: "CARREGAR_DADOS", colaboradores, movimentacoes, cargosCustom, tipos, perfis });
+        dispatch({ type: "CARREGAR_DADOS", colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros });
       })
       .catch((err: Error) => {
         if (cancelado) return;

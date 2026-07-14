@@ -36,6 +36,7 @@ export function buildAccess(colaboradores: Colaborador[]): Conta[] {
   const gestoresImediatos = new Set(colaboradores.map((c) => c.gestor));
 
   return colaboradores
+    .filter((c) => !c.desligado)
     .filter((c) => {
       const perfil = perfilOf(c);
       return perfil === "RH" || perfil === "Diretoria" || gestoresImediatos.has(c.nome);

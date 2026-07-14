@@ -9,6 +9,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  UserMinus,
   Users,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
@@ -33,7 +34,8 @@ function NavItem({ to, icon, label, badge, badgeTone }: { to: string; icon: Reac
 export function Sidebar() {
   const { logout } = useAuth();
   const { state } = usePortalStore();
-  const { conta, colaboradoresVisiveis, movimentacoesVisiveis, podeVerColaboradores, podeVerCadastros } = usePortalData();
+  const { conta, colaboradoresVisiveis, movimentacoesVisiveis, podeVerColaboradores, podeVerCadastros, pendenciasFinanceirasCount } =
+    usePortalData();
 
   const totalDeptos = agregarDepartamentos(colaboradoresVisiveis).length;
   const totalCargos = agregarCargos(colaboradoresVisiveis, state.cargosCustom).length;
@@ -74,6 +76,15 @@ export function Sidebar() {
         <NavItem to="/workflow" icon={<ClipboardList size={18} strokeWidth={1.9} />} label="Workflow de aprovação" badge={pendentesCount} badgeTone="warning" />
         <NavItem to="/aprovadas" icon={<CheckCircle2 size={18} strokeWidth={1.9} />} label="Movimentações aprovadas" badge={aprovadasCount} badgeTone="success" />
         <NavItem to="/historico" icon={<History size={18} strokeWidth={1.9} />} label="Histórico" />
+        {podeVerCadastros && (
+          <NavItem
+            to="/desligados"
+            icon={<UserMinus size={18} strokeWidth={1.9} />}
+            label="Desligados"
+            badge={pendenciasFinanceirasCount}
+            badgeTone="warning"
+          />
+        )}
       </nav>
 
       <div className={styles.footer}>

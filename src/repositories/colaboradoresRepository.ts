@@ -1,7 +1,8 @@
 // Camada de acesso à tabela `colaboradores` — COMPARTILHADA com o Portal SST
 // MSB (mesmo projeto Supabase, mesmas pessoas). O PeopleFlow só lê as colunas
 // que usa (nunca cpf/epis/exames, que são do domínio do SST) e nunca escreve
-// nesta tabela — cadastro de colaborador é responsabilidade do RH via SST.
+// nesta tabela — cadastro de colaborador é responsabilidade do RH via SST,
+// inclusive o desligamento (ver api/desligar-colaborador.ts do SST).
 //
 // Trocar a fonte de novo no futuro é uma mudança isolada neste arquivo; nada
 // mais no app importa o Supabase diretamente para dados de colaborador.
@@ -19,6 +20,10 @@ interface ColaboradorRow {
   nivel: string | null;
   gestor: string | null;
   admissao: string | null;
+  desligado: boolean | null;
+  data_desligamento: string | null;
+  motivo_desligamento: string | null;
+  desligado_by: string | null;
 }
 
 const NIVEIS_VALIDOS: Nivel[] = [
@@ -43,6 +48,10 @@ function fromRow(row: ColaboradorRow): Colaborador {
     nivel,
     gestor: row.gestor ?? "—",
     admissao: formatarDataIso(row.admissao),
+    desligado: row.desligado ?? false,
+    dataDesligamento: formatarDataIso(row.data_desligamento),
+    motivoDesligamento: row.motivo_desligamento ?? "",
+    desligadoBy: row.desligado_by ?? "",
   };
 }
 
@@ -61,7 +70,7 @@ export async function getColaboradores(): Promise<Colaborador[]> {
 
   const { data, error } = await supabase
     .from("colaboradores")
-    .select("nome, cargo, departamento, matricula, depto_code, nivel, gestor, admissao")
+    .select("nome, cargo, departamento, matricula, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by")
     .order("nome", { ascending: true });
 
   if (error) {

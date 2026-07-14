@@ -1,14 +1,16 @@
 import { useCallback, useMemo } from "react";
 import { useToast } from "../components/shared/ToastContext";
 import { atualizarDescricaoCargoCustom, criarCargoCustom } from "../repositories/cargosCustomRepository";
+import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import { atualizarMovimentacao, criarMovimentacao as criarMovimentacaoNoSupabase } from "../repositories/movimentacoesRepository";
+import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import { descendants } from "../domain/hierarquia";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
 import { aprovarEtapa as aprovarEtapaDomain, cargoCustomDeNovoCargo, reprovarEtapa as reprovarEtapaDomain } from "../domain/workflow";
 import { usePortalStore } from "./PortalStoreContext";
 import { useConta } from "./useConta";
-import type { Colaborador, Conta, Movimentacao, NovaMovimentacaoForm, Perfil } from "../types/domain";
+import type { Colaborador, Conta, DesligamentoFinanceiro, Movimentacao, NovaMovimentacaoForm, Perfil } from "../types/domain";
 
 export interface PortalData {
   conta: Conta;
@@ -17,6 +19,9 @@ export interface PortalData {
   colaboradoresVisiveis: Colaborador[];
   movimentacoes: Movimentacao[];
   movimentacoesVisiveis: Movimentacao[];
+  desligados: Colaborador[];
+  desligamentosFinanceiros: DesligamentoFinanceiro[];
+  pendenciasFinanceirasCount: number;
   scopeSet: Set<string> | null;
   podeCriar: boolean;
   podeVerColaboradores: boolean;
@@ -27,6 +32,7 @@ export interface PortalData {
   reprovarEtapa: (id: string) => void;
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   toggleDescricaoCargo: (nome: string) => void;
+  salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
 }
 
 /**
@@ -56,14 +62,21 @@ export function usePortalData(): PortalData {
     return set;
   }, [perfil, me, state.colaboradores]);
 
-  const colaboradoresVisiveis = useMemo(
-    () => (perfil === "Gestor" && scopeSet ? state.colaboradores.filter((c) => scopeSet.has(c.nome)) : state.colaboradores),
-    [perfil, scopeSet, state.colaboradores],
-  );
+  const colaboradoresVisiveis = useMemo(() => {
+    const ativos = state.colaboradores.filter((c) => !c.desligado);
+    return perfil === "Gestor" && scopeSet ? ativos.filter((c) => scopeSet.has(c.nome)) : ativos;
+  }, [perfil, scopeSet, state.colaboradores]);
 
   const movimentacoesVisiveis = useMemo(
     () => (perfil === "RH" ? state.movimentacoes : state.movimentacoes.filter((m) => canSeeMov(m, perfil, me, scopeSet))),
     [perfil, me, scopeSet, state.movimentacoes],
+  );
+
+  const desligados = useMemo(() => colaboradoresDesligados(state.colaboradores), [state.colaboradores]);
+
+  const pendenciasFinanceirasCount = useMemo(
+    () => desligados.filter((c) => pendenteFechamento(c.nome, state.desligamentosFinanceiros)).length,
+    [desligados, state.desligamentosFinanceiros],
   );
 
   const aprovarEtapaFn = useCallback(
@@ -139,6 +152,24 @@ export function usePortalData(): PortalData {
     [dispatch, perfil, me, state.tipos, state.colaboradores, state.movimentacoes, flash],
   );
 
+  const salvarFechamentoFinanceiroFn = useCallback(
+    async (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => {
+      try {
+        await salvarFechamentoNoSupabase(colaboradorNome, valorRescisao, valorGrrf, me);
+        dispatch({
+          type: "SALVAR_FECHAMENTO_FINANCEIRO",
+          desligamento: { colaboradorNome, valorRescisao, valorGrrf, updatedAt: new Date().toISOString(), updatedBy: me },
+        });
+        flash("Fechamento financeiro salvo.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao salvar fechamento financeiro.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash],
+  );
+
   return {
     conta,
     perfil,
@@ -146,6 +177,9 @@ export function usePortalData(): PortalData {
     colaboradoresVisiveis,
     movimentacoes: state.movimentacoes,
     movimentacoesVisiveis,
+    desligados,
+    desligamentosFinanceiros: state.desligamentosFinanceiros,
+    pendenciasFinanceirasCount,
     scopeSet,
     podeCriar: canCreate(perfil),
     podeVerColaboradores: navColab(perfil),
@@ -156,5 +190,6 @@ export function usePortalData(): PortalData {
     reprovarEtapa: reprovarEtapaFn,
     criarMovimentacao: criarMovimentacaoFn,
     toggleDescricaoCargo: toggleDescricaoCargoFn,
+    salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,
   };
 }
