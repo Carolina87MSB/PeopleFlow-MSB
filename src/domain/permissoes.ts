@@ -1,7 +1,9 @@
 import type { Movimentacao, Perfil } from "../types/domain";
 
-export function navColab(perfil: Perfil): boolean {
-  return perfil !== "Diretoria";
+/** Todos os perfis acessam a tela Colaboradores — RH edita, Gestor e
+ * Diretoria são só leitura (ver colaboradoresListagem em usePortalData.ts). */
+export function navColab(_perfil: Perfil): boolean {
+  return true;
 }
 
 export function navRegistro(perfil: Perfil): boolean {

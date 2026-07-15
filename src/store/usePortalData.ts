@@ -38,11 +38,13 @@ export interface PortalData {
   perfil: Perfil;
   colaboradores: Colaborador[];
   colaboradoresVisiveis: Colaborador[];
-  /** Todos os colaboradores ativos, sem escopo de equipe — usado na tela
-   * Colaboradores (`/colaboradores`), que é só leitura para Gestor (RH é
-   * quem edita). Diferente de `colaboradoresVisiveis`, que continua restrito
-   * à equipe do Gestor em todo o resto do app (ex.: seletor de colaborador
-   * em "Nova movimentação", agregados do Dashboard). */
+  /** Fonte da tela Colaboradores (`/colaboradores`), com regra própria por
+   * perfil: RH e Diretoria veem a base inteira (Diretoria sem os botões de
+   * edição, que são RH-only); Gestor vê só quem tem ele como gestor imediato
+   * (reporte direto). Diferente de `colaboradoresVisiveis`, que continua
+   * restrito à árvore hierárquica do Gestor (direta + indireta) em todo o
+   * resto do app (ex.: seletor de colaborador em "Nova movimentação",
+   * agregados do Dashboard). */
   colaboradoresListagem: Colaborador[];
   movimentacoes: Movimentacao[];
   movimentacoesVisiveis: Movimentacao[];
@@ -95,11 +97,21 @@ export function usePortalData(): PortalData {
     return set;
   }, [perfil, me, state.colaboradores]);
 
-  const colaboradoresListagem = useMemo(() => state.colaboradores.filter((c) => !c.desligado), [state.colaboradores]);
+  const ativosGlobal = useMemo(() => state.colaboradores.filter((c) => !c.desligado), [state.colaboradores]);
 
   const colaboradoresVisiveis = useMemo(() => {
-    return perfil === "Gestor" && scopeSet ? colaboradoresListagem.filter((c) => scopeSet.has(c.nome)) : colaboradoresListagem;
-  }, [perfil, scopeSet, colaboradoresListagem]);
+    return perfil === "Gestor" && scopeSet ? ativosGlobal.filter((c) => scopeSet.has(c.nome)) : ativosGlobal;
+  }, [perfil, scopeSet, ativosGlobal]);
+
+  /** Fonte da tela Colaboradores (/colaboradores), com regra própria por perfil:
+   * RH e Diretoria veem a base inteira (Diretoria sem os botões de edição, que
+   * são RH-only); Gestor vê só quem tem ele como gestor imediato — reporte
+   * direto, sem descer a árvore como `scopeSet`/`colaboradoresVisiveis` fazem
+   * para o resto do app (workflow, seletor de "Nova movimentação"). */
+  const colaboradoresListagem = useMemo(() => {
+    if (perfil === "Gestor") return ativosGlobal.filter((c) => c.gestor === me);
+    return ativosGlobal;
+  }, [perfil, me, ativosGlobal]);
 
   const movimentacoesVisiveis = useMemo(
     () => (perfil === "RH" ? state.movimentacoes : state.movimentacoes.filter((m) => canSeeMov(m, perfil, me, scopeSet))),

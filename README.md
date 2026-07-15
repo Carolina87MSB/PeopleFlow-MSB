@@ -45,8 +45,10 @@ Login por **link mágico** (e-mail corporativo `@msbbrasil.com`, sem senha) via 
 
 Três perfis, com visão e permissões diferentes (ver `src/domain/permissoes.ts`):
 - **RH** — acesso completo: todos os colaboradores, todas as movimentações, cadastros de departamentos/cargos, e a tela de **Acessos** (`/acessos`).
-- **Gestor** — pode solicitar movimentações e aprovar a etapa "Gestor Solicitante" só para sua equipe (hierarquia direta e indireta, via `descendants()` — esse escopo vale para `movimentacoesVisiveis` e para o seletor de colaborador em "Nova movimentação"). Na tela **Colaboradores** (`/colaboradores`), porém, todo Gestor vê a lista inteira da empresa, só leitura — não tem os botões de edição (Admissão, descrição de cargo), que continuam exclusivos do RH. Ver `colaboradoresListagem` (sem escopo) vs. `colaboradoresVisiveis` (escopado) em `usePortalData.ts`.
-- **Diretoria** — não vê o cadastro de colaboradores; vê apenas movimentações encaminhadas para sua aprovação.
+- **Gestor** — pode solicitar movimentações e aprovar a etapa "Gestor Solicitante" para toda sua equipe (hierarquia direta e indireta, via `descendants()` — esse escopo mais amplo vale para `movimentacoesVisiveis` e para o seletor de colaborador em "Nova movimentação"). Na tela **Colaboradores** (`/colaboradores`), porém, o escopo é mais estrito: só vê quem tem ele como **gestor imediato** (reporte direto, sem descer mais níveis) — e sem os botões de edição (Admissão, descrição de cargo), exclusivos do RH.
+- **Diretoria** — vê a mesma base de colaboradores que o RH em `/colaboradores` (sem escopo), mas sem nenhum botão de edição — RH é quem edita. Nas movimentações, continua vendo só o que ela mesma solicitou ou precisa aprovar.
+
+`colaboradoresListagem` (fonte de `/colaboradores`, com a regra por perfil acima) é diferente de `colaboradoresVisiveis` (escopo de hierarquia completa do Gestor, usado no resto do app) — ver `usePortalData.ts`.
 
 ### Tela de administração de acessos (`/acessos`, RH-only)
 
