@@ -115,6 +115,25 @@ export interface AdmissaoInfo {
   admissaoIso: string;
 }
 
+/** Snapshot para sincronizar cargo/departamento em `colaboradores` quando uma
+ * movimentação de Promoção, Transferência ou Mudança de Função é concluída —
+ * ver aprovarEtapa() em domain/workflow.ts e atualizarCargoDepto() no
+ * repositório. Campos ausentes (undefined) não são tocados no UPDATE. */
+export interface AtualizacaoCargoDeptoInfo {
+  nome: string;
+  novoCargo?: string;
+  novoDepto?: string;
+}
+
+/** Snapshot para desligar de fato em `colaboradores` quando uma movimentação
+ * de Desligamento é concluída — mesma lógica/colunas do botão "Desligar
+ * colaborador" do Portal SST (ver api/desligar-colaborador.ts deste projeto). */
+export interface DesligamentoInfo {
+  nome: string;
+  motivo: string;
+  dataIso: string;
+}
+
 export interface AprovacaoFinal {
   data: string;
   hora: string;
@@ -136,6 +155,8 @@ export interface Movimentacao {
   etapas: Etapa[];
   novoCargo?: NovoCargoInfo;
   admissaoInfo?: AdmissaoInfo;
+  atualizacaoInfo?: AtualizacaoCargoDeptoInfo;
+  desligamentoInfo?: DesligamentoInfo;
   aprovacaoFinal?: AprovacaoFinal | null;
   legado?: boolean;
 }

@@ -3,7 +3,9 @@ import { useToast } from "../components/shared/ToastContext";
 import { atualizarDescricaoCargoCustom, criarCargoCustom } from "../repositories/cargosCustomRepository";
 import {
   atualizarAdmissao as atualizarAdmissaoNoSupabase,
+  atualizarCargoDepto as atualizarCargoDeptoNoSupabase,
   criarPreCadastro as criarPreCadastroNoSupabase,
+  desligarColaborador as desligarColaboradorNoSupabase,
 } from "../repositories/colaboradoresRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import {
@@ -106,20 +108,36 @@ export function usePortalData(): PortalData {
 
   const aprovarEtapaFn = useCallback(
     (id: string) => {
-      const { movimentacoes, cargoRegistrado, admissaoRegistrada } = aprovarEtapaDomain(state.movimentacoes, id);
+      const { movimentacoes, cargoRegistrado, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado } = aprovarEtapaDomain(
+        state.movimentacoes,
+        id,
+      );
       const atualizada = movimentacoes.find((m) => m.id === id);
       if (!atualizada) return;
       (async () => {
         try {
           await atualizarMovimentacao(atualizada);
-          if (cargoRegistrado) await criarCargoCustom(cargoCustomDeNovoCargo(cargoRegistrado));
           let msg = "Etapa aprovada — movimentação atualizada.";
-          if (cargoRegistrado) msg = `Cargo "${cargoRegistrado.nome}" aprovado e incorporado ao cadastro oficial.`;
+          if (cargoRegistrado) {
+            await criarCargoCustom(cargoCustomDeNovoCargo(cargoRegistrado));
+            msg = `Cargo "${cargoRegistrado.nome}" aprovado e incorporado ao cadastro oficial.`;
+          }
           if (admissaoRegistrada) {
             const { jaExistia } = await criarPreCadastroNoSupabase(admissaoRegistrada);
             msg = jaExistia
               ? `Admissão concluída — já existe um colaborador chamado "${admissaoRegistrada.candidato}", pré-cadastro não duplicado.`
               : `Admissão concluída — pré-cadastro de "${admissaoRegistrada.candidato}" criado (CPF e demais dados do SST ainda precisam ser completados).`;
+            reload();
+          }
+          if (atualizacaoRegistrada) {
+            await atualizarCargoDeptoNoSupabase(atualizacaoRegistrada.nome, atualizacaoRegistrada.novoCargo, atualizacaoRegistrada.novoDepto);
+            msg = `Cadastro de "${atualizacaoRegistrada.nome}" atualizado com o novo cargo/departamento nos dois portais.`;
+            reload();
+          }
+          if (desligamentoRegistrado) {
+            const dataIso = desligamentoRegistrado.dataIso || new Date().toISOString().slice(0, 10);
+            await desligarColaboradorNoSupabase(desligamentoRegistrado.nome, dataIso, desligamentoRegistrado.motivo, conta.email);
+            msg = `Desligamento de "${desligamentoRegistrado.nome}" registrado — some das listas ativas nos dois portais.`;
             reload();
           }
           dispatch({ type: "APROVAR_ETAPA", id });
@@ -129,7 +147,7 @@ export function usePortalData(): PortalData {
         }
       })();
     },
-    [dispatch, state.movimentacoes, flash, reload],
+    [dispatch, state.movimentacoes, flash, reload, conta.email],
   );
 
   const reprovarEtapaFn = useCallback(

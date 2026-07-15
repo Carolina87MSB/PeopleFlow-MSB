@@ -194,11 +194,24 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     resumo = "Desligamento — " + (f.desMotivo || "") + " · " + cargoAtual;
     dados = [
       { label: "Motivo do desligamento", value: f.desMotivo || "—" },
-      { label: "Data prevista", value: f.desData || "A definir" },
-      { label: "Último dia trabalhado", value: f.desUltimoDia || "A definir" },
+      { label: "Data prevista", value: f.desData ? formatarDataIso(f.desData) : "A definir" },
+      { label: "Último dia trabalhado", value: f.desUltimoDia ? formatarDataIso(f.desUltimoDia) : "A definir" },
       { label: "Substituição", value: f.desSubst || "Não" },
       { label: "Observações", value: f.desObs || "—" },
     ];
+  }
+
+  let atualizacaoInfo: Movimentacao["atualizacaoInfo"];
+  let desligamentoInfo: Movimentacao["desligamentoInfo"];
+
+  if (f.tipo === "PRO" && f.proNovoCargo.trim()) {
+    atualizacaoInfo = { nome: f.colab, novoCargo: f.proNovoCargo.trim() };
+  } else if (f.tipo === "TRF" && (f.trfNovoDepto || f.trfNovoCargo.trim())) {
+    atualizacaoInfo = { nome: f.colab, novoCargo: f.trfNovoCargo.trim() || undefined, novoDepto: f.trfNovoDepto || undefined };
+  } else if (f.tipo === "FUN" && f.funNova.trim()) {
+    atualizacaoInfo = { nome: f.colab, novoCargo: f.funNova.trim() };
+  } else if (f.tipo === "DES") {
+    desligamentoInfo = { nome: f.colab, motivo: f.desMotivo.trim(), dataIso: f.desUltimoDia || f.desData };
   }
 
   return base({
@@ -209,5 +222,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     resumo,
     etapas,
     dados,
+    atualizacaoInfo,
+    desligamentoInfo,
   });
 }

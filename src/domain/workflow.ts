@@ -1,6 +1,15 @@
 import { formatarDataAtual, formatarHoraAtual } from "./dates";
 import { roleApprover } from "./hierarquia";
-import type { AdmissaoInfo, CargoCustom, Etapa, Movimentacao, NovoCargoInfo, TipoMovimentacao } from "../types/domain";
+import type {
+  AdmissaoInfo,
+  AtualizacaoCargoDeptoInfo,
+  CargoCustom,
+  DesligamentoInfo,
+  Etapa,
+  Movimentacao,
+  NovoCargoInfo,
+  TipoMovimentacao,
+} from "../types/domain";
 
 export function nextId(movimentacoes: Movimentacao[]): string {
   const nums = movimentacoes
@@ -36,12 +45,16 @@ export interface ApproveResult {
   movimentacoes: Movimentacao[];
   cargoRegistrado: NovoCargoInfo | null;
   admissaoRegistrada: AdmissaoInfo | null;
+  atualizacaoRegistrada: AtualizacaoCargoDeptoInfo | null;
+  desligamentoRegistrado: DesligamentoInfo | null;
 }
 
 /** Advances the first pending/in-review etapa to "Aprovado"; completes the movement once the last etapa clears. */
 export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): ApproveResult {
   let cargoRegistrado: NovoCargoInfo | null = null;
   let admissaoRegistrada: AdmissaoInfo | null = null;
+  let atualizacaoRegistrada: AtualizacaoCargoDeptoInfo | null = null;
+  let desligamentoRegistrado: DesligamentoInfo | null = null;
   const hoje = formatarDataAtual();
   const agora = formatarHoraAtual();
 
@@ -65,12 +78,20 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
       aprovacaoFinal = { data: etapas[idx].data, hora: etapas[idx].hora! };
       if (m.tipoCod === "NOV" && m.novoCargo) cargoRegistrado = m.novoCargo;
       if (m.tipoCod === "ADM" && m.admissaoInfo?.candidato) admissaoRegistrada = m.admissaoInfo;
+      if (
+        (m.tipoCod === "PRO" || m.tipoCod === "TRF" || m.tipoCod === "FUN") &&
+        m.atualizacaoInfo &&
+        (m.atualizacaoInfo.novoCargo || m.atualizacaoInfo.novoDepto)
+      ) {
+        atualizacaoRegistrada = m.atualizacaoInfo;
+      }
+      if (m.tipoCod === "DES" && m.desligamentoInfo?.nome) desligamentoRegistrado = m.desligamentoInfo;
     }
 
     return { ...m, etapas, status, aprovacaoFinal };
   });
 
-  return { movimentacoes: novasMovimentacoes, cargoRegistrado, admissaoRegistrada };
+  return { movimentacoes: novasMovimentacoes, cargoRegistrado, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado };
 }
 
 export function reprovarEtapa(movimentacoes: Movimentacao[], id: string): Movimentacao[] {

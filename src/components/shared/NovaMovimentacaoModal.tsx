@@ -306,11 +306,11 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             </label>
             <label className={styles.field}>
               <span>Data prevista</span>
-              <input value={form.desData} onChange={(e) => set("desData", e.target.value)} placeholder="dd/mmm/aaaa" />
+              <input type="date" value={form.desData} onChange={(e) => set("desData", e.target.value)} />
             </label>
             <label className={styles.field}>
               <span>Último dia trabalhado</span>
-              <input value={form.desUltimoDia} onChange={(e) => set("desUltimoDia", e.target.value)} placeholder="dd/mmm/aaaa" />
+              <input type="date" value={form.desUltimoDia} onChange={(e) => set("desUltimoDia", e.target.value)} />
             </label>
             <label className={styles.field}>
               <span>Substituição</span>
