@@ -79,11 +79,19 @@ Ao concluir a última etapa dessas movimentações, o PeopleFlow também atualiz
 - **Promoção**: grava o novo cargo (campo "Novo cargo" do formulário).
 - **Transferência**: grava o novo departamento e, se informado, o novo cargo.
 - **Mudança de Função**: grava a nova função como novo cargo.
-- **Desligamento**: chama `api/desligar-colaborador.ts` (deste projeto) com `desligado = true`, `data_desligamento`, `motivo_desligamento` e `desligado_by` — **mesma lógica/colunas do botão "Desligar colaborador" do Portal SST**, só que disparada pela aprovação final do fluxo de movimentação em vez de um botão direto. As duas vias continuam existindo (SST mantém seu próprio botão) e escrevem exatamente os mesmos campos.
+- **Desligamento**: **não** grava `desligado = true` diretamente (isso mudou — ver seção abaixo). Em vez disso, cria uma linha em `peopleflow_desligamento_pendente` com nome/data/motivo/quem aprovou; a efetivação real fica com o Portal SST.
 
 Se o campo relevante do formulário ficar vazio (ex.: promoção sem preencher "Novo cargo"), nada é sincronizado — a movimentação conclui normalmente sem alterar o cadastro. **Alteração Salarial não sincroniza nada**: não há coluna de salário em `colaboradores`.
 
-Em todos os casos a lista de colaboradores é recarregada do Supabase (`reload()`) logo em seguida, então a mudança aparece nos dois portais sem precisar dar F5.
+Promoção/Transferência/Mudança de Função recarregam a lista de colaboradores do Supabase (`reload()`) logo em seguida, então a mudança aparece nos dois portais sem precisar dar F5.
+
+### Desligamento em duas etapas (PeopleFlow aprova, SST efetiva)
+
+Concluir a etapa final (RH) de uma movimentação de Desligamento **não desliga ninguém ainda** — só registra a solicitação em `peopleflow_desligamento_pendente` (nome, data prevista, motivo, quem aprovou), gravado direto pelo navegador (tabela exclusiva do PeopleFlow, RLS já libera `authenticated`, sem precisar de service_role).
+
+O Portal SST lê essa tabela e mostra um card **"Desligamento pendente"** no Dashboard dele; clicar num item abre a ficha do colaborador já com a tela "Desligar colaborador" aberta e pré-preenchida (data/motivo). O RH revisa, anexa o ASO demissional se for o caso (fluxo que já existia lá, pergunta "possui mais de 90 dias?") e confirma — só nesse momento `colaboradores.desligado` é gravado de fato, e a linha em `peopleflow_desligamento_pendente` é apagada.
+
+Isso significa: entre a aprovação no PeopleFlow e a confirmação no SST, o colaborador **continua ativo** nos dois portais — a movimentação fica "Aprovado" no PeopleFlow, mas o desligamento em si só existe depois que o RH passa pela tela do SST. Ver README do Portal SST para o lado de lá.
 
 Diferente das demais escritas do PeopleFlow (que vão para tabelas próprias, prefixadas `peopleflow_`), esta é a **primeira gravação direta na tabela `colaboradores`** vinda do próprio app — e como a RLS dela só libera `select` para `authenticated`, a escrita passa por uma Vercel Serverless Function RH-only (`api/atualizar-admissao.ts`, mesmo padrão do `api/desligar-colaborador.ts` do SST): confirma que quem chamou é RH e então usa a `SUPABASE_SERVICE_ROLE_KEY` para atualizar só a coluna `admissao`. **Só funciona em produção (Vercel) ou com `vercel dev`** — em `npm run dev` (Vite puro) a chamada falha, o que é esperado localmente.
 
@@ -172,7 +180,8 @@ Os dois portais MSB usam o **mesmo projeto Supabase**, mas cada um só lê/escre
 
 | Tabela | Dono | Quem lê | Quem escreve |
 |---|---|---|---|
-| `colaboradores` | Portal SST | SST (tudo) e PeopleFlow (nome/cargo/departamento/vinculo/depto_code/nivel/gestor/admissao/desligado/data_desligamento/motivo_desligamento/desligado_by) | Cadastro base: criado como pré-cadastro pelo PeopleFlow ao concluir uma Admissão (`api/criar-pre-cadastro.ts`), completado (cpf/nascimento) pelo SST na tela Editar colaborador. `cargo`/`departamento` também atualizados pelo PeopleFlow ao concluir Promoção/Transferência/Mudança de Função (`api/atualizar-cargo-departamento.ts`). `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by`: SST via botão direto (`api/desligar-colaborador.ts` dele) **ou** PeopleFlow ao concluir um Desligamento (`api/desligar-colaborador.ts` deste projeto — mesma lógica, gatilhos diferentes). `admissao` também editável manualmente pelo RH via `api/atualizar-admissao.ts`. Fora essas exceções pontuais (todas RH-only, via service role), PeopleFlow só lê `colaboradores` |
+| `colaboradores` | Portal SST | SST (tudo) e PeopleFlow (nome/cargo/departamento/vinculo/depto_code/nivel/gestor/admissao/desligado/data_desligamento/motivo_desligamento/desligado_by) | Cadastro base: criado como pré-cadastro pelo PeopleFlow ao concluir uma Admissão (`api/criar-pre-cadastro.ts`), completado (cpf/nascimento) pelo SST na tela Editar colaborador. `cargo`/`departamento` também atualizados pelo PeopleFlow ao concluir Promoção/Transferência/Mudança de Função (`api/atualizar-cargo-departamento.ts`). `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by`: só o SST grava (botão "Desligar colaborador" dele) — o PeopleFlow nunca grava esses campos diretamente, só sinaliza via `peopleflow_desligamento_pendente` abaixo. `admissao` também editável manualmente pelo RH via `api/atualizar-admissao.ts`. Fora essas exceções pontuais (todas RH-only, via service role), PeopleFlow só lê `colaboradores` |
+| `peopleflow_desligamento_pendente` | Portal PeopleFlow | Os dois — PeopleFlow escreve, SST lê e apaga | PeopleFlow cria/atualiza a linha ao concluir uma movimentação de Desligamento (direto do navegador). SST lê para mostrar "Desligamento pendente" no Dashboard dele e apaga a linha ao confirmar o desligamento de verdade (tela "Desligar colaborador") |
 | `peopleflow_movimentacoes` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
 | `peopleflow_cargos_custom` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
 | `peopleflow_desligamentos` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) — valor da rescisão e da GRRF, editados na tela `/desligados` |

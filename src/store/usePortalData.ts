@@ -5,7 +5,7 @@ import {
   atualizarAdmissao as atualizarAdmissaoNoSupabase,
   atualizarCargoDepto as atualizarCargoDeptoNoSupabase,
   criarPreCadastro as criarPreCadastroNoSupabase,
-  desligarColaborador as desligarColaboradorNoSupabase,
+  criarSolicitacaoDesligamento as criarSolicitacaoDesligamentoNoSupabase,
 } from "../repositories/colaboradoresRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import {
@@ -154,10 +154,13 @@ export function usePortalData(): PortalData {
             reload();
           }
           if (desligamentoRegistrado) {
-            const dataIso = desligamentoRegistrado.dataIso || new Date().toISOString().slice(0, 10);
-            await desligarColaboradorNoSupabase(desligamentoRegistrado.nome, dataIso, desligamentoRegistrado.motivo, conta.email);
-            msg = `Desligamento de "${desligamentoRegistrado.nome}" registrado — some das listas ativas nos dois portais.`;
-            reload();
+            await criarSolicitacaoDesligamentoNoSupabase(
+              desligamentoRegistrado.nome,
+              desligamentoRegistrado.dataIso,
+              desligamentoRegistrado.motivo,
+              conta.email,
+            );
+            msg = `Desligamento de "${desligamentoRegistrado.nome}" aprovado — agora aguarda o RH efetivar no Portal SST (anexando o ASO demissional, se aplicável).`;
           }
           dispatch({ type: "APROVAR_ETAPA", id });
           flash(msg);

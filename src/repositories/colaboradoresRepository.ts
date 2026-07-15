@@ -1,13 +1,14 @@
 // Camada de acesso à tabela `colaboradores` — COMPARTILHADA com o Portal SST
 // MSB (mesmo projeto Supabase, mesmas pessoas). O PeopleFlow só lê as colunas
-// que usa (nunca cpf/epis/exames, que são do domínio do SST). Escritas, todas
-// via Vercel Function RH-only (RLS só libera SELECT direto do navegador):
-// atualizarAdmissao() (edição manual na tela Colaboradores), criarPreCadastro()
-// (ao concluir uma Admissão), atualizarCargoDepto() (ao concluir Promoção/
-// Transferência/Mudança de Função) e desligarColaborador() (ao concluir um
-// Desligamento) — todas disparadas em aprovarEtapaFn, store/usePortalData.ts.
-// O restante do cadastro (cpf, nascimento, epis, exames) continua exclusivo
-// do SST.
+// que usa (nunca cpf/epis/exames, que são do domínio do SST). Escritas em
+// `colaboradores`, todas via Vercel Function RH-only (RLS só libera SELECT
+// direto do navegador): atualizarAdmissao() (edição manual na tela
+// Colaboradores), criarPreCadastro() (ao concluir uma Admissão) e
+// atualizarCargoDepto() (ao concluir Promoção/Transferência/Mudança de
+// Função) — todas disparadas em aprovarEtapaFn, store/usePortalData.ts. O
+// restante do cadastro (cpf, nascimento, epis, exames, e o desligamento em
+// si) continua exclusivo do SST — ver criarSolicitacaoDesligamento() abaixo,
+// que só registra a solicitação numa tabela própria do PeopleFlow.
 //
 // Trocar a fonte de novo no futuro é uma mudança isolada neste arquivo; nada
 // mais no app importa o Supabase diretamente para dados de colaborador.
@@ -148,15 +149,17 @@ export async function atualizarCargoDepto(nome: string, novoCargo?: string, novo
   if (!res.ok) throw new Error(body.error || "Falha ao atualizar cargo/departamento do colaborador.");
 }
 
-/** Efetiva o desligamento ao concluir uma movimentação de Desligamento — via
- * api/desligar-colaborador.ts (RH-only, service_role), mesma lógica/colunas
- * do botão "Desligar colaborador" do Portal SST. */
-export async function desligarColaborador(nome: string, dataIso: string, motivo: string, by: string): Promise<void> {
-  const res = await fetch("/api/desligar-colaborador", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-    body: JSON.stringify({ nome, dataIso, motivo, by }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || "Falha ao desligar colaborador.");
+/** Registra a solicitação de desligamento ao concluir a movimentação no
+ * PeopleFlow — não desliga ninguém: só cria/atualiza uma linha em
+ * `peopleflow_desligamento_pendente`, que o Portal SST lê para notificar o
+ * RH no Dashboard dele. A efetivação real (`colaboradores.desligado`, com
+ * ASO demissional se aplicável) acontece só quando o RH confirma pela tela
+ * "Desligar colaborador" do SST — write direto (tabela exclusiva do
+ * PeopleFlow, RLS já libera `authenticated`, sem precisar de service_role). */
+export async function criarSolicitacaoDesligamento(nome: string, dataIso: string, motivo: string, solicitadoPor: string): Promise<void> {
+  const { error } = await supabase.from("peopleflow_desligamento_pendente").upsert(
+    { colaborador_nome: nome, data_desligamento: dataIso || null, motivo, solicitado_por: solicitadoPor },
+    { onConflict: "colaborador_nome" },
+  );
+  if (error) throw new Error(`Falha ao registrar solicitação de desligamento: ${error.message}`);
 }

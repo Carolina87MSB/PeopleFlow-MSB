@@ -221,3 +221,35 @@ alter table public.colaboradores
   add column if not exists vinculo text;
 
 comment on column public.colaboradores.vinculo is 'PeopleFlow: tipo de vínculo do colaborador (ex.: CLT, PJ, Estágio).';
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 6) Desligamento pendente — ponte entre a movimentação do PeopleFlow e a
+--    efetivação no Portal SST
+-- ─────────────────────────────────────────────────────────────────────────
+-- Concluir a etapa final (RH) de uma movimentação de Desligamento NÃO marca
+-- mais `colaboradores.desligado = true` diretamente — em vez disso, cria uma
+-- linha aqui. O Portal SST lê essa tabela para mostrar a notificação
+-- "Desligamento pendente" no Dashboard; a efetivação real (desligado/
+-- data_desligamento/motivo_desligamento/desligado_by, com ASO demissional
+-- anexado se aplicável) continua acontecendo pela tela "Desligar colaborador"
+-- de lá — que, ao confirmar, apaga a linha correspondente daqui.
+create table if not exists public.peopleflow_desligamento_pendente (
+  colaborador_nome text primary key,
+  data_desligamento date,
+  motivo text not null,
+  solicitado_por text not null,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_desligamento_pendente is
+  'Fila de desligamentos aprovados no PeopleFlow aguardando efetivação no Portal SST (tela Desligar colaborador, com ASO demissional).';
+
+alter table public.peopleflow_desligamento_pendente enable row level security;
+
+drop policy if exists "authenticated_rw_desligamento_pendente" on public.peopleflow_desligamento_pendente;
+create policy "authenticated_rw_desligamento_pendente"
+  on public.peopleflow_desligamento_pendente
+  for all
+  to authenticated
+  using (true)
+  with check (true);
