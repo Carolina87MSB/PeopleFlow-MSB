@@ -86,3 +86,17 @@ export function roleApprover(papel: string, ctx: { solicitanteGestor?: string })
   if (papel === "CEO") return "Daniel Emiliano Suguer";
   return ctx.solicitanteGestor || "A definir";
 }
+
+const CARGO_CEO = /^ceo\b/;
+
+/**
+ * true só para quem tem o cargo "CEO" (hoje, só o Daniel) — deliberadamente
+ * NÃO usa perfilOf()/"Diretoria", já que esse perfil também cobre o Diretor
+ * Industrial (Yuri) e os dois não podem ser tratados igual aqui: só o CEO
+ * pula Gestor Solicitante/Diretor Industrial ao solicitar uma movimentação
+ * (ver montarEtapas() em workflow.ts). Cargo, não nome — se um dia outra
+ * pessoa assumir o cargo de CEO, a regra já vale pra ela automaticamente.
+ */
+export function ehCEO(colaborador: Colaborador | undefined): boolean {
+  return Boolean(colaborador && CARGO_CEO.test(norm(colaborador.cargo)));
+}

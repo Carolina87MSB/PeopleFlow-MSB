@@ -1,9 +1,10 @@
 import { formatarDataAtual, formatarHoraAtual } from "./dates";
-import { roleApprover } from "./hierarquia";
+import { ehCEO, roleApprover } from "./hierarquia";
 import type {
   AdmissaoInfo,
   AtualizacaoCargoDeptoInfo,
   CargoCustom,
+  Colaborador,
   DesligamentoInfo,
   Etapa,
   Movimentacao,
@@ -30,8 +31,23 @@ export function podeAgir(m: Movimentacao, me: string): boolean {
   return Boolean(atual && atual.status === "Em análise" && atual.aprovador === me);
 }
 
-export function montarEtapas(tipo: TipoMovimentacao, solicitanteGestor: string): Etapa[] {
-  return tipo.etapas.map((papel, i) => ({
+/**
+ * Monta as etapas de aprovação de uma movimentação. Quando quem solicita é o
+ * CEO (ver ehCEO() em hierarquia.ts — checagem por cargo, não por perfil,
+ * já que "Diretoria" também cobre o Diretor Industrial), a matriz normal é
+ * ignorada: a movimentação pula Gestor Solicitante e Diretor Industrial (e a
+ * etapa "CEO" da matriz de Novo Cargo, que seria o próprio solicitante se
+ * aprovando) e vai direto para RH — regra válida para todos os tipos.
+ */
+export function montarEtapas(
+  tipo: TipoMovimentacao,
+  solicitanteGestor: string,
+  solicitanteNome: string,
+  colaboradores: Colaborador[],
+): Etapa[] {
+  const solicitanteColab = colaboradores.find((c) => c.nome === solicitanteNome);
+  const papeis = ehCEO(solicitanteColab) ? ["RH"] : tipo.etapas;
+  return papeis.map((papel, i) => ({
     papel,
     aprovador: roleApprover(papel, { solicitanteGestor }),
     status: i === 0 ? "Em análise" : "Aguardando",

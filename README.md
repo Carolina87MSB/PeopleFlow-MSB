@@ -50,6 +50,12 @@ Três perfis, com visão e permissões diferentes (ver `src/domain/permissoes.ts
 
 `colaboradoresListagem` (fonte de `/colaboradores`, com a regra por perfil acima) é diferente de `colaboradoresVisiveis` (escopo de hierarquia completa do Gestor, usado no resto do app) — ver `usePortalData.ts`.
 
+### Exceção de aprovação para o CEO
+
+Daniel (CEO) e Yuri (Diretor Industrial) têm o mesmo perfil "Diretoria", mas **só o CEO** tem uma regra especial: toda movimentação que ele solicitar pula as etapas "Gestor Solicitante" e "Diretor Industrial" (e a etapa "CEO" da matriz de Novo Cargo, que seria ele aprovando a própria solicitação) e vai direto para o RH — em qualquer tipo de movimentação. Yuri, com o mesmo perfil, continua seguindo a matriz normal.
+
+A checagem é por **cargo** (`ehCEO()` em `src/domain/hierarquia.ts`, cargo começando com "CEO"), não por perfil nem por nome fixo — se um dia outra pessoa assumir o cargo de CEO, a regra passa a valer para ela automaticamente, sem precisar mexer no código. Implementado em `montarEtapas()` (`src/domain/workflow.ts`), que agora recebe quem está solicitando para decidir a matriz de etapas.
+
 ### Tela de administração de acessos (`/acessos`, RH-only)
 
 Depois que a primeira conta do RH estiver provisionada manualmente (passo 2 acima), o próprio RH consegue liberar o acesso de qualquer Gestor/Diretor direto pelo app, sem entrar no painel do Supabase: a tela lista todo colaborador cadastrado com o e-mail derivado do nome e um status "Provisionado"/"Sem acesso", com um botão "Liberar acesso" por linha.

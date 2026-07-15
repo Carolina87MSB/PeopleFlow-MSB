@@ -87,7 +87,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
 
   if (f.tipo === "NOV") {
     const tipo = tipos.find((t) => t.cod === "NOV")!;
-    const etapas = montarEtapas(tipo, f.cargoGestor);
+    const etapas = montarEtapas(tipo, f.cargoGestor, me, colaboradores);
     const dados: DadoField[] = [
       { label: "Nome do cargo", value: f.cargoNome.trim() },
       { label: "Departamento", value: f.cargoDepto },
@@ -119,7 +119,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
 
   if (f.tipo === "ADM") {
     const tipo = tipos.find((t) => t.cod === "ADM")!;
-    const etapas = montarEtapas(tipo, f.admGestor);
+    const etapas = montarEtapas(tipo, f.admGestor, me, colaboradores);
     const dados: DadoField[] = [
       { label: "Motivo da contratação", value: f.admMotivo || "—" },
       { label: "Cargo solicitado", value: f.admCargo.trim() },
@@ -151,7 +151,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
   const tipo = tipos.find((t) => t.cod === f.tipo)!;
   const colab = colaboradores.find((c) => c.nome === f.colab);
   const solic = perfil === "Gestor" ? me : colab ? colab.gestor : "A definir";
-  const etapas = montarEtapas(tipo, solic);
+  const etapas = montarEtapas(tipo, solic, me, colaboradores);
   const cargoAtual = colab ? colab.cargo : "—";
   const deptoAtual = colab ? colab.depto : "—";
   let resumo = "";
