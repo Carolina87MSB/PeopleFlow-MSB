@@ -10,7 +10,7 @@ import { usePortalData } from "../../store/usePortalData";
 import styles from "./ColaboradoresPage.module.css";
 
 export function ColaboradoresPage() {
-  const { colaboradoresVisiveis, podeVerColaboradores, podeEditarAdmissao, atualizarAdmissao } = usePortalData();
+  const { colaboradoresListagem, podeVerColaboradores, podeEditarAdmissao, atualizarAdmissao } = usePortalData();
   const [searchParams, setSearchParams] = useSearchParams();
   const [depto, setDepto] = useState("Todos");
   const [busca, setBusca] = useState("");
@@ -21,18 +21,18 @@ export function ColaboradoresPage() {
   const [salvandoAdmissao, setSalvandoAdmissao] = useState(false);
 
   const deptos = useMemo(
-    () => ["Todos", ...new Set(colaboradoresVisiveis.map((c) => c.depto))],
-    [colaboradoresVisiveis],
+    () => ["Todos", ...new Set(colaboradoresListagem.map((c) => c.depto))],
+    [colaboradoresListagem],
   );
 
   const gestores = useMemo(
-    () => [...contarPorGestor(colaboradoresVisiveis).entries()].sort((a, b) => b[1] - a[1]),
-    [colaboradoresVisiveis],
+    () => [...contarPorGestor(colaboradoresListagem).entries()].sort((a, b) => b[1] - a[1]),
+    [colaboradoresListagem],
   );
 
   const filtrados = useMemo(() => {
     const termo = norm(busca);
-    return colaboradoresVisiveis.filter((c) => {
+    return colaboradoresListagem.filter((c) => {
       if (depto !== "Todos" && c.depto !== depto) return false;
       if (gestorSelecionado && c.gestor !== gestorSelecionado) return false;
       if (termo) {
@@ -41,11 +41,11 @@ export function ColaboradoresPage() {
       }
       return true;
     });
-  }, [colaboradoresVisiveis, depto, gestorSelecionado, busca]);
+  }, [colaboradoresListagem, depto, gestorSelecionado, busca]);
 
   const colaboradorSelecionado = useMemo(
-    () => colaboradoresVisiveis.find((c) => c.nome === selecionado) || null,
-    [colaboradoresVisiveis, selecionado],
+    () => colaboradoresListagem.find((c) => c.nome === selecionado) || null,
+    [colaboradoresListagem, selecionado],
   );
 
   if (!podeVerColaboradores) return <Navigate to="/dashboard" replace />;

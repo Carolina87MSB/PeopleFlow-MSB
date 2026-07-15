@@ -45,7 +45,7 @@ Login por **link mágico** (e-mail corporativo `@msbbrasil.com`, sem senha) via 
 
 Três perfis, com visão e permissões diferentes (ver `src/domain/permissoes.ts`):
 - **RH** — acesso completo: todos os colaboradores, todas as movimentações, cadastros de departamentos/cargos, e a tela de **Acessos** (`/acessos`).
-- **Gestor** — vê apenas sua equipe (hierarquia direta e indireta, via `descendants()`), pode solicitar movimentações e aprovar a etapa "Gestor Solicitante".
+- **Gestor** — pode solicitar movimentações e aprovar a etapa "Gestor Solicitante" só para sua equipe (hierarquia direta e indireta, via `descendants()` — esse escopo vale para `movimentacoesVisiveis` e para o seletor de colaborador em "Nova movimentação"). Na tela **Colaboradores** (`/colaboradores`), porém, todo Gestor vê a lista inteira da empresa, só leitura — não tem os botões de edição (Admissão, descrição de cargo), que continuam exclusivos do RH. Ver `colaboradoresListagem` (sem escopo) vs. `colaboradoresVisiveis` (escopado) em `usePortalData.ts`.
 - **Diretoria** — não vê o cadastro de colaboradores; vê apenas movimentações encaminhadas para sua aprovação.
 
 ### Tela de administração de acessos (`/acessos`, RH-only)

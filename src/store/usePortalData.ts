@@ -38,6 +38,12 @@ export interface PortalData {
   perfil: Perfil;
   colaboradores: Colaborador[];
   colaboradoresVisiveis: Colaborador[];
+  /** Todos os colaboradores ativos, sem escopo de equipe — usado na tela
+   * Colaboradores (`/colaboradores`), que é só leitura para Gestor (RH é
+   * quem edita). Diferente de `colaboradoresVisiveis`, que continua restrito
+   * à equipe do Gestor em todo o resto do app (ex.: seletor de colaborador
+   * em "Nova movimentação", agregados do Dashboard). */
+  colaboradoresListagem: Colaborador[];
   movimentacoes: Movimentacao[];
   movimentacoesVisiveis: Movimentacao[];
   desligados: Colaborador[];
@@ -89,10 +95,11 @@ export function usePortalData(): PortalData {
     return set;
   }, [perfil, me, state.colaboradores]);
 
+  const colaboradoresListagem = useMemo(() => state.colaboradores.filter((c) => !c.desligado), [state.colaboradores]);
+
   const colaboradoresVisiveis = useMemo(() => {
-    const ativos = state.colaboradores.filter((c) => !c.desligado);
-    return perfil === "Gestor" && scopeSet ? ativos.filter((c) => scopeSet.has(c.nome)) : ativos;
-  }, [perfil, scopeSet, state.colaboradores]);
+    return perfil === "Gestor" && scopeSet ? colaboradoresListagem.filter((c) => scopeSet.has(c.nome)) : colaboradoresListagem;
+  }, [perfil, scopeSet, colaboradoresListagem]);
 
   const movimentacoesVisiveis = useMemo(
     () => (perfil === "RH" ? state.movimentacoes : state.movimentacoes.filter((m) => canSeeMov(m, perfil, me, scopeSet))),
@@ -273,6 +280,7 @@ export function usePortalData(): PortalData {
     perfil,
     colaboradores: state.colaboradores,
     colaboradoresVisiveis,
+    colaboradoresListagem,
     movimentacoes: state.movimentacoes,
     movimentacoesVisiveis,
     desligados,
