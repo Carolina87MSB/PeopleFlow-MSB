@@ -1,12 +1,14 @@
 import { useCallback, useMemo } from "react";
 import { useToast } from "../components/shared/ToastContext";
 import { atualizarDescricaoCargoCustom, criarCargoCustom } from "../repositories/cargosCustomRepository";
+import { atualizarAdmissao as atualizarAdmissaoNoSupabase } from "../repositories/colaboradoresRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import {
   atualizarCampoDescricaoCargo as atualizarCampoDescricaoCargoNoSupabase,
   getHistoricoDescricaoCargo,
 } from "../repositories/descricoesCargoRepository";
 import { atualizarMovimentacao, criarMovimentacao as criarMovimentacaoNoSupabase } from "../repositories/movimentacoesRepository";
+import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
 import { descendants } from "../domain/hierarquia";
@@ -38,6 +40,7 @@ export interface PortalData {
   pendenciasFinanceirasCount: number;
   descricoesCargo: DescricaoCargo[];
   podeEditarDescricaoCargo: boolean;
+  podeEditarAdmissao: boolean;
   scopeSet: Set<string> | null;
   podeCriar: boolean;
   podeVerColaboradores: boolean;
@@ -51,6 +54,7 @@ export interface PortalData {
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
   atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
+  atualizarAdmissao: (nome: string, admissaoIso: string) => Promise<{ ok: true } | { ok: false }>;
 }
 
 /**
@@ -195,6 +199,27 @@ export function usePortalData(): PortalData {
     [],
   );
 
+  const atualizarAdmissaoFn = useCallback(
+    async (nome: string, admissaoIso: string) => {
+      try {
+        await atualizarAdmissaoNoSupabase(nome, admissaoIso);
+        dispatch({
+          type: "ATUALIZAR_ADMISSAO_COLABORADOR",
+          nome,
+          admissao: formatarDataIso(admissaoIso),
+          admissaoIso,
+          tempoDeEmpresa: tempoDeEmpresa(admissaoIso),
+        });
+        flash("Data de admissão atualizada.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao atualizar data de admissão.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, flash],
+  );
+
   const salvarFechamentoFinanceiroFn = useCallback(
     async (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => {
       try {
@@ -225,6 +250,7 @@ export function usePortalData(): PortalData {
     pendenciasFinanceirasCount,
     descricoesCargo: state.descricoesCargo,
     podeEditarDescricaoCargo: perfil === "RH",
+    podeEditarAdmissao: perfil === "RH",
     scopeSet,
     podeCriar: canCreate(perfil),
     podeVerColaboradores: navColab(perfil),
@@ -238,5 +264,6 @@ export function usePortalData(): PortalData {
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,
     atualizarCampoDescricaoCargo: atualizarCampoDescricaoCargoFn,
     carregarHistoricoDescricaoCargo: carregarHistoricoDescricaoCargoFn,
+    atualizarAdmissao: atualizarAdmissaoFn,
   };
 }

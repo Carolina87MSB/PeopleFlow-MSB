@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Pencil, Search } from "lucide-react";
 import { Header } from "../../components/layout/Header";
-import { Avatar, Badge, Drawer, EmptyState, FilterChips, tableStyles } from "../../components/ui";
+import { Avatar, Badge, Button, Drawer, EmptyState, FilterChips, tableStyles } from "../../components/ui";
 import { contarPorGestor } from "../../domain/agregados";
 import { nivelMeta } from "../../domain/colors";
 import { norm } from "../../domain/hierarquia";
@@ -10,12 +10,15 @@ import { usePortalData } from "../../store/usePortalData";
 import styles from "./ColaboradoresPage.module.css";
 
 export function ColaboradoresPage() {
-  const { colaboradoresVisiveis, podeVerColaboradores } = usePortalData();
+  const { colaboradoresVisiveis, podeVerColaboradores, podeEditarAdmissao, atualizarAdmissao } = usePortalData();
   const [searchParams, setSearchParams] = useSearchParams();
   const [depto, setDepto] = useState("Todos");
   const [busca, setBusca] = useState("");
   const [gestorSelecionado, setGestorSelecionado] = useState(searchParams.get("gestor") || "");
   const [selecionado, setSelecionado] = useState<string | null>(null);
+  const [editandoAdmissao, setEditandoAdmissao] = useState(false);
+  const [admissaoRascunho, setAdmissaoRascunho] = useState("");
+  const [salvandoAdmissao, setSalvandoAdmissao] = useState(false);
 
   const deptos = useMemo(
     () => ["Todos", ...new Set(colaboradoresVisiveis.map((c) => c.depto))],
@@ -53,6 +56,30 @@ export function ColaboradoresPage() {
     if (nome) params.set("gestor", nome);
     else params.delete("gestor");
     setSearchParams(params, { replace: true });
+  }
+
+  function abrirDrawer(nome: string) {
+    setSelecionado(nome);
+    setEditandoAdmissao(false);
+  }
+
+  function fecharDrawer() {
+    setSelecionado(null);
+    setEditandoAdmissao(false);
+  }
+
+  function iniciarEdicaoAdmissao() {
+    if (!colaboradorSelecionado) return;
+    setAdmissaoRascunho(colaboradorSelecionado.admissaoIso);
+    setEditandoAdmissao(true);
+  }
+
+  async function salvarAdmissao() {
+    if (!colaboradorSelecionado || !admissaoRascunho) return;
+    setSalvandoAdmissao(true);
+    const result = await atualizarAdmissao(colaboradorSelecionado.nome, admissaoRascunho);
+    setSalvandoAdmissao(false);
+    if (result.ok) setEditandoAdmissao(false);
   }
 
   return (
@@ -103,7 +130,7 @@ export function ColaboradoresPage() {
             </thead>
             <tbody>
               {filtrados.map((c) => (
-                <tr key={c.nome} className={tableStyles.clickable} onClick={() => setSelecionado(c.nome)}>
+                <tr key={c.nome} className={tableStyles.clickable} onClick={() => abrirDrawer(c.nome)}>
                   <td>{c.vinculo}</td>
                   <td>
                     <div className={styles.pessoa}>
@@ -137,7 +164,7 @@ export function ColaboradoresPage() {
 
       {colaboradorSelecionado && (
         <Drawer
-          onClose={() => setSelecionado(null)}
+          onClose={fecharDrawer}
           header={
             <div className={styles.drawerHeader}>
               <Avatar nome={colaboradorSelecionado.nome} size={44} />
@@ -174,8 +201,34 @@ export function ColaboradoresPage() {
               <span className={styles.detalheValor}>{colaboradorSelecionado.gestor}</span>
             </div>
             <div className={styles.detalheItem}>
-              <span className={styles.detalheLabel}>Admissão</span>
-              <span className={styles.detalheValor}>{colaboradorSelecionado.admissao}</span>
+              <div className={styles.detalheTopo}>
+                <span className={styles.detalheLabel}>Admissão</span>
+                {podeEditarAdmissao && !editandoAdmissao ? (
+                  <button type="button" className={styles.editarBtn} onClick={iniciarEdicaoAdmissao} title="Editar admissão">
+                    <Pencil size={12} />
+                  </button>
+                ) : null}
+              </div>
+              {editandoAdmissao ? (
+                <div className={styles.edicao}>
+                  <input
+                    type="date"
+                    className={styles.dateInput}
+                    value={admissaoRascunho}
+                    onChange={(e) => setAdmissaoRascunho(e.target.value)}
+                  />
+                  <div className={styles.edicaoAcoes}>
+                    <Button variant="ghost" onClick={() => setEditandoAdmissao(false)} disabled={salvandoAdmissao}>
+                      Cancelar
+                    </Button>
+                    <Button variant="primary" onClick={salvarAdmissao} disabled={salvandoAdmissao || !admissaoRascunho}>
+                      {salvandoAdmissao ? "Salvando..." : "Salvar"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <span className={styles.detalheValor}>{colaboradorSelecionado.admissao}</span>
+              )}
             </div>
             <div className={styles.detalheItem}>
               <span className={styles.detalheLabel}>Tempo de empresa</span>

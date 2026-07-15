@@ -49,6 +49,7 @@ function fromRow(row: ColaboradorRow): Colaborador {
     nivel: (row.nivel as Colaborador["nivel"]) ?? "Operacional",
     gestor: row.gestor ?? "—",
     admissao: row.admissao ?? "",
+    admissaoIso: row.admissao ?? "",
     tempoDeEmpresa: tempoDeEmpresa(row.admissao),
     desligado: row.desligado ?? false,
     dataDesligamento: row.data_desligamento ?? "",

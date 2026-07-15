@@ -26,6 +26,17 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         descricoesCargo: action.descricoesCargo,
       };
 
+    case "ATUALIZAR_ADMISSAO_COLABORADOR": {
+      return {
+        ...state,
+        colaboradores: state.colaboradores.map((c) =>
+          c.nome === action.nome
+            ? { ...c, admissao: action.admissao, admissaoIso: action.admissaoIso, tempoDeEmpresa: action.tempoDeEmpresa }
+            : c,
+        ),
+      };
+    }
+
     case "ATUALIZAR_DESCRICAO_CARGO": {
       const existe = state.descricoesCargo.some((d) => d.cargoNome === action.descricao.cargoNome);
       const descricoesCargo = existe

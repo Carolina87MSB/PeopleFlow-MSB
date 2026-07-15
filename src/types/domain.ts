@@ -19,6 +19,8 @@ export interface Colaborador {
   nivel: Nivel;
   gestor: string;
   admissao: string;
+  /** Mesma data de `admissao`, no formato ISO "aaaa-mm-dd" — usado para prefill do editor (input type="date") sem precisar reverter o parsing de "dd/mmm/aaaa". */
+  admissaoIso: string;
   /** Calculado a partir de `admissao` — ver tempoDeEmpresa() em domain/dates.ts. */
   tempoDeEmpresa: string;
   desligado: boolean;

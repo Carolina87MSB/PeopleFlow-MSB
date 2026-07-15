@@ -48,6 +48,7 @@ function fromRow(row: ColaboradorRow): Colaborador {
     nivel,
     gestor: row.gestor ?? "—",
     admissao: formatarDataIso(row.admissao),
+    admissaoIso: row.admissao ?? "",
     tempoDeEmpresa: tempoDeEmpresa(row.admissao),
     desligado: row.desligado ?? false,
     dataDesligamento: formatarDataIso(row.data_desligamento),
@@ -78,4 +79,23 @@ export async function getColaboradores(): Promise<Colaborador[]> {
     throw new Error(`Falha ao carregar colaboradores do Supabase: ${error.message}`);
   }
   return (data as ColaboradorRow[]).map(fromRow);
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Único write do PeopleFlow em `colaboradores` — passa pela Vercel Function
+ * RH-only em api/atualizar-admissao.ts (RLS não libera UPDATE direto do
+ * navegador). `admissaoIso` no formato "aaaa-mm-dd". */
+export async function atualizarAdmissao(nome: string, admissaoIso: string): Promise<void> {
+  const res = await fetch("/api/atualizar-admissao", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify({ nome, admissao: admissaoIso }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Falha ao atualizar data de admissão.");
 }
