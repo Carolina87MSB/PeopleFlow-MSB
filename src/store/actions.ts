@@ -12,7 +12,7 @@ export type PortalAction =
       descricoesCargo: DescricaoCargo[];
     }
   | { type: "APROVAR_ETAPA"; id: string }
-  | { type: "REPROVAR_ETAPA"; id: string }
+  | { type: "REPROVAR_ETAPA"; id: string; comentario: string }
   | { type: "CRIAR_MOVIMENTACAO"; movimentacao: Movimentacao }
   | { type: "REGISTRAR_CARGO_CUSTOM"; cargo: CargoCustom }
   | { type: "TOGGLE_DESCRICAO_CARGO"; nome: string }

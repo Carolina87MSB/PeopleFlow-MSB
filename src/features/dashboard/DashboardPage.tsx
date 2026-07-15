@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, CheckCircle2, Plus, Search, X } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { NovaMovimentacaoModal } from "../../components/shared/NovaMovimentacaoModal";
+import { ReprovarModal } from "../../components/shared/ReprovarModal";
 import { Avatar, Badge, Button, Card, EmptyState, KpiCard, ProgressBar } from "../../components/ui";
 import { agregarCargos, agregarDepartamentos, contarPorGestor } from "../../domain/agregados";
 import { tipoColor } from "../../domain/colors";
@@ -26,6 +27,7 @@ export function DashboardPage() {
   } = usePortalData();
   const [modalAberto, setModalAberto] = useState(false);
   const [busca, setBusca] = useState("");
+  const [reprovandoId, setReprovandoId] = useState<string | null>(null);
 
   const departamentos = useMemo(() => agregarDepartamentos(colaboradoresVisiveis), [colaboradoresVisiveis]);
   const cargos = useMemo(() => agregarCargos(colaboradoresVisiveis, state.cargosCustom), [colaboradoresVisiveis, state.cargosCustom]);
@@ -33,6 +35,16 @@ export function DashboardPage() {
   const maxDepto = Math.max(1, ...departamentos.map((d) => d.count));
 
   const pendentes = movimentacoesVisiveis.filter((m) => m.status === "Em Aprovação");
+  const movimentacaoReprovando = useMemo(
+    () => (reprovandoId ? movimentacoesVisiveis.find((m) => m.id === reprovandoId) ?? null : null),
+    [reprovandoId, movimentacoesVisiveis],
+  );
+
+  function handleReprovar(justificativa: string) {
+    if (!reprovandoId) return;
+    reprovarEtapa(reprovandoId, justificativa);
+    setReprovandoId(null);
+  }
   const aprovadasMes = movimentacoesVisiveis.filter((m) => m.status === "Aprovado" || m.status === "Concluído").length;
   const reprovadasMes = movimentacoesVisiveis.filter((m) => m.status === "Reprovado").length;
   const meusPendCount = pendentes.filter((m) => podeAgir(m, conta.nome)).length;
@@ -120,7 +132,7 @@ export function DashboardPage() {
                       <Button variant="success" icon={<Check size={14} />} onClick={() => aprovarEtapa(m.id)}>
                         Aprovar
                       </Button>
-                      <Button variant="danger" icon={<X size={14} />} onClick={() => reprovarEtapa(m.id)}>
+                      <Button variant="danger" icon={<X size={14} />} onClick={() => setReprovandoId(m.id)}>
                         Reprovar
                       </Button>
                     </div>
@@ -172,6 +184,15 @@ export function DashboardPage() {
       </div>
 
       {modalAberto && <NovaMovimentacaoModal onClose={() => setModalAberto(false)} />}
+
+      {movimentacaoReprovando && (
+        <ReprovarModal
+          colaborador={movimentacaoReprovando.colaborador}
+          tipo={movimentacaoReprovando.tipo}
+          onClose={() => setReprovandoId(null)}
+          onConfirm={handleReprovar}
+        />
+      )}
     </>
   );
 }

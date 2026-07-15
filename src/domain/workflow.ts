@@ -94,7 +94,7 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
   return { movimentacoes: novasMovimentacoes, cargoRegistrado, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado };
 }
 
-export function reprovarEtapa(movimentacoes: Movimentacao[], id: string): Movimentacao[] {
+export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comentario: string): Movimentacao[] {
   const hoje = formatarDataAtual();
   const agora = formatarHoraAtual();
   return movimentacoes.map((m) => {
@@ -105,6 +105,7 @@ export function reprovarEtapa(movimentacoes: Movimentacao[], id: string): Movime
     etapas[idx].status = "Reprovado";
     etapas[idx].data = hoje;
     etapas[idx].hora = agora;
+    etapas[idx].comentario = comentario;
     return { ...m, etapas, status: "Reprovado" };
   });
 }

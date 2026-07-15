@@ -78,7 +78,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
     }
 
     case "REPROVAR_ETAPA":
-      return { ...state, movimentacoes: reprovarEtapa(state.movimentacoes, action.id) };
+      return { ...state, movimentacoes: reprovarEtapa(state.movimentacoes, action.id, action.comentario) };
 
     case "CRIAR_MOVIMENTACAO":
       return { ...state, movimentacoes: [action.movimentacao, ...state.movimentacoes] };

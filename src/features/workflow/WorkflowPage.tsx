@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
-import { Check, Info } from "lucide-react";
+import { Check, Eye, Info } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { NovaMovimentacaoModal } from "../../components/shared/NovaMovimentacaoModal";
+import { MovimentacaoDetalhe } from "../../components/shared/MovimentacaoDetalhe";
+import { ReprovarModal } from "../../components/shared/ReprovarModal";
 import { useToast } from "../../components/shared/ToastContext";
-import { Badge, Button, Card, EmptyState, FilterChips, StatusBadge } from "../../components/ui";
+import { Badge, Button, Card, Drawer, EmptyState, FilterChips, StatusBadge } from "../../components/ui";
 import { prioMeta, tipoColor } from "../../domain/colors";
 import { etapaAtual, podeAgir } from "../../domain/workflow";
+import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import type { Etapa, EtapaStatus, Movimentacao } from "../../types/domain";
 import styles from "./WorkflowPage.module.css";
@@ -69,10 +72,13 @@ function comentarioParaExibir(m: Movimentacao): Etapa | undefined {
 
 export function WorkflowPage() {
   const { conta, movimentacoesVisiveis, podeCriar, aprovarEtapa, reprovarEtapa } = usePortalData();
+  const { state } = usePortalStore();
   const { flash } = useToast();
   const [modalAberto, setModalAberto] = useState(false);
   const [filtro, setFiltro] = useState<string>("Em Aprovação");
   const [gestor, setGestor] = useState("");
+  const [detalheId, setDetalheId] = useState<string | null>(null);
+  const [reprovandoId, setReprovandoId] = useState<string | null>(null);
 
   const pendentes = useMemo(
     () => movimentacoesVisiveis.filter((m) => m.status === "Em Aprovação" || m.status === "Rascunho" || m.status === "Reprovado"),
@@ -86,14 +92,26 @@ export function WorkflowPage() {
     [pendentes, filtro, gestor],
   );
 
+  const movimentacaoDetalhe = useMemo(
+    () => (detalheId ? movimentacoesVisiveis.find((m) => m.id === detalheId) ?? null : null),
+    [detalheId, movimentacoesVisiveis],
+  );
+
+  const movimentacaoReprovando = useMemo(
+    () => (reprovandoId ? movimentacoesVisiveis.find((m) => m.id === reprovandoId) ?? null : null),
+    [reprovandoId, movimentacoesVisiveis],
+  );
+
   function handleAprovar(id: string) {
     aprovarEtapa(id);
     flash("Etapa aprovada — movimentação atualizada.");
   }
 
-  function handleReprovar(id: string) {
-    reprovarEtapa(id);
+  function handleReprovar(justificativa: string) {
+    if (!reprovandoId) return;
+    reprovarEtapa(reprovandoId, justificativa);
     flash("Movimentação reprovada e registrada na trilha.");
+    setReprovandoId(null);
   }
 
   return (
@@ -166,6 +184,9 @@ export function WorkflowPage() {
                       {m.prioridade}
                     </Badge>
                     <StatusBadge status={m.status} />
+                    <Button variant="ghost" icon={<Eye size={14} />} onClick={() => setDetalheId(m.id)}>
+                      Ver detalhes
+                    </Button>
                   </div>
                 </div>
 
@@ -183,7 +204,7 @@ export function WorkflowPage() {
                 {m.status === "Em Aprovação" &&
                   (podeAgirAgora ? (
                     <div className={styles.actionsRow}>
-                      <Button variant="danger" onClick={() => handleReprovar(m.id)}>
+                      <Button variant="danger" onClick={() => setReprovandoId(m.id)}>
                         Reprovar
                       </Button>
                       <Button variant="primary" icon={<Check size={14} />} onClick={() => handleAprovar(m.id)}>
@@ -213,6 +234,21 @@ export function WorkflowPage() {
       )}
 
       {modalAberto && <NovaMovimentacaoModal onClose={() => setModalAberto(false)} />}
+
+      {movimentacaoDetalhe && (
+        <Drawer onClose={() => setDetalheId(null)} header={<div className={styles.drawerHeaderTitulo}>Detalhes da movimentação</div>}>
+          <MovimentacaoDetalhe movimentacao={movimentacaoDetalhe} cargosCustom={state.cargosCustom} />
+        </Drawer>
+      )}
+
+      {movimentacaoReprovando && (
+        <ReprovarModal
+          colaborador={movimentacaoReprovando.colaborador}
+          tipo={movimentacaoReprovando.tipo}
+          onClose={() => setReprovandoId(null)}
+          onConfirm={handleReprovar}
+        />
+      )}
     </>
   );
 }

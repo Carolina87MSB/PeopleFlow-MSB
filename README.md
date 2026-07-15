@@ -79,6 +79,12 @@ Em todos os casos a lista de colaboradores é recarregada do Supabase (`reload()
 
 Diferente das demais escritas do PeopleFlow (que vão para tabelas próprias, prefixadas `peopleflow_`), esta é a **primeira gravação direta na tabela `colaboradores`** vinda do próprio app — e como a RLS dela só libera `select` para `authenticated`, a escrita passa por uma Vercel Serverless Function RH-only (`api/atualizar-admissao.ts`, mesmo padrão do `api/desligar-colaborador.ts` do SST): confirma que quem chamou é RH e então usa a `SUPABASE_SERVICE_ROLE_KEY` para atualizar só a coluna `admissao`. **Só funciona em produção (Vercel) ou com `vercel dev`** — em `npm run dev` (Vite puro) a chamada falha, o que é esperado localmente.
 
+### Ver detalhes e reprovação com justificativa (`/workflow`, `/dashboard`)
+
+Cada card de movimentação (Workflow de aprovação e o widget "Aprovações pendentes" do Dashboard) tem um botão **"Ver detalhes"** que abre a mesma ficha completa usada em Movimentações aprovadas (`src/components/shared/MovimentacaoDetalhe.tsx`, extraído para ser reaproveitado nos dois lugares) dentro de um Drawer — todos os campos do formulário, justificativa da solicitação, trilha de aprovações e documentos gerados, sem sair da lista.
+
+**Reprovar** agora exige uma justificativa: em vez de reprovar direto no clique, abre um modal pedindo o motivo (`ReprovarModal.tsx`), que fica gravado no comentário da etapa reprovada e aparece na trilha ("JUSTIFICATIVA DA REPROVAÇÃO") — mesmo texto exibido tanto no card do Workflow quanto na ficha de detalhes.
+
 ### Desligados (`/desligados`, RH-only)
 
 Quando alguém é desligado no **Portal SST** (botão "Desligar colaborador"), esse colaborador aparece automaticamente aqui — os dois portais leem a mesma linha da tabela `colaboradores` (`desligado`, `data_desligamento`, `motivo_desligamento`), não há sincronização própria do PeopleFlow, é a mesma tabela.

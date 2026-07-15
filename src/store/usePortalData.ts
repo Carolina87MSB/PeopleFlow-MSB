@@ -53,7 +53,7 @@ export interface PortalData {
   mostrarEquipes: boolean;
   loading: boolean;
   aprovarEtapa: (id: string) => void;
-  reprovarEtapa: (id: string) => void;
+  reprovarEtapa: (id: string, comentario: string) => void;
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   toggleDescricaoCargo: (nome: string) => void;
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
@@ -151,14 +151,14 @@ export function usePortalData(): PortalData {
   );
 
   const reprovarEtapaFn = useCallback(
-    (id: string) => {
-      const movimentacoes = reprovarEtapaDomain(state.movimentacoes, id);
+    (id: string, comentario: string) => {
+      const movimentacoes = reprovarEtapaDomain(state.movimentacoes, id, comentario);
       const atualizada = movimentacoes.find((m) => m.id === id);
       if (!atualizada) return;
       (async () => {
         try {
           await atualizarMovimentacao(atualizada);
-          dispatch({ type: "REPROVAR_ETAPA", id });
+          dispatch({ type: "REPROVAR_ETAPA", id, comentario });
           flash("Movimentação reprovada e registrada na trilha.");
         } catch (err) {
           flash(err instanceof Error ? err.message : "Falha ao reprovar etapa.");
