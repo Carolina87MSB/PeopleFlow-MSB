@@ -1,6 +1,6 @@
 import { formatarDataAtual, formatarHoraAtual } from "./dates";
 import { roleApprover } from "./hierarquia";
-import type { CargoCustom, Etapa, Movimentacao, NovoCargoInfo, TipoMovimentacao } from "../types/domain";
+import type { AdmissaoInfo, CargoCustom, Etapa, Movimentacao, NovoCargoInfo, TipoMovimentacao } from "../types/domain";
 
 export function nextId(movimentacoes: Movimentacao[]): string {
   const nums = movimentacoes
@@ -35,11 +35,13 @@ export function montarEtapas(tipo: TipoMovimentacao, solicitanteGestor: string):
 export interface ApproveResult {
   movimentacoes: Movimentacao[];
   cargoRegistrado: NovoCargoInfo | null;
+  admissaoRegistrada: AdmissaoInfo | null;
 }
 
 /** Advances the first pending/in-review etapa to "Aprovado"; completes the movement once the last etapa clears. */
 export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): ApproveResult {
   let cargoRegistrado: NovoCargoInfo | null = null;
+  let admissaoRegistrada: AdmissaoInfo | null = null;
   const hoje = formatarDataAtual();
   const agora = formatarHoraAtual();
 
@@ -62,12 +64,13 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
       status = m.tipoCod === "ADM" || m.tipoCod === "NOV" ? "Concluído" : "Aprovado";
       aprovacaoFinal = { data: etapas[idx].data, hora: etapas[idx].hora! };
       if (m.tipoCod === "NOV" && m.novoCargo) cargoRegistrado = m.novoCargo;
+      if (m.tipoCod === "ADM" && m.admissaoInfo?.candidato) admissaoRegistrada = m.admissaoInfo;
     }
 
     return { ...m, etapas, status, aprovacaoFinal };
   });
 
-  return { movimentacoes: novasMovimentacoes, cargoRegistrado };
+  return { movimentacoes: novasMovimentacoes, cargoRegistrado, admissaoRegistrada };
 }
 
 export function reprovarEtapa(movimentacoes: Movimentacao[], id: string): Movimentacao[] {

@@ -175,6 +175,15 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
               </select>
             </label>
             <label className={styles.field}>
+              <span>Vínculo</span>
+              <select value={form.admVinculo} onChange={(e) => set("admVinculo", e.target.value)}>
+                <option value="">Selecione…</option>
+                <option value="CLT">CLT</option>
+                <option value="PJ">PJ</option>
+                <option value="Estágio">Estágio</option>
+              </select>
+            </label>
+            <label className={styles.field}>
               <span>Quantidade de vagas</span>
               <input value={form.admVagas} onChange={(e) => set("admVagas", e.target.value)} placeholder="1" />
             </label>
@@ -188,7 +197,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             </label>
             <label className={styles.field}>
               <span>Data prevista de admissão</span>
-              <input value={form.admData} onChange={(e) => set("admData", e.target.value)} placeholder="dd/mmm/aaaa" />
+              <input type="date" value={form.admData} onChange={(e) => set("admData", e.target.value)} />
             </label>
             <label className={styles.field}>
               <span>Faixa salarial</span>

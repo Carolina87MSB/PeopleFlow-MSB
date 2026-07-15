@@ -1,7 +1,10 @@
 import { useCallback, useMemo } from "react";
 import { useToast } from "../components/shared/ToastContext";
 import { atualizarDescricaoCargoCustom, criarCargoCustom } from "../repositories/cargosCustomRepository";
-import { atualizarAdmissao as atualizarAdmissaoNoSupabase } from "../repositories/colaboradoresRepository";
+import {
+  atualizarAdmissao as atualizarAdmissaoNoSupabase,
+  criarPreCadastro as criarPreCadastroNoSupabase,
+} from "../repositories/colaboradoresRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import {
   atualizarCampoDescricaoCargo as atualizarCampoDescricaoCargoNoSupabase,
@@ -69,7 +72,7 @@ export interface PortalData {
  */
 export function usePortalData(): PortalData {
   const conta = useConta();
-  const { state, dispatch, loading } = usePortalStore();
+  const { state, dispatch, loading, reload } = usePortalStore();
   const { flash } = useToast();
 
   if (!conta) throw new Error("usePortalData requer uma conta resolvida — use dentro de <AppShell>, depois que os colaboradores carregarem");
@@ -103,21 +106,30 @@ export function usePortalData(): PortalData {
 
   const aprovarEtapaFn = useCallback(
     (id: string) => {
-      const { movimentacoes, cargoRegistrado } = aprovarEtapaDomain(state.movimentacoes, id);
+      const { movimentacoes, cargoRegistrado, admissaoRegistrada } = aprovarEtapaDomain(state.movimentacoes, id);
       const atualizada = movimentacoes.find((m) => m.id === id);
       if (!atualizada) return;
       (async () => {
         try {
           await atualizarMovimentacao(atualizada);
           if (cargoRegistrado) await criarCargoCustom(cargoCustomDeNovoCargo(cargoRegistrado));
+          let msg = "Etapa aprovada — movimentação atualizada.";
+          if (cargoRegistrado) msg = `Cargo "${cargoRegistrado.nome}" aprovado e incorporado ao cadastro oficial.`;
+          if (admissaoRegistrada) {
+            const { jaExistia } = await criarPreCadastroNoSupabase(admissaoRegistrada);
+            msg = jaExistia
+              ? `Admissão concluída — já existe um colaborador chamado "${admissaoRegistrada.candidato}", pré-cadastro não duplicado.`
+              : `Admissão concluída — pré-cadastro de "${admissaoRegistrada.candidato}" criado (CPF e demais dados do SST ainda precisam ser completados).`;
+            reload();
+          }
           dispatch({ type: "APROVAR_ETAPA", id });
-          flash(cargoRegistrado ? `Cargo "${cargoRegistrado.nome}" aprovado e incorporado ao cadastro oficial.` : "Etapa aprovada — movimentação atualizada.");
+          flash(msg);
         } catch (err) {
           flash(err instanceof Error ? err.message : "Falha ao aprovar etapa.");
         }
       })();
     },
-    [dispatch, state.movimentacoes, flash],
+    [dispatch, state.movimentacoes, flash, reload],
   );
 
   const reprovarEtapaFn = useCallback(

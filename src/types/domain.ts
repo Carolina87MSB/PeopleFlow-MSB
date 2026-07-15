@@ -103,6 +103,18 @@ export interface NovoCargoInfo {
   obs: string;
 }
 
+/** Snapshot dos dados do candidato no momento da solicitação — usado para criar o
+ * pré-cadastro em `colaboradores` quando a movimentação de Admissão é concluída
+ * (ver aprovarEtapa() em domain/workflow.ts e criarPreCadastro() no repositório). */
+export interface AdmissaoInfo {
+  candidato: string;
+  cargo: string;
+  depto: string;
+  gestor: string;
+  vinculo: string;
+  admissaoIso: string;
+}
+
 export interface AprovacaoFinal {
   data: string;
   hora: string;
@@ -123,6 +135,7 @@ export interface Movimentacao {
   dados?: DadoField[];
   etapas: Etapa[];
   novoCargo?: NovoCargoInfo;
+  admissaoInfo?: AdmissaoInfo;
   aprovacaoFinal?: AprovacaoFinal | null;
   legado?: boolean;
 }
@@ -145,6 +158,7 @@ export interface NovaMovimentacaoForm {
   admCargo: string;
   admDepto: string;
   admGestor: string;
+  admVinculo: string;
   admVagas: string;
   admData: string;
   admFaixa: string;

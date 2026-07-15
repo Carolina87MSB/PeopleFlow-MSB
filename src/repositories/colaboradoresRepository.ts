@@ -1,8 +1,11 @@
 // Camada de acesso à tabela `colaboradores` — COMPARTILHADA com o Portal SST
 // MSB (mesmo projeto Supabase, mesmas pessoas). O PeopleFlow só lê as colunas
-// que usa (nunca cpf/epis/exames, que são do domínio do SST) e nunca escreve
-// nesta tabela — cadastro de colaborador é responsabilidade do RH via SST,
-// inclusive o desligamento (ver api/desligar-colaborador.ts do SST).
+// que usa (nunca cpf/epis/exames, que são do domínio do SST). Duas exceções
+// de escrita, ambas via Vercel Function RH-only (RLS só libera SELECT direto
+// do navegador): atualizarAdmissao() (edição manual na tela Colaboradores) e
+// criarPreCadastro() (criado automaticamente ao concluir uma movimentação de
+// Admissão — ver aprovarEtapaFn em store/usePortalData.ts). O restante do
+// cadastro (cpf, nascimento, epis, exames) continua exclusivo do SST.
 //
 // Trocar a fonte de novo no futuro é uma mudança isolada neste arquivo; nada
 // mais no app importa o Supabase diretamente para dados de colaborador.
@@ -98,4 +101,35 @@ export async function atualizarAdmissao(nome: string, admissaoIso: string): Prom
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "Falha ao atualizar data de admissão.");
+}
+
+export interface DadosPreCadastro {
+  candidato: string;
+  cargo: string;
+  depto: string;
+  gestor: string;
+  vinculo: string;
+  admissaoIso: string;
+}
+
+/** Cria o pré-cadastro em `colaboradores` ao concluir uma movimentação de
+ * Admissão — via api/criar-pre-cadastro.ts (RH-only, service_role). Não cria
+ * duplicata: se já existir alguém com o mesmo nome, retorna jaExistia=true
+ * sem alterar nada. */
+export async function criarPreCadastro(dados: DadosPreCadastro): Promise<{ jaExistia: boolean }> {
+  const res = await fetch("/api/criar-pre-cadastro", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify({
+      candidato: dados.candidato,
+      cargo: dados.cargo,
+      depto: dados.depto,
+      gestor: dados.gestor,
+      vinculo: dados.vinculo,
+      admissao: dados.admissaoIso,
+    }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Falha ao criar pré-cadastro do colaborador.");
+  return { jaExistia: Boolean(body.jaExistia) };
 }

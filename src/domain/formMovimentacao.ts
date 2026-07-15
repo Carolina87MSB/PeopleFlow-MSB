@@ -1,4 +1,4 @@
-import { formatarDataAtual } from "./dates";
+import { formatarDataAtual, formatarDataIso } from "./dates";
 import { calcularPercentual, montarEtapas, nextId } from "./workflow";
 import type { Colaborador, DadoField, Movimentacao, NovaMovimentacaoForm, Perfil, TipoMovimentacao } from "../types/domain";
 
@@ -21,6 +21,7 @@ export function blankForm(): NovaMovimentacaoForm {
     admCargo: "",
     admDepto: "",
     admGestor: "",
+    admVinculo: "",
     admVagas: "",
     admData: "",
     admFaixa: "",
@@ -61,7 +62,7 @@ export function validarForm(f: NovaMovimentacaoForm): FormValidation {
     return { ok: true };
   }
   if (f.tipo === "ADM") {
-    if (!f.admCargo.trim() || !f.admDepto || !f.admGestor || !f.justificativa.trim()) return { ok: false };
+    if (!f.admCargo.trim() || !f.admDepto || !f.admGestor || !f.admVinculo || !f.justificativa.trim()) return { ok: false };
     return { ok: true };
   }
   if (!f.tipo || !f.colab || !f.justificativa.trim()) return { ok: false };
@@ -122,8 +123,9 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     const dados: DadoField[] = [
       { label: "Motivo da contratação", value: f.admMotivo || "—" },
       { label: "Cargo solicitado", value: f.admCargo.trim() },
+      { label: "Vínculo", value: f.admVinculo || "A definir" },
       { label: "Quantidade de vagas", value: f.admVagas || "1" },
-      { label: "Data prevista de admissão", value: f.admData || "A definir" },
+      { label: "Data prevista de admissão", value: f.admData ? formatarDataIso(f.admData) : "A definir" },
       { label: "Faixa salarial", value: f.admFaixa || "A definir" },
       { label: "Candidato", value: f.admCandidato || "A definir" },
     ];
@@ -135,6 +137,14 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
       resumo: "Admissão — " + f.admCargo.trim() + " · " + (f.admVagas || "1") + " vaga(s)",
       etapas,
       dados,
+      admissaoInfo: {
+        candidato: f.admCandidato.trim(),
+        cargo: f.admCargo.trim(),
+        depto: f.admDepto,
+        gestor: f.admGestor,
+        vinculo: f.admVinculo,
+        admissaoIso: f.admData,
+      },
     });
   }
 
