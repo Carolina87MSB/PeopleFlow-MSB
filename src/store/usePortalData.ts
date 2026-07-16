@@ -170,7 +170,9 @@ export function usePortalData(): PortalData {
           // Notificação por e-mail: best-effort, não bloqueia nem afeta o
           // resultado da aprovação (ver notificacoesRepository.ts).
           const proximaEtapa = etapaAtual(atualizada);
-          const email = proximaEtapa ? notificacaoNovaEtapa(atualizada, proximaEtapa) : notificacaoConcluida(atualizada);
+          const email = proximaEtapa
+            ? notificacaoNovaEtapa(atualizada, proximaEtapa, window.location.origin)
+            : notificacaoConcluida(atualizada);
           void notificar(email);
         } catch (err) {
           flash(err instanceof Error ? err.message : "Falha ao aprovar etapa.");
@@ -233,7 +235,7 @@ export function usePortalData(): PortalData {
 
         const primeiraEtapa = etapaAtual(movimentacao);
         if (primeiraEtapa) {
-          const email = notificacaoNovaEtapa(movimentacao, primeiraEtapa);
+          const email = notificacaoNovaEtapa(movimentacao, primeiraEtapa, window.location.origin);
           void notificar(email);
         }
 

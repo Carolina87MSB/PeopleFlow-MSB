@@ -22,6 +22,8 @@ export interface EmailLayoutOptions {
   title: string;
   paragrafos: string[];
   detalhes?: DetalheEmail[];
+  /** Botão de destaque abaixo do card de detalhes, ex.: link para o Workflow. */
+  cta?: { label: string; url: string };
 }
 
 function escapeHtml(s: string): string {
@@ -49,6 +51,14 @@ export function buildEmailHtml(opts: EmailLayoutOptions): string {
       </table>`
     : "";
 
+  const ctaHtml = opts.cta
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 4px;">
+        <tr><td style="border-radius:8px;background:${opts.accentColor};">
+          <a href="${escapeHtml(opts.cta.url)}" style="display:inline-block;padding:10px 20px;font-size:13px;font-weight:bold;color:#ffffff;text-decoration:none;">${escapeHtml(opts.cta.label)}</a>
+        </td></tr>
+      </table>`
+    : "";
+
   return `<!doctype html>
 <html lang="pt-BR">
   <body style="margin:0;padding:24px 12px;background:${COR_BG};font-family:Arial,Helvetica,sans-serif;">
@@ -67,6 +77,7 @@ export function buildEmailHtml(opts: EmailLayoutOptions): string {
             <h1 style="margin:0 0 14px;color:${COR_NAVY};font-size:17px;">${escapeHtml(opts.title)}</h1>
             ${paragrafosHtml}
             ${detalhesHtml}
+            ${ctaHtml}
           </div>
         </td>
       </tr>

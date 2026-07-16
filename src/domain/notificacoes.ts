@@ -16,9 +16,12 @@ const ACCENT_CONCLUIDA = { cor: "#2f8f6b", bg: "#e4f3ed" };
 const ACCENT_REPROVADA = { cor: "#c0584e", bg: "#f8e7e4" };
 
 /** Notifica quem precisa agir agora: a movimentação acabou de ser criada, ou
- * uma etapa anterior acabou de ser aprovada e a próxima entrou em análise. */
-export function notificacaoNovaEtapa(m: Movimentacao, etapa: Etapa): EmailNotificacao {
+ * uma etapa anterior acabou de ser aprovada e a próxima entrou em análise.
+ * `baseUrl` é a origem do portal (`window.location.origin` de quem disparou a
+ * ação) — evita fixar no código um domínio de deploy específico. */
+export function notificacaoNovaEtapa(m: Movimentacao, etapa: Etapa, baseUrl: string): EmailNotificacao {
   const subject = `[PeopleFlow] Aprovação pendente — ${m.tipo} de ${m.colaborador}`;
+  const link = `${baseUrl}/workflow`;
   return {
     to: emailOf(etapa.aprovador),
     subject,
@@ -31,22 +34,21 @@ export function notificacaoNovaEtapa(m: Movimentacao, etapa: Etapa): EmailNotifi
       `Solicitado por: ${m.solicitante}`,
       ``,
       `Acesse o Portal PeopleFlow, na tela Workflow, para aprovar ou reprovar.`,
+      link,
     ].join("\n"),
     html: buildEmailHtml({
       accentColor: ACCENT_PENDENTE.cor,
       accentBg: ACCENT_PENDENTE.bg,
       badgeLabel: "Aprovação pendente",
       title: `${m.tipo} de ${m.colaborador}`,
-      paragrafos: [
-        `Uma movimentação está aguardando a sua aprovação na etapa "${etapa.papel}".`,
-        `Acesse o Portal PeopleFlow, na tela Workflow, para aprovar ou reprovar.`,
-      ],
+      paragrafos: [`Uma movimentação está aguardando a sua aprovação na etapa "${etapa.papel}".`],
       detalhes: [
         { label: "Tipo", valor: m.tipo },
         { label: "Colaborador", valor: m.colaborador },
         { label: "Solicitado por", valor: m.solicitante },
         { label: "Resumo", valor: m.resumo },
       ],
+      cta: { label: "Abrir Workflow no PeopleFlow", url: link },
     }),
   };
 }
