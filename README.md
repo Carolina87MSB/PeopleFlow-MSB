@@ -117,6 +117,8 @@ O envio (`api/notificar.ts`) usa Gmail SMTP via `nodemailer`, autenticado com `G
 
 **Best-effort, nunca bloqueia o fluxo**: a chamada em `notificacoesRepository.ts` engole qualquer erro, e a function em si responde `200` mesmo quando o envio falha (credencial ausente/errada, Gmail fora do ar etc.) — a movimentação já foi aprovada/reprovada/criada e salva no Supabase antes de disparar o e-mail; se o e-mail não sair, isso nunca aparece pro usuário como falha da ação. Sem `GMAIL_USER`/`GMAIL_APP_PASSWORD` configuradas, o envio é pulado silenciosamente (log no console do servidor).
 
+E-mail em HTML com a identidade do portal (`src/domain/emailTemplate.ts`): logo MSB, cores de `src/index.css` (faixa de destaque azul para pendente, verde para aprovada, vermelha para reprovada) e um bloco com os detalhes da movimentação. O logo vai embutido como anexo inline (`cid:msb-logo`, base64 em `api/_lib/msbLogo.ts`) em vez de imagem remota — funciona em qualquer ambiente sem depender de uma URL pública ou de acesso a `public/assets/` a partir da function. `text` continua sendo enviado junto como fallback para clientes que não renderizam HTML.
+
 ### Desligados (`/desligados`, RH-only)
 
 Quando alguém é desligado no **Portal SST** (botão "Desligar colaborador"), esse colaborador aparece automaticamente aqui — os dois portais leem a mesma linha da tabela `colaboradores` (`desligado`, `data_desligamento`, `motivo_desligamento`), não há sincronização própria do PeopleFlow, é a mesma tabela.

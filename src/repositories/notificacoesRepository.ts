@@ -4,6 +4,7 @@
 // antes de chamar isto e não deve falhar por causa de um e-mail não enviado.
 
 import { supabase } from "../lib/supabaseClient";
+import type { EmailNotificacao } from "../domain/notificacoes";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
@@ -11,12 +12,12 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function notificar(to: string, subject: string, text: string): Promise<void> {
+export async function notificar(email: EmailNotificacao): Promise<void> {
   try {
     await fetch("/api/notificar", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-      body: JSON.stringify({ to, subject, text }),
+      body: JSON.stringify(email),
     });
   } catch {
     // silencioso — ver comentário acima.

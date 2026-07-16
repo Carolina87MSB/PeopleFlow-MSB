@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import nodemailer from "nodemailer";
 import { requireAuth } from "./_lib/adminAuth.js";
+import { MSB_LOGO_PNG_BASE64 } from "./_lib/msbLogo.js";
 
 const gmailUser = process.env.GMAIL_USER;
 const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
@@ -31,10 +32,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const body = req.body as { to?: string; subject?: string; text?: string } | undefined;
+    const body = req.body as { to?: string; subject?: string; text?: string; html?: string } | undefined;
     const to = String(body?.to || "").trim();
     const subject = String(body?.subject || "").trim();
     const text = String(body?.text || "").trim();
+    const html = String(body?.html || "").trim();
 
     if (!to || !subject || !text) {
       res.status(400).json({ error: "Informe to, subject e text." });
@@ -51,6 +53,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       to,
       subject,
       text,
+      // html é opcional (fallback pro cliente que só manda text) — o logo é
+      // embutido como anexo inline (cid) em vez de imagem remota, pra não
+      // depender de acesso a public/assets/ a partir da function nem de uma
+      // URL pública hospedando a imagem.
+      ...(html
+        ? {
+            html,
+            attachments: [
+              {
+                filename: "msb-logo.png",
+                content: Buffer.from(MSB_LOGO_PNG_BASE64, "base64"),
+                cid: "msb-logo",
+              },
+            ],
+          }
+        : {}),
     });
 
     res.status(200).json({ ok: true });
