@@ -13,13 +13,15 @@ import {
   getHistoricoDescricaoCargo,
 } from "../repositories/descricoesCargoRepository";
 import { atualizarMovimentacao, criarMovimentacao as criarMovimentacaoNoSupabase } from "../repositories/movimentacoesRepository";
+import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
 import { descendants } from "../domain/hierarquia";
+import { notificacaoConcluida, notificacaoNovaEtapa, notificacaoReprovada } from "../domain/notificacoes";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
-import { aprovarEtapa as aprovarEtapaDomain, cargoCustomDeNovoCargo, reprovarEtapa as reprovarEtapaDomain } from "../domain/workflow";
+import { aprovarEtapa as aprovarEtapaDomain, cargoCustomDeNovoCargo, etapaAtual, reprovarEtapa as reprovarEtapaDomain } from "../domain/workflow";
 import { usePortalStore } from "./PortalStoreContext";
 import { useConta } from "./useConta";
 import type {
@@ -164,6 +166,12 @@ export function usePortalData(): PortalData {
           }
           dispatch({ type: "APROVAR_ETAPA", id });
           flash(msg);
+
+          // Notificação por e-mail: best-effort, não bloqueia nem afeta o
+          // resultado da aprovação (ver notificacoesRepository.ts).
+          const proximaEtapa = etapaAtual(atualizada);
+          const email = proximaEtapa ? notificacaoNovaEtapa(atualizada, proximaEtapa) : notificacaoConcluida(atualizada);
+          void notificar(email.to, email.subject, email.text);
         } catch (err) {
           flash(err instanceof Error ? err.message : "Falha ao aprovar etapa.");
         }
@@ -182,6 +190,12 @@ export function usePortalData(): PortalData {
           await atualizarMovimentacao(atualizada);
           dispatch({ type: "REPROVAR_ETAPA", id, comentario });
           flash("Movimentação reprovada e registrada na trilha.");
+
+          const etapaReprovada = atualizada.etapas.find((e) => e.status === "Reprovado");
+          if (etapaReprovada) {
+            const email = notificacaoReprovada(atualizada, etapaReprovada);
+            void notificar(email.to, email.subject, email.text);
+          }
         } catch (err) {
           flash(err instanceof Error ? err.message : "Falha ao reprovar etapa.");
         }
@@ -216,6 +230,13 @@ export function usePortalData(): PortalData {
       try {
         await criarMovimentacaoNoSupabase(movimentacao);
         dispatch({ type: "CRIAR_MOVIMENTACAO", movimentacao });
+
+        const primeiraEtapa = etapaAtual(movimentacao);
+        if (primeiraEtapa) {
+          const email = notificacaoNovaEtapa(movimentacao, primeiraEtapa);
+          void notificar(email.to, email.subject, email.text);
+        }
+
         return { ok: true as const, movimentacao };
       } catch (err) {
         const error = err instanceof Error ? err.message : "Falha ao criar movimentação.";

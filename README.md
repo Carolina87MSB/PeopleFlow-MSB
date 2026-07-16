@@ -37,6 +37,7 @@ Pré-requisito: [Node.js](https://nodejs.org) 20+ e um projeto Supabase já conf
 2. Em _Settings → Environment Variables_, adicione:
    - `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` — os **mesmos valores já usados no deploy do SST** (mesmo projeto Supabase). Lembre do prefixo `VITE_` (Vite, não Next.js).
    - `SUPABASE_SERVICE_ROLE_KEY` — **sem** prefixo `VITE_` (fica só no servidor, nunca chega ao navegador). Usada pelas Serverless Functions em `api/*.ts` para a tela de administração de acessos.
+   - `GMAIL_USER` e `GMAIL_APP_PASSWORD` — opcionais, ativam as notificações de movimentação por e-mail (ver seção abaixo). Sem elas, o fluxo de aprovação funciona normalmente, só não envia e-mail.
 3. Em Supabase → _Authentication → URL Configuration_, adicione a URL da Vercel deste projeto (diferente da URL do SST) na lista de _Redirect URLs_ permitidas — senão o link mágico do e-mail quebra em produção.
 
 ## Acesso
@@ -104,6 +105,17 @@ Diferente das demais escritas do PeopleFlow (que vão para tabelas próprias, pr
 Cada card de movimentação (Workflow de aprovação e o widget "Aprovações pendentes" do Dashboard) tem um botão **"Ver detalhes"** que abre a mesma ficha completa usada em Movimentações aprovadas (`src/components/shared/MovimentacaoDetalhe.tsx`, extraído para ser reaproveitado nos dois lugares) dentro de um Drawer — todos os campos do formulário, justificativa da solicitação, trilha de aprovações e documentos gerados, sem sair da lista.
 
 **Reprovar** agora exige uma justificativa: em vez de reprovar direto no clique, abre um modal pedindo o motivo (`ReprovarModal.tsx`), que fica gravado no comentário da etapa reprovada e aparece na trilha ("JUSTIFICATIVA DA REPROVAÇÃO") — mesmo texto exibido tanto no card do Workflow quanto na ficha de detalhes.
+
+### Notificação de movimentação por e-mail (Gmail SMTP)
+
+Toda movimentação dispara e-mail nestes 3 momentos (ver `src/domain/notificacoes.ts`):
+- **Nova etapa aguardando aprovação** — ao criar a movimentação (primeira etapa) e a cada aprovação intermediária (próxima etapa) — envia para o **aprovador responsável pela etapa atual** (mesmo `emailOf()` usado em `/acessos`), não para o solicitante.
+- **Aprovação final / concluída** — quando a última etapa é aprovada, envia para o **solicitante**.
+- **Reprovação** — quando qualquer etapa reprova a movimentação, envia para o **solicitante**, com a justificativa.
+
+O envio (`api/notificar.ts`) usa Gmail SMTP via `nodemailer`, autenticado com `GMAIL_USER` + `GMAIL_APP_PASSWORD` (variáveis de servidor, sem prefixo `VITE_`) — a senha é uma **"Senha de app"** do Google (`myaccount.google.com/apppasswords`, exige verificação em 2 etapas habilitada na conta), não a senha normal do Gmail. Qualquer conta autenticada pode chamar essa function (quem age no fluxo varia por etapa — Gestor, Diretor, CEO ou RH), diferente das demais `api/*.ts` que são RH-only.
+
+**Best-effort, nunca bloqueia o fluxo**: a chamada em `notificacoesRepository.ts` engole qualquer erro, e a function em si responde `200` mesmo quando o envio falha (credencial ausente/errada, Gmail fora do ar etc.) — a movimentação já foi aprovada/reprovada/criada e salva no Supabase antes de disparar o e-mail; se o e-mail não sair, isso nunca aparece pro usuário como falha da ação. Sem `GMAIL_USER`/`GMAIL_APP_PASSWORD` configuradas, o envio é pulado silenciosamente (log no console do servidor).
 
 ### Desligados (`/desligados`, RH-only)
 

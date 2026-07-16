@@ -94,3 +94,29 @@ export async function requireRH(authHeader: string | string[] | undefined): Prom
   }
   return { ok: true, colaboradores };
 }
+
+export type RequireAuthResult = { ok: true; email: string } | { ok: false; status: number; error: string };
+
+/** Confere só que quem chamou a function tem uma sessão Supabase válida — sem
+ * checar perfil. Usada por functions que qualquer conta autenticada (Gestor,
+ * Diretoria, RH) pode disparar, como o envio de notificação de movimentação
+ * (quem está agindo no fluxo varia por etapa, não é sempre RH). */
+export async function requireAuth(authHeader: string | string[] | undefined): Promise<RequireAuthResult> {
+  if (!url || !serviceRoleKey) {
+    return {
+      ok: false,
+      status: 500,
+      error: "SUPABASE_SERVICE_ROLE_KEY (ou VITE_SUPABASE_URL) não configurada nas variáveis de ambiente da Vercel.",
+    };
+  }
+
+  const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  const token = raw?.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return { ok: false, status: 401, error: "Token de autenticação ausente." };
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+  if (userError || !userData.user?.email) {
+    return { ok: false, status: 401, error: "Sessão inválida ou expirada." };
+  }
+  return { ok: true, email: userData.user.email.toLowerCase() };
+}
