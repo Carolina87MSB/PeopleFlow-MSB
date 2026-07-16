@@ -66,6 +66,10 @@ Isso funciona via duas Vercel Serverless Functions (`api/listar-acessos.ts`, `ap
 
 Na ficha do colaborador, o campo "Admissão" tem um botão de editar (ícone de lápis) visível só para RH — os demais campos (Cargo, Departamento, Vínculo, Nível, Gestor imediato) continuam somente leitura, pois hoje são cadastrados via `npm run seed:supabase` (ou pelo SST, no caso de Cargo/Departamento), não pela tela.
 
+### Autocomplete de cargo em "Nova movimentação"
+
+Os campos de nome de cargo (ADM "Cargo solicitado", PRO "Novo cargo", TRF "Novo cargo (se aplicável)", NOV "Nome do cargo") sugerem os cargos já cadastrados (`colaboradores.cargo` + `peopleflow_cargos_custom.nome`) via `<datalist>` — continuam sendo texto livre, não um `<select>` fechado, porque "Nome do cargo" no tipo Novo Cargo precisa aceitar um nome que ainda não existe em lugar nenhum.
+
 ### Pré-cadastro automático ao concluir uma Admissão
 
 O tipo de movimentação **ADM (Admissão)** agora também pede o **Vínculo** (CLT/PJ/Estágio) do candidato. Quando a última etapa é aprovada (RH), o PeopleFlow cria automaticamente o pré-cadastro do colaborador em `colaboradores` — nome, cargo, departamento, gestor, vínculo e data de admissão, os mesmos dados do formulário da movimentação — via `api/criar-pre-cadastro.ts` (RH-only, service_role, mesmo padrão de `api/atualizar-admissao.ts`). Se "Candidato" não tiver sido preenchido na solicitação, ou já existir alguém com o mesmo nome, nenhuma linha é criada (a movimentação conclui normalmente e o toast explica o motivo).

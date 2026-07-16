@@ -25,6 +25,10 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
 
   const departamentos = useMemo(() => [...new Set(colaboradores.map((c) => c.depto))].sort(), [colaboradores]);
   const gestores = useMemo(() => [...contarPorGestor(colaboradores).keys()].sort(), [colaboradores]);
+  const cargosExistentes = useMemo(
+    () => [...new Set([...colaboradores.map((c) => c.cargo), ...state.cargosCustom.map((c) => c.nome)])].filter(Boolean).sort(),
+    [colaboradores, state.cargosCustom],
+  );
 
   function set<K extends keyof NovaMovimentacaoForm>(key: K, value: NovaMovimentacaoForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -103,7 +107,12 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
           <>
             <label className={[styles.field, styles.full].join(" ")}>
               <span>Nome do cargo</span>
-              <input value={form.cargoNome} onChange={(e) => set("cargoNome", e.target.value)} placeholder="Ex.: Analista de Dados Industriais" />
+              <input
+                value={form.cargoNome}
+                onChange={(e) => set("cargoNome", e.target.value)}
+                placeholder="Ex.: Analista de Dados Industriais"
+                list="cargos-existentes"
+              />
             </label>
             <label className={styles.field}>
               <span>Departamento</span>
@@ -150,7 +159,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
           <>
             <label className={styles.field}>
               <span>Cargo solicitado</span>
-              <input value={form.admCargo} onChange={(e) => set("admCargo", e.target.value)} />
+              <input value={form.admCargo} onChange={(e) => set("admCargo", e.target.value)} list="cargos-existentes" />
             </label>
             <label className={styles.field}>
               <span>Departamento</span>
@@ -214,7 +223,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             </label>
             <label className={styles.field}>
               <span>Novo cargo</span>
-              <input value={form.proNovoCargo} onChange={(e) => set("proNovoCargo", e.target.value)} />
+              <input value={form.proNovoCargo} onChange={(e) => set("proNovoCargo", e.target.value)} list="cargos-existentes" />
             </label>
             <label className={[styles.field, styles.full].join(" ")}>
               <span>Justificativa de progressão</span>
@@ -272,7 +281,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             </label>
             <label className={[styles.field, styles.full].join(" ")}>
               <span>Novo cargo (se aplicável)</span>
-              <input value={form.trfNovoCargo} onChange={(e) => set("trfNovoCargo", e.target.value)} />
+              <input value={form.trfNovoCargo} onChange={(e) => set("trfNovoCargo", e.target.value)} list="cargos-existentes" />
             </label>
           </>
         )}
@@ -331,6 +340,15 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
           <textarea rows={3} value={form.justificativa} onChange={(e) => set("justificativa", e.target.value)} />
         </label>
       </div>
+
+      {/* Sugestões de cargos já cadastrados para os campos de nome de cargo acima — o campo
+       * continua sendo texto livre (essencial para "Nome do cargo" no tipo Novo Cargo, que
+       * precisa aceitar um nome que ainda não existe), só ganha autocomplete. */}
+      <datalist id="cargos-existentes">
+        {cargosExistentes.map((cargo) => (
+          <option key={cargo} value={cargo} />
+        ))}
+      </datalist>
 
       {erro && <div className={styles.error}>{erro}</div>}
     </Modal>
