@@ -6,7 +6,17 @@ export function norm(s: string): string {
   return (s || "").normalize("NFD").replace(DIACRITICS, "").toLowerCase();
 }
 
+/** Sobrenomes compostos (grafados com espaço no cadastro, ex.: "Sant Ana")
+ * que a heurística de primeiro+último nome de emailOf() erra — mapeados pelo
+ * nome completo normalizado para o e-mail corporativo correto. */
+const EMAIL_OVERRIDES: Record<string, string> = {
+  "tassio antonio lima sant ana": "tassio.santana@msbbrasil.com",
+};
+
 export function emailOf(nome: string): string {
+  const normNome = norm(nome.replace(/\(.*?\)/g, "").trim().replace(/\s+/g, " "));
+  if (EMAIL_OVERRIDES[normNome]) return EMAIL_OVERRIDES[normNome];
+
   const parts = nome.replace(/\(.*?\)/g, "").trim().split(/\s+/);
   const first = norm(parts[0] || "");
   const last = norm(parts.length > 1 ? parts[parts.length - 1] : "");
