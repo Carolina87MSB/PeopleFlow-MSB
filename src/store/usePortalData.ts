@@ -17,7 +17,7 @@ import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
-import { descendants } from "../domain/hierarquia";
+import { descendants, ehDiretorIndustrial } from "../domain/hierarquia";
 import { notificacaoConcluida, notificacaoNovaEtapa, notificacaoReprovada } from "../domain/notificacoes";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
@@ -115,9 +115,17 @@ export function usePortalData(): PortalData {
     return ativosGlobal;
   }, [perfil, me, ativosGlobal]);
 
+  const souDiretorIndustrial = useMemo(
+    () => ehDiretorIndustrial(state.colaboradores.find((c) => c.nome === me)),
+    [state.colaboradores, me],
+  );
+
   const movimentacoesVisiveis = useMemo(
-    () => (perfil === "RH" ? state.movimentacoes : state.movimentacoes.filter((m) => canSeeMov(m, perfil, me, scopeSet))),
-    [perfil, me, scopeSet, state.movimentacoes],
+    () =>
+      perfil === "RH"
+        ? state.movimentacoes
+        : state.movimentacoes.filter((m) => canSeeMov(m, perfil, me, scopeSet, souDiretorIndustrial)),
+    [perfil, me, scopeSet, state.movimentacoes, souDiretorIndustrial],
   );
 
   const desligados = useMemo(() => colaboradoresDesligados(state.colaboradores), [state.colaboradores]);

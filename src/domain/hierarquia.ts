@@ -110,3 +110,19 @@ const CARGO_CEO = /^ceo\b/;
 export function ehCEO(colaborador: Colaborador | undefined): boolean {
   return Boolean(colaborador && CARGO_CEO.test(norm(colaborador.cargo)));
 }
+
+const CARGO_DIRETOR_INDUSTRIAL = /^diretor industrial\b/;
+
+/**
+ * true só para quem tem o cargo "Diretor Industrial" (hoje, só o Yuri) —
+ * libera visão total do Workflow e de Movimentações aprovadas (ver
+ * canSeeMov() em permissoes.ts), sem depender do perfil "Diretoria" (que
+ * também cobre o CEO, que continua vendo só o que precisa aprovar ou
+ * solicitou — essa exceção NÃO se estende a ele). Puramente leitura: não
+ * altera podeAgir()/aprovarEtapa, então só ganha botão de aprovar/reprovar
+ * nas etapas que já eram dele. Cargo, não nome — se um dia outra pessoa
+ * assumir o cargo, a regra já vale pra ela automaticamente.
+ */
+export function ehDiretorIndustrial(colaborador: Colaborador | undefined): boolean {
+  return Boolean(colaborador && CARGO_DIRETOR_INDUSTRIAL.test(norm(colaborador.cargo)));
+}

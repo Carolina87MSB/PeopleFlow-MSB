@@ -24,14 +24,20 @@ export function showEquipes(perfil: Perfil): boolean {
   return perfil !== "Diretoria";
 }
 
-/** Mirrors the prototype's canSeeMov(): RH sees everything, Diretoria only what it must approve, Gestor only their scope. */
+/**
+ * Mirrors the prototype's canSeeMov(): RH sees everything, Diretoria only
+ * what it must approve, Gestor only their scope. `verTudo` é a exceção do
+ * Diretor Industrial (ver ehDiretorIndustrial() em hierarquia.ts) — visão
+ * total do Workflow e de Aprovadas, só leitura (não muda podeAgir()).
+ */
 export function canSeeMov(
   m: Movimentacao,
   perfil: Perfil,
   me: string,
   scopeSet: Set<string> | null,
+  verTudo = false,
 ): boolean {
-  if (perfil === "RH") return true;
+  if (perfil === "RH" || verTudo) return true;
   if (perfil === "Diretoria") {
     // Além do que precisa aprovar, também precisa ver o que ela mesma
     // solicitou (agora que Diretoria também pode criar movimentação — ver

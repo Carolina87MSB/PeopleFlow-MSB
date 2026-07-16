@@ -57,6 +57,12 @@ Daniel (CEO) e Yuri (Diretor Industrial) têm o mesmo perfil "Diretoria", mas **
 
 A checagem é por **cargo** (`ehCEO()` em `src/domain/hierarquia.ts`, cargo começando com "CEO"), não por perfil nem por nome fixo — se um dia outra pessoa assumir o cargo de CEO, a regra passa a valer para ela automaticamente, sem precisar mexer no código. Implementado em `montarEtapas()` (`src/domain/workflow.ts`), que agora recebe quem está solicitando para decidir a matriz de etapas.
 
+### Visão total do Workflow e de Aprovadas para o Diretor Industrial
+
+Mesma ideia da exceção do CEO, mas do outro lado: **só o Yuri** (cargo "Diretor Industrial") vê todas as movimentações em `/workflow` e `/aprovadas`, não só as que precisa aprovar ou que ele mesmo solicitou (regra normal de "Diretoria", que Daniel/CEO continua seguindo). Somente leitura — não muda `podeAgir()`, então os botões Aprovar/Reprovar continuam aparecendo só nas etapas que já eram dele.
+
+Checagem por **cargo** (`ehDiretorIndustrial()` em `src/domain/hierarquia.ts`, mesmo padrão de `ehCEO()`), passada como um parâmetro extra em `canSeeMov()` (`src/domain/permissoes.ts`).
+
 ### Tela de administração de acessos (`/acessos`, RH-only)
 
 Depois que a primeira conta do RH estiver provisionada manualmente (passo 2 acima), o próprio RH consegue liberar o acesso de qualquer Gestor/Diretor direto pelo app, sem entrar no painel do Supabase: a tela lista todo colaborador cadastrado com o e-mail derivado do nome e um status "Provisionado"/"Sem acesso", com um botão "Liberar acesso" por linha.
