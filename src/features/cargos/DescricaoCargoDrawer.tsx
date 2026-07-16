@@ -3,6 +3,7 @@ import { Pencil } from "lucide-react";
 import { Button, Drawer } from "../../components/ui";
 import { CAMPOS_DESCRICAO_CARGO, descricaoCargoVazia } from "../../domain/descricaoCargo";
 import type { CampoDescricaoCargo, CampoMeta } from "../../domain/descricaoCargo";
+import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalData } from "../../store/usePortalData";
 import type { HistoricoDescricaoCargo } from "../../types/domain";
 import styles from "./DescricaoCargoDrawer.module.css";
@@ -66,7 +67,7 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
       onClose={onClose}
       header={
         <div className={styles.drawerHeader}>
-          <div className={styles.drawerNome}>{cargoNome}</div>
+          <div className={styles.drawerNome}>{formatarNomeCargo(cargoNome)}</div>
           <div className={styles.drawerSub}>Descrição de cargo · POP-RH-001</div>
         </div>
       }

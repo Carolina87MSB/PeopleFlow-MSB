@@ -5,6 +5,7 @@ import { Header } from "../../components/layout/Header";
 import { Badge, tableStyles } from "../../components/ui";
 import { agregarCargos } from "../../domain/agregados";
 import { nivelMeta } from "../../domain/colors";
+import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { DescricaoCargoDrawer } from "./DescricaoCargoDrawer";
@@ -44,7 +45,7 @@ export function CargosPage() {
                 <tr key={c.nome}>
                   <td>
                     <div className={styles.cargoCell}>
-                      <span>{c.nome}</span>
+                      <span>{formatarNomeCargo(c.nome)}</span>
                       {c.novo && (
                         <Badge bg="#d6f4f7" fg="#1f4e5e">
                           NOVO · {c.vagas} vaga(s)
