@@ -22,6 +22,7 @@ export function DashboardPage() {
     podeCriar,
     podeVerCadastros,
     pendenciasFinanceirasCount,
+    descricoesCargo,
     aprovarEtapa,
     reprovarEtapa,
   } = usePortalData();
@@ -33,6 +34,11 @@ export function DashboardPage() {
   const cargos = useMemo(() => agregarCargos(colaboradoresVisiveis, state.cargosCustom), [colaboradoresVisiveis, state.cargosCustom]);
   const niveis = useMemo(() => new Set(cargos.map((c) => c.nivel)).size, [cargos]);
   const maxDepto = Math.max(1, ...departamentos.map((d) => d.count));
+
+  const cargosSemDescricao = useMemo(
+    () => cargos.filter((c) => !descricoesCargo.some((d) => d.cargoNome === c.nome)),
+    [cargos, descricoesCargo],
+  );
 
   const pendentes = movimentacoesVisiveis.filter((m) => m.status === "Em Aprovação");
   const movimentacaoReprovando = useMemo(
@@ -87,6 +93,16 @@ export function DashboardPage() {
               value={pendenciasFinanceirasCount}
               hint="rescisão ou GRRF sem valor lançado"
               highlight={pendenciasFinanceirasCount > 0}
+            />
+          </Link>
+        )}
+        {podeVerCadastros && (
+          <Link to="/cargos" className={styles.kpiLink}>
+            <KpiCard
+              label="Cargos sem descrição"
+              value={cargosSemDescricao.length}
+              hint="cargos aguardando cadastro da descrição"
+              highlight={cargosSemDescricao.length > 0}
             />
           </Link>
         )}
