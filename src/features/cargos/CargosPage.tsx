@@ -17,7 +17,10 @@ export function CargosPage() {
   const [cargoAberto, setCargoAberto] = useState<string | null>(null);
 
   const cargos = useMemo(
-    () => agregarCargos(colaboradoresVisiveis, state.cargosCustom),
+    () =>
+      agregarCargos(colaboradoresVisiveis, state.cargosCustom).sort((a, b) =>
+        formatarNomeCargo(a.nome).localeCompare(formatarNomeCargo(b.nome), "pt-BR"),
+      ),
     [colaboradoresVisiveis, state.cargosCustom],
   );
 
