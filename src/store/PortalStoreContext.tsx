@@ -6,7 +6,7 @@ import { getCargosCustom } from "../repositories/cargosCustomRepository";
 import { getDesligamentosFinanceiros } from "../repositories/desligadosRepository";
 import { getDescricoesCargo } from "../repositories/descricoesCargoRepository";
 import { getMovimentacoes } from "../repositories/movimentacoesRepository";
-import { getAvaliacoesExperiencia } from "../repositories/avaliacoesExperienciaRepository";
+import { getAvaliacoesExperiencia, getDispensasAvaliacaoExperiencia } from "../repositories/avaliacoesExperienciaRepository";
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
 import type { PortalAction } from "./actions";
 import { initialPortalState, portalReducer } from "./reducer";
@@ -52,11 +52,10 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getDesligamentosFinanceiros(),
       getDescricoesCargo(),
       getAvaliacoesExperiencia(),
+      getDispensasAvaliacaoExperiencia(),
     ])
-      .then(([colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros, descricoesCargo, avaliacoesExperiencia]) => {
-        if (cancelado) return;
-        dispatch({
-          type: "CARREGAR_DADOS",
+      .then(
+        ([
           colaboradores,
           movimentacoes,
           cargosCustom,
@@ -65,8 +64,23 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           desligamentosFinanceiros,
           descricoesCargo,
           avaliacoesExperiencia,
-        });
-      })
+          dispensasAvaliacaoExperiencia,
+        ]) => {
+          if (cancelado) return;
+          dispatch({
+            type: "CARREGAR_DADOS",
+            colaboradores,
+            movimentacoes,
+            cargosCustom,
+            tipos,
+            perfis,
+            desligamentosFinanceiros,
+            descricoesCargo,
+            avaliacoesExperiencia,
+            dispensasAvaliacaoExperiencia,
+          });
+        },
+      )
       .catch((err: Error) => {
         if (cancelado) return;
         setError(err.message);

@@ -148,6 +148,8 @@ A regra é puramente por tempo de casa, nunca as duas etapas ao mesmo tempo: **<
 
 Cada avaliação é um registro histórico imutável em `peopleflow_avaliacoes_experiencia` (RLS permissiva para qualquer autenticado, mesmo padrão de `peopleflow_movimentacoes`) — não há edição depois de salva. Por decisão explícita, o resultado **não** dispara automaticamente uma movimentação de Desligamento; fica só registrado, e o gestor/RH decide separadamente se abre uma solicitação de Desligamento no fluxo normal.
 
+**Dispensa (colaboradores já avaliados fora do sistema)**: a regra de tempo de casa acima não sabe que um colaborador já foi avaliado antes da implantação deste módulo (ex.: avaliação feita em papel/outra ferramenta) — por padrão ele continua aparecendo como pendente. Em vez de fabricar uma nota/decisão que nunca existiu de verdade, a tela `/avaliacoes` tem um botão **"Dispensar"** em cada linha de pendência que registra uma isenção permanente em `peopleflow_avaliacoes_experiencia_dispensas` (nome do colaborador, motivo obrigatório, quem dispensou e quando) — `pendenciasAvaliacaoExperiencia()` exclui qualquer colaborador dispensado da lista inteiramente, sem checar dias nem etapa (ver `DispensarAvaliacaoModal.tsx`).
+
 ### Descrição de cargo (`/cargos`, formulário POP-RH-001)
 
 Na tela **Cargos**, a coluna "Descrição de cargo" mostra um link **"Ver descrição"** para todo cargo que já tenha o formulário oficial (POP-RH-001) cadastrado em `peopleflow_descricoes_cargo`. Clicar abre uma ficha com todos os campos do formulário:

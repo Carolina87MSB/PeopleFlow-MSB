@@ -13,7 +13,10 @@ import {
   getHistoricoDescricaoCargo,
 } from "../repositories/descricoesCargoRepository";
 import { atualizarMovimentacao, criarMovimentacao as criarMovimentacaoNoSupabase } from "../repositories/movimentacoesRepository";
-import { criarAvaliacaoExperiencia as criarAvaliacaoExperienciaNoSupabase } from "../repositories/avaliacoesExperienciaRepository";
+import {
+  criarAvaliacaoExperiencia as criarAvaliacaoExperienciaNoSupabase,
+  criarDispensaAvaliacaoExperiencia as criarDispensaAvaliacaoExperienciaNoSupabase,
+} from "../repositories/avaliacoesExperienciaRepository";
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
@@ -37,6 +40,7 @@ import type {
   Conta,
   DescricaoCargo,
   DesligamentoFinanceiro,
+  DispensaAvaliacaoExperiencia,
   EtapaAvaliacaoExperiencia,
   HistoricoDescricaoCargo,
   Movimentacao,
@@ -93,6 +97,10 @@ export interface PortalData {
     decisaoFinal: ResultadoAvaliacaoExperiencia,
     justificativaDivergencia: string,
   ) => Promise<{ ok: true } | { ok: false }>;
+  dispensasAvaliacaoExperiencia: DispensaAvaliacaoExperiencia[];
+  /** Registra que um colaborador já foi avaliado fora do sistema (antes da
+   * implantação deste módulo) e não deve mais aparecer em pendências. */
+  dispensarAvaliacaoExperiencia: (colaboradorNome: string, motivo: string) => Promise<{ ok: true } | { ok: false }>;
 }
 
 /**
@@ -159,9 +167,13 @@ export function usePortalData(): PortalData {
   );
 
   const pendenciasAvaliacaoExperiencia = useMemo(() => {
-    const todas = pendenciasAvaliacaoExperienciaDomain(state.colaboradores, state.avaliacoesExperiencia);
+    const todas = pendenciasAvaliacaoExperienciaDomain(
+      state.colaboradores,
+      state.avaliacoesExperiencia,
+      state.dispensasAvaliacaoExperiencia,
+    );
     return perfil === "RH" ? todas : todas.filter((p) => p.colaborador.gestor === me);
-  }, [state.colaboradores, state.avaliacoesExperiencia, perfil, me]);
+  }, [state.colaboradores, state.avaliacoesExperiencia, state.dispensasAvaliacaoExperiencia, perfil, me]);
 
   const aprovarEtapaFn = useCallback(
     (id: string) => {
@@ -384,6 +396,27 @@ export function usePortalData(): PortalData {
     [dispatch, me, flash],
   );
 
+  const dispensarAvaliacaoExperienciaFn = useCallback(
+    async (colaboradorNome: string, motivo: string) => {
+      const dispensa: DispensaAvaliacaoExperiencia = {
+        colaboradorNome,
+        motivo,
+        dispensadoPor: me,
+        dispensadoEm: new Date().toISOString(),
+      };
+      try {
+        await criarDispensaAvaliacaoExperienciaNoSupabase(colaboradorNome, motivo, me);
+        dispatch({ type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA", dispensa });
+        flash(`${colaboradorNome} dispensado(a) da avaliação de experiência.`);
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao registrar dispensa de avaliação de experiência.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash],
+  );
+
   return {
     conta,
     perfil,
@@ -415,5 +448,7 @@ export function usePortalData(): PortalData {
     avaliacoesExperiencia: state.avaliacoesExperiencia,
     pendenciasAvaliacaoExperiencia,
     criarAvaliacaoExperiencia: criarAvaliacaoExperienciaFn,
+    dispensasAvaliacaoExperiencia: state.dispensasAvaliacaoExperiencia,
+    dispensarAvaliacaoExperiencia: dispensarAvaliacaoExperienciaFn,
   };
 }

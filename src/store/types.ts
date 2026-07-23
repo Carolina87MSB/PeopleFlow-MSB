@@ -4,6 +4,7 @@ import type {
   Colaborador,
   DescricaoCargo,
   DesligamentoFinanceiro,
+  DispensaAvaliacaoExperiencia,
   Movimentacao,
   Perfil2Info,
   TipoMovimentacao,
@@ -18,4 +19,5 @@ export interface PortalState {
   desligamentosFinanceiros: DesligamentoFinanceiro[];
   descricoesCargo: DescricaoCargo[];
   avaliacoesExperiencia: AvaliacaoExperiencia[];
+  dispensasAvaliacaoExperiencia: DispensaAvaliacaoExperiencia[];
 }

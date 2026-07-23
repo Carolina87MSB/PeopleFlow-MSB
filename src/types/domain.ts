@@ -305,3 +305,17 @@ export interface AvaliacaoExperiencia {
   avaliadoPor: string;
   avaliadoEm: string;
 }
+
+/**
+ * Dispensa de avaliação de experiência — cobre colaboradores antigos já
+ * avaliados fora do sistema (outra ferramenta/papel) antes da implantação
+ * deste módulo: em vez de fabricar uma AvaliacaoExperiencia sem respostas
+ * reais, o colaborador é excluído da lista de pendências, com o motivo
+ * registrado (ver pendenciasAvaliacaoExperiencia() em domain/avaliacaoExperiencia.ts).
+ */
+export interface DispensaAvaliacaoExperiencia {
+  colaboradorNome: string;
+  motivo: string;
+  dispensadoPor: string;
+  dispensadoEm: string;
+}

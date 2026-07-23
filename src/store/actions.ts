@@ -4,6 +4,7 @@ import type {
   Colaborador,
   DescricaoCargo,
   DesligamentoFinanceiro,
+  DispensaAvaliacaoExperiencia,
   Movimentacao,
   Perfil2Info,
   TipoMovimentacao,
@@ -20,8 +21,10 @@ export type PortalAction =
       desligamentosFinanceiros: DesligamentoFinanceiro[];
       descricoesCargo: DescricaoCargo[];
       avaliacoesExperiencia: AvaliacaoExperiencia[];
+      dispensasAvaliacaoExperiencia: DispensaAvaliacaoExperiencia[];
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
+  | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
   | { type: "APROVAR_ETAPA"; id: string }
   | { type: "REPROVAR_ETAPA"; id: string; comentario: string }
   | { type: "CRIAR_MOVIMENTACAO"; movimentacao: Movimentacao }

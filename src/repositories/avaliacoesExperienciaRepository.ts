@@ -4,7 +4,13 @@
 
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { SupabaseNotConfiguredError } from "./colaboradoresRepository";
-import type { AvaliacaoExperiencia, EtapaAvaliacaoExperiencia, RespostaAvaliacaoExperiencia, ResultadoAvaliacaoExperiencia } from "../types/domain";
+import type {
+  AvaliacaoExperiencia,
+  DispensaAvaliacaoExperiencia,
+  EtapaAvaliacaoExperiencia,
+  RespostaAvaliacaoExperiencia,
+  ResultadoAvaliacaoExperiencia,
+} from "../types/domain";
 
 interface AvaliacaoExperienciaRow {
   id: string;
@@ -62,4 +68,37 @@ export async function criarAvaliacaoExperiencia(a: AvaliacaoExperiencia): Promis
     avaliado_em: a.avaliadoEm,
   });
   if (error) throw new Error(`Falha ao registrar avaliação de experiência no Supabase: ${error.message}`);
+}
+
+interface DispensaAvaliacaoExperienciaRow {
+  colaborador_nome: string;
+  motivo: string | null;
+  dispensado_por: string;
+  dispensado_em: string;
+}
+
+function dispensaFromRow(row: DispensaAvaliacaoExperienciaRow): DispensaAvaliacaoExperiencia {
+  return {
+    colaboradorNome: row.colaborador_nome,
+    motivo: row.motivo ?? "",
+    dispensadoPor: row.dispensado_por,
+    dispensadoEm: row.dispensado_em,
+  };
+}
+
+export async function getDispensasAvaliacaoExperiencia(): Promise<DispensaAvaliacaoExperiencia[]> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { data, error } = await supabase.from("peopleflow_avaliacoes_experiencia_dispensas").select("*");
+  if (error) throw new Error(`Falha ao carregar dispensas de avaliação de experiência do Supabase: ${error.message}`);
+  return (data as DispensaAvaliacaoExperienciaRow[]).map(dispensaFromRow);
+}
+
+export async function criarDispensaAvaliacaoExperiencia(colaboradorNome: string, motivo: string, dispensadoPor: string): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { error } = await supabase
+    .from("peopleflow_avaliacoes_experiencia_dispensas")
+    .insert({ colaborador_nome: colaboradorNome, motivo, dispensado_por: dispensadoPor });
+  if (error) throw new Error(`Falha ao registrar dispensa de avaliação de experiência no Supabase: ${error.message}`);
 }

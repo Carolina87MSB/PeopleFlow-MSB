@@ -1,14 +1,17 @@
 import { useMemo, useState } from "react";
-import { Badge, EmptyState, tableStyles } from "../../components/ui";
+import { Badge, Button, EmptyState, tableStyles } from "../../components/ui";
 import { Header } from "../../components/layout/Header";
 import { usePortalData } from "../../store/usePortalData";
 import type { Colaborador, EtapaAvaliacaoExperiencia } from "../../types/domain";
 import { AvaliacaoExperienciaDrawer } from "./AvaliacaoExperienciaDrawer";
+import { DispensarAvaliacaoModal } from "./DispensarAvaliacaoModal";
 import styles from "./AvaliacoesPage.module.css";
 
 export function AvaliacoesPage() {
-  const { conta, perfil, avaliacoesExperiencia, pendenciasAvaliacaoExperiencia, criarAvaliacaoExperiencia } = usePortalData();
+  const { conta, perfil, avaliacoesExperiencia, pendenciasAvaliacaoExperiencia, criarAvaliacaoExperiencia, dispensarAvaliacaoExperiencia } =
+    usePortalData();
   const [selecionado, setSelecionado] = useState<{ colaborador: Colaborador; etapa: EtapaAvaliacaoExperiencia } | null>(null);
+  const [dispensando, setDispensando] = useState<{ colaborador: Colaborador; etapa: EtapaAvaliacaoExperiencia } | null>(null);
 
   const historico = useMemo(() => {
     const base = perfil === "RH" ? avaliacoesExperiencia : avaliacoesExperiencia.filter((a) => a.avaliadoPor === conta.nome);
@@ -31,6 +34,7 @@ export function AvaliacoesPage() {
                 <th>Cargo</th>
                 <th>Departamento</th>
                 <th>Etapa</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -43,6 +47,17 @@ export function AvaliacoesPage() {
                     <Badge bg="var(--color-warning-bg)" fg="var(--color-warning-fg)" dot="var(--color-warning)">
                       {etapa}
                     </Badge>
+                  </td>
+                  <td>
+                    <Button
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDispensando({ colaborador, etapa });
+                      }}
+                    >
+                      Dispensar
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -105,6 +120,18 @@ export function AvaliacoesPage() {
           onSalvar={(respostas, decisaoFinal, justificativa) =>
             criarAvaliacaoExperiencia(selecionado.colaborador.nome, selecionado.etapa, respostas, decisaoFinal, justificativa)
           }
+        />
+      )}
+
+      {dispensando && (
+        <DispensarAvaliacaoModal
+          colaborador={dispensando.colaborador.nome}
+          etapa={dispensando.etapa}
+          onClose={() => setDispensando(null)}
+          onConfirm={async (motivo) => {
+            const resultado = await dispensarAvaliacaoExperiencia(dispensando.colaborador.nome, motivo);
+            if (resultado.ok) setDispensando(null);
+          }}
         />
       )}
     </>

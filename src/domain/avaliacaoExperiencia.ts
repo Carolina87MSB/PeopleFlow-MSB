@@ -2,6 +2,7 @@ import perguntasSeed from "../data/perguntasAvaliacaoExperiencia.json";
 import type {
   AvaliacaoExperiencia,
   Colaborador,
+  DispensaAvaliacaoExperiencia,
   EtapaAvaliacaoExperiencia,
   PerguntaAvaliacaoExperiencia,
   RespostaAvaliacaoExperiencia,
@@ -71,16 +72,22 @@ export interface PendenciaAvaliacaoExperiencia {
  * avaliação de 45 dias em alguém que já passou dos 90 — só a de 90 dias fica
  * pendente). Para admissões depois da implantação, o fluxo natural (avaliar
  * aos 45 antes de chegar aos 90) já garante que a de 45 dias apareça a tempo.
+ *
+ * `dispensas` cobre colaboradores já avaliados fora do sistema antes da
+ * implantação (ver DispensaAvaliacaoExperiencia) — ficam de fora da lista
+ * inteiramente, sem checar dias nem etapa.
  */
 export function pendenciasAvaliacaoExperiencia(
   colaboradores: Colaborador[],
   avaliacoes: AvaliacaoExperiencia[],
+  dispensas: DispensaAvaliacaoExperiencia[] = [],
   hoje: Date = new Date(),
 ): PendenciaAvaliacaoExperiencia[] {
+  const dispensados = new Set(dispensas.map((d) => d.colaboradorNome));
   const pendencias: PendenciaAvaliacaoExperiencia[] = [];
 
   for (const c of colaboradores) {
-    if (c.desligado) continue;
+    if (c.desligado || dispensados.has(c.nome)) continue;
     const dias = diasDesdeAdmissao(c.admissaoIso, hoje);
     if (dias === null || dias < 45) continue;
 

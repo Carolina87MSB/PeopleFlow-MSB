@@ -289,3 +289,29 @@ create policy "authenticated_rw_avaliacoes_experiencia"
   to authenticated
   using (true)
   with check (true);
+
+-- Dispensa da avaliação de experiência — cobre a transição para quem já foi
+-- avaliado fora do sistema (outra ferramenta/papel) antes deste módulo
+-- existir: em vez de fabricar uma nota/decisão que nunca existiu de verdade,
+-- o colaborador é simplesmente excluído da lista de pendências, com o motivo
+-- registrado (ver pendenciasAvaliacaoExperiencia() em
+-- src/domain/avaliacaoExperiencia.ts).
+create table if not exists public.peopleflow_avaliacoes_experiencia_dispensas (
+  colaborador_nome text primary key,
+  motivo text not null default '',
+  dispensado_por text not null,
+  dispensado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_avaliacoes_experiencia_dispensas is
+  'Colaboradores dispensados da avaliação de experiência (já avaliados fora do sistema antes da implantação do módulo) — não aparecem na lista de pendências.';
+
+alter table public.peopleflow_avaliacoes_experiencia_dispensas enable row level security;
+
+drop policy if exists "authenticated_rw_avaliacoes_experiencia_dispensas" on public.peopleflow_avaliacoes_experiencia_dispensas;
+create policy "authenticated_rw_avaliacoes_experiencia_dispensas"
+  on public.peopleflow_avaliacoes_experiencia_dispensas
+  for all
+  to authenticated
+  using (true)
+  with check (true);
