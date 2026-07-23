@@ -15,13 +15,21 @@ const TIPOS_SEM_CADASTRO_PREVIO: TipoCod[] = ["NOV", "ADM"];
 
 export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const { state } = usePortalStore();
-  const { colaboradoresVisiveis, colaboradores, criarMovimentacao } = usePortalData();
+  const { colaboradores, criarMovimentacao } = usePortalData();
   const { flash } = useToast();
   const navigate = useNavigate();
 
   const [form, setForm] = useState<NovaMovimentacaoForm>(blankForm());
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+
+  // Lista completa (não restrita à árvore hierárquica do gestor solicitante) —
+  // uma movimentação pode ser aberta para qualquer colaborador ativo da empresa,
+  // não só para quem está sob a gestão direta/indireta de quem está solicitando.
+  const colaboradoresParaSelecao = useMemo(
+    () => colaboradores.filter((c) => !c.desligado).sort((a, b) => a.nome.localeCompare(b.nome)),
+    [colaboradores],
+  );
 
   const departamentos = useMemo(() => [...new Set(colaboradores.map((c) => c.depto))].sort(), [colaboradores]);
   const gestores = useMemo(() => [...contarPorGestor(colaboradores).keys()].sort(), [colaboradores]);
@@ -48,7 +56,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   }
 
   const tipo = form.tipo;
-  const colaboradorSelecionado = colaboradoresVisiveis.find((c) => c.nome === form.colab);
+  const colaboradorSelecionado = colaboradoresParaSelecao.find((c) => c.nome === form.colab);
 
   return (
     <Modal
@@ -94,7 +102,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             <span>Colaborador</span>
             <select value={form.colab} onChange={(e) => set("colab", e.target.value)}>
               <option value="">Selecione…</option>
-              {colaboradoresVisiveis.map((c) => (
+              {colaboradoresParaSelecao.map((c) => (
                 <option key={c.nome} value={c.nome}>
                   {c.nome} — {c.cargo}
                 </option>

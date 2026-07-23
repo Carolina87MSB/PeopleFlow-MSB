@@ -46,7 +46,7 @@ Login por **link mágico** (e-mail corporativo `@msbbrasil.com`, sem senha) via 
 
 Três perfis, com visão e permissões diferentes (ver `src/domain/permissoes.ts`):
 - **RH** — acesso completo: todos os colaboradores, todas as movimentações, cadastros de departamentos/cargos, e a tela de **Acessos** (`/acessos`).
-- **Gestor** — pode solicitar movimentações e aprovar a etapa "Gestor Solicitante" para toda sua equipe (hierarquia direta e indireta, via `descendants()` — esse escopo mais amplo vale para `movimentacoesVisiveis` e para o seletor de colaborador em "Nova movimentação"). Na tela **Colaboradores** (`/colaboradores`), porém, o escopo é mais estrito: só vê quem tem ele como **gestor imediato** (reporte direto, sem descer mais níveis) — e sem os botões de edição (Admissão, descrição de cargo), exclusivos do RH.
+- **Gestor** — pode solicitar movimentações e aprovar a etapa "Gestor Solicitante" para toda sua equipe (hierarquia direta e indireta, via `descendants()` — esse escopo mais amplo vale para `movimentacoesVisiveis`). O seletor de colaborador em "Nova movimentação", porém, **não é restrito à hierarquia** — mostra todos os colaboradores ativos da empresa (`colaboradoresParaSelecao` em `NovaMovimentacaoModal.tsx`), já que um gestor pode precisar abrir uma solicitação para alguém fora da própria equipe. Na tela **Colaboradores** (`/colaboradores`), o escopo volta a ser mais estrito: só vê quem tem ele como **gestor imediato** (reporte direto, sem descer mais níveis) — e sem os botões de edição (Admissão, descrição de cargo), exclusivos do RH.
 - **Diretoria** — vê a mesma base de colaboradores que o RH em `/colaboradores` (sem escopo), mas sem nenhum botão de edição — RH é quem edita. Nas movimentações, continua vendo só o que ela mesma solicitou ou precisa aprovar.
 
 `colaboradoresListagem` (fonte de `/colaboradores`, com a regra por perfil acima) é diferente de `colaboradoresVisiveis` (escopo de hierarquia completa do Gestor, usado no resto do app) — ver `usePortalData.ts`.
@@ -129,7 +129,7 @@ E-mail em HTML com a identidade do portal (`src/domain/emailTemplate.ts`): logo 
 
 Quando alguém é desligado no **Portal SST** (botão "Desligar colaborador"), esse colaborador aparece automaticamente aqui — os dois portais leem a mesma linha da tabela `colaboradores` (`desligado`, `data_desligamento`, `motivo_desligamento`), não há sincronização própria do PeopleFlow, é a mesma tabela.
 
-Colaboradores desligados somem das telas normais (Colaboradores, headcount do Dashboard, seletor de "Nova movimentação" — ver o filtro `!c.desligado` em `usePortalData.ts`) e passam a aparecer só aqui, com:
+Colaboradores desligados somem das telas normais (Colaboradores, headcount do Dashboard, seletor de "Nova movimentação" — ver o filtro `!c.desligado` em `usePortalData.ts` e em `colaboradoresParaSelecao` de `NovaMovimentacaoModal.tsx`) e passam a aparecer só aqui, com:
 - Dados do desligamento (data, motivo, quem registrou no SST);
 - Histórico completo das movimentações desse colaborador no PeopleFlow (promoções, transferências etc. antes do desligamento);
 - Dois campos editáveis, exclusivos do PeopleFlow — **valor da rescisão** e **valor da GRRF** —, salvos em `peopleflow_desligamentos` (colaborador não tem esses campos no SST).
