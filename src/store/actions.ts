@@ -1,4 +1,13 @@
-import type { CargoCustom, Colaborador, DescricaoCargo, DesligamentoFinanceiro, Movimentacao, Perfil2Info, TipoMovimentacao } from "../types/domain";
+import type {
+  AvaliacaoExperiencia,
+  CargoCustom,
+  Colaborador,
+  DescricaoCargo,
+  DesligamentoFinanceiro,
+  Movimentacao,
+  Perfil2Info,
+  TipoMovimentacao,
+} from "../types/domain";
 
 export type PortalAction =
   | {
@@ -10,7 +19,9 @@ export type PortalAction =
       perfis: Perfil2Info[];
       desligamentosFinanceiros: DesligamentoFinanceiro[];
       descricoesCargo: DescricaoCargo[];
+      avaliacoesExperiencia: AvaliacaoExperiencia[];
     }
+  | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "APROVAR_ETAPA"; id: string }
   | { type: "REPROVAR_ETAPA"; id: string; comentario: string }
   | { type: "CRIAR_MOVIMENTACAO"; movimentacao: Movimentacao }

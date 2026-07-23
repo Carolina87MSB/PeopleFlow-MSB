@@ -253,3 +253,39 @@ create policy "authenticated_rw_desligamento_pendente"
   to authenticated
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 7) Avaliação de experiência (45+90 dias)
+-- ─────────────────────────────────────────────────────────────────────────
+-- Uma linha por etapa avaliada (nunca sobrescrita — histórico imutável, como
+-- as demais tabelas de registro deste app). `indicacao` é a sugestão
+-- automática calculada a partir da nota (ver calcularIndicacao() em
+-- src/domain/avaliacaoExperiencia.ts); `decisao_final` é o que o gestor
+-- realmente escolheu — quando diverge da indicação, `justificativa_divergencia`
+-- é obrigatória (ver AvaliacaoExperiencia em src/types/domain.ts).
+create table if not exists public.peopleflow_avaliacoes_experiencia (
+  id text primary key,
+  colaborador_nome text not null,
+  etapa text not null,
+  respostas jsonb not null,
+  nota_final_pct numeric not null,
+  indicacao text not null,
+  decisao_final text not null,
+  justificativa_divergencia text not null default '',
+  avaliado_por text not null,
+  avaliado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_avaliacoes_experiencia is
+  'Avaliações de experiência de 45/90 dias — ver AvaliacaoExperiencia em src/types/domain.ts.';
+comment on column public.peopleflow_avaliacoes_experiencia.respostas is 'Array de { perguntaId, nota } — nota de 1 a 5 por pergunta.';
+
+alter table public.peopleflow_avaliacoes_experiencia enable row level security;
+
+drop policy if exists "authenticated_rw_avaliacoes_experiencia" on public.peopleflow_avaliacoes_experiencia;
+create policy "authenticated_rw_avaliacoes_experiencia"
+  on public.peopleflow_avaliacoes_experiencia
+  for all
+  to authenticated
+  using (true)
+  with check (true);

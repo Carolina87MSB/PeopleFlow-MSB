@@ -265,3 +265,43 @@ export interface HistoricoDescricaoCargo {
   editadoPor: string;
   editadoEm: string;
 }
+
+export interface PerguntaAvaliacaoExperiencia {
+  id: string;
+  categoria: string;
+  texto: string;
+}
+
+/** Contrato de experiência 45+45 (MSB): a etapa "45 dias" decide entre
+ * Renovar/Desligar; a "90 dias" (final) decide entre Efetivar/Desligar —
+ * ver opcoesDecisao() em domain/avaliacaoExperiencia.ts. */
+export type EtapaAvaliacaoExperiencia = "45 dias" | "90 dias";
+
+export type ResultadoAvaliacaoExperiencia = "Renovar" | "Efetivar" | "Desligar";
+
+export interface RespostaAvaliacaoExperiencia {
+  perguntaId: string;
+  /** Escala 1 (Insatisfatório) a 5 (Excelente). */
+  nota: number;
+}
+
+/**
+ * Avaliação de experiência (45 ou 90 dias) feita pelo gestor imediato.
+ * `indicacao` é a sugestão automática (ver calcularIndicacao()); `decisaoFinal`
+ * é o que o gestor de fato escolheu — quando diferente da indicação, exige
+ * `justificativaDivergencia` preenchida (nos dois sentidos: tanto pra
+ * efetivar/renovar apesar da nota baixa quanto pra desligar apesar da nota
+ * ter batido a meta).
+ */
+export interface AvaliacaoExperiencia {
+  id: string;
+  colaboradorNome: string;
+  etapa: EtapaAvaliacaoExperiencia;
+  respostas: RespostaAvaliacaoExperiencia[];
+  notaFinalPct: number;
+  indicacao: ResultadoAvaliacaoExperiencia;
+  decisaoFinal: ResultadoAvaliacaoExperiencia;
+  justificativaDivergencia: string;
+  avaliadoPor: string;
+  avaliadoEm: string;
+}

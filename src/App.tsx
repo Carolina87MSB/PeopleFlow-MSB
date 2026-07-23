@@ -15,6 +15,7 @@ import { WorkflowPage } from "./features/workflow/WorkflowPage";
 import { AprovadasPage } from "./features/aprovadas/AprovadasPage";
 import { HistoricoPage } from "./features/historico/HistoricoPage";
 import { DesligadosPage } from "./features/desligados/DesligadosPage";
+import { AvaliacoesPage } from "./features/avaliacoes/AvaliacoesPage";
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
                 <Route path="/aprovadas" element={<AprovadasPage />} />
                 <Route path="/historico" element={<HistoricoPage />} />
                 <Route path="/desligados" element={<DesligadosPage />} />
+                <Route path="/avaliacoes" element={<AvaliacoesPage />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Routes>

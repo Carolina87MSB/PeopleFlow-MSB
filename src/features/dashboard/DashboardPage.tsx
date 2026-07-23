@@ -23,6 +23,7 @@ export function DashboardPage() {
     podeVerCadastros,
     pendenciasFinanceirasCount,
     descricoesCargo,
+    pendenciasAvaliacaoExperiencia,
     aprovarEtapa,
     reprovarEtapa,
   } = usePortalData();
@@ -106,6 +107,14 @@ export function DashboardPage() {
             />
           </Link>
         )}
+        <Link to="/avaliacoes" className={styles.kpiLink}>
+          <KpiCard
+            label="Avaliações de experiência"
+            value={pendenciasAvaliacaoExperiencia.length}
+            hint="colaboradores com 45/90 dias vencidos"
+            highlight={pendenciasAvaliacaoExperiencia.length > 0}
+          />
+        </Link>
       </div>
 
       <div className={styles.mainGrid}>

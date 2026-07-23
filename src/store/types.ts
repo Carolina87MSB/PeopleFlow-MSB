@@ -1,4 +1,13 @@
-import type { CargoCustom, Colaborador, DescricaoCargo, DesligamentoFinanceiro, Movimentacao, Perfil2Info, TipoMovimentacao } from "../types/domain";
+import type {
+  AvaliacaoExperiencia,
+  CargoCustom,
+  Colaborador,
+  DescricaoCargo,
+  DesligamentoFinanceiro,
+  Movimentacao,
+  Perfil2Info,
+  TipoMovimentacao,
+} from "../types/domain";
 
 export interface PortalState {
   colaboradores: Colaborador[];
@@ -8,4 +17,5 @@ export interface PortalState {
   perfis: Perfil2Info[];
   desligamentosFinanceiros: DesligamentoFinanceiro[];
   descricoesCargo: DescricaoCargo[];
+  avaliacoesExperiencia: AvaliacaoExperiencia[];
 }

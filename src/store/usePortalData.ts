@@ -13,10 +13,17 @@ import {
   getHistoricoDescricaoCargo,
 } from "../repositories/descricoesCargoRepository";
 import { atualizarMovimentacao, criarMovimentacao as criarMovimentacaoNoSupabase } from "../repositories/movimentacoesRepository";
+import { criarAvaliacaoExperiencia as criarAvaliacaoExperienciaNoSupabase } from "../repositories/avaliacoesExperienciaRepository";
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
+import {
+  calcularIndicacao,
+  calcularNotaFinalPct,
+  gerarIdAvaliacaoExperiencia,
+  pendenciasAvaliacaoExperiencia as pendenciasAvaliacaoExperienciaDomain,
+} from "../domain/avaliacaoExperiencia";
 import { descendants, ehDiretorIndustrial } from "../domain/hierarquia";
 import { notificacaoConcluida, notificacaoNovaEtapa, notificacaoReprovada } from "../domain/notificacoes";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
@@ -25,14 +32,18 @@ import { aprovarEtapa as aprovarEtapaDomain, cargoCustomDeNovoCargo, etapaAtual,
 import { usePortalStore } from "./PortalStoreContext";
 import { useConta } from "./useConta";
 import type {
+  AvaliacaoExperiencia,
   Colaborador,
   Conta,
   DescricaoCargo,
   DesligamentoFinanceiro,
+  EtapaAvaliacaoExperiencia,
   HistoricoDescricaoCargo,
   Movimentacao,
   NovaMovimentacaoForm,
   Perfil,
+  RespostaAvaliacaoExperiencia,
+  ResultadoAvaliacaoExperiencia,
 } from "../types/domain";
 
 export interface PortalData {
@@ -70,6 +81,18 @@ export interface PortalData {
   atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
   atualizarAdmissao: (nome: string, admissaoIso: string) => Promise<{ ok: true } | { ok: false }>;
+  avaliacoesExperiencia: AvaliacaoExperiencia[];
+  /** Colaboradores com etapa (45/90 dias) vencida e ainda sem avaliação — RH vê
+   * todo mundo, quem tem `colaborador.gestor === conta.nome` (Gestor ou
+   * Diretoria que também é gestor imediato de alguém) só vê os próprios. */
+  pendenciasAvaliacaoExperiencia: { colaborador: Colaborador; etapa: EtapaAvaliacaoExperiencia }[];
+  criarAvaliacaoExperiencia: (
+    colaboradorNome: string,
+    etapa: EtapaAvaliacaoExperiencia,
+    respostas: RespostaAvaliacaoExperiencia[],
+    decisaoFinal: ResultadoAvaliacaoExperiencia,
+    justificativaDivergencia: string,
+  ) => Promise<{ ok: true } | { ok: false }>;
 }
 
 /**
@@ -134,6 +157,11 @@ export function usePortalData(): PortalData {
     () => desligados.filter((c) => pendenteFechamento(c.nome, state.desligamentosFinanceiros)).length,
     [desligados, state.desligamentosFinanceiros],
   );
+
+  const pendenciasAvaliacaoExperiencia = useMemo(() => {
+    const todas = pendenciasAvaliacaoExperienciaDomain(state.colaboradores, state.avaliacoesExperiencia);
+    return perfil === "RH" ? todas : todas.filter((p) => p.colaborador.gestor === me);
+  }, [state.colaboradores, state.avaliacoesExperiencia, perfil, me]);
 
   const aprovarEtapaFn = useCallback(
     (id: string) => {
@@ -321,6 +349,41 @@ export function usePortalData(): PortalData {
     [dispatch, me, flash],
   );
 
+  const criarAvaliacaoExperienciaFn = useCallback(
+    async (
+      colaboradorNome: string,
+      etapa: EtapaAvaliacaoExperiencia,
+      respostas: RespostaAvaliacaoExperiencia[],
+      decisaoFinal: ResultadoAvaliacaoExperiencia,
+      justificativaDivergencia: string,
+    ) => {
+      const notaFinalPct = calcularNotaFinalPct(respostas);
+      const indicacao = calcularIndicacao(etapa, notaFinalPct);
+      const avaliacao: AvaliacaoExperiencia = {
+        id: gerarIdAvaliacaoExperiencia(),
+        colaboradorNome,
+        etapa,
+        respostas,
+        notaFinalPct,
+        indicacao,
+        decisaoFinal,
+        justificativaDivergencia,
+        avaliadoPor: me,
+        avaliadoEm: new Date().toISOString(),
+      };
+      try {
+        await criarAvaliacaoExperienciaNoSupabase(avaliacao);
+        dispatch({ type: "CRIAR_AVALIACAO_EXPERIENCIA", avaliacao });
+        flash(`Avaliação de ${etapa} de ${colaboradorNome} registrada.`);
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao registrar avaliação de experiência.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash],
+  );
+
   return {
     conta,
     perfil,
@@ -349,5 +412,8 @@ export function usePortalData(): PortalData {
     atualizarCampoDescricaoCargo: atualizarCampoDescricaoCargoFn,
     carregarHistoricoDescricaoCargo: carregarHistoricoDescricaoCargoFn,
     atualizarAdmissao: atualizarAdmissaoFn,
+    avaliacoesExperiencia: state.avaliacoesExperiencia,
+    pendenciasAvaliacaoExperiencia,
+    criarAvaliacaoExperiencia: criarAvaliacaoExperienciaFn,
   };
 }

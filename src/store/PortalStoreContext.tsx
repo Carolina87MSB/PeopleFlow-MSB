@@ -6,6 +6,7 @@ import { getCargosCustom } from "../repositories/cargosCustomRepository";
 import { getDesligamentosFinanceiros } from "../repositories/desligadosRepository";
 import { getDescricoesCargo } from "../repositories/descricoesCargoRepository";
 import { getMovimentacoes } from "../repositories/movimentacoesRepository";
+import { getAvaliacoesExperiencia } from "../repositories/avaliacoesExperienciaRepository";
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
 import type { PortalAction } from "./actions";
 import { initialPortalState, portalReducer } from "./reducer";
@@ -50,10 +51,21 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getPerfis(),
       getDesligamentosFinanceiros(),
       getDescricoesCargo(),
+      getAvaliacoesExperiencia(),
     ])
-      .then(([colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros, descricoesCargo]) => {
+      .then(([colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros, descricoesCargo, avaliacoesExperiencia]) => {
         if (cancelado) return;
-        dispatch({ type: "CARREGAR_DADOS", colaboradores, movimentacoes, cargosCustom, tipos, perfis, desligamentosFinanceiros, descricoesCargo });
+        dispatch({
+          type: "CARREGAR_DADOS",
+          colaboradores,
+          movimentacoes,
+          cargosCustom,
+          tipos,
+          perfis,
+          desligamentosFinanceiros,
+          descricoesCargo,
+          avaliacoesExperiencia,
+        });
       })
       .catch((err: Error) => {
         if (cancelado) return;

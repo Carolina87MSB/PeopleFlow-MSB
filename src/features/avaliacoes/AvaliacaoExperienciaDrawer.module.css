@@ -1,0 +1,159 @@
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drawerNome {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.drawerSub {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.82);
+  margin-top: 2px;
+}
+
+.progresso {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-muted);
+  margin-bottom: 16px;
+}
+
+.grupo {
+  margin-bottom: 18px;
+}
+
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-navy);
+}
+
+.pergunta {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pergunta:last-child {
+  border-bottom: none;
+}
+
+.perguntaTexto {
+  font-size: 12.5px;
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.escala {
+  display: flex;
+  gap: 6px;
+}
+
+.escalaBotao {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-strong);
+  background: #fff;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.escalaBotao:hover {
+  border-color: var(--color-brand);
+}
+.escalaBotaoAtivo {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: #fff;
+}
+
+.resultado {
+  margin: 20px 0;
+  padding: 14px 16px;
+  background: var(--color-brand-pale, #eef7f9);
+  border-radius: var(--radius-sm);
+}
+
+.resultadoVazio {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.notaLinha {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--color-text);
+  padding: 3px 0;
+}
+
+.indicacaoLinha {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--color-text);
+}
+
+.indicacaoPositiva {
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+.indicacaoNegativa {
+  font-weight: 700;
+  color: var(--color-danger);
+}
+
+.decisao {
+  margin-bottom: 16px;
+}
+
+.decisaoOpcoes {
+  display: flex;
+  gap: 8px;
+}
+
+.justificativaCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-navy);
+}
+
+.justificativaCampo textarea {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--color-text);
+  resize: vertical;
+}
+
+.erro {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-danger);
+  margin-bottom: 10px;
+}
+
+.acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-divider);
+}

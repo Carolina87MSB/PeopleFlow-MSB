@@ -10,6 +10,7 @@ export const initialPortalState: PortalState = {
   perfis: [],
   desligamentosFinanceiros: [],
   descricoesCargo: [],
+  avaliacoesExperiencia: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -24,7 +25,11 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         perfis: action.perfis,
         desligamentosFinanceiros: action.desligamentosFinanceiros,
         descricoesCargo: action.descricoesCargo,
+        avaliacoesExperiencia: action.avaliacoesExperiencia,
       };
+
+    case "CRIAR_AVALIACAO_EXPERIENCIA":
+      return { ...state, avaliacoesExperiencia: [action.avaliacao, ...state.avaliacoesExperiencia] };
 
     case "ATUALIZAR_ADMISSAO_COLABORADOR": {
       return {

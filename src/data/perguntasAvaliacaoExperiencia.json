@@ -1,0 +1,22 @@
+[
+  { "id": "p1", "categoria": "Desempenho e qualidade", "texto": "Executa as tarefas atribuídas com qualidade e atenção aos detalhes." },
+  { "id": "p2", "categoria": "Desempenho e qualidade", "texto": "Cumpre os prazos estabelecidos para suas entregas." },
+  { "id": "p3", "categoria": "Conhecimento técnico e do cargo", "texto": "Demonstra domínio das ferramentas e conhecimentos necessários para a função." },
+  { "id": "p4", "categoria": "Conhecimento técnico e do cargo", "texto": "Compreende os processos e rotinas da área com clareza." },
+  { "id": "p5", "categoria": "Produtividade", "texto": "Mantém um ritmo de trabalho adequado às demandas da função." },
+  { "id": "p6", "categoria": "Produtividade", "texto": "Consegue priorizar tarefas de forma eficiente." },
+  { "id": "p7", "categoria": "Adaptação e cultura organizacional", "texto": "Demonstra alinhamento com os valores e a cultura da empresa." },
+  { "id": "p8", "categoria": "Adaptação e cultura organizacional", "texto": "Adaptou-se bem ao ambiente e à rotina de trabalho." },
+  { "id": "p9", "categoria": "Relacionamento interpessoal", "texto": "Mantém bom relacionamento com colegas de equipe." },
+  { "id": "p10", "categoria": "Relacionamento interpessoal", "texto": "Relaciona-se bem com outras áreas/departamentos quando necessário." },
+  { "id": "p11", "categoria": "Comunicação", "texto": "Comunica-se de forma clara e objetiva." },
+  { "id": "p12", "categoria": "Comunicação", "texto": "Sabe ouvir e considerar feedbacks recebidos." },
+  { "id": "p13", "categoria": "Proatividade e iniciativa", "texto": "Demonstra iniciativa na resolução de problemas." },
+  { "id": "p14", "categoria": "Proatividade e iniciativa", "texto": "Busca aprender e se desenvolver além do que é solicitado." },
+  { "id": "p15", "categoria": "Assiduidade e postura", "texto": "Cumpre horários e é assíduo(a)." },
+  { "id": "p16", "categoria": "Assiduidade e postura", "texto": "Mantém postura profissional adequada no ambiente de trabalho." },
+  { "id": "p17", "categoria": "Segurança, qualidade e compliance", "texto": "Segue as normas de segurança do trabalho." },
+  { "id": "p18", "categoria": "Segurança, qualidade e compliance", "texto": "Segue os requisitos de qualidade/regulatórios aplicáveis à função." },
+  { "id": "p19", "categoria": "Visão geral", "texto": "Atende às expectativas para o cargo até o momento." },
+  { "id": "p20", "categoria": "Visão geral", "texto": "Recomendaria a efetivação/renovação deste colaborador." }
+]

@@ -136,6 +136,16 @@ Colaboradores desligados somem das telas normais (Colaboradores, headcount do Da
 
 Enquanto rescisão ou GRRF não estiverem preenchidos, o colaborador conta como **pendência** — aparece no badge do menu lateral e num card no Dashboard ("Desligamentos pendentes"), visível só para RH.
 
+### Avaliação de experiência (`/avaliacoes`)
+
+Contrato de experiência da MSB é **45+45 dias** (duas etapas, nunca uma terceira renovação — regra da CLT). Cada etapa é uma avaliação de ~20 perguntas (escala 1 a 5, agrupadas por categoria — desempenho, conhecimento técnico, produtividade, cultura, relacionamento, comunicação, proatividade, assiduidade, segurança/qualidade — ver `src/data/perguntasAvaliacaoExperiencia.json`), preenchida pelo gestor imediato do colaborador.
+
+**Pendências automáticas**: com base em `colaboradores.admissao` (campo `admissaoIso` no domínio do app), o sistema calcula quando um colaborador ativo completa 45 ou 90 dias de empresa e ainda não tem a avaliação daquela etapa registrada (`pendenciasAvaliacaoExperiencia()` em `src/domain/avaliacaoExperiencia.ts`) — aparece como pendência no Dashboard, no badge do menu lateral e na tela `/avaliacoes`, **só para quem tem o colaborador como gestor imediato** (`colaborador.gestor === conta.nome` — vale tanto para perfil Gestor quanto Diretoria, já que um Diretor também pode ser gestor direto de alguém) ou para RH (vê tudo). A etapa de 90 dias só aparece depois que a de 45 dias foi registrada com decisão "Renovar" — se decidiu desligar aos 45, não há por que avaliar de novo aos 90.
+
+**Nota e meta**: nota final = média das respostas (1 a 5) convertida em percentual. A indicação automática (`calcularIndicacao()`) usa metas diferentes por etapa — **45 dias**: ≥ 50% indica Renovar, abaixo disso indica Desligar; **90 dias**: ≥ 60% indica Efetivar, abaixo indica Desligar (as opções de decisão em si também mudam por etapa — `opcoesDecisao()` — 45 dias nunca efetiva, 90 dias nunca renova). A indicação é só uma sugestão: o gestor sempre escolhe a **decisão final** manualmente, pré-selecionada com a indicação; se ele escolher algo diferente (nos dois sentidos — desligar apesar da nota boa, ou manter apesar da nota baixa), uma **justificativa é obrigatória**.
+
+Cada avaliação é um registro histórico imutável em `peopleflow_avaliacoes_experiencia` (RLS permissiva para qualquer autenticado, mesmo padrão de `peopleflow_movimentacoes`) — não há edição depois de salva. Por decisão explícita, o resultado **não** dispara automaticamente uma movimentação de Desligamento; fica só registrado, e o gestor/RH decide separadamente se abre uma solicitação de Desligamento no fluxo normal.
+
 ### Descrição de cargo (`/cargos`, formulário POP-RH-001)
 
 Na tela **Cargos**, a coluna "Descrição de cargo" mostra um link **"Ver descrição"** para todo cargo que já tenha o formulário oficial (POP-RH-001) cadastrado em `peopleflow_descricoes_cargo`. Clicar abre uma ficha com todos os campos do formulário:
