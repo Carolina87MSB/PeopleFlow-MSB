@@ -275,7 +275,7 @@ export function usePortalData(): PortalData {
     async (form: NovaMovimentacaoForm) => {
       const validacao = validarForm(form);
       if (!validacao.ok) return { ok: false as const };
-      const ctx: FormContext = { perfil, me, tipos: state.tipos, colaboradores: state.colaboradores, movimentacoes: state.movimentacoes };
+      const ctx: FormContext = { me, tipos: state.tipos, colaboradores: state.colaboradores, movimentacoes: state.movimentacoes };
       const movimentacao = construirMovimentacao(form, ctx);
       try {
         await criarMovimentacaoNoSupabase(movimentacao);
@@ -294,7 +294,7 @@ export function usePortalData(): PortalData {
         return { ok: false as const, error };
       }
     },
-    [dispatch, perfil, me, state.tipos, state.colaboradores, state.movimentacoes, flash],
+    [dispatch, me, state.tipos, state.colaboradores, state.movimentacoes, flash],
   );
 
   const atualizarCampoDescricaoCargoFn = useCallback(

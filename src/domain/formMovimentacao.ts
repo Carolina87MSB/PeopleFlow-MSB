@@ -1,6 +1,6 @@
 import { formatarDataAtual, formatarDataIso } from "./dates";
 import { calcularPercentual, montarEtapas, nextId } from "./workflow";
-import type { Colaborador, DadoField, Movimentacao, NovaMovimentacaoForm, Perfil, TipoMovimentacao } from "../types/domain";
+import type { Colaborador, DadoField, Movimentacao, NovaMovimentacaoForm, TipoMovimentacao } from "../types/domain";
 
 export function blankForm(): NovaMovimentacaoForm {
   return {
@@ -46,7 +46,6 @@ export function blankForm(): NovaMovimentacaoForm {
 }
 
 export interface FormContext {
-  perfil: Perfil;
   me: string;
   tipos: TipoMovimentacao[];
   colaboradores: Colaborador[];
@@ -71,7 +70,7 @@ export function validarForm(f: NovaMovimentacaoForm): FormValidation {
 
 /** Builds a new Movimentacao from the wizard form, mirroring the prototype's submitNova() branch-per-tipo logic. */
 export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext): Movimentacao {
-  const { perfil, me, tipos, colaboradores, movimentacoes } = ctx;
+  const { me, tipos, colaboradores, movimentacoes } = ctx;
   const id = nextId(movimentacoes);
   const dataSolicitacao = formatarDataAtual();
 
@@ -150,7 +149,13 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
 
   const tipo = tipos.find((t) => t.cod === f.tipo)!;
   const colab = colaboradores.find((c) => c.nome === f.colab);
-  const solic = perfil === "Gestor" ? me : colab ? colab.gestor : "A definir";
+  // Sempre o gestor imediato REAL do colaborador (colab.gestor), nunca quem
+  // está preenchendo o formulário — desde que "Nova movimentação" passou a
+  // listar todos os colaboradores (não só a equipe de quem solicita), um
+  // Gestor pode abrir uma movimentação para alguém que não é seu reporte
+  // direto, e nesse caso ele NÃO deve virar o aprovador de "Gestor
+  // Solicitante" no lugar do gestor de fato.
+  const solic = colab ? colab.gestor : "A definir";
   const etapas = montarEtapas(tipo, solic, me, colaboradores);
   const cargoAtual = colab ? colab.cargo : "—";
   const deptoAtual = colab ? colab.depto : "—";
