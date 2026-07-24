@@ -61,17 +61,18 @@ export interface PendenciaAvaliacaoExperiencia {
 }
 
 /**
- * Colaboradores ativos com admissão registrada que já passaram de 45/90 dias
- * de empresa e ainda não têm a avaliação daquela etapa registrada.
+ * Colaboradores ativos, admitidos há menos de 90 dias, que ainda não têm a
+ * avaliação da etapa atual registrada.
  *
- * Puramente baseada em tempo de casa — nunca as duas etapas ao mesmo tempo:
- * < 45 dias → nenhuma pendência; 45–89 dias → só "45 dias"; ≥ 90 dias → só
- * "90 dias", **mesmo que a de 45 dias nunca tenha sido registrada**. Isso é
- * deliberado: cobre a regra de transição para quem foi admitido antes da
- * implantação deste módulo (o portal não vai forçar retroativamente uma
- * avaliação de 45 dias em alguém que já passou dos 90 — só a de 90 dias fica
- * pendente). Para admissões depois da implantação, o fluxo natural (avaliar
- * aos 45 antes de chegar aos 90) já garante que a de 45 dias apareça a tempo.
+ * Só entram na lista enquanto o contrato de experiência (45+45 dias) ainda
+ * está em curso — < 45 dias → nenhuma pendência; ≥ 90 dias → sai da lista
+ * automaticamente, tenha ou não sido avaliado (a CLT não permite prorrogar
+ * além dos 90 dias, então passado esse prazo a pendência automática deixa de
+ * fazer sentido; um caso perdido vira trabalho manual do RH, não deste
+ * relatório). Entre 45 e 89 dias: pendente "45 dias" enquanto essa avaliação
+ * não existir; assim que ela é registrada, calcula automaticamente que a
+ * etapa seguinte é a "90 dias" e ela passa a aparecer pendente — dando ao
+ * gestor a janela que resta até o fim do contrato para completá-la.
  *
  * `dispensas` cobre colaboradores já avaliados fora do sistema antes da
  * implantação (ver DispensaAvaliacaoExperiencia) — ficam de fora da lista
@@ -89,15 +90,16 @@ export function pendenciasAvaliacaoExperiencia(
   for (const c of colaboradores) {
     if (c.desligado || dispensados.has(c.nome)) continue;
     const dias = diasDesdeAdmissao(c.admissaoIso, hoje);
-    if (dias === null || dias < 45) continue;
+    if (dias === null || dias < 45 || dias >= 90) continue;
 
-    if (dias < 90) {
-      const avaliacao45 = avaliacoes.some((a) => a.colaboradorNome === c.nome && a.etapa === "45 dias");
-      if (!avaliacao45) pendencias.push({ colaborador: c, etapa: "45 dias" });
-    } else {
-      const avaliacao90 = avaliacoes.some((a) => a.colaboradorNome === c.nome && a.etapa === "90 dias");
-      if (!avaliacao90) pendencias.push({ colaborador: c, etapa: "90 dias" });
+    const avaliacao45 = avaliacoes.some((a) => a.colaboradorNome === c.nome && a.etapa === "45 dias");
+    if (!avaliacao45) {
+      pendencias.push({ colaborador: c, etapa: "45 dias" });
+      continue;
     }
+
+    const avaliacao90 = avaliacoes.some((a) => a.colaboradorNome === c.nome && a.etapa === "90 dias");
+    if (!avaliacao90) pendencias.push({ colaborador: c, etapa: "90 dias" });
   }
 
   return pendencias;
