@@ -203,7 +203,10 @@ export function DashboardPage() {
                 {qtdDesligamentosTotal} desligamento{qtdDesligamentosTotal === 1 ? "" : "s"} · {money(custoRescisaoTotal)}
               </span>
             </div>
-            <BarChart data={custosRescisao.map((m) => ({ label: m.mesLabel, value: m.total, annotation: String(m.quantidade) }))} />
+            <BarChart
+              data={custosRescisao.map((m) => ({ label: m.mesLabel, value: m.total, annotation: String(m.quantidade) }))}
+              color="var(--color-danger)"
+            />
             <div className={`${tableStyles.wrap} ${styles.custoTableWrap}`}>
               <table className={tableStyles.table}>
                 <thead>
