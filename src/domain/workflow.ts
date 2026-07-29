@@ -1,5 +1,5 @@
 import { formatarDataAtual, formatarHoraAtual } from "./dates";
-import { ehCEO, roleApprover } from "./hierarquia";
+import { ehCEO, perfilOf, roleApprover } from "./hierarquia";
 import type {
   AdmissaoInfo,
   AtualizacaoCargoDeptoInfo,
@@ -38,6 +38,16 @@ export function podeAgir(m: Movimentacao, me: string): boolean {
  * ignorada: a movimentação pula Gestor Solicitante e Diretor Industrial (e a
  * etapa "CEO" da matriz de Novo Cargo, que seria o próprio solicitante se
  * aprovando) e vai direto para RH — regra válida para todos os tipos.
+ *
+ * Exceção parecida para Promoção: quando quem abre é um gestor (perfil
+ * "Gestor", ou seja, tem reporte direto — ver buildAccess()) DIFERENTE do
+ * gestor atual do colaborador, entende-se que é o gestor do setor de
+ * destino promovendo alguém para a própria equipe — o próprio ato de abrir
+ * já é o aval dele, então a etapa "Gestor Solicitante" é pulada e a
+ * movimentação nasce direto em "Diretor Industrial". Transferência NÃO
+ * segue essa exceção — o gestor de origem sempre aprova antes do Diretor,
+ * mesmo quando é o gestor de destino quem abre (ver construirMovimentacao()
+ * em formMovimentacao.ts para a troca de departamento/gestor em si).
  */
 export function montarEtapas(
   tipo: TipoMovimentacao,
@@ -46,7 +56,17 @@ export function montarEtapas(
   colaboradores: Colaborador[],
 ): Etapa[] {
   const solicitanteColab = colaboradores.find((c) => c.nome === solicitanteNome);
-  const papeis = ehCEO(solicitanteColab) ? ["RH"] : tipo.etapas;
+  const promocaoParaOutroGestor =
+    tipo.cod === "PRO" &&
+    !!solicitanteGestor &&
+    solicitanteNome !== solicitanteGestor &&
+    !!solicitanteColab &&
+    perfilOf(solicitanteColab) === "Gestor";
+  const papeis = ehCEO(solicitanteColab)
+    ? ["RH"]
+    : promocaoParaOutroGestor
+      ? tipo.etapas.filter((papel) => papel !== "Gestor Solicitante")
+      : tipo.etapas;
   return papeis.map((papel, i) => ({
     papel,
     aprovador: roleApprover(papel, { solicitanteGestor }),
@@ -97,7 +117,7 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
       if (
         (m.tipoCod === "PRO" || m.tipoCod === "TRF" || m.tipoCod === "FUN") &&
         m.atualizacaoInfo &&
-        (m.atualizacaoInfo.novoCargo || m.atualizacaoInfo.novoDepto)
+        (m.atualizacaoInfo.novoCargo || m.atualizacaoInfo.novoDepto || m.atualizacaoInfo.novoGestor)
       ) {
         atualizacaoRegistrada = m.atualizacaoInfo;
       }

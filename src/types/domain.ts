@@ -123,6 +123,10 @@ export interface AtualizacaoCargoDeptoInfo {
   nome: string;
   novoCargo?: string;
   novoDepto?: string;
+  /** Preenchido quando a movimentação foi aberta por um gestor diferente do gestor
+   * atual do colaborador (ex.: gestor do setor de destino promovendo/transferindo
+   * alguém para a própria equipe) — ver montarEtapas()/construirMovimentacao(). */
+  novoGestor?: string;
 }
 
 /** Snapshot para desligar de fato em `colaboradores` quando uma movimentação
@@ -192,6 +196,7 @@ export interface NovaMovimentacaoForm {
   salNovo: string;
   trfNovoDepto: string;
   trfNovoCargo: string;
+  trfData: string;
   funNova: string;
   funMotivo: string;
   funTreinos: string;

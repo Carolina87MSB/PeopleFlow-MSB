@@ -139,11 +139,11 @@ export async function criarPreCadastro(dados: DadosPreCadastro): Promise<{ jaExi
 
 /** Sincroniza cargo/departamento ao concluir Promoção/Transferência/Mudança
  * de Função — via api/atualizar-cargo-departamento.ts (RH-only, service_role). */
-export async function atualizarCargoDepto(nome: string, novoCargo?: string, novoDepto?: string): Promise<void> {
+export async function atualizarCargoDepto(nome: string, novoCargo?: string, novoDepto?: string, novoGestor?: string): Promise<void> {
   const res = await fetch("/api/atualizar-cargo-departamento", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-    body: JSON.stringify({ nome, novoCargo, novoDepto }),
+    body: JSON.stringify({ nome, novoCargo, novoDepto, novoGestor }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "Falha ao atualizar cargo/departamento do colaborador.");

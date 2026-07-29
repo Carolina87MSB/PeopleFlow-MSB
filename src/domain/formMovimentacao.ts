@@ -1,4 +1,5 @@
 import { formatarDataAtual, formatarDataIso } from "./dates";
+import { perfilOf } from "./hierarquia";
 import { calcularPercentual, montarEtapas, nextId } from "./workflow";
 import type { Colaborador, DadoField, Movimentacao, NovaMovimentacaoForm, TipoMovimentacao } from "../types/domain";
 
@@ -34,6 +35,7 @@ export function blankForm(): NovaMovimentacaoForm {
     salNovo: "",
     trfNovoDepto: "",
     trfNovoCargo: "",
+    trfData: "",
     funNova: "",
     funMotivo: "",
     funTreinos: "",
@@ -156,21 +158,40 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
   // direto, e nesse caso ele NÃO deve virar o aprovador de "Gestor
   // Solicitante" no lugar do gestor de fato.
   const solic = colab ? colab.gestor : "A definir";
+  const solicitanteColab = colaboradores.find((c) => c.nome === me);
+  // Um gestor (perfil "Gestor", ver perfilOf() — só quem tem reporte direto
+  // chega a logar com esse perfil) diferente do gestor atual do colaborador
+  // abrindo a movimentação é entendido como "gestor do setor de destino":
+  // o colaborador passa a ir para o departamento/gestão de quem abriu.
+  // Vale tanto para Promoção (pula a etapa "Gestor Solicitante", ver
+  // montarEtapas()) quanto para Transferência (mantém as 3 etapas normais —
+  // o gestor de origem continua aprovando antes do Diretor).
+  const gestorDeDestino =
+    !!colab && !!solicitanteColab && me !== solic && perfilOf(solicitanteColab) === "Gestor" ? solicitanteColab : null;
   const etapas = montarEtapas(tipo, solic, me, colaboradores);
   const cargoAtual = colab ? colab.cargo : "—";
   const deptoAtual = colab ? colab.depto : "—";
   let resumo = "";
   let dados: DadoField[] = [];
+  let depto = deptoAtual;
 
   if (f.tipo === "PRO") {
-    resumo = cargoAtual + " → " + (f.proNovoCargo || "novo cargo");
+    const novoDepto = gestorDeDestino?.depto;
+    if (novoDepto) depto = novoDepto;
+    resumo = cargoAtual + " → " + (f.proNovoCargo || "novo cargo") + (novoDepto ? " (" + novoDepto + ")" : "");
     dados = [
       { label: "Cargo atual", value: cargoAtual },
       { label: "Novo cargo", value: f.proNovoCargo || "—" },
+      ...(gestorDeDestino
+        ? ([
+            { label: "Novo departamento", value: gestorDeDestino.depto },
+            { label: "Novo gestor", value: gestorDeDestino.nome },
+          ] as DadoField[])
+        : []),
       { label: "Justificativa de progressão", value: f.proJustProg || "—" },
       { label: "Alteração salarial", value: f.proAltSal || "Não" },
       { label: "Novo salário", value: f.proAltSal === "Sim" ? f.proNovoSalario || "A definir" : "—" },
-      { label: "Data prevista", value: f.proData || "A definir" },
+      { label: "Data prevista", value: f.proData ? formatarDataIso(f.proData) : "A definir" },
     ];
   } else if (f.tipo === "SAL") {
     resumo = "Reajuste salarial — " + cargoAtual;
@@ -186,6 +207,8 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
       { label: "Novo departamento", value: f.trfNovoDepto || "—" },
       { label: "Cargo atual", value: cargoAtual },
       { label: "Novo cargo (se aplicável)", value: f.trfNovoCargo || "—" },
+      ...(gestorDeDestino ? ([{ label: "Novo gestor", value: gestorDeDestino.nome }] as DadoField[]) : []),
+      { label: "Data prevista", value: f.trfData ? formatarDataIso(f.trfData) : "A definir" },
     ];
   } else if (f.tipo === "FUN") {
     resumo = cargoAtual + " → " + (f.funNova || "nova função");
@@ -210,9 +233,19 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
   let desligamentoInfo: Movimentacao["desligamentoInfo"];
 
   if (f.tipo === "PRO" && f.proNovoCargo.trim()) {
-    atualizacaoInfo = { nome: f.colab, novoCargo: f.proNovoCargo.trim() };
+    atualizacaoInfo = {
+      nome: f.colab,
+      novoCargo: f.proNovoCargo.trim(),
+      novoDepto: gestorDeDestino?.depto,
+      novoGestor: gestorDeDestino?.nome,
+    };
   } else if (f.tipo === "TRF" && (f.trfNovoDepto || f.trfNovoCargo.trim())) {
-    atualizacaoInfo = { nome: f.colab, novoCargo: f.trfNovoCargo.trim() || undefined, novoDepto: f.trfNovoDepto || undefined };
+    atualizacaoInfo = {
+      nome: f.colab,
+      novoCargo: f.trfNovoCargo.trim() || undefined,
+      novoDepto: f.trfNovoDepto || undefined,
+      novoGestor: gestorDeDestino?.nome,
+    };
   } else if (f.tipo === "FUN" && f.funNova.trim()) {
     atualizacaoInfo = { nome: f.colab, novoCargo: f.funNova.trim() };
   } else if (f.tipo === "DES") {
@@ -223,7 +256,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     tipo: tipo.nome,
     tipoCod: tipo.cod,
     colaborador: f.colab,
-    depto: deptoAtual,
+    depto,
     resumo,
     etapas,
     dados,

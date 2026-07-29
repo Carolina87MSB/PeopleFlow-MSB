@@ -15,7 +15,7 @@ const TIPOS_SEM_CADASTRO_PREVIO: TipoCod[] = ["NOV", "ADM"];
 
 export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const { state } = usePortalStore();
-  const { colaboradores, criarMovimentacao } = usePortalData();
+  const { conta, colaboradores, criarMovimentacao } = usePortalData();
   const { flash } = useToast();
   const navigate = useNavigate();
 
@@ -57,6 +57,13 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
 
   const tipo = form.tipo;
   const colaboradorSelecionado = colaboradoresParaSelecao.find((c) => c.nome === form.colab);
+  // Só para Promoção: gestor logado diferente do gestor atual do colaborador
+  // selecionado é entendido como "gestor do setor de destino" — mesma regra
+  // de gestorDeDestino em construirMovimentacao()/formMovimentacao.ts. Aqui é
+  // só para avisar quem está preenchendo, o cálculo que vale de fato acontece
+  // ao montar a movimentação.
+  const promocaoParaOutroGestor =
+    tipo === "PRO" && !!colaboradorSelecionado && conta.perfil === "Gestor" && conta.nome !== colaboradorSelecionado.gestor;
 
   return (
     <Modal
@@ -252,8 +259,18 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             )}
             <label className={styles.field}>
               <span>Data prevista</span>
-              <input value={form.proData} onChange={(e) => set("proData", e.target.value)} placeholder="dd/mmm/aaaa" />
+              <input type="date" value={form.proData} onChange={(e) => set("proData", e.target.value)} />
             </label>
+            {promocaoParaOutroGestor && (
+              <div className={[styles.field, styles.full].join(" ")}>
+                <span>Novo departamento / gestor</span>
+                <div className={styles.info}>
+                  Como você é gestor(a) de <strong>{conta.depto}</strong> e é diferente do gestor atual, o sistema vai mover{" "}
+                  {colaboradorSelecionado?.nome} para o seu departamento e a sua gestão assim que a movimentação for aprovada — a
+                  etapa de aprovação do gestor atual é pulada, indo direto para o Diretor Industrial.
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -290,6 +307,10 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             <label className={[styles.field, styles.full].join(" ")}>
               <span>Novo cargo (se aplicável)</span>
               <input value={form.trfNovoCargo} onChange={(e) => set("trfNovoCargo", e.target.value)} list="cargos-existentes" />
+            </label>
+            <label className={styles.field}>
+              <span>Data prevista</span>
+              <input type="date" value={form.trfData} onChange={(e) => set("trfData", e.target.value)} />
             </label>
           </>
         )}

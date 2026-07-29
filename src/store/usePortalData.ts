@@ -199,7 +199,12 @@ export function usePortalData(): PortalData {
             reload();
           }
           if (atualizacaoRegistrada) {
-            await atualizarCargoDeptoNoSupabase(atualizacaoRegistrada.nome, atualizacaoRegistrada.novoCargo, atualizacaoRegistrada.novoDepto);
+            await atualizarCargoDeptoNoSupabase(
+              atualizacaoRegistrada.nome,
+              atualizacaoRegistrada.novoCargo,
+              atualizacaoRegistrada.novoDepto,
+              atualizacaoRegistrada.novoGestor,
+            );
             msg = `Cadastro de "${atualizacaoRegistrada.nome}" atualizado com o novo cargo/departamento nos dois portais.`;
             reload();
           }

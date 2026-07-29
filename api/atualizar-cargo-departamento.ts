@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireRH, supabaseAdmin } from "./_lib/adminAuth.js";
 
-/** Sincroniza cargo/departamento em `colaboradores` quando uma movimentação de
- * Promoção, Transferência ou Mudança de Função é concluída — RH-only, mesma
+/** Sincroniza cargo/departamento/gestor em `colaboradores` quando uma movimentação
+ * de Promoção, Transferência ou Mudança de Função é concluída — RH-only, mesma
  * service_role key das demais functions administrativas (RLS não libera
  * UPDATE direto do navegador). Só altera as colunas informadas. */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -18,10 +18,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const body = req.body as { nome?: string; novoCargo?: string; novoDepto?: string } | undefined;
+    const body = req.body as { nome?: string; novoCargo?: string; novoDepto?: string; novoGestor?: string } | undefined;
     const nome = String(body?.nome || "").trim();
     const novoCargo = String(body?.novoCargo || "").trim();
     const novoDepto = String(body?.novoDepto || "").trim();
+    const novoGestor = String(body?.novoGestor || "").trim();
 
     if (!nome) {
       res.status(400).json({ error: "Informe o nome do colaborador." });
@@ -31,8 +32,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const patch: Record<string, string> = {};
     if (novoCargo) patch.cargo = novoCargo;
     if (novoDepto) patch.departamento = novoDepto;
+    if (novoGestor) patch.gestor = novoGestor;
     if (Object.keys(patch).length === 0) {
-      res.status(400).json({ error: "Nada para atualizar (informe novoCargo e/ou novoDepto)." });
+      res.status(400).json({ error: "Nada para atualizar (informe novoCargo, novoDepto e/ou novoGestor)." });
       return;
     }
 
