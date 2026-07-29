@@ -213,7 +213,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             </label>
             <label className={styles.field}>
               <span>Salário atual</span>
-              <input value={form.proSalarioAtual} onChange={(e) => set("proSalarioAtual", e.target.value)} placeholder="R$ 4.800" />
+              <input value={form.proSalarioAtual} onChange={(e) => set("proSalarioAtual", e.target.value)} placeholder="R$ 0,00" />
             </label>
             <label className={styles.field}>
               <span>Alteração salarial</span>
@@ -225,7 +225,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             {form.proAltSal === "Sim" && (
               <label className={styles.field}>
                 <span>Novo salário</span>
-                <input value={form.proNovoSalario} onChange={(e) => set("proNovoSalario", e.target.value)} placeholder="R$ 5.300" />
+                <input value={form.proNovoSalario} onChange={(e) => set("proNovoSalario", e.target.value)} placeholder="R$ 0,00" />
               </label>
             )}
             <label className={styles.field}>
