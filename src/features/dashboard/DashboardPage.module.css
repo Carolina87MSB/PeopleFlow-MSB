@@ -189,6 +189,10 @@
   flex: none;
 }
 
+.custoTableWrap {
+  margin-top: 16px;
+}
+
 .integracoesDesc {
   margin: 0 0 16px;
   font-size: 12.5px;

@@ -5,6 +5,7 @@ export { Button } from "./Button";
 export { Card } from "./Card";
 export { KpiCard } from "./KpiCard";
 export { ProgressBar } from "./ProgressBar";
+export { BarChart } from "./BarChart";
 export { FilterChips } from "./FilterChips";
 export { EmptyState } from "./EmptyState";
 export { Modal } from "./Modal";

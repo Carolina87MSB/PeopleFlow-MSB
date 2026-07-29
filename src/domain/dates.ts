@@ -1,4 +1,5 @@
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const MESES_LABEL = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export function formatarDataAtual(d: Date = new Date()): string {
   return String(d.getDate()).padStart(2, "0") + "/" + MESES[d.getMonth()] + "/" + d.getFullYear();
@@ -15,6 +16,23 @@ export function formatarDataIso(iso: string | null | undefined): string {
   const mesIdx = parseInt(mes, 10) - 1;
   if (!ano || !dia || Number.isNaN(mesIdx) || !MESES[mesIdx]) return "—";
   return `${dia}/${MESES[mesIdx]}/${ano}`;
+}
+
+/** Converte "dd/mmm/aaaa" (formato usado no app, ver formatarDataIso) para o bucket "aaaa-mm" —
+ * usado para agrupar por mês (ex.: gráfico de custos de rescisão no Dashboard). */
+export function mesIsoFromDataBr(dataBr: string | null | undefined): string | null {
+  if (!dataBr) return null;
+  const [, mesAbrev, ano] = dataBr.split("/");
+  const mesIdx = MESES.indexOf((mesAbrev ?? "").toLowerCase());
+  if (!ano || mesIdx < 0) return null;
+  return `${ano}-${String(mesIdx + 1).padStart(2, "0")}`;
+}
+
+/** Rótulo curto para exibição em gráfico (ex.: "Jul/26") a partir de um bucket "aaaa-mm". */
+export function mesLabel(mesIso: string): string {
+  const [ano, mes] = mesIso.split("-");
+  const idx = parseInt(mes, 10) - 1;
+  return `${MESES_LABEL[idx] ?? mes}/${ano.slice(2)}`;
 }
 
 /** Tempo decorrido desde a admissão (ISO "yyyy-mm-dd", como vem do Postgres) até hoje, em texto

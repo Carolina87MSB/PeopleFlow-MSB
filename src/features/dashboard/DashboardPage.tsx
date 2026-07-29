@@ -4,9 +4,10 @@ import { Check, CheckCircle2, Plus, Search, X } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { NovaMovimentacaoModal } from "../../components/shared/NovaMovimentacaoModal";
 import { ReprovarModal } from "../../components/shared/ReprovarModal";
-import { Avatar, Badge, Button, Card, EmptyState, KpiCard, ProgressBar } from "../../components/ui";
+import { Avatar, BarChart, Badge, Button, Card, EmptyState, KpiCard, ProgressBar, tableStyles } from "../../components/ui";
 import { agregarCargos, agregarDepartamentos, contarPorGestor } from "../../domain/agregados";
 import { tipoColor } from "../../domain/colors";
+import { custosRescisaoPorMes } from "../../domain/desligados";
 import { podeAgir } from "../../domain/workflow";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
@@ -24,6 +25,8 @@ export function DashboardPage() {
     pendenciasFinanceirasCount,
     descricoesCargo,
     pendenciasAvaliacaoExperiencia,
+    desligados,
+    desligamentosFinanceiros,
     aprovarEtapa,
     reprovarEtapa,
   } = usePortalData();
@@ -58,6 +61,10 @@ export function DashboardPage() {
 
   const gestores = useMemo(() => [...contarPorGestor(colaboradoresVisiveis).entries()].sort((a, b) => b[1] - a[1]), [colaboradoresVisiveis]);
   const maxGestor = Math.max(1, ...gestores.map(([, count]) => count));
+
+  const custosRescisao = useMemo(() => custosRescisaoPorMes(desligados, desligamentosFinanceiros), [desligados, desligamentosFinanceiros]);
+  const custoRescisaoTotal = custosRescisao.reduce((acc, m) => acc + m.total, 0);
+  const qtdDesligamentosTotal = custosRescisao.reduce((acc, m) => acc + m.quantidade, 0);
 
   return (
     <>
@@ -188,6 +195,44 @@ export function DashboardPage() {
           </Card>
         )}
 
+        {podeVerCadastros && custosRescisao.length > 0 && (
+          <Card className={styles.spanAll}>
+            <div className={styles.pendHeader}>
+              <h3 className={styles.cardTitle}>Custos de rescisão por mês</h3>
+              <span className={styles.verTodas}>
+                {qtdDesligamentosTotal} desligamento{qtdDesligamentosTotal === 1 ? "" : "s"} · {money(custoRescisaoTotal)}
+              </span>
+            </div>
+            <BarChart data={custosRescisao.map((m) => ({ label: m.mesLabel, value: m.total, annotation: String(m.quantidade) }))} />
+            <div className={`${tableStyles.wrap} ${styles.custoTableWrap}`}>
+              <table className={tableStyles.table}>
+                <thead>
+                  <tr>
+                    <th>Mês</th>
+                    <th>Desligamentos</th>
+                    <th>Rescisão</th>
+                    <th>GRRF</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {custosRescisao.map((m) => (
+                    <tr key={m.mes}>
+                      <td>{m.mesLabel}</td>
+                      <td>{m.quantidade}</td>
+                      <td>{money(m.rescisao)}</td>
+                      <td>{money(m.grrf)}</td>
+                      <td>
+                        <strong>{money(m.total)}</strong>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
         <Card className={styles.spanAll}>
           <h3 className={styles.cardTitle}>Integrações futuras</h3>
           <p className={styles.integracoesDesc}>
@@ -220,4 +265,8 @@ export function DashboardPage() {
       )}
     </>
   );
+}
+
+function money(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

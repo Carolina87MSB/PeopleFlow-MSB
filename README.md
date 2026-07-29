@@ -136,6 +136,12 @@ Colaboradores desligados somem das telas normais (Colaboradores, headcount do Da
 
 Enquanto rescisão ou GRRF não estiverem preenchidos, o colaborador conta como **pendência** — aparece no badge do menu lateral e num card no Dashboard ("Desligamentos pendentes"), visível só para RH.
 
+### Custos de rescisão por mês (Dashboard, RH-only)
+
+Card com gráfico de barras (`src/components/ui/BarChart.tsx`, SVG puro, sem lib externa) mostrando o custo total de rescisão + GRRF por mês, com a quantidade de desligamentos daquele mês anotada acima de cada barra, seguido de uma tabela com o detalhamento (mês, quantidade, rescisão, GRRF, total). Só aparece quando há pelo menos um mês com desligamento.
+
+O mês de cada desligamento vem de `Colaborador.dataDesligamento` (formato `dd/mmm/aaaa`, ex. `"15/jul/2026"`) convertido para o bucket `aaaa-mm` por `mesIsoFromDataBr()` (`src/domain/dates.ts`); o custo de cada mês soma `valorRescisao`/`valorGrrf` de `peopleflow_desligamentos` para os colaboradores desligados naquele mês (`custosRescisaoPorMes()` em `src/domain/desligados.ts`). Um colaborador desligado sem rescisão/GRRF lançado ainda entra na contagem do mês, só não soma valor — ver a pendência da seção acima.
+
 ### Avaliação de experiência (`/avaliacoes`)
 
 Contrato de experiência da MSB é **45+45 dias** (duas etapas, nunca uma terceira renovação — regra da CLT). Cada etapa é uma avaliação de ~20 perguntas (escala 1 a 5, agrupadas por categoria — desempenho, conhecimento técnico, produtividade, cultura, relacionamento, comunicação, proatividade, assiduidade, segurança/qualidade — ver `src/data/perguntasAvaliacaoExperiencia.json`), preenchida pelo gestor imediato do colaborador.
