@@ -3,12 +3,10 @@ import { Header } from "../../components/layout/Header";
 import { Badge, EmptyState, StatusBadge, tableStyles } from "../../components/ui";
 import { MovimentacaoDetalhe } from "../../components/shared/MovimentacaoDetalhe";
 import { tipoColor } from "../../domain/colors";
-import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 
 export function AprovadasPage() {
   const { movimentacoesVisiveis } = usePortalData();
-  const { state } = usePortalStore();
   const [selecionado, setSelecionado] = useState<string | null>(null);
 
   const aprovadas = useMemo(
@@ -22,7 +20,7 @@ export function AprovadasPage() {
     return (
       <>
         <Header />
-        <MovimentacaoDetalhe movimentacao={movimentacao} cargosCustom={state.cargosCustom} onVoltar={() => setSelecionado(null)} />
+        <MovimentacaoDetalhe movimentacao={movimentacao} onVoltar={() => setSelecionado(null)} />
       </>
     );
   }

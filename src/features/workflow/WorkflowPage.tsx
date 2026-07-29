@@ -8,7 +8,6 @@ import { useToast } from "../../components/shared/ToastContext";
 import { Badge, Button, Card, Drawer, EmptyState, FilterChips, StatusBadge } from "../../components/ui";
 import { prioMeta, tipoColor } from "../../domain/colors";
 import { etapaAtual, podeAgir } from "../../domain/workflow";
-import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import type { Etapa, EtapaStatus, Movimentacao } from "../../types/domain";
 import styles from "./WorkflowPage.module.css";
@@ -72,7 +71,6 @@ function comentarioParaExibir(m: Movimentacao): Etapa | undefined {
 
 export function WorkflowPage() {
   const { conta, movimentacoesVisiveis, podeCriar, aprovarEtapa, reprovarEtapa } = usePortalData();
-  const { state } = usePortalStore();
   const { flash } = useToast();
   const [modalAberto, setModalAberto] = useState(false);
   const [filtro, setFiltro] = useState<string>("Em Aprovação");
@@ -237,7 +235,7 @@ export function WorkflowPage() {
 
       {movimentacaoDetalhe && (
         <Drawer onClose={() => setDetalheId(null)} header={<div className={styles.drawerHeaderTitulo}>Detalhes da movimentação</div>}>
-          <MovimentacaoDetalhe movimentacao={movimentacaoDetalhe} cargosCustom={state.cargosCustom} />
+          <MovimentacaoDetalhe movimentacao={movimentacaoDetalhe} />
         </Drawer>
       )}
 

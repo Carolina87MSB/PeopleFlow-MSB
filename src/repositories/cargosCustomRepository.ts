@@ -35,24 +35,6 @@ export async function getCargosCustom(): Promise<CargoCustom[]> {
   return (data as CargoCustomRow[]).map(fromRow);
 }
 
-export async function criarCargoCustom(c: CargoCustom): Promise<void> {
-  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
-
-  const { error } = await supabase.from("peopleflow_cargos_custom").upsert(
-    {
-      nome: c.nome,
-      depto: c.depto,
-      gestor: c.gestor,
-      vagas: c.vagas ?? "",
-      faixa: c.faixa ?? "",
-      nivel: c.nivel,
-      descricao: c.descricao,
-    },
-    { onConflict: "nome" },
-  );
-  if (error) throw new Error(`Falha ao criar cargo personalizado no Supabase: ${error.message}`);
-}
-
 export async function atualizarDescricaoCargoCustom(nome: string, descricao: "OK" | "Pendente"): Promise<void> {
   if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
 

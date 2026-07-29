@@ -5,7 +5,7 @@
 
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { SupabaseNotConfiguredError } from "./colaboradoresRepository";
-import type { AprovacaoFinal, DadoField, Etapa, Movimentacao, NovoCargoInfo, TipoCod } from "../types/domain";
+import type { AprovacaoFinal, DadoField, Etapa, Movimentacao, TipoCod } from "../types/domain";
 
 interface MovimentacaoRow {
   id: string;
@@ -21,7 +21,6 @@ interface MovimentacaoRow {
   justificativa: string | null;
   dados: DadoField[] | null;
   etapas: Etapa[] | null;
-  novo_cargo: NovoCargoInfo | null;
   aprovacao_final: AprovacaoFinal | null;
   legado: boolean;
 }
@@ -41,7 +40,6 @@ function fromRow(row: MovimentacaoRow): Movimentacao {
     justificativa: row.justificativa ?? undefined,
     dados: row.dados ?? undefined,
     etapas: row.etapas ?? [],
-    novoCargo: row.novo_cargo ?? undefined,
     aprovacaoFinal: row.aprovacao_final ?? null,
     legado: row.legado,
   };
@@ -62,7 +60,6 @@ function toRow(m: Movimentacao): Omit<MovimentacaoRow, "legado"> & { legado: boo
     justificativa: m.justificativa ?? "",
     dados: m.dados ?? [],
     etapas: m.etapas,
-    novo_cargo: m.novoCargo ?? null,
     aprovacao_final: m.aprovacaoFinal ?? null,
     legado: m.legado ?? false,
   };

@@ -67,24 +67,8 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
       return initialPortalState;
 
     case "APROVAR_ETAPA": {
-      const { movimentacoes, cargoRegistrado } = aprovarEtapa(state.movimentacoes, action.id);
-      const cargosCustom = cargoRegistrado
-        ? state.cargosCustom.some((c) => c.nome === cargoRegistrado!.nome)
-          ? state.cargosCustom
-          : [
-              ...state.cargosCustom,
-              {
-                nome: cargoRegistrado.nome,
-                depto: cargoRegistrado.depto,
-                gestor: cargoRegistrado.gestor,
-                vagas: cargoRegistrado.vagas,
-                faixa: cargoRegistrado.faixa,
-                nivel: "Novo cargo",
-                descricao: "Pendente" as const,
-              },
-            ]
-        : state.cargosCustom;
-      return { ...state, movimentacoes, cargosCustom };
+      const { movimentacoes } = aprovarEtapa(state.movimentacoes, action.id);
+      return { ...state, movimentacoes };
     }
 
     case "REPROVAR_ETAPA":

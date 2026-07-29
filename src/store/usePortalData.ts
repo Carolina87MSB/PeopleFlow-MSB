@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useToast } from "../components/shared/ToastContext";
-import { atualizarDescricaoCargoCustom, criarCargoCustom } from "../repositories/cargosCustomRepository";
+import { atualizarDescricaoCargoCustom } from "../repositories/cargosCustomRepository";
 import {
   atualizarAdmissao as atualizarAdmissaoNoSupabase,
   atualizarCargoDepto as atualizarCargoDeptoNoSupabase,
@@ -31,7 +31,7 @@ import { descendants, ehDiretorIndustrial } from "../domain/hierarquia";
 import { notificacaoConcluida, notificacaoNovaEtapa, notificacaoReprovada } from "../domain/notificacoes";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
-import { aprovarEtapa as aprovarEtapaDomain, cargoCustomDeNovoCargo, etapaAtual, reprovarEtapa as reprovarEtapaDomain } from "../domain/workflow";
+import { aprovarEtapa as aprovarEtapaDomain, etapaAtual, reprovarEtapa as reprovarEtapaDomain } from "../domain/workflow";
 import { usePortalStore } from "./PortalStoreContext";
 import { useConta } from "./useConta";
 import type {
@@ -177,7 +177,7 @@ export function usePortalData(): PortalData {
 
   const aprovarEtapaFn = useCallback(
     (id: string) => {
-      const { movimentacoes, cargoRegistrado, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado } = aprovarEtapaDomain(
+      const { movimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado } = aprovarEtapaDomain(
         state.movimentacoes,
         id,
       );
@@ -187,10 +187,6 @@ export function usePortalData(): PortalData {
         try {
           await atualizarMovimentacao(atualizada);
           let msg = "Etapa aprovada — movimentação atualizada.";
-          if (cargoRegistrado) {
-            await criarCargoCustom(cargoCustomDeNovoCargo(cargoRegistrado));
-            msg = `Cargo "${cargoRegistrado.nome}" aprovado e incorporado ao cadastro oficial.`;
-          }
           if (admissaoRegistrada) {
             const { jaExistia } = await criarPreCadastroNoSupabase(admissaoRegistrada);
             msg = jaExistia
@@ -278,8 +274,8 @@ export function usePortalData(): PortalData {
 
   const criarMovimentacaoFn = useCallback(
     async (form: NovaMovimentacaoForm) => {
-      const validacao = validarForm(form);
-      if (!validacao.ok) return { ok: false as const };
+      const validacao = validarForm(form, { me, colaboradores: state.colaboradores });
+      if (!validacao.ok) return { ok: false as const, error: validacao.error };
       const ctx: FormContext = { me, tipos: state.tipos, colaboradores: state.colaboradores, movimentacoes: state.movimentacoes };
       const movimentacao = construirMovimentacao(form, ctx);
       try {

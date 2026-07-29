@@ -55,7 +55,7 @@ export interface Conta {
   perfil: Perfil;
 }
 
-export type TipoCod = "ADM" | "PRO" | "SAL" | "TRF" | "FUN" | "DES" | "NOV" | "AFA";
+export type TipoCod = "ADM" | "PRO" | "SAL" | "TRF" | "DES" | "AFA";
 
 export interface TipoMovimentacao {
   cod: TipoCod;
@@ -93,16 +93,6 @@ export interface DadoField {
   value: string;
 }
 
-export interface NovoCargoInfo {
-  nome: string;
-  depto: string;
-  gestor: string;
-  vagas: string;
-  faixa: string;
-  data: string;
-  obs: string;
-}
-
 /** Snapshot dos dados do candidato no momento da solicitação — usado para criar o
  * pré-cadastro em `colaboradores` quando a movimentação de Admissão é concluída
  * (ver aprovarEtapa() em domain/workflow.ts e criarPreCadastro() no repositório). */
@@ -115,10 +105,10 @@ export interface AdmissaoInfo {
   admissaoIso: string;
 }
 
-/** Snapshot para sincronizar cargo/departamento em `colaboradores` quando uma
- * movimentação de Promoção, Transferência ou Mudança de Função é concluída —
- * ver aprovarEtapa() em domain/workflow.ts e atualizarCargoDepto() no
- * repositório. Campos ausentes (undefined) não são tocados no UPDATE. */
+/** Snapshot para sincronizar cargo/departamento/gestor em `colaboradores` quando
+ * uma movimentação de Promoção ou Transferência é concluída — ver aprovarEtapa()
+ * em domain/workflow.ts e atualizarCargoDepto() no repositório. Campos
+ * ausentes (undefined) não são tocados no UPDATE. */
 export interface AtualizacaoCargoDeptoInfo {
   nome: string;
   novoCargo?: string;
@@ -157,7 +147,6 @@ export interface Movimentacao {
   justificativa?: string;
   dados?: DadoField[];
   etapas: Etapa[];
-  novoCargo?: NovoCargoInfo;
   admissaoInfo?: AdmissaoInfo;
   atualizacaoInfo?: AtualizacaoCargoDeptoInfo;
   desligamentoInfo?: DesligamentoInfo;
@@ -171,13 +160,6 @@ export interface NovaMovimentacaoForm {
   destino: string;
   prioridade: Prioridade;
   justificativa: string;
-  cargoNome: string;
-  cargoDepto: string;
-  cargoGestor: string;
-  cargoVagas: string;
-  cargoFaixa: string;
-  cargoData: string;
-  cargoObs: string;
   admMotivo: string;
   admCandidato: string;
   admCargo: string;
@@ -188,18 +170,16 @@ export interface NovaMovimentacaoForm {
   admData: string;
   admFaixa: string;
   proNovoCargo: string;
-  proJustProg: string;
+  proSalarioAtual: string;
   proAltSal: "Sim" | "Não";
   proNovoSalario: string;
+  proMudaDepto: "Sim" | "Não";
+  proNovoDepto: string;
   proData: string;
   salAtual: string;
   salNovo: string;
   trfNovoDepto: string;
-  trfNovoCargo: string;
   trfData: string;
-  funNova: string;
-  funMotivo: string;
-  funTreinos: string;
   desMotivo: string;
   desData: string;
   desUltimoDia: string;

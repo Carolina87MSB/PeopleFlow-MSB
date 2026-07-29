@@ -53,7 +53,7 @@ Três perfis, com visão e permissões diferentes (ver `src/domain/permissoes.ts
 
 ### Exceção de aprovação para o CEO
 
-Daniel (CEO) e Yuri (Diretor Industrial) têm o mesmo perfil "Diretoria", mas **só o CEO** tem uma regra especial: toda movimentação que ele solicitar pula as etapas "Gestor Solicitante" e "Diretor Industrial" (e a etapa "CEO" da matriz de Novo Cargo, que seria ele aprovando a própria solicitação) e vai direto para o RH — em qualquer tipo de movimentação. Yuri, com o mesmo perfil, continua seguindo a matriz normal.
+Daniel (CEO) e Yuri (Diretor Industrial) têm o mesmo perfil "Diretoria", mas **só o CEO** tem uma regra especial: toda movimentação que ele solicitar pula as etapas "Gestor Solicitante" e "Diretor Industrial" e vai direto para o RH — em qualquer tipo de movimentação. Yuri, com o mesmo perfil, continua seguindo a matriz normal.
 
 A checagem é por **cargo** (`ehCEO()` em `src/domain/hierarquia.ts`, cargo começando com "CEO"), não por perfil nem por nome fixo — se um dia outra pessoa assumir o cargo de CEO, a regra passa a valer para ela automaticamente, sem precisar mexer no código. Implementado em `montarEtapas()` (`src/domain/workflow.ts`), que agora recebe quem está solicitando para decidir a matriz de etapas.
 
@@ -73,9 +73,11 @@ Isso funciona via duas Vercel Serverless Functions (`api/listar-acessos.ts`, `ap
 
 Na ficha do colaborador, o campo "Admissão" tem um botão de editar (ícone de lápis) visível só para RH — os demais campos (Cargo, Departamento, Vínculo, Nível, Gestor imediato) continuam somente leitura, pois hoje são cadastrados via `npm run seed:supabase` (ou pelo SST, no caso de Cargo/Departamento), não pela tela.
 
-### Autocomplete de cargo em "Nova movimentação"
+### Tipos de movimentação suportados
 
-Os campos de nome de cargo (ADM "Cargo solicitado", PRO "Novo cargo", TRF "Novo cargo (se aplicável)", NOV "Nome do cargo") sugerem os cargos já cadastrados (`colaboradores.cargo` + `peopleflow_cargos_custom.nome`) via `<datalist>` — continuam sendo texto livre, não um `<select>` fechado, porque "Nome do cargo" no tipo Novo Cargo precisa aceitar um nome que ainda não existe em lugar nenhum.
+Só 5 tipos existem hoje: **Admissão, Promoção, Alteração Salarial, Transferência, Desligamento** (`src/data/tiposMovimentacao.json`). Os tipos "Novo Cargo" e "Mudança de Função" foram removidos por completo do produto — não aparecem mais no seletor de tipo, não têm mais campos de formulário, e todo o código relacionado (`NovoCargoInfo`, a criação automática de `peopleflow_cargos_custom` ao aprovar um "Novo Cargo", a etapa extra "CEO" da matriz de aprovação) foi apagado, não só ocultado. `peopleflow_cargos_custom` continua existindo só para leitura (cargos que já tinham sido criados assim antes) — não há mais como criar um novo através do fluxo de movimentação.
+
+Em "Nova movimentação", "Cargo solicitado" (Admissão) continua sendo texto livre com sugestão via `<datalist>` dos cargos já cadastrados (`colaboradores.cargo` + `peopleflow_cargos_custom.nome`) — uma admissão pode pedir um cargo inédito. **"Novo cargo" de Promoção agora é um `<select>` fechado**, só cargos já existentes no sistema (sem "Novo Cargo" para criar um cargo do zero, não há mais como uma promoção introduzir um nome de cargo novo).
 
 ### Pré-cadastro automático ao concluir uma Admissão
 
@@ -83,29 +85,30 @@ O tipo de movimentação **ADM (Admissão)** agora também pede o **Vínculo** (
 
 **Isso é um pré-cadastro, não um cadastro completo**: `cpf` fica como string vazia (é `NOT NULL` no schema do SST, mas sem CPF real ainda) e `nascimento`/`epis`/`exames` ficam vazios — essas colunas continuam exclusivas do SST. Quem completa esses dados é a nova tela **Editar colaborador** no Portal SST (aba Colaboradores → ícone de lápis por linha — ver README dele). Por isso o botão "Novo colaborador" do Portal SST foi removido — ele nunca fez nada (era um `window.alert` de placeholder) e agora a entrada de novo colaborador é sempre pela Admissão aqui no PeopleFlow.
 
-### Sincronização de Promoção, Transferência, Mudança de Função e Desligamento
+### Sincronização de Promoção, Transferência e Desligamento
 
 Ao concluir a última etapa dessas movimentações, o PeopleFlow também atualiza `colaboradores` (mesma tabela, RH-only via service_role):
 
-- **Promoção**: grava o novo cargo (campo "Novo cargo" do formulário) e, quando aplicável (ver "Gestor de destino" abaixo), também o novo departamento e o novo gestor.
-- **Transferência**: grava o novo departamento e, se informado, o novo cargo — e o novo gestor quando aplicável (ver abaixo).
-- **Mudança de Função**: grava a nova função como novo cargo.
-- **Desligamento**: **não** grava `desligado = true` diretamente (isso mudou — ver seção abaixo). Em vez disso, cria uma linha em `peopleflow_desligamento_pendente` com nome/data/motivo/quem aprovou; a efetivação real fica com o Portal SST.
+- **Promoção**: grava o novo cargo, e — quando o colaborador muda de departamento (ver "Promoção com/sem mudança de departamento" abaixo) — também o novo departamento e o novo gestor.
+- **Transferência**: grava o novo departamento e o novo gestor (Transferência sempre muda de departamento — é o próprio conceito do tipo, ver abaixo).
+- **Desligamento**: **não** grava `desligado = true` diretamente. Em vez disso, cria uma linha em `peopleflow_desligamento_pendente` com nome/data/motivo/quem aprovou; a efetivação real fica com o Portal SST.
 
-Se o campo relevante do formulário ficar vazio (ex.: promoção sem preencher "Novo cargo"), nada é sincronizado — a movimentação conclui normalmente sem alterar o cadastro. **Alteração Salarial não sincroniza nada**: não há coluna de salário em `colaboradores`.
+Se o campo relevante do formulário ficar vazio, nada é sincronizado — a movimentação conclui normalmente sem alterar o cadastro. **Alteração Salarial não sincroniza nada**: não há coluna de salário em `colaboradores` — os campos "Salário atual"/"Novo salário" (em Alteração Salarial e agora também em Promoção) são só para constar no histórico da movimentação, preenchidos manualmente pelo gestor solicitante.
 
-Promoção/Transferência/Mudança de Função recarregam a lista de colaboradores do Supabase (`reload()`) logo em seguida, então a mudança aparece nos dois portais sem precisar dar F5.
+Promoção/Transferência recarregam a lista de colaboradores do Supabase (`reload()`) logo em seguida, então a mudança aparece nos dois portais sem precisar dar F5.
 
-#### Gestor de destino: quem abre a movimentação define o fluxo (Promoção e Transferência)
+#### Promoção: com ou sem mudança de departamento, numa única movimentação
 
-O gestor atual do colaborador nem sempre é quem deveria aprovar uma Promoção ou Transferência — quando é o **gestor do setor de destino** quem está movendo alguém para a própria equipe, o gestor atual não participa. `construirMovimentacao()` (`src/domain/formMovimentacao.ts`) detecta isso comparando quem está logado (`me`) com o gestor atual do colaborador (`colaborador.gestor`): se forem pessoas diferentes **e** quem abriu tiver perfil "Gestor" (ou seja, tem reporte direto — só assim consegue logar com esse perfil, ver `buildAccess()` em `src/domain/hierarquia.ts`), o app entende que é o gestor de destino:
+Antes, promover alguém para outro departamento exigia duas movimentações separadas (Promoção + Transferência). Agora **Promoção contempla os dois cenários dentro do mesmo formulário**, via a pergunta "O colaborador mudará de departamento?" (Sim/Não):
 
-- **Promoção**: o colaborador passa a ir automaticamente para o **departamento de quem abriu** a movimentação, e esse vira o novo gestor — sem precisar escolher nada a mais no formulário (ex.: Tainara, gestora de Produção, promove Fabiana da Qualidade para "Líder de Produção" — Fabiana muda de departamento e de gestora ao ser aprovado). Como o próprio ato de abrir já representa o aval desse gestor, a etapa **"Gestor Solicitante" é pulada** (`montarEtapas()` em `src/domain/workflow.ts`, mesmo mecanismo já usado para a exceção do CEO) — a movimentação nasce direto em "Diretor Industrial" e segue para RH.
-- **Transferência**: comportamento diferente de propósito — o formulário continua pedindo o "novo departamento" manualmente (não muda), mas o **gestor de origem continua aprovando normalmente** antes do Diretor Industrial (a etapa "Gestor Solicitante" NÃO é pulada aqui). Só o novo gestor (`gestor` em `colaboradores`) é atualizado automaticamente na aprovação final, para quem tiver aberto a transferência.
+- **Não** (promoção interna, mesmo departamento): só o gestor atual do colaborador pode abrir a movimentação — o app bloqueia o envio com um erro se `me` for outra pessoa. Fluxo normal de 3 etapas (Gestor Solicitante → Diretor Industrial → RH), gestor não muda.
+- **Sim** (promoção com mudança de departamento): o formulário pede "Departamento de destino" (lista) e preenche sozinho "Gestor de destino" (somente leitura, derivado de quem gerencia aquele departamento — ver `gestorDoDepartamento()` em `src/domain/hierarquia.ts`). Só esse gestor de destino pode abrir a movimentação — mesmo bloqueio de envio se não for ele. A etapa "Gestor Solicitante" continua existindo (não é pulada), mas passa a ser resolvida para o **gestor de destino**, não o atual — na prática, o gestor atual nunca precisa (nem consegue) aprovar essa movimentação.
 
-Quando o próprio gestor atual do colaborador abre a movimentação (o caso comum: promoção dentro do mesmo setor), nada disso se aplica — segue exatamente como antes (3 etapas, gestor não muda).
+**Transferência** ficou exclusiva para mudança de departamento **sem** evolução de cargo (ex.: "Auxiliar de Serviços Gerais" → "Auxiliar de Produção", mesmo nível) — sempre aberta pelo gestor de destino, mesma validação e mesmo mecanismo de "Gestor Solicitante" resolvido para ele. Se o cargo também muda de nível, a movimentação correta é Promoção (com mudança de departamento), não Transferência — o formulário de Transferência não tem mais campo de cargo.
 
-`AtualizacaoCargoDeptoInfo.novoGestor` (novo campo, `src/types/domain.ts`) carrega esse gestor de destino até a aprovação final, onde `api/atualizar-cargo-departamento.ts` grava a coluna `gestor` em `colaboradores` junto com cargo/departamento (RH-only, service_role — RLS não libera UPDATE direto do navegador).
+`gestorDoDepartamento()` resolve "o gestor de um departamento" pelo gestor mais frequente entre os colaboradores daquele departamento (não existe uma coluna própria "gestor do depto" — é sempre derivado de `colaboradores.gestor`). `validarForm()` (`src/domain/formMovimentacao.ts`) faz a validação de verdade (bloqueia o envio); o modal só mostra o mesmo aviso antes de enviar, para feedback imediato.
+
+`AtualizacaoCargoDeptoInfo.novoGestor` (`src/types/domain.ts`) carrega esse gestor de destino até a aprovação final, onde `api/atualizar-cargo-departamento.ts` grava a coluna `gestor` em `colaboradores` junto com cargo/departamento (RH-only, service_role — RLS não libera UPDATE direto do navegador).
 
 ### Desligamento em duas etapas (PeopleFlow aprova, SST efetiva)
 
@@ -235,7 +238,7 @@ Os dois portais MSB usam o **mesmo projeto Supabase**, mas cada um só lê/escre
 
 | Tabela | Dono | Quem lê | Quem escreve |
 |---|---|---|---|
-| `colaboradores` | Portal SST | SST (tudo) e PeopleFlow (nome/cargo/departamento/vinculo/depto_code/nivel/gestor/admissao/desligado/data_desligamento/motivo_desligamento/desligado_by) | Cadastro base: criado como pré-cadastro pelo PeopleFlow ao concluir uma Admissão (`api/criar-pre-cadastro.ts`), completado (cpf/nascimento) pelo SST na tela Editar colaborador. `cargo`/`departamento` também atualizados pelo PeopleFlow ao concluir Promoção/Transferência/Mudança de Função (`api/atualizar-cargo-departamento.ts`). `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by`: só o SST grava (botão "Desligar colaborador" dele) — o PeopleFlow nunca grava esses campos diretamente, só sinaliza via `peopleflow_desligamento_pendente` abaixo. `admissao` também editável manualmente pelo RH via `api/atualizar-admissao.ts`. Fora essas exceções pontuais (todas RH-only, via service role), PeopleFlow só lê `colaboradores` |
+| `colaboradores` | Portal SST | SST (tudo) e PeopleFlow (nome/cargo/departamento/vinculo/depto_code/nivel/gestor/admissao/desligado/data_desligamento/motivo_desligamento/desligado_by) | Cadastro base: criado como pré-cadastro pelo PeopleFlow ao concluir uma Admissão (`api/criar-pre-cadastro.ts`), completado (cpf/nascimento) pelo SST na tela Editar colaborador. `cargo`/`departamento`/`gestor` também atualizados pelo PeopleFlow ao concluir Promoção/Transferência (`api/atualizar-cargo-departamento.ts`). `desligado`/`data_desligamento`/`motivo_desligamento`/`desligado_by`: só o SST grava (botão "Desligar colaborador" dele) — o PeopleFlow nunca grava esses campos diretamente, só sinaliza via `peopleflow_desligamento_pendente` abaixo. `admissao` também editável manualmente pelo RH via `api/atualizar-admissao.ts`. Fora essas exceções pontuais (todas RH-only, via service role), PeopleFlow só lê `colaboradores` |
 | `peopleflow_desligamento_pendente` | Portal PeopleFlow | Os dois — PeopleFlow escreve, SST lê e apaga | PeopleFlow cria/atualiza a linha ao concluir uma movimentação de Desligamento (direto do navegador). SST lê para mostrar "Desligamento pendente" no Dashboard dele e apaga a linha ao confirmar o desligamento de verdade (tela "Desligar colaborador") |
 | `peopleflow_movimentacoes` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |
 | `peopleflow_cargos_custom` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow (direto do navegador, usuário autenticado) |

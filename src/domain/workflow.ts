@@ -1,16 +1,6 @@
 import { formatarDataAtual, formatarHoraAtual } from "./dates";
-import { ehCEO, perfilOf, roleApprover } from "./hierarquia";
-import type {
-  AdmissaoInfo,
-  AtualizacaoCargoDeptoInfo,
-  CargoCustom,
-  Colaborador,
-  DesligamentoInfo,
-  Etapa,
-  Movimentacao,
-  NovoCargoInfo,
-  TipoMovimentacao,
-} from "../types/domain";
+import { ehCEO, roleApprover } from "./hierarquia";
+import type { AdmissaoInfo, AtualizacaoCargoDeptoInfo, Colaborador, DesligamentoInfo, Etapa, Movimentacao, TipoMovimentacao } from "../types/domain";
 
 export function nextId(movimentacoes: Movimentacao[]): string {
   const nums = movimentacoes
@@ -35,19 +25,15 @@ export function podeAgir(m: Movimentacao, me: string): boolean {
  * Monta as etapas de aprovação de uma movimentação. Quando quem solicita é o
  * CEO (ver ehCEO() em hierarquia.ts — checagem por cargo, não por perfil,
  * já que "Diretoria" também cobre o Diretor Industrial), a matriz normal é
- * ignorada: a movimentação pula Gestor Solicitante e Diretor Industrial (e a
- * etapa "CEO" da matriz de Novo Cargo, que seria o próprio solicitante se
- * aprovando) e vai direto para RH — regra válida para todos os tipos.
+ * ignorada: a movimentação pula Gestor Solicitante e Diretor Industrial e
+ * vai direto para RH — regra válida para todos os tipos.
  *
- * Exceção parecida para Promoção: quando quem abre é um gestor (perfil
- * "Gestor", ou seja, tem reporte direto — ver buildAccess()) DIFERENTE do
- * gestor atual do colaborador, entende-se que é o gestor do setor de
- * destino promovendo alguém para a própria equipe — o próprio ato de abrir
- * já é o aval dele, então a etapa "Gestor Solicitante" é pulada e a
- * movimentação nasce direto em "Diretor Industrial". Transferência NÃO
- * segue essa exceção — o gestor de origem sempre aprova antes do Diretor,
- * mesmo quando é o gestor de destino quem abre (ver construirMovimentacao()
- * em formMovimentacao.ts para a troca de departamento/gestor em si).
+ * Para Promoção e Transferência, `solicitanteGestor` já vem resolvido pelo
+ * chamador (construirMovimentacao() em formMovimentacao.ts) para o gestor
+ * correto de cada caso — gestor atual (promoção sem mudança de
+ * departamento) ou gestor do departamento de destino (promoção com mudança
+ * de departamento, e toda transferência) — nunca é pulado, sempre precisa
+ * de aprovação explícita.
  */
 export function montarEtapas(
   tipo: TipoMovimentacao,
@@ -56,17 +42,7 @@ export function montarEtapas(
   colaboradores: Colaborador[],
 ): Etapa[] {
   const solicitanteColab = colaboradores.find((c) => c.nome === solicitanteNome);
-  const promocaoParaOutroGestor =
-    tipo.cod === "PRO" &&
-    !!solicitanteGestor &&
-    solicitanteNome !== solicitanteGestor &&
-    !!solicitanteColab &&
-    perfilOf(solicitanteColab) === "Gestor";
-  const papeis = ehCEO(solicitanteColab)
-    ? ["RH"]
-    : promocaoParaOutroGestor
-      ? tipo.etapas.filter((papel) => papel !== "Gestor Solicitante")
-      : tipo.etapas;
+  const papeis = ehCEO(solicitanteColab) ? ["RH"] : tipo.etapas;
   return papeis.map((papel, i) => ({
     papel,
     aprovador: roleApprover(papel, { solicitanteGestor }),
@@ -79,7 +55,6 @@ export function montarEtapas(
 
 export interface ApproveResult {
   movimentacoes: Movimentacao[];
-  cargoRegistrado: NovoCargoInfo | null;
   admissaoRegistrada: AdmissaoInfo | null;
   atualizacaoRegistrada: AtualizacaoCargoDeptoInfo | null;
   desligamentoRegistrado: DesligamentoInfo | null;
@@ -87,7 +62,6 @@ export interface ApproveResult {
 
 /** Advances the first pending/in-review etapa to "Aprovado"; completes the movement once the last etapa clears. */
 export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): ApproveResult {
-  let cargoRegistrado: NovoCargoInfo | null = null;
   let admissaoRegistrada: AdmissaoInfo | null = null;
   let atualizacaoRegistrada: AtualizacaoCargoDeptoInfo | null = null;
   let desligamentoRegistrado: DesligamentoInfo | null = null;
@@ -110,12 +84,11 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
     if (idx + 1 < etapas.length) {
       etapas[idx + 1].status = "Em análise";
     } else {
-      status = m.tipoCod === "ADM" || m.tipoCod === "NOV" ? "Concluído" : "Aprovado";
+      status = m.tipoCod === "ADM" ? "Concluído" : "Aprovado";
       aprovacaoFinal = { data: etapas[idx].data, hora: etapas[idx].hora! };
-      if (m.tipoCod === "NOV" && m.novoCargo) cargoRegistrado = m.novoCargo;
       if (m.tipoCod === "ADM" && m.admissaoInfo?.candidato) admissaoRegistrada = m.admissaoInfo;
       if (
-        (m.tipoCod === "PRO" || m.tipoCod === "TRF" || m.tipoCod === "FUN") &&
+        (m.tipoCod === "PRO" || m.tipoCod === "TRF") &&
         m.atualizacaoInfo &&
         (m.atualizacaoInfo.novoCargo || m.atualizacaoInfo.novoDepto || m.atualizacaoInfo.novoGestor)
       ) {
@@ -127,7 +100,7 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
     return { ...m, etapas, status, aprovacaoFinal };
   });
 
-  return { movimentacoes: novasMovimentacoes, cargoRegistrado, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado };
+  return { movimentacoes: novasMovimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado };
 }
 
 export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comentario: string): Movimentacao[] {
@@ -144,18 +117,6 @@ export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comenta
     etapas[idx].comentario = comentario;
     return { ...m, etapas, status: "Reprovado" };
   });
-}
-
-export function cargoCustomDeNovoCargo(info: NovoCargoInfo): CargoCustom {
-  return {
-    nome: info.nome,
-    depto: info.depto,
-    gestor: info.gestor,
-    vagas: info.vagas,
-    faixa: info.faixa,
-    nivel: "Novo cargo",
-    descricao: "Pendente",
-  };
 }
 
 export function calcularPercentual(atual: string, novo: string): string {

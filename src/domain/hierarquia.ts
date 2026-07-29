@@ -70,6 +70,31 @@ export function buildAccess(colaboradores: Colaborador[]): Conta[] {
     }));
 }
 
+/**
+ * Gestor "do" departamento — usado para preencher automaticamente "Gestor de
+ * destino" em Promoção/Transferência e para validar quem pode abrir essas
+ * movimentações. Não existe uma coluna própria para isso: o departamento não
+ * tem um gestor único cadastrado à parte, então a heurística é pegar o
+ * gestor mais frequente entre os colaboradores daquele departamento (o caso
+ * comum, um departamento por gestor, sempre resolve sem ambiguidade).
+ */
+export function gestorDoDepartamento(colaboradores: Colaborador[], depto: string): string | null {
+  const contagem = new Map<string, number>();
+  colaboradores.forEach((c) => {
+    if (c.depto !== depto || !c.gestor) return;
+    contagem.set(c.gestor, (contagem.get(c.gestor) || 0) + 1);
+  });
+  let melhor: string | null = null;
+  let melhorCount = 0;
+  contagem.forEach((count, gestor) => {
+    if (count > melhorCount) {
+      melhor = gestor;
+      melhorCount = count;
+    }
+  });
+  return melhor;
+}
+
 /** Walks the manager tree to find every employee reporting up to `nome`, directly or transitively. */
 export function descendants(colaboradores: Colaborador[], nome: string): Set<string> {
   const children = new Map<string, string[]>();

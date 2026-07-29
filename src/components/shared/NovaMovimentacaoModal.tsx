@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
 import { blankForm } from "../../domain/formMovimentacao";
 import { contarPorGestor } from "../../domain/agregados";
+import { gestorDoDepartamento } from "../../domain/hierarquia";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { useToast } from "./ToastContext";
@@ -11,7 +12,7 @@ import { Modal } from "../ui/Modal";
 import type { NovaMovimentacaoForm, TipoCod } from "../../types/domain";
 import styles from "./NovaMovimentacaoModal.module.css";
 
-const TIPOS_SEM_CADASTRO_PREVIO: TipoCod[] = ["NOV", "ADM"];
+const TIPOS_SEM_CADASTRO_PREVIO: TipoCod[] = ["ADM"];
 
 export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const { state } = usePortalStore();
@@ -57,13 +58,28 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
 
   const tipo = form.tipo;
   const colaboradorSelecionado = colaboradoresParaSelecao.find((c) => c.nome === form.colab);
-  // Só para Promoção: gestor logado diferente do gestor atual do colaborador
-  // selecionado é entendido como "gestor do setor de destino" — mesma regra
-  // de gestorDeDestino em construirMovimentacao()/formMovimentacao.ts. Aqui é
-  // só para avisar quem está preenchendo, o cálculo que vale de fato acontece
-  // ao montar a movimentação.
-  const promocaoParaOutroGestor =
-    tipo === "PRO" && !!colaboradorSelecionado && conta.perfil === "Gestor" && conta.nome !== colaboradorSelecionado.gestor;
+
+  // "Gestor de destino" é sempre derivado do departamento escolhido (não de
+  // quem está logado) — mesma função usada na validação de verdade em
+  // validarForm()/construirMovimentacao() (domain/formMovimentacao.ts). Aqui
+  // só serve para preencher o campo somente-leitura e avisar quem preenche
+  // se não é a pessoa certa para enviar esta movimentação.
+  const proGestorDestino = form.proNovoDepto ? gestorDoDepartamento(colaboradores, form.proNovoDepto) : null;
+  const trfGestorDestino = form.trfNovoDepto ? gestorDoDepartamento(colaboradores, form.trfNovoDepto) : null;
+
+  function avisoGestorErrado(): string | null {
+    if (tipo === "PRO" && form.proMudaDepto === "Sim" && proGestorDestino && proGestorDestino !== conta.nome) {
+      return `Somente ${proGestorDestino}, gestor(a) do departamento de destino, pode enviar esta movimentação.`;
+    }
+    if (tipo === "PRO" && form.proMudaDepto === "Não" && colaboradorSelecionado && colaboradorSelecionado.gestor !== conta.nome) {
+      return `Somente ${colaboradorSelecionado.gestor}, gestor(a) atual de ${colaboradorSelecionado.nome}, pode enviar esta promoção.`;
+    }
+    if (tipo === "TRF" && trfGestorDestino && trfGestorDestino !== conta.nome) {
+      return `Somente ${trfGestorDestino}, gestor(a) do departamento de destino, pode enviar esta movimentação.`;
+    }
+    return null;
+  }
+  const avisoGestor = avisoGestorErrado();
 
   return (
     <Modal
@@ -116,58 +132,6 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
               ))}
             </select>
           </label>
-        )}
-
-        {tipo === "NOV" && (
-          <>
-            <label className={[styles.field, styles.full].join(" ")}>
-              <span>Nome do cargo</span>
-              <input
-                value={form.cargoNome}
-                onChange={(e) => set("cargoNome", e.target.value)}
-                placeholder="Ex.: Analista de Dados Industriais"
-                list="cargos-existentes"
-              />
-            </label>
-            <label className={styles.field}>
-              <span>Departamento</span>
-              <select value={form.cargoDepto} onChange={(e) => set("cargoDepto", e.target.value)}>
-                <option value="">Selecione…</option>
-                {departamentos.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={styles.field}>
-              <span>Gestor responsável</span>
-              <select value={form.cargoGestor} onChange={(e) => set("cargoGestor", e.target.value)}>
-                <option value="">Selecione…</option>
-                {gestores.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={styles.field}>
-              <span>Quantidade de vagas</span>
-              <input value={form.cargoVagas} onChange={(e) => set("cargoVagas", e.target.value)} placeholder="1" />
-            </label>
-            <label className={styles.field}>
-              <span>Faixa salarial</span>
-              <input value={form.cargoFaixa} onChange={(e) => set("cargoFaixa", e.target.value)} placeholder="R$ 6.500 – R$ 8.200" />
-            </label>
-            <label className={styles.field}>
-              <span>Data prevista de implantação</span>
-              <input value={form.cargoData} onChange={(e) => set("cargoData", e.target.value)} placeholder="dd/mmm/aaaa" />
-            </label>
-            <label className={[styles.field, styles.full].join(" ")}>
-              <span>Observações</span>
-              <input value={form.cargoObs} onChange={(e) => set("cargoObs", e.target.value)} />
-            </label>
-          </>
         )}
 
         {tipo === "ADM" && (
@@ -238,11 +202,18 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             </label>
             <label className={styles.field}>
               <span>Novo cargo</span>
-              <input value={form.proNovoCargo} onChange={(e) => set("proNovoCargo", e.target.value)} list="cargos-existentes" />
+              <select value={form.proNovoCargo} onChange={(e) => set("proNovoCargo", e.target.value)}>
+                <option value="">Selecione…</option>
+                {cargosExistentes.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </label>
-            <label className={[styles.field, styles.full].join(" ")}>
-              <span>Justificativa de progressão</span>
-              <input value={form.proJustProg} onChange={(e) => set("proJustProg", e.target.value)} />
+            <label className={styles.field}>
+              <span>Salário atual</span>
+              <input value={form.proSalarioAtual} onChange={(e) => set("proSalarioAtual", e.target.value)} placeholder="R$ 4.800" />
             </label>
             <label className={styles.field}>
               <span>Alteração salarial</span>
@@ -254,23 +225,43 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             {form.proAltSal === "Sim" && (
               <label className={styles.field}>
                 <span>Novo salário</span>
-                <input value={form.proNovoSalario} onChange={(e) => set("proNovoSalario", e.target.value)} />
+                <input value={form.proNovoSalario} onChange={(e) => set("proNovoSalario", e.target.value)} placeholder="R$ 5.300" />
               </label>
             )}
             <label className={styles.field}>
-              <span>Data prevista</span>
+              <span>O colaborador mudará de departamento?</span>
+              <select value={form.proMudaDepto} onChange={(e) => set("proMudaDepto", e.target.value as "Sim" | "Não")}>
+                <option value="Não">Não</option>
+                <option value="Sim">Sim</option>
+              </select>
+            </label>
+            {form.proMudaDepto === "Sim" && (
+              <>
+                <label className={styles.field}>
+                  <span>Departamento de origem</span>
+                  <input value={colaboradorSelecionado?.depto ?? "—"} disabled />
+                </label>
+                <label className={styles.field}>
+                  <span>Departamento de destino</span>
+                  <select value={form.proNovoDepto} onChange={(e) => set("proNovoDepto", e.target.value)}>
+                    <option value="">Selecione…</option>
+                    {departamentos.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styles.field}>
+                  <span>Gestor de destino</span>
+                  <input value={proGestorDestino ?? "—"} disabled />
+                </label>
+              </>
+            )}
+            <label className={styles.field}>
+              <span>Data prevista da movimentação</span>
               <input type="date" value={form.proData} onChange={(e) => set("proData", e.target.value)} />
             </label>
-            {promocaoParaOutroGestor && (
-              <div className={[styles.field, styles.full].join(" ")}>
-                <span>Novo departamento / gestor</span>
-                <div className={styles.info}>
-                  Como você é gestor(a) de <strong>{conta.depto}</strong> e é diferente do gestor atual, o sistema vai mover{" "}
-                  {colaboradorSelecionado?.nome} para o seu departamento e a sua gestão assim que a movimentação for aprovada — a
-                  etapa de aprovação do gestor atual é pulada, indo direto para o Diretor Industrial.
-                </div>
-              </div>
-            )}
           </>
         )}
 
@@ -304,34 +295,13 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
                 ))}
               </select>
             </label>
-            <label className={[styles.field, styles.full].join(" ")}>
-              <span>Novo cargo (se aplicável)</span>
-              <input value={form.trfNovoCargo} onChange={(e) => set("trfNovoCargo", e.target.value)} list="cargos-existentes" />
+            <label className={styles.field}>
+              <span>Gestor de destino</span>
+              <input value={trfGestorDestino ?? "—"} disabled />
             </label>
             <label className={styles.field}>
               <span>Data prevista</span>
               <input type="date" value={form.trfData} onChange={(e) => set("trfData", e.target.value)} />
-            </label>
-          </>
-        )}
-
-        {tipo === "FUN" && (
-          <>
-            <label className={styles.field}>
-              <span>Função atual</span>
-              <input value={colaboradorSelecionado?.cargo ?? "—"} disabled />
-            </label>
-            <label className={styles.field}>
-              <span>Nova função</span>
-              <input value={form.funNova} onChange={(e) => set("funNova", e.target.value)} />
-            </label>
-            <label className={[styles.field, styles.full].join(" ")}>
-              <span>Motivo da alteração</span>
-              <input value={form.funMotivo} onChange={(e) => set("funMotivo", e.target.value)} />
-            </label>
-            <label className={[styles.field, styles.full].join(" ")}>
-              <span>Treinamentos obrigatórios</span>
-              <input value={form.funTreinos} onChange={(e) => set("funTreinos", e.target.value)} />
             </label>
           </>
         )}
@@ -370,9 +340,10 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
         </label>
       </div>
 
-      {/* Sugestões de cargos já cadastrados para os campos de nome de cargo acima — o campo
-       * continua sendo texto livre (essencial para "Nome do cargo" no tipo Novo Cargo, que
-       * precisa aceitar um nome que ainda não existe), só ganha autocomplete. */}
+      {avisoGestor && <div className={styles.info}>{avisoGestor}</div>}
+
+      {/* Sugestão de cargos já cadastrados para "Cargo solicitado" (Admissão) — campo
+       * continua sendo texto livre, já que uma admissão pode pedir um cargo inédito. */}
       <datalist id="cargos-existentes">
         {cargosExistentes.map((cargo) => (
           <option key={cargo} value={cargo} />

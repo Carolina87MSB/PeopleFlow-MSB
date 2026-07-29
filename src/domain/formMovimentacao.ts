@@ -1,5 +1,5 @@
 import { formatarDataAtual, formatarDataIso } from "./dates";
-import { perfilOf } from "./hierarquia";
+import { gestorDoDepartamento } from "./hierarquia";
 import { calcularPercentual, montarEtapas, nextId } from "./workflow";
 import type { Colaborador, DadoField, Movimentacao, NovaMovimentacaoForm, TipoMovimentacao } from "../types/domain";
 
@@ -10,13 +10,6 @@ export function blankForm(): NovaMovimentacaoForm {
     destino: "",
     prioridade: "Média",
     justificativa: "",
-    cargoNome: "",
-    cargoDepto: "",
-    cargoGestor: "",
-    cargoVagas: "",
-    cargoFaixa: "",
-    cargoData: "",
-    cargoObs: "",
     admMotivo: "",
     admCandidato: "",
     admCargo: "",
@@ -27,18 +20,16 @@ export function blankForm(): NovaMovimentacaoForm {
     admData: "",
     admFaixa: "",
     proNovoCargo: "",
-    proJustProg: "",
+    proSalarioAtual: "",
     proAltSal: "Não",
     proNovoSalario: "",
+    proMudaDepto: "Não",
+    proNovoDepto: "",
     proData: "",
     salAtual: "",
     salNovo: "",
     trfNovoDepto: "",
-    trfNovoCargo: "",
     trfData: "",
-    funNova: "",
-    funMotivo: "",
-    funTreinos: "",
     desMotivo: "",
     desData: "",
     desUltimoDia: "",
@@ -54,23 +45,54 @@ export interface FormContext {
   movimentacoes: Movimentacao[];
 }
 
-export type FormValidation = { ok: true } | { ok: false };
+export type FormValidation = { ok: true } | { ok: false; error?: string };
 
-/** Validates required fields per movement type, mirroring the prototype's per-type guard clauses. */
-export function validarForm(f: NovaMovimentacaoForm): FormValidation {
-  if (f.tipo === "NOV") {
-    if (!f.cargoNome.trim() || !f.cargoDepto || !f.cargoGestor || !f.justificativa.trim()) return { ok: false };
-    return { ok: true };
-  }
+/**
+ * Validates required fields per movement type, plus a hard access-control check
+ * for Promoção (com mudança de departamento) e Transferência: só o gestor do
+ * departamento de destino pode abrir essas movimentações (e, para Promoção sem
+ * mudança de departamento, só o gestor atual do colaborador) — não é uma
+ * sugestão, o app bloqueia o envio se `me` não for essa pessoa.
+ */
+export function validarForm(f: NovaMovimentacaoForm, ctx: { me: string; colaboradores: Colaborador[] }): FormValidation {
   if (f.tipo === "ADM") {
     if (!f.admCargo.trim() || !f.admDepto || !f.admGestor || !f.admVinculo || !f.justificativa.trim()) return { ok: false };
     return { ok: true };
   }
   if (!f.tipo || !f.colab || !f.justificativa.trim()) return { ok: false };
+
+  const colab = ctx.colaboradores.find((c) => c.nome === f.colab);
+
+  if (f.tipo === "PRO") {
+    if (!f.proNovoCargo.trim() || !f.proData) return { ok: false };
+    if (f.proAltSal === "Sim" && !f.proNovoSalario.trim()) return { ok: false };
+    if (f.proMudaDepto === "Sim") {
+      if (!f.proNovoDepto) return { ok: false };
+      const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.proNovoDepto);
+      if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
+      if (gestorDestino !== ctx.me) {
+        return { ok: false, error: `Somente ${gestorDestino}, gestor(a) de ${f.proNovoDepto}, pode abrir esta movimentação.` };
+      }
+    } else if (colab && colab.gestor !== ctx.me) {
+      return { ok: false, error: `Somente ${colab.gestor}, gestor(a) atual de ${colab.nome}, pode abrir esta promoção.` };
+    }
+    return { ok: true };
+  }
+
+  if (f.tipo === "TRF") {
+    if (!f.trfNovoDepto || !f.trfData) return { ok: false };
+    const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.trfNovoDepto);
+    if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
+    if (gestorDestino !== ctx.me) {
+      return { ok: false, error: `Somente ${gestorDestino}, gestor(a) de ${f.trfNovoDepto}, pode abrir esta movimentação.` };
+    }
+    return { ok: true };
+  }
+
   return { ok: true };
 }
 
-/** Builds a new Movimentacao from the wizard form, mirroring the prototype's submitNova() branch-per-tipo logic. */
+/** Builds a new Movimentacao from the wizard form. */
 export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext): Movimentacao {
   const { me, tipos, colaboradores, movimentacoes } = ctx;
   const id = nextId(movimentacoes);
@@ -85,38 +107,6 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     justificativa: f.justificativa.trim(),
     ...extra,
   });
-
-  if (f.tipo === "NOV") {
-    const tipo = tipos.find((t) => t.cod === "NOV")!;
-    const etapas = montarEtapas(tipo, f.cargoGestor, me, colaboradores);
-    const dados: DadoField[] = [
-      { label: "Nome do cargo", value: f.cargoNome.trim() },
-      { label: "Departamento", value: f.cargoDepto },
-      { label: "Gestor responsável", value: f.cargoGestor },
-      { label: "Quantidade de vagas", value: f.cargoVagas || "1" },
-      { label: "Faixa salarial", value: f.cargoFaixa || "A definir" },
-      { label: "Data prevista de implantação", value: f.cargoData || "A definir" },
-      { label: "Observações", value: f.cargoObs || "—" },
-    ];
-    return base({
-      tipo: tipo.nome,
-      tipoCod: "NOV",
-      colaborador: f.cargoNome.trim(),
-      depto: f.cargoDepto,
-      resumo: "Criação de cargo — " + (f.cargoVagas || "1") + " vaga(s)" + (f.cargoFaixa ? " · " + f.cargoFaixa : ""),
-      etapas,
-      dados,
-      novoCargo: {
-        nome: f.cargoNome.trim(),
-        depto: f.cargoDepto,
-        gestor: f.cargoGestor,
-        vagas: f.cargoVagas || "1",
-        faixa: f.cargoFaixa || "A definir",
-        data: f.cargoData || "",
-        obs: f.cargoObs || "",
-      },
-    });
-  }
 
   if (f.tipo === "ADM") {
     const tipo = tipos.find((t) => t.cod === "ADM")!;
@@ -151,44 +141,35 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
 
   const tipo = tipos.find((t) => t.cod === f.tipo)!;
   const colab = colaboradores.find((c) => c.nome === f.colab);
-  // Sempre o gestor imediato REAL do colaborador (colab.gestor), nunca quem
-  // está preenchendo o formulário — desde que "Nova movimentação" passou a
-  // listar todos os colaboradores (não só a equipe de quem solicita), um
-  // Gestor pode abrir uma movimentação para alguém que não é seu reporte
-  // direto, e nesse caso ele NÃO deve virar o aprovador de "Gestor
-  // Solicitante" no lugar do gestor de fato.
-  const solic = colab ? colab.gestor : "A definir";
-  const solicitanteColab = colaboradores.find((c) => c.nome === me);
-  // Um gestor (perfil "Gestor", ver perfilOf() — só quem tem reporte direto
-  // chega a logar com esse perfil) diferente do gestor atual do colaborador
-  // abrindo a movimentação é entendido como "gestor do setor de destino":
-  // o colaborador passa a ir para o departamento/gestão de quem abriu.
-  // Vale tanto para Promoção (pula a etapa "Gestor Solicitante", ver
-  // montarEtapas()) quanto para Transferência (mantém as 3 etapas normais —
-  // o gestor de origem continua aprovando antes do Diretor).
-  const gestorDeDestino =
-    !!colab && !!solicitanteColab && me !== solic && perfilOf(solicitanteColab) === "Gestor" ? solicitanteColab : null;
-  const etapas = montarEtapas(tipo, solic, me, colaboradores);
   const cargoAtual = colab ? colab.cargo : "—";
   const deptoAtual = colab ? colab.depto : "—";
   let resumo = "";
   let dados: DadoField[] = [];
   let depto = deptoAtual;
+  // "Gestor Solicitante" nunca é o gestor atual quando a movimentação muda o
+  // colaborador de departamento — nesses casos, validarForm() já garantiu que
+  // `me` É o gestor do departamento de destino, então ele mesmo vira o
+  // aprovador dessa etapa (ver montarEtapas() em workflow.ts — a etapa
+  // continua existindo, só muda quem a resolve).
+  let solic = colab ? colab.gestor : "A definir";
 
   if (f.tipo === "PRO") {
-    const novoDepto = gestorDeDestino?.depto;
-    if (novoDepto) depto = novoDepto;
-    resumo = cargoAtual + " → " + (f.proNovoCargo || "novo cargo") + (novoDepto ? " (" + novoDepto + ")" : "");
+    if (f.proMudaDepto === "Sim") {
+      solic = me;
+      depto = f.proNovoDepto;
+    }
+    resumo = cargoAtual + " → " + (f.proNovoCargo || "novo cargo") + (f.proMudaDepto === "Sim" ? " (" + f.proNovoDepto + ")" : "");
     dados = [
       { label: "Cargo atual", value: cargoAtual },
       { label: "Novo cargo", value: f.proNovoCargo || "—" },
-      ...(gestorDeDestino
+      { label: "Salário atual", value: f.proSalarioAtual || "—" },
+      ...(f.proMudaDepto === "Sim"
         ? ([
-            { label: "Novo departamento", value: gestorDeDestino.depto },
-            { label: "Novo gestor", value: gestorDeDestino.nome },
+            { label: "Departamento de origem", value: deptoAtual },
+            { label: "Departamento de destino", value: f.proNovoDepto },
+            { label: "Gestor de destino", value: me },
           ] as DadoField[])
         : []),
-      { label: "Justificativa de progressão", value: f.proJustProg || "—" },
       { label: "Alteração salarial", value: f.proAltSal || "Não" },
       { label: "Novo salário", value: f.proAltSal === "Sim" ? f.proNovoSalario || "A definir" : "—" },
       { label: "Data prevista", value: f.proData ? formatarDataIso(f.proData) : "A definir" },
@@ -201,22 +182,14 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
       { label: "Percentual de alteração", value: calcularPercentual(f.salAtual, f.salNovo) },
     ];
   } else if (f.tipo === "TRF") {
-    resumo = deptoAtual + " → " + (f.trfNovoDepto || "novo depto") + (f.trfNovoCargo ? " (" + f.trfNovoCargo + ")" : "");
+    solic = me;
+    depto = f.trfNovoDepto;
+    resumo = deptoAtual + " → " + (f.trfNovoDepto || "novo depto");
     dados = [
       { label: "Departamento atual", value: deptoAtual },
       { label: "Novo departamento", value: f.trfNovoDepto || "—" },
-      { label: "Cargo atual", value: cargoAtual },
-      { label: "Novo cargo (se aplicável)", value: f.trfNovoCargo || "—" },
-      ...(gestorDeDestino ? ([{ label: "Novo gestor", value: gestorDeDestino.nome }] as DadoField[]) : []),
+      { label: "Gestor de destino", value: me },
       { label: "Data prevista", value: f.trfData ? formatarDataIso(f.trfData) : "A definir" },
-    ];
-  } else if (f.tipo === "FUN") {
-    resumo = cargoAtual + " → " + (f.funNova || "nova função");
-    dados = [
-      { label: "Função atual", value: cargoAtual },
-      { label: "Nova função", value: f.funNova || "—" },
-      { label: "Motivo da alteração", value: f.funMotivo || "—" },
-      { label: "Treinamentos obrigatórios", value: f.funTreinos || "—" },
     ];
   } else if (f.tipo === "DES") {
     resumo = "Desligamento — " + (f.desMotivo || "") + " · " + cargoAtual;
@@ -229,6 +202,8 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     ];
   }
 
+  const etapas = montarEtapas(tipo, solic, me, colaboradores);
+
   let atualizacaoInfo: Movimentacao["atualizacaoInfo"];
   let desligamentoInfo: Movimentacao["desligamentoInfo"];
 
@@ -236,18 +211,11 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     atualizacaoInfo = {
       nome: f.colab,
       novoCargo: f.proNovoCargo.trim(),
-      novoDepto: gestorDeDestino?.depto,
-      novoGestor: gestorDeDestino?.nome,
+      novoDepto: f.proMudaDepto === "Sim" ? f.proNovoDepto : undefined,
+      novoGestor: f.proMudaDepto === "Sim" ? me : undefined,
     };
-  } else if (f.tipo === "TRF" && (f.trfNovoDepto || f.trfNovoCargo.trim())) {
-    atualizacaoInfo = {
-      nome: f.colab,
-      novoCargo: f.trfNovoCargo.trim() || undefined,
-      novoDepto: f.trfNovoDepto || undefined,
-      novoGestor: gestorDeDestino?.nome,
-    };
-  } else if (f.tipo === "FUN" && f.funNova.trim()) {
-    atualizacaoInfo = { nome: f.colab, novoCargo: f.funNova.trim() };
+  } else if (f.tipo === "TRF" && f.trfNovoDepto) {
+    atualizacaoInfo = { nome: f.colab, novoDepto: f.trfNovoDepto, novoGestor: me };
   } else if (f.tipo === "DES") {
     desligamentoInfo = { nome: f.colab, motivo: f.desMotivo.trim(), dataIso: f.desUltimoDia || f.desData };
   }

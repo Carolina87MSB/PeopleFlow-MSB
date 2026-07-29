@@ -1,12 +1,11 @@
 import { Avatar } from "../ui";
 import { tipoColor } from "../../domain/colors";
 import { docsFor } from "../../domain/documentos";
-import type { CargoCustom, DadoField, Movimentacao } from "../../types/domain";
+import type { DadoField, Movimentacao } from "../../types/domain";
 import styles from "./MovimentacaoDetalhe.module.css";
 
 interface MovimentacaoDetalheProps {
   movimentacao: Movimentacao;
-  cargosCustom: CargoCustom[];
   /** Quando informado, mostra o link "← Voltar" no topo (uso em página cheia — ver AprovadasPage.tsx).
    * Omitido quando usado dentro de um Drawer, que já tem seu próprio fechamento. */
   onVoltar?: () => void;
@@ -15,7 +14,7 @@ interface MovimentacaoDetalheProps {
 /** Ficha completa de uma movimentação — todos os campos do formulário, justificativa,
  * trilha de aprovações e documentos gerados. Usada tanto em Movimentações aprovadas
  * (página cheia) quanto no Workflow de aprovação (dentro de um Drawer, "Ver detalhes"). */
-export function MovimentacaoDetalhe({ movimentacao: m, cargosCustom, onVoltar }: MovimentacaoDetalheProps) {
+export function MovimentacaoDetalhe({ movimentacao: m, onVoltar }: MovimentacaoDetalheProps) {
   const dados = m.dados ?? [];
   const dadosLabels = new Set(dados.map((d) => d.label));
 
@@ -29,7 +28,7 @@ export function MovimentacaoDetalhe({ movimentacao: m, cargosCustom, onVoltar }:
   ].filter((c) => !dadosLabels.has(c.label));
 
   const camposGrid = [...dados, ...camposBase];
-  const documentos = docsFor(m, cargosCustom);
+  const documentos = docsFor(m);
 
   return (
     <div className={styles.detalhe}>
