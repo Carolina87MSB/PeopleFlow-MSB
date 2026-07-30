@@ -128,6 +128,10 @@ Isso significa: entre a aprovação no PeopleFlow e a confirmação no SST, o co
 
 Diferente das demais escritas do PeopleFlow (que vão para tabelas próprias, prefixadas `peopleflow_`), esta é a **primeira gravação direta na tabela `colaboradores`** vinda do próprio app — e como a RLS dela só libera `select` para `authenticated`, a escrita passa por uma Vercel Serverless Function RH-only (`api/atualizar-admissao.ts`, mesmo padrão do `api/desligar-colaborador.ts` do SST): confirma que quem chamou é RH e então usa a `SUPABASE_SERVICE_ROLE_KEY` para atualizar só a coluna `admissao`. **Só funciona em produção (Vercel) ou com `vercel dev`** — em `npm run dev` (Vite puro) a chamada falha, o que é esperado localmente.
 
+### Histórico do colaborador (`/colaboradores`)
+
+A ficha de um colaborador (clique numa linha da tabela) tem uma seção **"Histórico"** ao final, listando toda movimentação já solicitada para ele — admissão, promoção, transferência, alteração salarial, desligamento — mais recente primeiro, com tipo, resumo, status e data. Filtra `movimentacoes` por `colaborador === nome` (mesma fonte usada em Workflow/Aprovadas, sem tabela nova); clicar num item abre a mesma ficha completa (`MovimentacaoDetalhe.tsx`) num Drawer por cima do Drawer do colaborador.
+
 ### Ver detalhes e reprovação com justificativa (`/workflow`, `/dashboard`)
 
 Cada card de movimentação (Workflow de aprovação e o widget "Aprovações pendentes" do Dashboard) tem um botão **"Ver detalhes"** que abre a mesma ficha completa usada em Movimentações aprovadas (`src/components/shared/MovimentacaoDetalhe.tsx`, extraído para ser reaproveitado nos dois lugares) dentro de um Drawer — todos os campos do formulário, justificativa da solicitação, trilha de aprovações e documentos gerados, sem sair da lista.

@@ -2,15 +2,16 @@ import { useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { Pencil, Search } from "lucide-react";
 import { Header } from "../../components/layout/Header";
-import { Avatar, Badge, Button, Drawer, EmptyState, FilterChips, tableStyles } from "../../components/ui";
+import { MovimentacaoDetalhe } from "../../components/shared/MovimentacaoDetalhe";
+import { Avatar, Badge, Button, Drawer, EmptyState, FilterChips, StatusBadge, tableStyles } from "../../components/ui";
 import { contarPorGestor } from "../../domain/agregados";
-import { nivelMeta } from "../../domain/colors";
+import { nivelMeta, tipoColor } from "../../domain/colors";
 import { norm } from "../../domain/hierarquia";
 import { usePortalData } from "../../store/usePortalData";
 import styles from "./ColaboradoresPage.module.css";
 
 export function ColaboradoresPage() {
-  const { colaboradoresListagem, podeVerColaboradores, podeEditarAdmissao, atualizarAdmissao } = usePortalData();
+  const { colaboradoresListagem, movimentacoes, podeVerColaboradores, podeEditarAdmissao, atualizarAdmissao } = usePortalData();
   const [searchParams, setSearchParams] = useSearchParams();
   const [depto, setDepto] = useState("Todos");
   const [busca, setBusca] = useState("");
@@ -19,6 +20,7 @@ export function ColaboradoresPage() {
   const [editandoAdmissao, setEditandoAdmissao] = useState(false);
   const [admissaoRascunho, setAdmissaoRascunho] = useState("");
   const [salvandoAdmissao, setSalvandoAdmissao] = useState(false);
+  const [historicoDetalheId, setHistoricoDetalheId] = useState<string | null>(null);
 
   const deptos = useMemo(
     () => ["Todos", ...new Set(colaboradoresListagem.map((c) => c.depto))],
@@ -48,6 +50,19 @@ export function ColaboradoresPage() {
     [colaboradoresListagem, selecionado],
   );
 
+  /** Toda movimentação (promoção, transferência, alteração salarial, admissão,
+   * desligamento) já solicitada para este colaborador — mais recente primeiro
+   * (ids são sequenciais, ver nextId() em domain/workflow.ts). */
+  const historicoColaborador = useMemo(() => {
+    if (!colaboradorSelecionado) return [];
+    return movimentacoes.filter((m) => m.colaborador === colaboradorSelecionado.nome).sort((a, b) => (a.id < b.id ? 1 : -1));
+  }, [movimentacoes, colaboradorSelecionado]);
+
+  const movimentacaoHistoricoDetalhe = useMemo(
+    () => (historicoDetalheId ? movimentacoes.find((m) => m.id === historicoDetalheId) ?? null : null),
+    [historicoDetalheId, movimentacoes],
+  );
+
   if (!podeVerColaboradores) return <Navigate to="/dashboard" replace />;
 
   function handleGestorChange(nome: string) {
@@ -61,11 +76,13 @@ export function ColaboradoresPage() {
   function abrirDrawer(nome: string) {
     setSelecionado(nome);
     setEditandoAdmissao(false);
+    setHistoricoDetalheId(null);
   }
 
   function fecharDrawer() {
     setSelecionado(null);
     setEditandoAdmissao(false);
+    setHistoricoDetalheId(null);
   }
 
   function iniciarEdicaoAdmissao() {
@@ -235,6 +252,42 @@ export function ColaboradoresPage() {
               <span className={styles.detalheValor}>{colaboradorSelecionado.tempoDeEmpresa}</span>
             </div>
           </div>
+
+          <div className={styles.historicoSection}>
+            <h4 className={styles.historicoTitulo}>Histórico</h4>
+            {historicoColaborador.length === 0 ? (
+              <p className={styles.historicoVazio}>Nenhuma movimentação registrada.</p>
+            ) : (
+              <div className={styles.historicoList}>
+                {historicoColaborador.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={styles.historicoItem}
+                    onClick={() => setHistoricoDetalheId(m.id)}
+                  >
+                    <span className={styles.historicoTipo} style={{ background: tipoColor(m.tipoCod) }}>
+                      {m.tipoCod}
+                    </span>
+                    <span className={styles.historicoInfo}>
+                      <span className={styles.historicoResumo}>{m.resumo}</span>
+                      <span className={styles.historicoData}>{m.aprovacaoFinal?.data ?? m.dataSolicitacao}</span>
+                    </span>
+                    <StatusBadge status={m.status} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </Drawer>
+      )}
+
+      {movimentacaoHistoricoDetalhe && (
+        <Drawer
+          onClose={() => setHistoricoDetalheId(null)}
+          header={<div className={styles.drawerHeaderTitulo}>Detalhes da movimentação</div>}
+        >
+          <MovimentacaoDetalhe movimentacao={movimentacaoHistoricoDetalhe} />
         </Drawer>
       )}
     </>
