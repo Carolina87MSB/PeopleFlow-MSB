@@ -122,15 +122,22 @@ export function roleApprover(papel: string, ctx: { solicitanteGestor?: string })
   return ctx.solicitanteGestor || "A definir";
 }
 
-const CARGO_CEO = /^ceo\b/;
+// "\bceo\b" (não "^ceo\b"): o cargo real do CEO é "Diretor Geral - CEO", não
+// só "CEO" — um prefixo estrito nunca bateu com ele (bug real, corrigido
+// depois de M-2026-004 precisar de um patch manual em
+// supabase/corrigir_fluxo_m2026_004.local.sql porque ehCEO() retornava false
+// e a etapa "Diretor Industrial" não era pulada). "CEO" como palavra isolada
+// em qualquer posição do cargo (prefixo, sufixo, etc.) já basta.
+const CARGO_CEO = /\bceo\b/;
 
 /**
- * true só para quem tem o cargo "CEO" (hoje, só o Daniel) — deliberadamente
- * NÃO usa perfilOf()/"Diretoria", já que esse perfil também cobre o Diretor
- * Industrial (Yuri) e os dois não podem ser tratados igual aqui: só o CEO
- * pula Gestor Solicitante/Diretor Industrial ao solicitar uma movimentação
- * (ver montarEtapas() em workflow.ts). Cargo, não nome — se um dia outra
- * pessoa assumir o cargo de CEO, a regra já vale pra ela automaticamente.
+ * true só para quem tem "CEO" no cargo (hoje, só o Daniel, cargo "Diretor
+ * Geral - CEO") — deliberadamente NÃO usa perfilOf()/"Diretoria", já que esse
+ * perfil também cobre o Diretor Industrial (Yuri) e os dois não podem ser
+ * tratados igual aqui: só o CEO pula Gestor Solicitante/Diretor Industrial ao
+ * solicitar uma movimentação (ver montarEtapas() em workflow.ts). Cargo, não
+ * nome — se um dia outra pessoa assumir o cargo de CEO, a regra já vale pra
+ * ela automaticamente.
  */
 export function ehCEO(colaborador: Colaborador | undefined): boolean {
   return Boolean(colaborador && CARGO_CEO.test(norm(colaborador.cargo)));

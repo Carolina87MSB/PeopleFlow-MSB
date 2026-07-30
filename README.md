@@ -55,7 +55,9 @@ Três perfis, com visão e permissões diferentes (ver `src/domain/permissoes.ts
 
 Daniel (CEO) e Yuri (Diretor Industrial) têm o mesmo perfil "Diretoria", mas **só o CEO** tem uma regra especial: toda movimentação que ele solicitar pula as etapas "Gestor Solicitante" e "Diretor Industrial" e vai direto para o RH — em qualquer tipo de movimentação. Yuri, com o mesmo perfil, continua seguindo a matriz normal.
 
-A checagem é por **cargo** (`ehCEO()` em `src/domain/hierarquia.ts`, cargo começando com "CEO"), não por perfil nem por nome fixo — se um dia outra pessoa assumir o cargo de CEO, a regra passa a valer para ela automaticamente, sem precisar mexer no código. Implementado em `montarEtapas()` (`src/domain/workflow.ts`), que agora recebe quem está solicitando para decidir a matriz de etapas.
+A checagem é por **cargo** (`ehCEO()` em `src/domain/hierarquia.ts`, "CEO" como palavra isolada em qualquer posição do cargo — o cargo real do Daniel é "Diretor Geral - CEO", não só "CEO"), não por perfil nem por nome fixo — se um dia outra pessoa assumir o cargo de CEO, a regra passa a valer para ela automaticamente, sem precisar mexer no código. Implementado em `montarEtapas()` (`src/domain/workflow.ts`), que agora recebe quem está solicitando para decidir a matriz de etapas.
+
+**Bug corrigido em 2026-07-30**: a regex original exigia que o cargo *começasse* com "CEO" (`/^ceo\b/`), o que nunca bateu com "Diretor Geral - CEO" — `ehCEO()` retornava `false` para o Daniel, e a etapa "Diretor Industrial" não era pulada. Isso já tinha exigido um patch manual numa movimentação real (`supabase/corrigir_fluxo_m2026_004.local.sql`, admissão de Emanoela) antes de a causa raiz ser encontrada. Trocado para `/\bceo\b/` (agora casa "CEO" em qualquer posição do cargo, não só no início).
 
 ### Visão total do Workflow e de Aprovadas para o Diretor Industrial
 
