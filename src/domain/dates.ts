@@ -5,6 +5,12 @@ export function formatarDataAtual(d: Date = new Date()): string {
   return String(d.getDate()).padStart(2, "0") + "/" + MESES[d.getMonth()] + "/" + d.getFullYear();
 }
 
+/** Data de hoje em ISO ("aaaa-mm-dd") — usado para comparar com "Data prevista"
+ * de movimentações (atualizacaoInfo.dataPrevistaIso), que também vem em ISO. */
+export function hojeIso(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function formatarHoraAtual(d: Date = new Date()): string {
   return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }

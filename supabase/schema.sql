@@ -64,6 +64,22 @@ comment on table public.peopleflow_movimentacoes is
 comment on column public.peopleflow_movimentacoes.etapas is 'Array de { papel, aprovador, status, data, hora, comentario } — ver Etapa em src/types/domain.ts.';
 comment on column public.peopleflow_movimentacoes.dados is 'Array de { label, value } com os campos específicos do tipo de movimentação.';
 
+-- Antes, admissaoInfo/atualizacaoInfo/desligamentoInfo só existiam em memória
+-- (nunca eram persistidos) — qualquer aprovação final feita numa sessão
+-- diferente de quem abriu a movimentação (o caso normal: Gestor, Diretor e
+-- RH em dias/sessões diferentes) perdia esses dados e a sincronização com
+-- `colaboradores` nunca disparava. As 3 colunas abaixo corrigem isso.
+alter table public.peopleflow_movimentacoes
+  add column if not exists admissao_info jsonb,
+  add column if not exists atualizacao_info jsonb,
+  add column if not exists desligamento_info jsonb,
+  add column if not exists sincronizado_em timestamptz;
+
+comment on column public.peopleflow_movimentacoes.admissao_info is 'AdmissaoInfo (candidato/cargo/depto/gestor/vinculo/admissaoIso) — só para tipo_cod = ADM. Fixado na criação, nunca muda depois.';
+comment on column public.peopleflow_movimentacoes.atualizacao_info is 'AtualizacaoCargoDeptoInfo (nome/novoCargo/novoDepto/novoGestor/dataPrevistaIso) — só para PRO/TRF. Fixado na criação, nunca muda depois.';
+comment on column public.peopleflow_movimentacoes.desligamento_info is 'DesligamentoInfo (nome/motivo/dataIso) — só para tipo_cod = DES. Fixado na criação, nunca muda depois.';
+comment on column public.peopleflow_movimentacoes.sincronizado_em is 'Quando a sincronização de cargo/departamento/gestor com `colaboradores` foi de fato aplicada (PRO/TRF). Null = aprovada mas ainda não efetivada — respeita a "Data prevista" em atualizacao_info.dataPrevistaIso antes de aplicar.';
+
 create table if not exists public.peopleflow_cargos_custom (
   nome text primary key,
   depto text not null,

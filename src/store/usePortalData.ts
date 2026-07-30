@@ -3,7 +3,6 @@ import { useToast } from "../components/shared/ToastContext";
 import { atualizarDescricaoCargoCustom } from "../repositories/cargosCustomRepository";
 import {
   atualizarAdmissao as atualizarAdmissaoNoSupabase,
-  atualizarCargoDepto as atualizarCargoDeptoNoSupabase,
   criarPreCadastro as criarPreCadastroNoSupabase,
   criarSolicitacaoDesligamento as criarSolicitacaoDesligamentoNoSupabase,
 } from "../repositories/colaboradoresRepository";
@@ -12,7 +11,11 @@ import {
   atualizarCampoDescricaoCargo as atualizarCampoDescricaoCargoNoSupabase,
   getHistoricoDescricaoCargo,
 } from "../repositories/descricoesCargoRepository";
-import { atualizarMovimentacao, criarMovimentacao as criarMovimentacaoNoSupabase } from "../repositories/movimentacoesRepository";
+import {
+  atualizarMovimentacao,
+  criarMovimentacao as criarMovimentacaoNoSupabase,
+  efetivarSincronizacoesPendentes,
+} from "../repositories/movimentacoesRepository";
 import {
   criarAvaliacaoExperiencia as criarAvaliacaoExperienciaNoSupabase,
   criarDispensaAvaliacaoExperiencia as criarDispensaAvaliacaoExperienciaNoSupabase,
@@ -195,14 +198,16 @@ export function usePortalData(): PortalData {
             reload();
           }
           if (atualizacaoRegistrada) {
-            await atualizarCargoDeptoNoSupabase(
-              atualizacaoRegistrada.nome,
-              atualizacaoRegistrada.novoCargo,
-              atualizacaoRegistrada.novoDepto,
-              atualizacaoRegistrada.novoGestor,
-            );
-            msg = `Cadastro de "${atualizacaoRegistrada.nome}" atualizado com o novo cargo/departamento nos dois portais.`;
-            reload();
+            const [efetivada] = await efetivarSincronizacoesPendentes([atualizada]);
+            if (efetivada.sincronizadoEm) {
+              msg = `Cadastro de "${atualizacaoRegistrada.nome}" atualizado com o novo cargo/departamento nos dois portais.`;
+              reload();
+            } else {
+              const previstaLabel = atualizacaoRegistrada.dataPrevistaIso ? formatarDataIso(atualizacaoRegistrada.dataPrevistaIso) : null;
+              msg = previstaLabel
+                ? `Movimentação de "${atualizacaoRegistrada.nome}" aprovada — cargo/departamento serão atualizados automaticamente em ${previstaLabel}.`
+                : `Movimentação de "${atualizacaoRegistrada.nome}" aprovada — cargo/departamento serão atualizados na próxima carga do portal.`;
+            }
           }
           if (desligamentoRegistrado) {
             await criarSolicitacaoDesligamentoNoSupabase(

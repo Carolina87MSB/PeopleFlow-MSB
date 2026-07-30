@@ -213,9 +213,10 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
       novoCargo: f.proNovoCargo.trim(),
       novoDepto: f.proMudaDepto === "Sim" ? f.proNovoDepto : undefined,
       novoGestor: f.proMudaDepto === "Sim" ? me : undefined,
+      dataPrevistaIso: f.proData || undefined,
     };
   } else if (f.tipo === "TRF" && f.trfNovoDepto) {
-    atualizacaoInfo = { nome: f.colab, novoDepto: f.trfNovoDepto, novoGestor: me };
+    atualizacaoInfo = { nome: f.colab, novoDepto: f.trfNovoDepto, novoGestor: me, dataPrevistaIso: f.trfData || undefined };
   } else if (f.tipo === "DES") {
     desligamentoInfo = { nome: f.colab, motivo: f.desMotivo.trim(), dataIso: f.desUltimoDia || f.desData };
   }

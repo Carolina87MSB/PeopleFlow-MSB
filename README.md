@@ -97,6 +97,14 @@ Se o campo relevante do formulário ficar vazio, nada é sincronizado — a movi
 
 Promoção/Transferência recarregam a lista de colaboradores do Supabase (`reload()`) logo em seguida, então a mudança aparece nos dois portais sem precisar dar F5.
 
+#### `atualizacaoInfo`/`admissaoInfo`/`desligamentoInfo` são persistidos (fixado em 2026-07-30)
+
+Até essa correção, esses três objetos (que carregam o que precisa ser sincronizado com `colaboradores` — novo cargo, departamento, gestor etc.) só existiam **em memória**, no navegador de quem clicava em aprovar. Como o fluxo normal tem Gestor Solicitante → Diretor Industrial → RH aprovando em sessões/dias diferentes, essa informação se perdia antes da aprovação final chegar, e a sincronização silenciosamente nunca disparava — sem nenhum erro visível. `peopleflow_movimentacoes` ganhou 3 colunas jsonb (`admissao_info`, `atualizacao_info`, `desligamento_info`) gravadas na criação da movimentação (`criarMovimentacao()`/`toRow()`) e lidas de volta em qualquer sessão (`fromRow()`) — corrigindo a perda de dados entre sessões.
+
+#### Promoção/Transferência só efetivam na "Data prevista" do formulário
+
+A aprovação final de uma Promoção/Transferência **não** aplica mais a troca de cargo/departamento na hora — ela respeita a "Data prevista da movimentação" escolhida no formulário (`AtualizacaoCargoDeptoInfo.dataPrevistaIso`, coluna `sincronizado_em` marca quando a sincronização realmente aconteceu). Não existe job/cron neste projeto (Vercel serverless + Supabase), então a checagem roda a cada carga de dados do app (`efetivarSincronizacoesPendentes()` em `src/repositories/movimentacoesRepository.ts`, chamada em `PortalStoreContext.tsx` no load inicial/reload e em `usePortalData.ts` logo após a aprovação final): toda movimentação "Aprovado" de PRO/TRF cuja data prevista já chegou (ou ficou em branco) e que ainda não foi sincronizada tem a troca aplicada automaticamente em `colaboradores` — sem precisar de nenhuma ação manual do RH. Se a data ainda não chegou, o toast avisa a data em que vai ser aplicada, e a movimentação fica "Aprovado" normalmente até lá.
+
 #### Promoção: com ou sem mudança de departamento, numa única movimentação
 
 Antes, promover alguém para outro departamento exigia duas movimentações separadas (Promoção + Transferência). Agora **Promoção contempla os dois cenários dentro do mesmo formulário**, via a pergunta "O colaborador mudará de departamento?" (Sim/Não):

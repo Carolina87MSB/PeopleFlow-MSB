@@ -117,6 +117,11 @@ export interface AtualizacaoCargoDeptoInfo {
    * atual do colaborador (ex.: gestor do setor de destino promovendo/transferindo
    * alguém para a própria equipe) — ver montarEtapas()/construirMovimentacao(). */
   novoGestor?: string;
+  /** "Data prevista da movimentação" (aaaa-mm-dd) escolhida no formulário — a
+   * sincronização com `colaboradores` só é aplicada nesta data (ou depois),
+   * nunca antes, mesmo que a aprovação final já tenha acontecido. Ver
+   * efetivarSincronizacoesPendentes() em movimentacoesRepository.ts. */
+  dataPrevistaIso?: string;
 }
 
 /** Snapshot para desligar de fato em `colaboradores` quando uma movimentação
@@ -151,6 +156,10 @@ export interface Movimentacao {
   atualizacaoInfo?: AtualizacaoCargoDeptoInfo;
   desligamentoInfo?: DesligamentoInfo;
   aprovacaoFinal?: AprovacaoFinal | null;
+  /** Quando a sincronização de cargo/departamento/gestor com `colaboradores` foi
+   * de fato aplicada (só PRO/TRF). Null/undefined = aprovada mas ainda esperando
+   * a "Data prevista" (atualizacaoInfo.dataPrevistaIso) chegar. */
+  sincronizadoEm?: string | null;
   legado?: boolean;
 }
 
