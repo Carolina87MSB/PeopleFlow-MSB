@@ -1,6 +1,16 @@
+import { norm } from "./hierarquia";
 import type { DescricaoCargo } from "../types/domain";
 
 export type CampoDescricaoCargo = Exclude<keyof DescricaoCargo, "cargoNome" | "updatedAt" | "updatedBy">;
+
+/** Cargos que não precisam do formulário POP-RH-001 (ex.: a alta liderança/
+ * fundação da empresa, sem descrição de cargo formal) — a tela Cargos mostra
+ * "Não aplicável" no lugar do convite "+ Adicionar descrição". */
+const CARGOS_SEM_DESCRICAO_OBRIGATORIA = new Set(["diretor geral - ceo"]);
+
+export function precisaDescricaoCargo(cargoNome: string): boolean {
+  return !CARGOS_SEM_DESCRICAO_OBRIGATORIA.has(norm(cargoNome));
+}
 
 export interface CampoMeta {
   key: CampoDescricaoCargo;

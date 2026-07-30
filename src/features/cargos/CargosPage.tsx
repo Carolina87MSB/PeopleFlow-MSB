@@ -5,6 +5,7 @@ import { Header } from "../../components/layout/Header";
 import { Badge, tableStyles } from "../../components/ui";
 import { agregarCargos } from "../../domain/agregados";
 import { nivelMeta } from "../../domain/colors";
+import { precisaDescricaoCargo } from "../../domain/descricaoCargo";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
@@ -80,6 +81,8 @@ export function CargosPage() {
                           {c.descricao === "OK" ? "OK" : "Pendente"}
                         </Badge>
                       </button>
+                    ) : !precisaDescricaoCargo(c.nome) ? (
+                      "Não aplicável"
                     ) : podeEditarDescricaoCargo ? (
                       <button type="button" className={styles.descricaoLink} onClick={() => setCargoAberto(c.nome)}>
                         + Adicionar descrição
