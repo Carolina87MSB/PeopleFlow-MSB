@@ -1,11 +1,16 @@
 import type {
+  AvaliacaoDesempenho,
   AvaliacaoExperiencia,
   CargoCustom,
   Colaborador,
+  CompetenciaComportamental,
+  ConfigAvaliacaoDesempenho,
   DescricaoCargo,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
+  KpiCargo,
   Movimentacao,
+  Pdi,
   Perfil2Info,
   TipoMovimentacao,
 } from "../types/domain";
@@ -22,6 +27,11 @@ export type PortalAction =
       descricoesCargo: DescricaoCargo[];
       avaliacoesExperiencia: AvaliacaoExperiencia[];
       dispensasAvaliacaoExperiencia: DispensaAvaliacaoExperiencia[];
+      configAvaliacaoDesempenho: ConfigAvaliacaoDesempenho | null;
+      competenciasComportamentais: CompetenciaComportamental[];
+      kpisCargo: KpiCargo[];
+      avaliacoesDesempenho: AvaliacaoDesempenho[];
+      pdi: Pdi[];
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
@@ -33,4 +43,9 @@ export type PortalAction =
   | { type: "SALVAR_FECHAMENTO_FINANCEIRO"; desligamento: DesligamentoFinanceiro }
   | { type: "ATUALIZAR_DESCRICAO_CARGO"; descricao: DescricaoCargo }
   | { type: "ATUALIZAR_ADMISSAO_COLABORADOR"; nome: string; admissao: string; admissaoIso: string; tempoDeEmpresa: string }
+  | { type: "ATUALIZAR_CONFIG_AVALIACAO_DESEMPENHO"; config: ConfigAvaliacaoDesempenho }
+  | { type: "SALVAR_COMPETENCIA_COMPORTAMENTAL"; competencia: CompetenciaComportamental }
+  | { type: "CRIAR_KPI_CARGO"; kpi: KpiCargo }
+  | { type: "ATUALIZAR_KPI_CARGO"; kpi: KpiCargo }
+  | { type: "EXCLUIR_KPI_CARGO"; id: number }
   | { type: "RESET" };

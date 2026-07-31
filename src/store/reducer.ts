@@ -12,6 +12,11 @@ export const initialPortalState: PortalState = {
   descricoesCargo: [],
   avaliacoesExperiencia: [],
   dispensasAvaliacaoExperiencia: [],
+  configAvaliacaoDesempenho: null,
+  competenciasComportamentais: [],
+  kpisCargo: [],
+  avaliacoesDesempenho: [],
+  pdi: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -28,6 +33,11 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         descricoesCargo: action.descricoesCargo,
         avaliacoesExperiencia: action.avaliacoesExperiencia,
         dispensasAvaliacaoExperiencia: action.dispensasAvaliacaoExperiencia,
+        configAvaliacaoDesempenho: action.configAvaliacaoDesempenho,
+        competenciasComportamentais: action.competenciasComportamentais,
+        kpisCargo: action.kpisCargo,
+        avaliacoesDesempenho: action.avaliacoesDesempenho,
+        pdi: action.pdi,
       };
 
     case "CRIAR_AVALIACAO_EXPERIENCIA":
@@ -88,6 +98,26 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
           c.nome === action.nome ? { ...c, descricao: c.descricao === "OK" ? "Pendente" : "OK" } : c,
         ),
       };
+
+    case "ATUALIZAR_CONFIG_AVALIACAO_DESEMPENHO":
+      return { ...state, configAvaliacaoDesempenho: action.config };
+
+    case "SALVAR_COMPETENCIA_COMPORTAMENTAL": {
+      const existe = state.competenciasComportamentais.some((c) => c.id === action.competencia.id);
+      const competenciasComportamentais = existe
+        ? state.competenciasComportamentais.map((c) => (c.id === action.competencia.id ? action.competencia : c))
+        : [...state.competenciasComportamentais, action.competencia];
+      return { ...state, competenciasComportamentais };
+    }
+
+    case "CRIAR_KPI_CARGO":
+      return { ...state, kpisCargo: [...state.kpisCargo, action.kpi] };
+
+    case "ATUALIZAR_KPI_CARGO":
+      return { ...state, kpisCargo: state.kpisCargo.map((k) => (k.id === action.kpi.id ? action.kpi : k)) };
+
+    case "EXCLUIR_KPI_CARGO":
+      return { ...state, kpisCargo: state.kpisCargo.filter((k) => k.id !== action.id) };
 
     default:
       return state;

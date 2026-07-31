@@ -10,6 +10,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  Target,
   UserMinus,
   Users,
 } from "lucide-react";
@@ -75,6 +76,7 @@ export function Sidebar() {
           <>
             <NavItem to="/departamentos" icon={<Building2 size={18} strokeWidth={1.9} />} label="Departamentos" badge={totalDeptos} badgeTone="neutral" />
             <NavItem to="/cargos" icon={<Briefcase size={18} strokeWidth={1.9} />} label="Cargos" badge={totalCargos} badgeTone="neutral" />
+            <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Gestão de Desempenho" />
           </>
         )}
         <NavItem to="/tipos" icon={<ArrowLeftRight size={18} strokeWidth={1.9} />} label="Tipos de movimentação" />

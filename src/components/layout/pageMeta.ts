@@ -14,6 +14,8 @@ const PAGE_META: Record<string, PageMeta> = {
   aprovadas: { eyebrow: "Operação", title: "Movimentações aprovadas" },
   historico: { eyebrow: "Operação", title: "Histórico" },
   desligados: { eyebrow: "Operação", title: "Desligados" },
+  avaliacoes: { eyebrow: "Operação", title: "Avaliações de experiência" },
+  desempenho: { eyebrow: "Cadastro", title: "Gestão de Desempenho" },
 };
 
 export function pageMetaFromPath(pathname: string): PageMeta {

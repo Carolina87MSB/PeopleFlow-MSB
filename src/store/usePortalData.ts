@@ -20,6 +20,13 @@ import {
   criarAvaliacaoExperiencia as criarAvaliacaoExperienciaNoSupabase,
   criarDispensaAvaliacaoExperiencia as criarDispensaAvaliacaoExperienciaNoSupabase,
 } from "../repositories/avaliacoesExperienciaRepository";
+import { atualizarConfigAvaliacaoDesempenho as atualizarConfigAvaliacaoDesempenhoNoSupabase } from "../repositories/configAvaliacaoDesempenhoRepository";
+import { salvarCompetenciaComportamental as salvarCompetenciaComportamentalNoSupabase } from "../repositories/competenciasComportamentaisRepository";
+import {
+  atualizarKpiCargo as atualizarKpiCargoNoSupabase,
+  criarKpiCargo as criarKpiCargoNoSupabase,
+  excluirKpiCargo as excluirKpiCargoNoSupabase,
+} from "../repositories/kpisCargoRepository";
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
@@ -38,16 +45,21 @@ import { aprovarEtapa as aprovarEtapaDomain, etapaAtual, reprovarEtapa as reprov
 import { usePortalStore } from "./PortalStoreContext";
 import { useConta } from "./useConta";
 import type {
+  AvaliacaoDesempenho,
   AvaliacaoExperiencia,
   Colaborador,
+  CompetenciaComportamental,
+  ConfigAvaliacaoDesempenho,
   Conta,
   DescricaoCargo,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
   EtapaAvaliacaoExperiencia,
   HistoricoDescricaoCargo,
+  KpiCargo,
   Movimentacao,
   NovaMovimentacaoForm,
+  Pdi,
   Perfil,
   RespostaAvaliacaoExperiencia,
   ResultadoAvaliacaoExperiencia,
@@ -104,6 +116,18 @@ export interface PortalData {
   /** Registra que um colaborador já foi avaliado fora do sistema (antes da
    * implantação deste módulo) e não deve mais aparecer em pendências. */
   dispensarAvaliacaoExperiencia: (colaboradorNome: string, motivo: string) => Promise<{ ok: true } | { ok: false }>;
+  /** Gestão de Desempenho — etapa 1, só estrutura (ver README). */
+  configAvaliacaoDesempenho: ConfigAvaliacaoDesempenho | null;
+  atualizarConfigAvaliacaoDesempenho: (pesoKpis: number, pesoComportamental: number) => Promise<{ ok: true } | { ok: false }>;
+  competenciasComportamentais: CompetenciaComportamental[];
+  salvarCompetenciaComportamental: (competencia: CompetenciaComportamental) => Promise<{ ok: true } | { ok: false }>;
+  kpisCargo: KpiCargo[];
+  criarKpiCargo: (kpi: Omit<KpiCargo, "id" | "updatedAt" | "updatedBy">) => Promise<{ ok: true } | { ok: false }>;
+  atualizarKpiCargo: (kpi: KpiCargo) => Promise<{ ok: true } | { ok: false }>;
+  excluirKpiCargo: (id: number) => Promise<{ ok: true } | { ok: false }>;
+  avaliacoesDesempenho: AvaliacaoDesempenho[];
+  pdi: Pdi[];
+  podeEditarGestaoDesempenho: boolean;
 }
 
 /**
@@ -423,6 +447,87 @@ export function usePortalData(): PortalData {
     [dispatch, me, flash],
   );
 
+  const atualizarConfigAvaliacaoDesempenhoFn = useCallback(
+    async (pesoKpis: number, pesoComportamental: number) => {
+      try {
+        await atualizarConfigAvaliacaoDesempenhoNoSupabase(pesoKpis, pesoComportamental, me);
+        dispatch({
+          type: "ATUALIZAR_CONFIG_AVALIACAO_DESEMPENHO",
+          config: { pesoKpis, pesoComportamental, updatedAt: new Date().toISOString(), updatedBy: me },
+        });
+        flash("Configuração da Avaliação de Desempenho atualizada.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao atualizar configuração da Avaliação de Desempenho.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash],
+  );
+
+  const salvarCompetenciaComportamentalFn = useCallback(
+    async (competencia: CompetenciaComportamental) => {
+      try {
+        await salvarCompetenciaComportamentalNoSupabase(competencia, me);
+        dispatch({
+          type: "SALVAR_COMPETENCIA_COMPORTAMENTAL",
+          competencia: { ...competencia, updatedAt: new Date().toISOString(), updatedBy: me },
+        });
+        flash("Competência comportamental salva.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao salvar competência comportamental.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash],
+  );
+
+  const criarKpiCargoFn = useCallback(
+    async (kpi: Omit<KpiCargo, "id" | "updatedAt" | "updatedBy">) => {
+      try {
+        const criado = await criarKpiCargoNoSupabase(kpi, me);
+        dispatch({ type: "CRIAR_KPI_CARGO", kpi: criado });
+        flash(`KPI "${kpi.nomeIndicador}" cadastrado para ${kpi.cargoNome}.`);
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao cadastrar KPI.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash],
+  );
+
+  const atualizarKpiCargoFn = useCallback(
+    async (kpi: KpiCargo) => {
+      try {
+        await atualizarKpiCargoNoSupabase(kpi, me);
+        dispatch({ type: "ATUALIZAR_KPI_CARGO", kpi: { ...kpi, updatedAt: new Date().toISOString(), updatedBy: me } });
+        flash("KPI atualizado.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao atualizar KPI.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash],
+  );
+
+  const excluirKpiCargoFn = useCallback(
+    async (id: number) => {
+      try {
+        await excluirKpiCargoNoSupabase(id);
+        dispatch({ type: "EXCLUIR_KPI_CARGO", id });
+        flash("KPI excluído.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao excluir KPI.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, flash],
+  );
+
   return {
     conta,
     perfil,
@@ -456,5 +561,16 @@ export function usePortalData(): PortalData {
     criarAvaliacaoExperiencia: criarAvaliacaoExperienciaFn,
     dispensasAvaliacaoExperiencia: state.dispensasAvaliacaoExperiencia,
     dispensarAvaliacaoExperiencia: dispensarAvaliacaoExperienciaFn,
+    configAvaliacaoDesempenho: state.configAvaliacaoDesempenho,
+    atualizarConfigAvaliacaoDesempenho: atualizarConfigAvaliacaoDesempenhoFn,
+    competenciasComportamentais: state.competenciasComportamentais,
+    salvarCompetenciaComportamental: salvarCompetenciaComportamentalFn,
+    kpisCargo: state.kpisCargo,
+    criarKpiCargo: criarKpiCargoFn,
+    atualizarKpiCargo: atualizarKpiCargoFn,
+    excluirKpiCargo: excluirKpiCargoFn,
+    avaliacoesDesempenho: state.avaliacoesDesempenho,
+    pdi: state.pdi,
+    podeEditarGestaoDesempenho: perfil === "RH",
   };
 }

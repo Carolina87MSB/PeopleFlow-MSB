@@ -313,3 +313,88 @@ export interface DispensaAvaliacaoExperiencia {
   dispensadoPor: string;
   dispensadoEm: string;
 }
+
+/** Configuração geral da Avaliação de Desempenho — linha única (pesos dos
+ * blocos Competências Técnicas/Comportamentais que compõem a nota final).
+ * Etapa 1: só estrutura, sem cálculo automático ainda. */
+export interface ConfigAvaliacaoDesempenho {
+  pesoKpis: number;
+  pesoComportamental: number;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/** Competência comportamental do catálogo corporativo — igual para todos os
+ * cargos (diferente dos KPIs, que são por cargo). `afirmacoes` fica vazio na
+ * carga inicial, preenchido depois. */
+export interface CompetenciaComportamental {
+  id: string;
+  nome: string;
+  descricao: string;
+  afirmacoes: string[];
+  ordem: number;
+  ativo: boolean;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/** KPI ("Competência Técnica") vinculado a um cargo — nunca reaproveita as
+ * competências da Descrição de Cargo nem competências técnicas genéricas.
+ * Carga inicial vem de planilha real do RH (ver README > "Gestão de
+ * Desempenho"). */
+export interface KpiCargo {
+  id: number;
+  cargoNome: string;
+  nomeIndicador: string;
+  meta: number | null;
+  unidadeMedida: string;
+  sentidoMeta: "Maior é Melhor" | "Menor é Melhor";
+  peso: number | null;
+  observacao: string;
+  ordem: number;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface ResultadoComportamental {
+  competenciaId: string;
+  nota: number;
+}
+
+export interface ResultadoKpi {
+  kpiId: number;
+  resultado: number;
+}
+
+/** Avaliação de Desempenho por colaborador/ciclo — estrutura só nesta etapa:
+ * sem regra de cálculo de nota, fluxo de aprovação ou autoavaliação ainda
+ * (ver README > "Gestão de Desempenho" pro que fica pra próxima fase). */
+export interface AvaliacaoDesempenho {
+  id: string;
+  colaboradorNome: string;
+  ciclo: string;
+  status: string;
+  resultadosComportamentais: ResultadoComportamental[];
+  resultadosKpis: ResultadoKpi[];
+  comentarioComportamental: string;
+  comentarioTecnico: string;
+  comentarioGeral: string;
+  avaliadoPor: string;
+  criadoEm: string;
+  updatedAt: string;
+}
+
+/** Plano de Desenvolvimento Individual — estrutura inicial, sem geração
+ * automática a partir de competências com baixo desempenho ainda. */
+export interface Pdi {
+  id: number;
+  colaboradorNome: string;
+  avaliacaoId: string | null;
+  origem: string;
+  acao: string;
+  prazo: string | null;
+  status: string;
+  responsavel: string;
+  criadoEm: string;
+  updatedAt: string;
+}

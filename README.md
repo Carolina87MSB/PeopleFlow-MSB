@@ -200,6 +200,21 @@ Todo cargo precisa do formulário, sem exceção — inclusive "Diretor Geral - 
 
 Os 22 formulários reais (pasta "Descrição de Cargos 2026") foram convertidos para SQL em `supabase/descricoes_cargo_seed.local.sql` (gitignorado — conteúdo proprietário da empresa). Ao rodar, confira se cada cargo aparece com o link "Ver descrição" na tela — o nome do cargo (`cargo_nome`) precisa bater exatamente com o texto usado em `colaboradores.cargo`; como o Claude não tem acesso direto ao banco, os nomes foram normalizados a partir do texto em CAIXA ALTA de cada formulário e podem divergir da grafia real. Cargo sem o link após rodar o seed provavelmente só precisa de um `UPDATE ... SET cargo_nome = '<nome real>'`.
 
+### Gestão de Desempenho (`/desempenho`, RH-only) — etapa 1: só estrutura
+
+Módulo novo, em construção por fases. **Esta primeira etapa é só a base estrutural** — configuração de pesos, catálogo de competências comportamentais, KPIs por cargo e o esqueleto de Avaliações/PDI — **sem** cálculo de nota, fluxo de aprovação, autoavaliação, Matriz 9 Box, Avaliação de Potencial, dashboards ou relatórios ainda (fica pra próximas etapas).
+
+5 tabelas novas (`supabase/schema.sql`, seção 8), mesmo padrão RLS/comentários do resto do schema:
+
+- **`peopleflow_config_avaliacao_desempenho`** — linha única (`id = 'default'`), peso de cada bloco (Competências Técnicas/KPIs + Comportamentais) que vai compor a nota final — editável pelo RH na aba "Configuração", validação de soma=100% só no cliente (sem CHECK no banco, mesmo padrão do resto do schema).
+- **`peopleflow_competencias_comportamentais`** — catálogo corporativo, **igual para todos os cargos** (nome, descrição, afirmações avaliativas — `afirmacoes jsonb`, vazio na carga inicial, a preencher depois). Escala de avaliação (1 a 5, "Não atende" → "Supera as expectativas") é fixa/igual pra todo mundo e por isso não é uma coluna — vira constante de domínio quando o fluxo de avaliação for implementado, mesmo padrão do `ESCALA` hardcoded em `AvaliacaoExperienciaDrawer.tsx`.
+- **`peopleflow_kpis_cargo`** — KPIs (Competências Técnicas) **por cargo**, nunca reaproveitando as competências da Descrição de Cargo nem competências genéricas. Carga inicial a partir de uma planilha real do RH ("Metas AVD S1_2026.xlsx") — ver de-para de nomenclatura abaixo.
+- **`peopleflow_avaliacoes_desempenho`** / **`peopleflow_pdi`** — só estrutura de dados por ora (tabelas existem, repositórios só leem — `getAvaliacoesDesempenho()`/`getPdi()` — sem fluxo de criação ainda). As abas "Avaliações" e "PDI" mostram `EmptyState` até a próxima etapa implementar o fluxo de verdade.
+
+**De-para da planilha de KPIs**: a planilha agrupa alguns cargos que compartilham o mesmo conjunto de KPIs sob um rótulo combinado (ex.: "Analista de Planejamento e Assistente de Planejamento", "Analista Contábil e Analista Financeiro") — como a instrução foi explícita ("cada cargo deverá possuir apenas os KPIs definidos para ele"), essas linhas foram **duplicadas por cargo real** em vez de criar um conceito de "grupo" (`supabase/seed_kpis_cargo.local.sql`, gitignorado — dado real da empresa). Nomes/tipos/metas foram copiados exatamente como na planilha, sem alterar nomenclatura. Cargos do catálogo sem KPI definido na planilha (Analista Administrativo, Assistente de Produção, Consultor de Vendas, Diretor Geral - CEO, Estagiário (a), Jovem Aprendiz Administrativo, Jovem Aprendiz Industrial, Líder de Produção, Supervisor (a) de Operações de Vendas, Técnico de Manutenção) ficam sem KPI por ora — esperado, não é erro.
+
+Acesso RH-only (`podeVerCadastros`, mesma regra de Departamentos/Cargos/Tipos/Acessos) — Gestor/Diretoria não veem o módulo ainda; pode mudar quando o fluxo de avaliação de fato precisar de visão do gestor.
+
 ## Arquitetura
 
 ```

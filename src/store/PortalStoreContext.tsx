@@ -8,6 +8,11 @@ import { getDescricoesCargo } from "../repositories/descricoesCargoRepository";
 import { efetivarSincronizacoesPendentes, getMovimentacoes } from "../repositories/movimentacoesRepository";
 import { getAvaliacoesExperiencia, getDispensasAvaliacaoExperiencia } from "../repositories/avaliacoesExperienciaRepository";
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
+import { getConfigAvaliacaoDesempenho } from "../repositories/configAvaliacaoDesempenhoRepository";
+import { getCompetenciasComportamentais } from "../repositories/competenciasComportamentaisRepository";
+import { getKpisCargo } from "../repositories/kpisCargoRepository";
+import { getAvaliacoesDesempenho } from "../repositories/avaliacoesDesempenhoRepository";
+import { getPdi } from "../repositories/pdiRepository";
 import type { PortalAction } from "./actions";
 import { initialPortalState, portalReducer } from "./reducer";
 import type { PortalState } from "./types";
@@ -53,6 +58,11 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getDescricoesCargo(),
       getAvaliacoesExperiencia(),
       getDispensasAvaliacaoExperiencia(),
+      getConfigAvaliacaoDesempenho(),
+      getCompetenciasComportamentais(),
+      getKpisCargo(),
+      getAvaliacoesDesempenho(),
+      getPdi(),
     ])
       .then(
         async ([
@@ -65,6 +75,11 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           descricoesCargo,
           avaliacoesExperiencia,
           dispensasAvaliacaoExperiencia,
+          configAvaliacaoDesempenho,
+          competenciasComportamentais,
+          kpisCargo,
+          avaliacoesDesempenho,
+          pdi,
         ]) => {
           if (cancelado) return;
           // Efetiva promoções/transferências aprovadas cuja "Data prevista" já
@@ -85,6 +100,11 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             descricoesCargo,
             avaliacoesExperiencia,
             dispensasAvaliacaoExperiencia,
+            configAvaliacaoDesempenho,
+            competenciasComportamentais,
+            kpisCargo,
+            avaliacoesDesempenho,
+            pdi,
           });
         },
       )

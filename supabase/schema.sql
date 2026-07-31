@@ -331,3 +331,168 @@ create policy "authenticated_rw_avaliacoes_experiencia_dispensas"
   to authenticated
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 8) Gestão de Desempenho (Avaliação de Desempenho — AVD) — etapa 1
+-- ─────────────────────────────────────────────────────────────────────────
+-- Só estrutura nesta etapa: configuração de pesos, catálogo de competências
+-- comportamentais (corporativo, vale pra todos os cargos), KPIs por cargo
+-- (carga inicial a partir de planilha real do RH) e o esqueleto de
+-- Avaliação/PDI — sem regras de cálculo, fluxo de aprovação, autoavaliação,
+-- Matriz 9 Box ou dashboards ainda (ver README > "Gestão de Desempenho").
+
+-- Config singleton: sempre uma linha só, id fixo 'default'. Peso dos dois
+-- blocos que compõem a nota final da avaliação — editável pelo RH, soma
+-- validada no cliente (não há CHECK aqui, mesmo padrão do resto do schema:
+-- validação de negócio fica em TypeScript, não em constraint de banco).
+create table if not exists public.peopleflow_config_avaliacao_desempenho (
+  id text primary key default 'default',
+  peso_kpis numeric not null default 60,
+  peso_comportamental numeric not null default 40,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+comment on table public.peopleflow_config_avaliacao_desempenho is
+  'Configuração geral da Avaliação de Desempenho (pesos dos blocos) — linha única, id sempre ''default''. Ver ConfigAvaliacaoDesempenho em src/types/domain.ts.';
+
+alter table public.peopleflow_config_avaliacao_desempenho enable row level security;
+
+drop policy if exists "authenticated_rw_config_avaliacao_desempenho" on public.peopleflow_config_avaliacao_desempenho;
+create policy "authenticated_rw_config_avaliacao_desempenho"
+  on public.peopleflow_config_avaliacao_desempenho
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- Catálogo corporativo de competências comportamentais — as mesmas para
+-- todos os cargos da empresa (diferente dos KPIs, que são por cargo).
+-- `afirmacoes` fica vazio na carga inicial (etapa 1); a escala de avaliação
+-- (1 a 5) é fixa/igual pra todo mundo e por isso não vira coluna aqui — vira
+-- constante em domain/avaliacaoDesempenho.ts, mesmo padrão do ESCALA
+-- hardcoded em AvaliacaoExperienciaDrawer.tsx.
+create table if not exists public.peopleflow_competencias_comportamentais (
+  id text primary key,
+  nome text not null,
+  descricao text,
+  afirmacoes jsonb not null default '[]'::jsonb,
+  ordem integer not null default 0,
+  ativo boolean not null default true,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+comment on table public.peopleflow_competencias_comportamentais is
+  'Catálogo corporativo de competências comportamentais da Avaliação de Desempenho, comum a todos os cargos. Ver CompetenciaComportamental em src/types/domain.ts.';
+comment on column public.peopleflow_competencias_comportamentais.afirmacoes is 'Array de string — afirmações avaliativas da competência (preenchidas depois da carga inicial).';
+
+alter table public.peopleflow_competencias_comportamentais enable row level security;
+
+drop policy if exists "authenticated_rw_competencias_comportamentais" on public.peopleflow_competencias_comportamentais;
+create policy "authenticated_rw_competencias_comportamentais"
+  on public.peopleflow_competencias_comportamentais
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- KPIs (Competências Técnicas) por cargo — tabela filha, cargo_nome sem FK
+-- (mesmo padrão de peopleflow_descricoes_cargo_historico: consultada por
+-- cargo_nome, não carregada por chave própria). Vem exclusivamente dos KPIs
+-- definidos pra cada cargo (nunca das competências da Descrição de Cargo, e
+-- nunca competências técnicas genéricas — ver README).
+create table if not exists public.peopleflow_kpis_cargo (
+  id bigint generated always as identity primary key,
+  cargo_nome text not null,
+  nome_indicador text not null,
+  meta numeric,
+  unidade_medida text,
+  sentido_meta text not null,
+  peso numeric,
+  observacao text,
+  ordem integer not null default 0,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+comment on table public.peopleflow_kpis_cargo is
+  'KPIs (Competências Técnicas) por cargo da Avaliação de Desempenho — cargo_nome referencia colaboradores.cargo. Ver KpiCargo em src/types/domain.ts.';
+comment on column public.peopleflow_kpis_cargo.sentido_meta is '''Maior é Melhor'' ou ''Menor é Melhor'' — direção em que o resultado deve ir pra bater a meta.';
+
+alter table public.peopleflow_kpis_cargo enable row level security;
+
+drop policy if exists "authenticated_rw_kpis_cargo" on public.peopleflow_kpis_cargo;
+create policy "authenticated_rw_kpis_cargo"
+  on public.peopleflow_kpis_cargo
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- Avaliação de Desempenho — estrutura só, nesta etapa (sem cálculo de nota,
+-- fluxo de aprovação ou autoavaliação ainda). `resultados_comportamentais`/
+-- `resultados_kpis` são arrays embutidos (mesmo padrão de
+-- peopleflow_avaliacoes_experiencia.respostas): snapshot do que foi avaliado
+-- contra o catálogo/KPIs vigentes na época, sempre lido/escrito como uma
+-- unidade com a avaliação.
+create table if not exists public.peopleflow_avaliacoes_desempenho (
+  id text primary key,
+  colaborador_nome text not null,
+  ciclo text not null,
+  status text not null default 'Rascunho',
+  resultados_comportamentais jsonb not null default '[]'::jsonb,
+  resultados_kpis jsonb not null default '[]'::jsonb,
+  comentario_comportamental text not null default '',
+  comentario_tecnico text not null default '',
+  comentario_geral text not null default '',
+  avaliado_por text,
+  criado_em timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.peopleflow_avaliacoes_desempenho is
+  'Avaliação de Desempenho (AVD) por colaborador/ciclo — estrutura só nesta etapa, sem regra de cálculo/aprovação ainda. Ver AvaliacaoDesempenho em src/types/domain.ts.';
+comment on column public.peopleflow_avaliacoes_desempenho.resultados_comportamentais is 'Array de { competenciaId, nota } — nota de 1 a 5 por competência comportamental.';
+comment on column public.peopleflow_avaliacoes_desempenho.resultados_kpis is 'Array de { kpiId, resultado } — resultado numérico obtido em cada KPI do cargo.';
+comment on column public.peopleflow_avaliacoes_desempenho.ciclo is 'Identificador do ciclo de avaliação, ex.: ''S1_2026''.';
+
+alter table public.peopleflow_avaliacoes_desempenho enable row level security;
+
+drop policy if exists "authenticated_rw_avaliacoes_desempenho" on public.peopleflow_avaliacoes_desempenho;
+create policy "authenticated_rw_avaliacoes_desempenho"
+  on public.peopleflow_avaliacoes_desempenho
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- PDI (Plano de Desenvolvimento Individual) — estrutura inicial, sem regra
+-- automática de geração (isso é etapa futura: competência com baixo
+-- desempenho gerando ação de desenvolvimento sozinha).
+create table if not exists public.peopleflow_pdi (
+  id bigint generated always as identity primary key,
+  colaborador_nome text not null,
+  avaliacao_id text,
+  origem text,
+  acao text not null,
+  prazo date,
+  status text not null default 'Pendente',
+  responsavel text,
+  criado_em timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.peopleflow_pdi is
+  'Plano de Desenvolvimento Individual — estrutura inicial, sem geração automática ainda. avaliacao_id referencia peopleflow_avaliacoes_desempenho.id (sem FK), pode ficar nulo. Ver Pdi em src/types/domain.ts.';
+comment on column public.peopleflow_pdi.origem is 'Texto livre indicando qual competência/KPI motivou a ação (ex.: nome da competência) — sem regra automática nesta etapa.';
+
+alter table public.peopleflow_pdi enable row level security;
+
+drop policy if exists "authenticated_rw_pdi" on public.peopleflow_pdi;
+create policy "authenticated_rw_pdi"
+  on public.peopleflow_pdi
+  for all
+  to authenticated
+  using (true)
+  with check (true);
