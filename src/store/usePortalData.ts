@@ -228,13 +228,15 @@ export function usePortalData(): PortalData {
     return perfil === "RH" ? todas : todas.filter((p) => p.colaborador.gestor === me);
   }, [state.colaboradores, state.avaliacoesExperiencia, state.dispensasAvaliacaoExperiencia, perfil, me]);
 
+  // Usa o gestorAvaliador CONGELADO na avaliação (snapshot do momento da
+  // criação do ciclo), não o colaborador.gestor atual — se o colaborador
+  // trocar de gestor no meio do ciclo, quem avalia continua sendo quem era
+  // responsável quando a avaliação foi gerada. Vazio = sem gestor definido
+  // na criação, só o RH vê/trata (nenhum gestor bate com string vazia).
   const avaliacoesDesempenhoVisiveis = useMemo(() => {
     if (perfil === "RH") return state.avaliacoesDesempenho;
-    return state.avaliacoesDesempenho.filter((a) => {
-      const colaborador = state.colaboradores.find((c) => c.nome === a.colaboradorNome);
-      return colaborador?.gestor === me;
-    });
-  }, [state.avaliacoesDesempenho, state.colaboradores, perfil, me]);
+    return state.avaliacoesDesempenho.filter((a) => a.gestorAvaliador === me);
+  }, [state.avaliacoesDesempenho, perfil, me]);
 
   const podeEditarAvaliacaoDesempenhoFn = useCallback(
     (avaliacao: AvaliacaoDesempenho) => {
@@ -242,10 +244,9 @@ export function usePortalData(): PortalData {
       const ciclo = state.ciclosAvaliacaoDesempenho.find((c) => c.id === avaliacao.cicloId);
       if (ciclo?.status === "Encerrado") return false;
       if (perfil === "RH") return true;
-      const colaborador = state.colaboradores.find((c) => c.nome === avaliacao.colaboradorNome);
-      return colaborador?.gestor === me;
+      return avaliacao.gestorAvaliador === me;
     },
-    [perfil, me, state.colaboradores, state.ciclosAvaliacaoDesempenho],
+    [perfil, me, state.ciclosAvaliacaoDesempenho],
   );
 
   const aprovarEtapaFn = useCallback(
@@ -606,12 +607,31 @@ export function usePortalData(): PortalData {
         ciclo: ciclo.nome,
         status: "Não iniciada",
         // Competências/KPIs ficam travados no momento da criação — ver
-        // README > "Gestão de Desempenho" e comentário em schema.sql.
+        // README > "Gestão de Desempenho" e comentário em schema.sql. Não é
+        // só o conjunto (ids) que fica congelado: nome/descrição/afirmações
+        // da competência e nome/descrição/meta/unidade/sentido/peso do KPI
+        // também são copiados aqui (snapshot completo) — se o cadastro
+        // original mudar depois, esta avaliação continua mostrando
+        // exatamente o que foi avaliado.
         resultadosComportamentais: competenciasAtivas.map((comp) => ({
           competenciaId: comp.id,
+          competenciaNome: comp.nome,
+          competenciaDescricao: comp.descricao,
+          afirmacoes: [...comp.afirmacoes],
           notasAfirmacoes: comp.afirmacoes.map(() => null),
         })),
-        resultadosKpis: state.kpisCargo.filter((k) => k.cargoNome === c.cargo).map((k) => ({ kpiId: k.id, resultado: null })),
+        resultadosKpis: state.kpisCargo
+          .filter((k) => k.cargoNome === c.cargo)
+          .map((k) => ({
+            kpiId: k.id,
+            kpiNome: k.nomeIndicador,
+            kpiDescricao: k.observacao,
+            meta: k.meta,
+            unidadeMedida: k.unidadeMedida,
+            sentidoMeta: k.sentidoMeta,
+            peso: k.peso,
+            resultado: null,
+          })),
         comentarioComportamental: "",
         comentarioTecnico: "",
         comentarioGeral: "",
@@ -625,17 +645,21 @@ export function usePortalData(): PortalData {
         updatedAt: agora,
       }));
       try {
-        await criarCicloComAvaliacoesNoSupabase(ciclo, avaliacoes);
-        dispatch({ type: "CRIAR_CICLO_AVALIACAO_DESEMPENHO", ciclo, avaliacoes });
-        flash(`Ciclo "${ciclo.nome}" aberto — ${avaliacoes.length} avaliação(ões) gerada(s).`);
+        const { avaliacoesCriadas, duplicadas } = await criarCicloComAvaliacoesNoSupabase(ciclo, avaliacoes);
+        dispatch({ type: "CRIAR_CICLO_AVALIACAO_DESEMPENHO", ciclo, avaliacoes: avaliacoesCriadas });
+        flash(
+          duplicadas > 0
+            ? `Ciclo "${ciclo.nome}" aberto — ${avaliacoesCriadas.length} avaliação(ões) gerada(s) (${duplicadas} colaborador(es) já tinham avaliação neste ciclo).`
+            : `Ciclo "${ciclo.nome}" aberto — ${avaliacoesCriadas.length} avaliação(ões) gerada(s).`,
+        );
         void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: ciclo.id, acao: "CICLO_CRIADO", usuario: me });
         void registrarLogAvaliacaoDesempenhoNoSupabase({
           cicloId: ciclo.id,
           acao: "AVALIACOES_GERADAS",
-          detalhe: `${avaliacoes.length} avaliação(ões) geradas`,
+          detalhe: `${avaliacoesCriadas.length} avaliação(ões) geradas`,
           usuario: me,
         });
-        return { ok: true as const, quantidade: avaliacoes.length };
+        return { ok: true as const, quantidade: avaliacoesCriadas.length };
       } catch (err) {
         flash(err instanceof Error ? err.message : "Falha ao abrir ciclo de avaliação de desempenho.");
         return { ok: false as const };

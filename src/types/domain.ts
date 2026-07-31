@@ -359,21 +359,37 @@ export interface KpiCargo {
 /** Notas (1 a 5) de cada afirmação avaliativa de uma competência — o conjunto
  * de competências (e quantas afirmações cada uma tinha) fica travado no
  * momento em que o ciclo gera a avaliação, indexado nesta mesma ordem;
- * `null` = afirmação ainda não avaliada. Nome/descrição/afirmações da
- * competência continuam vindo por lookup em `competenciasComportamentais`
- * via `competenciaId` — não são duplicados aqui. */
+ * `null` = afirmação ainda não avaliada. `competenciaNome`/`competenciaDescricao`/
+ * `afirmacoes` são um **snapshot** do catálogo no momento da criação — ficam
+ * congelados durante todo o ciclo, mesmo que `competenciasComportamentais`
+ * seja editado depois (renomeada, desativada, afirmações alteradas etc.).
+ * `competenciaId` continua existindo pra referência, mas o texto exibido
+ * nunca mais é lido ao vivo do catálogo. */
 export interface ResultadoComportamental {
   competenciaId: string;
+  competenciaNome: string;
+  competenciaDescricao: string;
+  afirmacoes: string[];
   notasAfirmacoes: (number | null)[];
 }
 
 /** Resultado obtido pelo colaborador em um KPI do cargo — o conjunto de KPIs
  * (do cargo no momento da criação da avaliação) fica travado; o gestor não
- * pode incluir indicador manualmente, só preencher `resultado`. Demais campos
- * (meta/unidade/sentido/peso) continuam vindo por lookup em `kpisCargo` via
- * `kpiId`. */
+ * pode incluir indicador manualmente, só preencher `resultado`. `kpiNome`/
+ * `kpiDescricao`/`meta`/`unidadeMedida`/`sentidoMeta`/`peso` são um
+ * **snapshot** de `KpiCargo` no momento da criação (`kpiDescricao` vem de
+ * `KpiCargo.observacao`) — ficam congelados durante todo o ciclo, mesmo que
+ * `kpisCargo` seja editado depois. `kpiId` continua existindo pra
+ * referência, mas os valores exibidos/usados no cálculo nunca mais são
+ * lidos ao vivo do catálogo. */
 export interface ResultadoKpi {
   kpiId: number;
+  kpiNome: string;
+  kpiDescricao: string;
+  meta: number | null;
+  unidadeMedida: string;
+  sentidoMeta: "Maior é Melhor" | "Menor é Melhor";
+  peso: number | null;
   resultado: number | null;
 }
 

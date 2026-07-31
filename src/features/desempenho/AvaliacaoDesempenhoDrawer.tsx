@@ -31,11 +31,10 @@ interface AvaliacaoDesempenhoDrawerProps {
  * ao vivo (ver domain/avaliacaoDesempenho.ts). "Concluir avaliação" só fica
  * disponível quando tudo estiver preenchido, e trava a edição depois. */
 export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesempenhoDrawerProps) {
-  const { colaboradores, competenciasComportamentais, kpisCargo, configAvaliacaoDesempenho, salvarAvaliacaoDesempenho, podeEditarAvaliacaoDesempenho } =
+  const { competenciasComportamentais, kpisCargo, configAvaliacaoDesempenho, salvarAvaliacaoDesempenho, podeEditarAvaliacaoDesempenho } =
     usePortalData();
 
   const podeEditar = podeEditarAvaliacaoDesempenho(avaliacao);
-  const colaborador = colaboradores.find((c) => c.nome === avaliacao.colaboradorNome);
 
   // Recuperação da última versão salva: o rascunho sempre parte do que está
   // persistido no Supabase (prop `avaliacao`), então reabrir o Drawer já
@@ -129,7 +128,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
         <div className={styles.drawerHeader}>
           <div className={styles.drawerNome}>{avaliacao.colaboradorNome}</div>
           <div className={styles.drawerSub}>
-            {colaborador ? formatarNomeCargo(colaborador.cargo) : "—"} · {avaliacao.ciclo}
+            {avaliacao.cargo ? formatarNomeCargo(avaliacao.cargo) : "—"} · {avaliacao.ciclo}
           </div>
         </div>
       }
@@ -151,17 +150,22 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
 
       <h4 className={styles.sectionTitle}>Competências Comportamentais</h4>
       {rascunho.resultadosComportamentais.map((resultado) => {
-        const competencia = competenciasPorId.get(resultado.competenciaId);
-        if (!competencia) return null;
+        // Nome/descrição/afirmações vêm do snapshot congelado na própria
+        // avaliação — o catálogo (competenciasPorId) só serve de fallback
+        // pra avaliações antigas, geradas antes do snapshot existir.
+        const competenciaCatalogo = competenciasPorId.get(resultado.competenciaId);
+        const nome = resultado.competenciaNome || competenciaCatalogo?.nome || "Competência";
+        const descricao = resultado.competenciaDescricao || competenciaCatalogo?.descricao || "";
+        const afirmacoes = resultado.afirmacoes?.length ? resultado.afirmacoes : competenciaCatalogo?.afirmacoes ?? [];
         const mediaCompetencia = arredondar(mediaAfirmacoes(resultado.notasAfirmacoes));
         return (
           <div key={resultado.competenciaId} className={styles.competenciaBloco}>
             <div className={styles.competenciaTopo}>
-              <span className={styles.competenciaNome}>{competencia.nome}</span>
+              <span className={styles.competenciaNome}>{nome}</span>
               {mediaCompetencia !== null && <span className={styles.mediaPill}>Média: {mediaCompetencia}</span>}
             </div>
-            {competencia.descricao && <p className={styles.competenciaDescricao}>{competencia.descricao}</p>}
-            {competencia.afirmacoes.map((afirmacao, indice) => (
+            {descricao && <p className={styles.competenciaDescricao}>{descricao}</p>}
+            {afirmacoes.map((afirmacao, indice) => (
               <div key={indice} className={styles.afirmacaoRow}>
                 <span className={styles.afirmacaoTexto}>{afirmacao}</span>
                 <div className={styles.escala}>
@@ -186,36 +190,45 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
 
       <h4 className={styles.sectionTitle}>Competências Técnicas (KPIs)</h4>
       {rascunho.resultadosKpis.map((resultado) => {
-        const kpi = kpisPorId.get(resultado.kpiId);
-        if (!kpi) return null;
-        const percentual = percentualAtingimentoKpi(kpi.meta, resultado.resultado, kpi.sentidoMeta);
-        const nota = notaKpi(resultado, kpi);
+        // Nome/descrição/meta/unidade/sentido/peso vêm do snapshot congelado
+        // no próprio resultado — o catálogo (kpisPorId) só serve de fallback
+        // pra avaliações antigas, geradas antes do snapshot existir.
+        const kpiCatalogo = kpisPorId.get(resultado.kpiId);
+        const nome = resultado.kpiNome || kpiCatalogo?.nomeIndicador || `KPI #${resultado.kpiId}`;
+        const descricao = resultado.kpiDescricao || kpiCatalogo?.observacao || "";
+        const meta = resultado.meta ?? kpiCatalogo?.meta ?? null;
+        const unidadeMedida = resultado.unidadeMedida || kpiCatalogo?.unidadeMedida || "";
+        const sentidoMeta = resultado.sentidoMeta ?? kpiCatalogo?.sentidoMeta;
+        const peso = resultado.peso ?? kpiCatalogo?.peso ?? null;
+        const percentual = sentidoMeta ? percentualAtingimentoKpi(meta, resultado.resultado, sentidoMeta) : null;
+        const nota = notaKpi(resultado, kpiCatalogo);
         return (
           <div key={resultado.kpiId} className={styles.kpiBloco}>
             <div className={styles.kpiTopo}>
-              <span className={styles.kpiNome}>{kpi.nomeIndicador}</span>
+              <span className={styles.kpiNome}>{nome}</span>
               {nota !== null && (
                 <span className={styles.mediaPill}>
                   {arredondar(percentual)}% · Nota {nota}
                 </span>
               )}
             </div>
+            {descricao && <p className={styles.competenciaDescricao}>{descricao}</p>}
             <div className={styles.kpiDetalhes}>
               <span>
-                Meta: <strong>{kpi.meta ?? "—"}</strong> {kpi.unidadeMedida}
+                Meta: <strong>{meta ?? "—"}</strong> {unidadeMedida}
               </span>
-              <span>{kpi.sentidoMeta}</span>
-              {kpi.peso !== null && <span>Peso: {kpi.peso}</span>}
+              <span>{sentidoMeta}</span>
+              {peso !== null && <span>Peso: {peso}</span>}
             </div>
             <div className={styles.resultadoCampo}>
-              <label className={styles.label} htmlFor={`kpi-resultado-${kpi.id}`}>
+              <label className={styles.label} htmlFor={`kpi-resultado-${resultado.kpiId}`}>
                 Resultado obtido
               </label>
               <input
-                id={`kpi-resultado-${kpi.id}`}
+                id={`kpi-resultado-${resultado.kpiId}`}
                 className={styles.input}
                 value={resultado.resultado ?? ""}
-                onChange={(e) => atualizarResultadoKpi(kpi.id, e.target.value)}
+                onChange={(e) => atualizarResultadoKpi(resultado.kpiId, e.target.value)}
                 disabled={!podeEditar}
                 inputMode="decimal"
               />

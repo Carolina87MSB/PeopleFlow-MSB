@@ -75,10 +75,15 @@ export function notaPorPercentual(percentual: number): number {
   return 1;
 }
 
-/** Nota de um KPI específico dentro de uma avaliação — `null` se ainda sem resultado informado. */
-export function notaKpi(resultado: ResultadoKpi, kpi: KpiCargo | undefined): number | null {
-  if (!kpi) return null;
-  const percentual = percentualAtingimentoKpi(kpi.meta, resultado.resultado, kpi.sentidoMeta);
+/** Nota de um KPI específico dentro de uma avaliação — `null` se ainda sem
+ * resultado informado. Usa o snapshot congelado no próprio `resultado`
+ * (meta/sentidoMeta); `kpi` (lookup no catálogo atual) só serve de
+ * fallback pra avaliações antigas, geradas antes do snapshot existir. */
+export function notaKpi(resultado: ResultadoKpi, kpi?: KpiCargo): number | null {
+  const meta = resultado.meta ?? kpi?.meta ?? null;
+  const sentido = resultado.sentidoMeta ?? kpi?.sentidoMeta;
+  if (!sentido) return null;
+  const percentual = percentualAtingimentoKpi(meta, resultado.resultado, sentido);
   return percentual === null ? null : notaPorPercentual(percentual);
 }
 
@@ -86,8 +91,9 @@ export function notaKpi(resultado: ResultadoKpi, kpi: KpiCargo | undefined): num
  * peso definido conta como peso 1). Quando nenhum KPI do conjunto tem peso
  * definido, isso equivale sozinho a uma média simples — não precisa de
  * lógica separada pros dois casos da especificação. `null` enquanto algum
- * KPI do conjunto ainda não tem resultado. */
-export function mediaTecnica(resultados: ResultadoKpi[], kpis: KpiCargo[]): number | null {
+ * KPI do conjunto ainda não tem resultado. `kpis` (catálogo atual) só serve
+ * de fallback — o peso vem do snapshot em `resultado.peso` sempre que presente. */
+export function mediaTecnica(resultados: ResultadoKpi[], kpis: KpiCargo[] = []): number | null {
   if (resultados.length === 0) return null;
   const kpisPorId = new Map(kpis.map((k) => [k.id, k]));
   let somaPonderada = 0;
@@ -96,7 +102,7 @@ export function mediaTecnica(resultados: ResultadoKpi[], kpis: KpiCargo[]): numb
     const kpi = kpisPorId.get(r.kpiId);
     const nota = notaKpi(r, kpi);
     if (nota === null) return null;
-    const peso = kpi?.peso ?? 1;
+    const peso = r.peso ?? kpi?.peso ?? 1;
     somaPonderada += nota * peso;
     somaPesos += peso;
   }
@@ -134,27 +140,30 @@ export function arredondar(valor: number | null, casas = 1): number | null {
 }
 
 /** Lista textual do que falta preencher pra poder concluir a avaliação —
- * exibida ao gestor em vez de só desabilitar o botão em silêncio. */
+ * exibida ao gestor em vez de só desabilitar o botão em silêncio. Usa o
+ * nome congelado no próprio `resultado`; `competencias`/`kpis` (catálogo
+ * atual) só servem de fallback pra avaliações antigas, geradas antes do
+ * snapshot existir. */
 export function itensPendentes(
   avaliacao: AvaliacaoDesempenho,
-  competencias: CompetenciaComportamental[],
-  kpis: KpiCargo[],
+  competencias: CompetenciaComportamental[] = [],
+  kpis: KpiCargo[] = [],
 ): string[] {
   const competenciasPorId = new Map(competencias.map((c) => [c.id, c]));
   const kpisPorId = new Map(kpis.map((k) => [k.id, k]));
   const pendentes: string[] = [];
 
   for (const resultado of avaliacao.resultadosComportamentais) {
-    const competencia = competenciasPorId.get(resultado.competenciaId);
+    const nome = resultado.competenciaNome || competenciasPorId.get(resultado.competenciaId)?.nome || "Competência";
     resultado.notasAfirmacoes.forEach((nota, indice) => {
-      if (nota === null) pendentes.push(`${competencia?.nome ?? "Competência"} — afirmação ${indice + 1}`);
+      if (nota === null) pendentes.push(`${nome} — afirmação ${indice + 1}`);
     });
   }
 
   for (const resultado of avaliacao.resultadosKpis) {
     if (resultado.resultado === null) {
-      const kpi = kpisPorId.get(resultado.kpiId);
-      pendentes.push(`KPI: ${kpi?.nomeIndicador ?? `#${resultado.kpiId}`}`);
+      const nome = resultado.kpiNome || kpisPorId.get(resultado.kpiId)?.nomeIndicador || `#${resultado.kpiId}`;
+      pendentes.push(`KPI: ${nome}`);
     }
   }
 

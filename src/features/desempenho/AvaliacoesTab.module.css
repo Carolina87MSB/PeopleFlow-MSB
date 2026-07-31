@@ -44,6 +44,22 @@
   color: var(--color-warning-fg, #a3672a);
 }
 
+.statusBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.checkboxFiltro {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  padding: 0 4px;
+}
+
 .expandirBotao {
   display: inline-flex;
   align-items: center;

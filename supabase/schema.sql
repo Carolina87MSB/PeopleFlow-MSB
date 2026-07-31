@@ -593,3 +593,17 @@ create policy "authenticated_rw_log_avaliacao_desempenho"
   to authenticated
   using (true)
   with check (true);
+
+-- =====================================================================
+-- 11) Gestão de Desempenho — snapshot completo da avaliação (botão "Abrir
+-- ciclo"): além do CONJUNTO de competências/KPIs (já travado desde a etapa
+-- 2), agora também se congela o TEXTO de cada um dentro dos próprios jsonb
+-- resultados_comportamentais/resultados_kpis — nome/descrição/afirmações da
+-- competência, nome/descrição/meta/unidade/sentido/peso do KPI. Não precisa
+-- de coluna nova (já são jsonb), só documentar o novo formato.
+-- =====================================================================
+
+comment on column public.peopleflow_avaliacoes_desempenho.resultados_comportamentais is
+  'Array de { competenciaId, competenciaNome, competenciaDescricao, afirmacoes: string[], notasAfirmacoes: (number|null)[] } — nome/descrição/afirmações da competência ficam congelados no momento da criação (snapshot), não refletem edições futuras em peopleflow_competencias_comportamentais.';
+comment on column public.peopleflow_avaliacoes_desempenho.resultados_kpis is
+  'Array de { kpiId, kpiNome, kpiDescricao, meta, unidadeMedida, sentidoMeta, peso, resultado } — nome/descrição/meta/unidade/sentido/peso do KPI ficam congelados no momento da criação (snapshot), não refletem edições futuras em peopleflow_kpis_cargo.';

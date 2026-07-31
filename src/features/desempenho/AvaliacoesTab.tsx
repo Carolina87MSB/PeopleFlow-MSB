@@ -62,6 +62,7 @@ function CicloLinha({ ciclo, avaliacoesDoCiclo, onEncerrar }: CicloLinhaProps) {
 
   const geradas = avaliacoesDoCiclo.length;
   const concluidas = avaliacoesDoCiclo.filter((a) => a.status === "Concluída").length;
+  const semGestor = avaliacoesDoCiclo.filter((a) => !a.gestorAvaliador).length;
   const tone = CICLO_TONE[ciclo.status] ?? CICLO_TONE.Aberto;
 
   async function toggleExpandir() {
@@ -90,9 +91,16 @@ function CicloLinha({ ciclo, avaliacoesDoCiclo, onEncerrar }: CicloLinhaProps) {
         <td className={tableStyles.right}>{geradas}</td>
         <td className={tableStyles.right}>{concluidas}</td>
         <td>
-          <Badge bg={tone.bg} fg={tone.fg}>
-            {ciclo.status}
-          </Badge>
+          <div className={styles.statusBadges}>
+            <Badge bg={tone.bg} fg={tone.fg}>
+              {ciclo.status}
+            </Badge>
+            {semGestor > 0 && (
+              <Badge bg="var(--color-warning-bg, #fbeee0)" fg="var(--color-warning-fg, #a3672a)">
+                {semGestor} sem gestor
+              </Badge>
+            )}
+          </div>
         </td>
         <td className={tableStyles.right}>
           {ciclo.status === "Aberto" && (
@@ -146,6 +154,7 @@ export function AvaliacoesTab() {
   const [cicloFiltro, setCicloFiltro] = useState("Todos");
   const [statusFiltro, setStatusFiltro] = useState("Todos");
   const [departamentoFiltro, setDepartamentoFiltro] = useState("Todos");
+  const [somenteSemGestor, setSomenteSemGestor] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [avaliacaoAbertaId, setAvaliacaoAbertaId] = useState<string | null>(null);
   const [iniciosPorAvaliacao, setIniciosPorAvaliacao] = useState<Map<string, string>>(new Map());
@@ -177,9 +186,10 @@ export function AvaliacoesTab() {
         (a) =>
           (cicloFiltro === "Todos" || a.ciclo === cicloFiltro) &&
           (statusFiltro === "Todos" || a.status === statusFiltro) &&
-          (departamentoFiltro === "Todos" || a.departamento === departamentoFiltro),
+          (departamentoFiltro === "Todos" || a.departamento === departamentoFiltro) &&
+          (!somenteSemGestor || !a.gestorAvaliador),
       ),
-    [avaliacoesDesempenhoVisiveis, cicloFiltro, statusFiltro, departamentoFiltro],
+    [avaliacoesDesempenhoVisiveis, cicloFiltro, statusFiltro, departamentoFiltro, somenteSemGestor],
   );
 
   const avaliacaoAberta = avaliacaoAbertaId ? avaliacoesDesempenhoVisiveis.find((a) => a.id === avaliacaoAbertaId) ?? null : null;
@@ -265,6 +275,12 @@ export function AvaliacoesTab() {
               </option>
             ))}
           </select>
+        )}
+        {podeEditarGestaoDesempenho && (
+          <label className={styles.checkboxFiltro}>
+            <input type="checkbox" checked={somenteSemGestor} onChange={(e) => setSomenteSemGestor(e.target.checked)} />
+            Somente sem gestor
+          </label>
         )}
       </div>
 

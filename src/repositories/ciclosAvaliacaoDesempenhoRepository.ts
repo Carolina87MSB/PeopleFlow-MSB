@@ -38,12 +38,28 @@ export async function getCiclosAvaliacaoDesempenho(): Promise<CicloAvaliacaoDese
   return (data as CicloAvaliacaoDesempenhoRow[]).map(fromRow);
 }
 
+export interface ResultadoCriacaoCiclo {
+  /** Avaliações efetivamente inseridas (exclui duplicadas — ver abaixo). */
+  avaliacoesCriadas: AvaliacaoDesempenho[];
+  /** Quantos colaboradores da leva recebida já tinham avaliação neste ciclo (não reinseridos). */
+  duplicadas: number;
+}
+
 /** Cria o ciclo e, em seguida, as avaliações já geradas pra ele (uma por
  * colaborador ativo — ver criarCicloAvaliacaoDesempenho() em usePortalData.ts).
  * Dois inserts sequenciais, sem transação (o Supabase client não oferece
  * transação multi-tabela) — se o segundo falhar, o ciclo fica criado sem
- * avaliações; aceitável nesta etapa. */
-export async function criarCicloComAvaliacoes(ciclo: CicloAvaliacaoDesempenho, avaliacoes: AvaliacaoDesempenho[]): Promise<void> {
+ * avaliações; aceitável nesta etapa.
+ *
+ * Validação contra duplicidade: antes de inserir, confere quais colaboradores
+ * já têm avaliação para este `ciclo_id` (id sempre novo, mas protege contra
+ * reenvio duplo do formulário/corrida de rede que já tenha inserido parte das
+ * avaliações) — nunca insere uma segunda avaliação pro mesmo colaborador no
+ * mesmo ciclo. */
+export async function criarCicloComAvaliacoes(
+  ciclo: CicloAvaliacaoDesempenho,
+  avaliacoes: AvaliacaoDesempenho[],
+): Promise<ResultadoCriacaoCiclo> {
   if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
 
   const { error } = await supabase.from("peopleflow_ciclos_avaliacao_desempenho").insert({
@@ -56,7 +72,19 @@ export async function criarCicloComAvaliacoes(ciclo: CicloAvaliacaoDesempenho, a
   });
   if (error) throw new Error(`Falha ao criar ciclo de avaliação de desempenho no Supabase: ${error.message}`);
 
-  await criarAvaliacoesDesempenho(avaliacoes);
+  const { data: existentes, error: errorExistentes } = await supabase
+    .from("peopleflow_avaliacoes_desempenho")
+    .select("colaborador_nome")
+    .eq("ciclo_id", ciclo.id);
+  if (errorExistentes) {
+    throw new Error(`Falha ao validar avaliações já existentes no ciclo no Supabase: ${errorExistentes.message}`);
+  }
+
+  const nomesExistentes = new Set((existentes ?? []).map((r) => r.colaborador_nome as string));
+  const avaliacoesCriadas = avaliacoes.filter((a) => !nomesExistentes.has(a.colaboradorNome));
+
+  await criarAvaliacoesDesempenho(avaliacoesCriadas);
+  return { avaliacoesCriadas, duplicadas: avaliacoes.length - avaliacoesCriadas.length };
 }
 
 /** Encerra o ciclo — trava todas as avaliações vinculadas a ele, mesmo as
