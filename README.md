@@ -65,6 +65,8 @@ Mesma ideia da exceção do CEO, mas do outro lado: **só o Yuri** (cargo "Diret
 
 Checagem por **cargo** (`ehDiretorIndustrial()` em `src/domain/hierarquia.ts`, mesmo padrão de `ehCEO()`), passada como um parâmetro extra em `canSeeMov()` (`src/domain/permissoes.ts`).
 
+Cargos de liderança passaram a usar o marcador de gênero neutro "(a)" (ex.: "Diretor (a) Geral - CEO", "Diretor (a) Industrial") — `CARGO_DIRETOR_INDUSTRIAL` (e a mesma lógica em `CARGO_CEO`) tolera "(a)" no meio do texto (`/^diretor\s*(\(a\))?\s*industrial\b/`), senão um `^diretor industrial\b` estrito quebraria assim que o cargo do Yuri fosse renomeado.
+
 ### Tela de administração de acessos (`/acessos`, RH-only)
 
 Depois que a primeira conta do RH estiver provisionada manualmente (passo 2 acima), o próprio RH consegue liberar o acesso de qualquer Gestor/Diretor direto pelo app, sem entrar no painel do Supabase: a tela lista todo colaborador cadastrado com o e-mail derivado do nome e um status "Provisionado"/"Sem acesso", com um botão "Liberar acesso" por linha.

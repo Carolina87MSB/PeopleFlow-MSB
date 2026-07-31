@@ -143,7 +143,10 @@ export function ehCEO(colaborador: Colaborador | undefined): boolean {
   return Boolean(colaborador && CARGO_CEO.test(norm(colaborador.cargo)));
 }
 
-const CARGO_DIRETOR_INDUSTRIAL = /^diretor industrial\b/;
+// "diretor\s*(\(a\))?\s*industrial" tolera o marcador de gênero neutro
+// "(a)" que passou a ser usado nos nomes de cargo (ex.: "Diretor (a)
+// Industrial") — um "^diretor industrial\b" estrito nunca bateria com isso.
+const CARGO_DIRETOR_INDUSTRIAL = /^diretor\s*(\(a\))?\s*industrial\b/;
 
 /**
  * true só para quem tem o cargo "Diretor Industrial" (hoje, só o Yuri) —
