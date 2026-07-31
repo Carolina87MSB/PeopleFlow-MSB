@@ -496,3 +496,42 @@ create policy "authenticated_rw_pdi"
   to authenticated
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 9) Gestão de Desempenho — etapa 2 (funcionamento da AVD)
+-- ─────────────────────────────────────────────────────────────────────────
+-- Ciclo de avaliação de desempenho, aberto pelo RH. Ao abrir um ciclo, o
+-- sistema gera automaticamente 1 linha em peopleflow_avaliacoes_desempenho
+-- por colaborador ativo, com o conjunto de competências comportamentais e
+-- KPIs do cargo já "travado" no momento da criação (ver comentário na coluna
+-- ciclo_id abaixo, e ResultadoComportamental/ResultadoKpi em
+-- src/types/domain.ts).
+create table if not exists public.peopleflow_ciclos_avaliacao_desempenho (
+  id text primary key,
+  nome text not null,
+  periodo_referencia text not null,
+  data_inicio date not null,
+  data_encerramento date not null,
+  criado_por text,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_ciclos_avaliacao_desempenho is
+  'Ciclo de Avaliação de Desempenho (AVD) aberto pelo RH — ao criar, gera automaticamente 1 avaliação por colaborador ativo. Ver CicloAvaliacaoDesempenho em src/types/domain.ts.';
+
+alter table public.peopleflow_ciclos_avaliacao_desempenho enable row level security;
+
+drop policy if exists "authenticated_rw_ciclos_avaliacao_desempenho" on public.peopleflow_ciclos_avaliacao_desempenho;
+create policy "authenticated_rw_ciclos_avaliacao_desempenho"
+  on public.peopleflow_ciclos_avaliacao_desempenho
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+alter table public.peopleflow_avaliacoes_desempenho
+  add column if not exists ciclo_id text;
+
+comment on column public.peopleflow_avaliacoes_desempenho.ciclo_id is 'Referencia peopleflow_ciclos_avaliacao_desempenho.id (sem FK) — a coluna ciclo (texto) continua guardando o nome do ciclo, pra exibição sem join.';
+comment on column public.peopleflow_avaliacoes_desempenho.resultados_comportamentais is 'Array de { competenciaId, notasAfirmacoes: (number|null)[] } — o conjunto de competências (e quantas afirmações cada uma tinha) fica travado no momento da criação da avaliação, não é recalculado depois.';
+comment on column public.peopleflow_avaliacoes_desempenho.resultados_kpis is 'Array de { kpiId, resultado: number|null } — o conjunto de KPIs (do cargo do colaborador no momento da criação) fica travado, o gestor não pode incluir indicador manualmente.';

@@ -27,10 +27,13 @@ import {
   criarKpiCargo as criarKpiCargoNoSupabase,
   excluirKpiCargo as excluirKpiCargoNoSupabase,
 } from "../repositories/kpisCargoRepository";
+import { atualizarAvaliacaoDesempenho as atualizarAvaliacaoDesempenhoNoSupabase } from "../repositories/avaliacoesDesempenhoRepository";
+import { criarCicloComAvaliacoes as criarCicloComAvaliacoesNoSupabase } from "../repositories/ciclosAvaliacaoDesempenhoRepository";
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
+import { gerarIdAvaliacaoDesempenho, gerarIdCicloAvaliacaoDesempenho } from "../domain/avaliacaoDesempenho";
 import {
   calcularIndicacao,
   calcularNotaFinalPct,
@@ -47,6 +50,7 @@ import { useConta } from "./useConta";
 import type {
   AvaliacaoDesempenho,
   AvaliacaoExperiencia,
+  CicloAvaliacaoDesempenho,
   Colaborador,
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
@@ -59,6 +63,7 @@ import type {
   KpiCargo,
   Movimentacao,
   NovaMovimentacaoForm,
+  NovoCicloAvaliacaoForm,
   Pdi,
   Perfil,
   RespostaAvaliacaoExperiencia,
@@ -126,6 +131,14 @@ export interface PortalData {
   atualizarKpiCargo: (kpi: KpiCargo) => Promise<{ ok: true } | { ok: false }>;
   excluirKpiCargo: (id: number) => Promise<{ ok: true } | { ok: false }>;
   avaliacoesDesempenho: AvaliacaoDesempenho[];
+  /** RH vê todas; Gestor só as de colaboradores com `gestor === conta.nome` (reporte direto). */
+  avaliacoesDesempenhoVisiveis: AvaliacaoDesempenho[];
+  ciclosAvaliacaoDesempenho: CicloAvaliacaoDesempenho[];
+  criarCicloAvaliacaoDesempenho: (form: NovoCicloAvaliacaoForm) => Promise<{ ok: true; quantidade: number } | { ok: false }>;
+  salvarAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => Promise<{ ok: true } | { ok: false }>;
+  /** true quando `conta` pode editar ESSA avaliação especificamente — RH sempre, Gestor só se
+   * for o gestor do colaborador avaliado — e ela ainda não estiver "Concluída" (trava total). */
+  podeEditarAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => boolean;
   pdi: Pdi[];
   podeEditarGestaoDesempenho: boolean;
 }
@@ -201,6 +214,24 @@ export function usePortalData(): PortalData {
     );
     return perfil === "RH" ? todas : todas.filter((p) => p.colaborador.gestor === me);
   }, [state.colaboradores, state.avaliacoesExperiencia, state.dispensasAvaliacaoExperiencia, perfil, me]);
+
+  const avaliacoesDesempenhoVisiveis = useMemo(() => {
+    if (perfil === "RH") return state.avaliacoesDesempenho;
+    return state.avaliacoesDesempenho.filter((a) => {
+      const colaborador = state.colaboradores.find((c) => c.nome === a.colaboradorNome);
+      return colaborador?.gestor === me;
+    });
+  }, [state.avaliacoesDesempenho, state.colaboradores, perfil, me]);
+
+  const podeEditarAvaliacaoDesempenhoFn = useCallback(
+    (avaliacao: AvaliacaoDesempenho) => {
+      if (avaliacao.status === "Concluída") return false;
+      if (perfil === "RH") return true;
+      const colaborador = state.colaboradores.find((c) => c.nome === avaliacao.colaboradorNome);
+      return colaborador?.gestor === me;
+    },
+    [perfil, me, state.colaboradores],
+  );
 
   const aprovarEtapaFn = useCallback(
     (id: string) => {
@@ -528,6 +559,70 @@ export function usePortalData(): PortalData {
     [dispatch, flash],
   );
 
+  const criarCicloAvaliacaoDesempenhoFn = useCallback(
+    async (form: NovoCicloAvaliacaoForm) => {
+      const agora = new Date().toISOString();
+      const ciclo: CicloAvaliacaoDesempenho = {
+        id: gerarIdCicloAvaliacaoDesempenho(),
+        nome: form.nome.trim(),
+        periodoReferencia: form.periodoReferencia.trim(),
+        dataInicio: form.dataInicio,
+        dataEncerramento: form.dataEncerramento,
+        criadoPor: me,
+        criadoEm: agora,
+      };
+      // Elegibilidade nesta etapa: todo colaborador ativo. Regras (tempo
+      // mínimo de empresa, afastamentos etc.) ficam pra próxima etapa.
+      const ativos = state.colaboradores.filter((c) => !c.desligado);
+      const competenciasAtivas = state.competenciasComportamentais.filter((c) => c.ativo);
+      const avaliacoes: AvaliacaoDesempenho[] = ativos.map((c) => ({
+        id: gerarIdAvaliacaoDesempenho(),
+        colaboradorNome: c.nome,
+        cicloId: ciclo.id,
+        ciclo: ciclo.nome,
+        status: "Não iniciada",
+        // Competências/KPIs ficam travados no momento da criação — ver
+        // README > "Gestão de Desempenho" e comentário em schema.sql.
+        resultadosComportamentais: competenciasAtivas.map((comp) => ({
+          competenciaId: comp.id,
+          notasAfirmacoes: comp.afirmacoes.map(() => null),
+        })),
+        resultadosKpis: state.kpisCargo.filter((k) => k.cargoNome === c.cargo).map((k) => ({ kpiId: k.id, resultado: null })),
+        comentarioComportamental: "",
+        comentarioTecnico: "",
+        comentarioGeral: "",
+        avaliadoPor: "",
+        criadoEm: agora,
+        updatedAt: agora,
+      }));
+      try {
+        await criarCicloComAvaliacoesNoSupabase(ciclo, avaliacoes);
+        dispatch({ type: "CRIAR_CICLO_AVALIACAO_DESEMPENHO", ciclo, avaliacoes });
+        flash(`Ciclo "${ciclo.nome}" aberto — ${avaliacoes.length} avaliação(ões) gerada(s).`);
+        return { ok: true as const, quantidade: avaliacoes.length };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao abrir ciclo de avaliação de desempenho.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, state.colaboradores, state.competenciasComportamentais, state.kpisCargo],
+  );
+
+  const salvarAvaliacaoDesempenhoFn = useCallback(
+    async (avaliacao: AvaliacaoDesempenho) => {
+      try {
+        await atualizarAvaliacaoDesempenhoNoSupabase(avaliacao);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_DESEMPENHO", avaliacao });
+        flash(avaliacao.status === "Concluída" ? "Avaliação concluída." : "Progresso da avaliação salvo.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao salvar avaliação de desempenho.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, flash],
+  );
+
   return {
     conta,
     perfil,
@@ -565,6 +660,11 @@ export function usePortalData(): PortalData {
     atualizarConfigAvaliacaoDesempenho: atualizarConfigAvaliacaoDesempenhoFn,
     competenciasComportamentais: state.competenciasComportamentais,
     salvarCompetenciaComportamental: salvarCompetenciaComportamentalFn,
+    avaliacoesDesempenhoVisiveis,
+    ciclosAvaliacaoDesempenho: state.ciclosAvaliacaoDesempenho,
+    criarCicloAvaliacaoDesempenho: criarCicloAvaliacaoDesempenhoFn,
+    salvarAvaliacaoDesempenho: salvarAvaliacaoDesempenhoFn,
+    podeEditarAvaliacaoDesempenho: podeEditarAvaliacaoDesempenhoFn,
     kpisCargo: state.kpisCargo,
     criarKpiCargo: criarKpiCargoFn,
     atualizarKpiCargo: atualizarKpiCargoFn,

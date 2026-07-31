@@ -2,6 +2,7 @@ import type {
   AvaliacaoDesempenho,
   AvaliacaoExperiencia,
   CargoCustom,
+  CicloAvaliacaoDesempenho,
   Colaborador,
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
@@ -31,6 +32,7 @@ export type PortalAction =
       competenciasComportamentais: CompetenciaComportamental[];
       kpisCargo: KpiCargo[];
       avaliacoesDesempenho: AvaliacaoDesempenho[];
+      ciclosAvaliacaoDesempenho: CicloAvaliacaoDesempenho[];
       pdi: Pdi[];
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
@@ -48,4 +50,6 @@ export type PortalAction =
   | { type: "CRIAR_KPI_CARGO"; kpi: KpiCargo }
   | { type: "ATUALIZAR_KPI_CARGO"; kpi: KpiCargo }
   | { type: "EXCLUIR_KPI_CARGO"; id: number }
+  | { type: "CRIAR_CICLO_AVALIACAO_DESEMPENHO"; ciclo: CicloAvaliacaoDesempenho; avaliacoes: AvaliacaoDesempenho[] }
+  | { type: "ATUALIZAR_AVALIACAO_DESEMPENHO"; avaliacao: AvaliacaoDesempenho }
   | { type: "RESET" };

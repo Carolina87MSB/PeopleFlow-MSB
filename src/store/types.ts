@@ -2,6 +2,7 @@ import type {
   AvaliacaoDesempenho,
   AvaliacaoExperiencia,
   CargoCustom,
+  CicloAvaliacaoDesempenho,
   Colaborador,
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
@@ -29,5 +30,6 @@ export interface PortalState {
   competenciasComportamentais: CompetenciaComportamental[];
   kpisCargo: KpiCargo[];
   avaliacoesDesempenho: AvaliacaoDesempenho[];
+  ciclosAvaliacaoDesempenho: CicloAvaliacaoDesempenho[];
   pdi: Pdi[];
 }

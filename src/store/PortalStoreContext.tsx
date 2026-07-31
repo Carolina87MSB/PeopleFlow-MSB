@@ -12,6 +12,7 @@ import { getConfigAvaliacaoDesempenho } from "../repositories/configAvaliacaoDes
 import { getCompetenciasComportamentais } from "../repositories/competenciasComportamentaisRepository";
 import { getKpisCargo } from "../repositories/kpisCargoRepository";
 import { getAvaliacoesDesempenho } from "../repositories/avaliacoesDesempenhoRepository";
+import { getCiclosAvaliacaoDesempenho } from "../repositories/ciclosAvaliacaoDesempenhoRepository";
 import { getPdi } from "../repositories/pdiRepository";
 import type { PortalAction } from "./actions";
 import { initialPortalState, portalReducer } from "./reducer";
@@ -62,6 +63,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getCompetenciasComportamentais(),
       getKpisCargo(),
       getAvaliacoesDesempenho(),
+      getCiclosAvaliacaoDesempenho(),
       getPdi(),
     ])
       .then(
@@ -79,6 +81,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           competenciasComportamentais,
           kpisCargo,
           avaliacoesDesempenho,
+          ciclosAvaliacaoDesempenho,
           pdi,
         ]) => {
           if (cancelado) return;
@@ -104,6 +107,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             competenciasComportamentais,
             kpisCargo,
             avaliacoesDesempenho,
+            ciclosAvaliacaoDesempenho,
             pdi,
           });
         },

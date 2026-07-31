@@ -16,6 +16,7 @@ export const initialPortalState: PortalState = {
   competenciasComportamentais: [],
   kpisCargo: [],
   avaliacoesDesempenho: [],
+  ciclosAvaliacaoDesempenho: [],
   pdi: [],
 };
 
@@ -37,6 +38,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         competenciasComportamentais: action.competenciasComportamentais,
         kpisCargo: action.kpisCargo,
         avaliacoesDesempenho: action.avaliacoesDesempenho,
+        ciclosAvaliacaoDesempenho: action.ciclosAvaliacaoDesempenho,
         pdi: action.pdi,
       };
 
@@ -118,6 +120,19 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
 
     case "EXCLUIR_KPI_CARGO":
       return { ...state, kpisCargo: state.kpisCargo.filter((k) => k.id !== action.id) };
+
+    case "CRIAR_CICLO_AVALIACAO_DESEMPENHO":
+      return {
+        ...state,
+        ciclosAvaliacaoDesempenho: [action.ciclo, ...state.ciclosAvaliacaoDesempenho],
+        avaliacoesDesempenho: [...action.avaliacoes, ...state.avaliacoesDesempenho],
+      };
+
+    case "ATUALIZAR_AVALIACAO_DESEMPENHO":
+      return {
+        ...state,
+        avaliacoesDesempenho: state.avaliacoesDesempenho.map((a) => (a.id === action.avaliacao.id ? action.avaliacao : a)),
+      };
 
     default:
       return state;

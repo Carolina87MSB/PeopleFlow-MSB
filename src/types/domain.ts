@@ -356,24 +356,61 @@ export interface KpiCargo {
   updatedBy: string;
 }
 
+/** Notas (1 a 5) de cada afirmação avaliativa de uma competência — o conjunto
+ * de competências (e quantas afirmações cada uma tinha) fica travado no
+ * momento em que o ciclo gera a avaliação, indexado nesta mesma ordem;
+ * `null` = afirmação ainda não avaliada. Nome/descrição/afirmações da
+ * competência continuam vindo por lookup em `competenciasComportamentais`
+ * via `competenciaId` — não são duplicados aqui. */
 export interface ResultadoComportamental {
   competenciaId: string;
-  nota: number;
+  notasAfirmacoes: (number | null)[];
 }
 
+/** Resultado obtido pelo colaborador em um KPI do cargo — o conjunto de KPIs
+ * (do cargo no momento da criação da avaliação) fica travado; o gestor não
+ * pode incluir indicador manualmente, só preencher `resultado`. Demais campos
+ * (meta/unidade/sentido/peso) continuam vindo por lookup em `kpisCargo` via
+ * `kpiId`. */
 export interface ResultadoKpi {
   kpiId: number;
-  resultado: number;
+  resultado: number | null;
 }
 
-/** Avaliação de Desempenho por colaborador/ciclo — estrutura só nesta etapa:
- * sem regra de cálculo de nota, fluxo de aprovação ou autoavaliação ainda
- * (ver README > "Gestão de Desempenho" pro que fica pra próxima fase). */
+/** Ciclo de Avaliação de Desempenho (AVD), aberto pelo RH — ao criar, gera
+ * automaticamente 1 AvaliacaoDesempenho por colaborador ativo. */
+export interface CicloAvaliacaoDesempenho {
+  id: string;
+  nome: string;
+  periodoReferencia: string;
+  dataInicio: string;
+  dataEncerramento: string;
+  criadoPor: string;
+  criadoEm: string;
+}
+
+/** Form de abertura de um novo ciclo (tela RH-only). */
+export interface NovoCicloAvaliacaoForm {
+  nome: string;
+  periodoReferencia: string;
+  dataInicio: string;
+  dataEncerramento: string;
+}
+
+/** Status possíveis de uma AvaliacaoDesempenho — avança sozinho conforme o
+ * gestor preenche (nunca regride); "Concluída" trava a edição por completo
+ * (só reabertura de ciclo, funcionalidade futura, desfaz isso). */
+export type StatusAvaliacaoDesempenho = "Não iniciada" | "Em andamento" | "Concluída";
+
+/** Avaliação de Desempenho por colaborador/ciclo — etapa 2: cálculo de nota
+ * automático, sem fluxo de aprovação, autoavaliação, calibração ou reabertura
+ * de ciclo ainda (ver README > "Gestão de Desempenho"). */
 export interface AvaliacaoDesempenho {
   id: string;
   colaboradorNome: string;
+  cicloId: string;
   ciclo: string;
-  status: string;
+  status: StatusAvaliacaoDesempenho;
   resultadosComportamentais: ResultadoComportamental[];
   resultadosKpis: ResultadoKpi[];
   comentarioComportamental: string;
