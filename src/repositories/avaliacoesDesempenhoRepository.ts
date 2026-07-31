@@ -8,6 +8,9 @@ import type { AvaliacaoDesempenho, ResultadoComportamental, ResultadoKpi, Status
 interface AvaliacaoDesempenhoRow {
   id: string;
   colaborador_nome: string;
+  cargo: string | null;
+  departamento: string | null;
+  gestor_avaliador: string | null;
   ciclo_id: string | null;
   ciclo: string;
   status: string;
@@ -17,6 +20,11 @@ interface AvaliacaoDesempenhoRow {
   comentario_tecnico: string | null;
   comentario_geral: string | null;
   avaliado_por: string | null;
+  concluido_por: string | null;
+  concluido_em: string | null;
+  nota_final: number | null;
+  media_tecnica: number | null;
+  media_comportamental: number | null;
   criado_em: string;
   updated_at: string;
 }
@@ -25,6 +33,9 @@ function fromRow(row: AvaliacaoDesempenhoRow): AvaliacaoDesempenho {
   return {
     id: row.id,
     colaboradorNome: row.colaborador_nome,
+    cargo: row.cargo ?? "",
+    departamento: row.departamento ?? "",
+    gestorAvaliador: row.gestor_avaliador ?? "",
     cicloId: row.ciclo_id ?? "",
     ciclo: row.ciclo,
     status: row.status as StatusAvaliacaoDesempenho,
@@ -34,6 +45,11 @@ function fromRow(row: AvaliacaoDesempenhoRow): AvaliacaoDesempenho {
     comentarioTecnico: row.comentario_tecnico ?? "",
     comentarioGeral: row.comentario_geral ?? "",
     avaliadoPor: row.avaliado_por ?? "",
+    concluidoPor: row.concluido_por ?? "",
+    concluidoEm: row.concluido_em,
+    notaFinal: row.nota_final,
+    mediaTecnica: row.media_tecnica,
+    mediaComportamental: row.media_comportamental,
     criadoEm: row.criado_em,
     updatedAt: row.updated_at,
   };
@@ -43,6 +59,9 @@ function toRow(a: AvaliacaoDesempenho) {
   return {
     id: a.id,
     colaborador_nome: a.colaboradorNome,
+    cargo: a.cargo || null,
+    departamento: a.departamento || null,
+    gestor_avaliador: a.gestorAvaliador || null,
     ciclo_id: a.cicloId,
     ciclo: a.ciclo,
     status: a.status,
@@ -52,6 +71,11 @@ function toRow(a: AvaliacaoDesempenho) {
     comentario_tecnico: a.comentarioTecnico,
     comentario_geral: a.comentarioGeral,
     avaliado_por: a.avaliadoPor || null,
+    concluido_por: a.concluidoPor || null,
+    concluido_em: a.concluidoEm,
+    nota_final: a.notaFinal,
+    media_tecnica: a.mediaTecnica,
+    media_comportamental: a.mediaComportamental,
   };
 }
 

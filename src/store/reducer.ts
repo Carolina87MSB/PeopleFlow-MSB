@@ -134,6 +134,14 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         avaliacoesDesempenho: state.avaliacoesDesempenho.map((a) => (a.id === action.avaliacao.id ? action.avaliacao : a)),
       };
 
+    case "ENCERRAR_CICLO_AVALIACAO_DESEMPENHO":
+      return {
+        ...state,
+        ciclosAvaliacaoDesempenho: state.ciclosAvaliacaoDesempenho.map((c) =>
+          c.id === action.id ? { ...c, status: "Encerrado" } : c,
+        ),
+      };
+
     default:
       return state;
   }

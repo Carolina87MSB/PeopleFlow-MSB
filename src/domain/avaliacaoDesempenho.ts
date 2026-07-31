@@ -2,7 +2,7 @@
 // dependência de UI/Supabase. Ver README > "Gestão de Desempenho" para as
 // regras de negócio por trás de cada fórmula.
 
-import type { AvaliacaoDesempenho, ConfigAvaliacaoDesempenho, KpiCargo, ResultadoComportamental, ResultadoKpi } from "../types/domain";
+import type { AvaliacaoDesempenho, CompetenciaComportamental, ConfigAvaliacaoDesempenho, KpiCargo, ResultadoComportamental, ResultadoKpi } from "../types/domain";
 
 /** Escala fixa de avaliação das afirmações comportamentais — igual pra todas
  * as competências, não é configurável (ver peopleflow_competencias_comportamentais
@@ -131,4 +131,32 @@ export function arredondar(valor: number | null, casas = 1): number | null {
   if (valor === null) return null;
   const fator = 10 ** casas;
   return Math.round(valor * fator) / fator;
+}
+
+/** Lista textual do que falta preencher pra poder concluir a avaliação —
+ * exibida ao gestor em vez de só desabilitar o botão em silêncio. */
+export function itensPendentes(
+  avaliacao: AvaliacaoDesempenho,
+  competencias: CompetenciaComportamental[],
+  kpis: KpiCargo[],
+): string[] {
+  const competenciasPorId = new Map(competencias.map((c) => [c.id, c]));
+  const kpisPorId = new Map(kpis.map((k) => [k.id, k]));
+  const pendentes: string[] = [];
+
+  for (const resultado of avaliacao.resultadosComportamentais) {
+    const competencia = competenciasPorId.get(resultado.competenciaId);
+    resultado.notasAfirmacoes.forEach((nota, indice) => {
+      if (nota === null) pendentes.push(`${competencia?.nome ?? "Competência"} — afirmação ${indice + 1}`);
+    });
+  }
+
+  for (const resultado of avaliacao.resultadosKpis) {
+    if (resultado.resultado === null) {
+      const kpi = kpisPorId.get(resultado.kpiId);
+      pendentes.push(`KPI: ${kpi?.nomeIndicador ?? `#${resultado.kpiId}`}`);
+    }
+  }
+
+  return pendentes;
 }

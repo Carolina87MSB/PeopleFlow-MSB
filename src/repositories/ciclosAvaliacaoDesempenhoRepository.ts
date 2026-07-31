@@ -12,6 +12,7 @@ interface CicloAvaliacaoDesempenhoRow {
   periodo_referencia: string;
   data_inicio: string;
   data_encerramento: string;
+  status: string;
   criado_por: string | null;
   criado_em: string;
 }
@@ -23,6 +24,7 @@ function fromRow(row: CicloAvaliacaoDesempenhoRow): CicloAvaliacaoDesempenho {
     periodoReferencia: row.periodo_referencia,
     dataInicio: row.data_inicio,
     dataEncerramento: row.data_encerramento,
+    status: row.status as CicloAvaliacaoDesempenho["status"],
     criadoPor: row.criado_por ?? "",
     criadoEm: row.criado_em,
   };
@@ -55,4 +57,14 @@ export async function criarCicloComAvaliacoes(ciclo: CicloAvaliacaoDesempenho, a
   if (error) throw new Error(`Falha ao criar ciclo de avaliação de desempenho no Supabase: ${error.message}`);
 
   await criarAvaliacoesDesempenho(avaliacoes);
+}
+
+/** Encerra o ciclo — trava todas as avaliações vinculadas a ele, mesmo as
+ * "Em andamento" (ver podeEditarAvaliacaoDesempenho() em usePortalData.ts).
+ * Sem reabertura nesta etapa. */
+export async function encerrarCiclo(id: string): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { error } = await supabase.from("peopleflow_ciclos_avaliacao_desempenho").update({ status: "Encerrado" }).eq("id", id);
+  if (error) throw new Error(`Falha ao encerrar ciclo de avaliação de desempenho no Supabase: ${error.message}`);
 }

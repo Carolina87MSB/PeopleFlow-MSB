@@ -52,4 +52,5 @@ export type PortalAction =
   | { type: "EXCLUIR_KPI_CARGO"; id: number }
   | { type: "CRIAR_CICLO_AVALIACAO_DESEMPENHO"; ciclo: CicloAvaliacaoDesempenho; avaliacoes: AvaliacaoDesempenho[] }
   | { type: "ATUALIZAR_AVALIACAO_DESEMPENHO"; avaliacao: AvaliacaoDesempenho }
+  | { type: "ENCERRAR_CICLO_AVALIACAO_DESEMPENHO"; id: string }
   | { type: "RESET" };

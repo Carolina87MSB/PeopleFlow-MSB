@@ -379,12 +379,17 @@ export interface ResultadoKpi {
 
 /** Ciclo de Avaliação de Desempenho (AVD), aberto pelo RH — ao criar, gera
  * automaticamente 1 AvaliacaoDesempenho por colaborador ativo. */
+/** "Aberto" aceita edição das avaliações geradas por ele; "Encerrado" trava
+ * todas de uma vez (mesmo as "Em andamento") — sem reabertura nesta etapa. */
+export type StatusCicloAvaliacaoDesempenho = "Aberto" | "Encerrado";
+
 export interface CicloAvaliacaoDesempenho {
   id: string;
   nome: string;
   periodoReferencia: string;
   dataInicio: string;
   dataEncerramento: string;
+  status: StatusCicloAvaliacaoDesempenho;
   criadoPor: string;
   criadoEm: string;
 }
@@ -402,12 +407,23 @@ export interface NovoCicloAvaliacaoForm {
  * (só reabertura de ciclo, funcionalidade futura, desfaz isso). */
 export type StatusAvaliacaoDesempenho = "Não iniciada" | "Em andamento" | "Concluída";
 
-/** Avaliação de Desempenho por colaborador/ciclo — etapa 2: cálculo de nota
+/** Avaliação de Desempenho por colaborador/ciclo — cálculo de nota
  * automático, sem fluxo de aprovação, autoavaliação, calibração ou reabertura
- * de ciclo ainda (ver README > "Gestão de Desempenho"). */
+ * de ciclo ainda (ver README > "Gestão de Desempenho"). `cargo`/`departamento`/
+ * `gestorAvaliador` são snapshot da estrutura organizacional no momento da
+ * criação — preservam o histórico mesmo que o colaborador seja promovido
+ * depois. `notaFinal`/`mediaTecnica`/`mediaComportamental` são recalculados e
+ * regravados a cada save — junto com `criadoEm`/`concluidoEm`, formam a base
+ * do histórico do colaborador (comparativo entre ciclos, evolução, Matriz 9
+ * Box ficam pra etapas futuras, mas o dado já fica disponível). */
 export interface AvaliacaoDesempenho {
   id: string;
   colaboradorNome: string;
+  cargo: string;
+  departamento: string;
+  /** Nome do gestor responsável por avaliar — vazio quando o colaborador não
+   * tinha gestor definido no momento da geração (RH precisa tratar). */
+  gestorAvaliador: string;
   cicloId: string;
   ciclo: string;
   status: StatusAvaliacaoDesempenho;
@@ -417,8 +433,26 @@ export interface AvaliacaoDesempenho {
   comentarioTecnico: string;
   comentarioGeral: string;
   avaliadoPor: string;
+  /** Preenchidos só quando status = "Concluída". */
+  concluidoPor: string;
+  concluidoEm: string | null;
+  notaFinal: number | null;
+  mediaTecnica: number | null;
+  mediaComportamental: number | null;
   criadoEm: string;
   updatedAt: string;
+}
+
+/** Auditoria básica da AVD — gravação best-effort (nunca bloqueia a ação
+ * principal), ver logAvaliacaoDesempenhoRepository.ts. */
+export interface LogAvaliacaoDesempenho {
+  id: number;
+  cicloId: string | null;
+  avaliacaoId: string | null;
+  acao: string;
+  detalhe: string;
+  usuario: string;
+  criadoEm: string;
 }
 
 /** Plano de Desenvolvimento Individual — estrutura inicial, sem geração

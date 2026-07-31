@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Drawer } from "../../components/ui";
 import {
   arredondar,
   avaliacaoCompleta,
   ESCALA_COMPORTAMENTAL,
+  itensPendentes,
   mediaAfirmacoes,
   mediaComportamental,
   mediaTecnica,
@@ -11,10 +12,13 @@ import {
   notaKpi,
   percentualAtingimentoKpi,
 } from "../../domain/avaliacaoDesempenho";
+import { formatarDataHora, formatarHoraAtual } from "../../domain/dates";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalData } from "../../store/usePortalData";
-import type { AvaliacaoDesempenho } from "../../types/domain";
+import type { AvaliacaoDesempenho, StatusAvaliacaoDesempenho } from "../../types/domain";
 import styles from "./AvaliacaoDesempenhoDrawer.module.css";
+
+const AUTOSAVE_DEBOUNCE_MS = 1200;
 
 interface AvaliacaoDesempenhoDrawerProps {
   avaliacao: AvaliacaoDesempenho;
@@ -33,12 +37,18 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
   const podeEditar = podeEditarAvaliacaoDesempenho(avaliacao);
   const colaborador = colaboradores.find((c) => c.nome === avaliacao.colaboradorNome);
 
+  // Recuperação da última versão salva: o rascunho sempre parte do que está
+  // persistido no Supabase (prop `avaliacao`), então reabrir o Drawer já
+  // retoma de onde parou — não precisa de nenhuma lógica adicional.
   const [rascunho, setRascunho] = useState<AvaliacaoDesempenho>(() => ({
     ...avaliacao,
     resultadosComportamentais: avaliacao.resultadosComportamentais.map((r) => ({ ...r, notasAfirmacoes: [...r.notasAfirmacoes] })),
     resultadosKpis: avaliacao.resultadosKpis.map((r) => ({ ...r })),
   }));
   const [salvando, setSalvando] = useState<"progresso" | "concluir" | null>(null);
+  const [sujo, setSujo] = useState(false);
+  const [salvandoAuto, setSalvandoAuto] = useState(false);
+  const [ultimoSalvoAutoHora, setUltimoSalvoAutoHora] = useState<string | null>(null);
 
   const kpisPorId = useMemo(() => new Map(kpisCargo.map((k) => [k.id, k])), [kpisCargo]);
   const competenciasPorId = useMemo(() => new Map(competenciasComportamentais.map((c) => [c.id, c])), [competenciasComportamentais]);
@@ -47,6 +57,36 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
   const mediaComportamentalValor = mediaComportamental(rascunho.resultadosComportamentais);
   const notaFinal = notaFinalAvaliacao(mediaTecnicaValor, mediaComportamentalValor, configAvaliacaoDesempenho);
   const completa = avaliacaoCompleta(rascunho);
+  const pendencias = useMemo(
+    () => itensPendentes(rascunho, competenciasComportamentais, kpisCargo),
+    [rascunho, competenciasComportamentais, kpisCargo],
+  );
+
+  async function persistir(status: StatusAvaliacaoDesempenho) {
+    const atualizado: AvaliacaoDesempenho = { ...rascunho, status };
+    const result = await salvarAvaliacaoDesempenho(atualizado);
+    if (result.ok) {
+      setRascunho(atualizado);
+      setSujo(false);
+    }
+    return result;
+  }
+
+  // Autosave debounced: qualquer edição agenda uma gravação silenciosa (sem
+  // toast) ~1,2s depois da última mudança; a 1ª gravação já promove "Não
+  // iniciada" -> "Em andamento" sozinha, igual ao salvamento manual.
+  useEffect(() => {
+    if (!podeEditar || !sujo || salvando !== null) return;
+    const timer = setTimeout(async () => {
+      setSalvandoAuto(true);
+      const status = rascunho.status === "Não iniciada" ? "Em andamento" : rascunho.status;
+      await persistir(status);
+      setSalvandoAuto(false);
+      setUltimoSalvoAutoHora(formatarHoraAtual());
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rascunho, sujo, podeEditar, salvando]);
 
   function atualizarNotaAfirmacao(competenciaId: string, indice: number, nota: number) {
     setRascunho((r) => ({
@@ -57,6 +97,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
           : res,
       ),
     }));
+    setSujo(true);
   }
 
   function atualizarResultadoKpi(kpiId: number, valor: string) {
@@ -65,18 +106,20 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
       ...r,
       resultadosKpis: r.resultadosKpis.map((res) => (res.kpiId === kpiId ? { ...res, resultado: Number.isNaN(resultado) ? null : resultado } : res)),
     }));
+    setSujo(true);
+  }
+
+  function atualizarComentario(campo: "comentarioComportamental" | "comentarioTecnico" | "comentarioGeral", valor: string) {
+    setRascunho((r) => ({ ...r, [campo]: valor }));
+    setSujo(true);
   }
 
   async function handleSalvar(tipo: "progresso" | "concluir") {
     setSalvando(tipo);
     const status = tipo === "concluir" ? "Concluída" : rascunho.status === "Não iniciada" ? "Em andamento" : rascunho.status;
-    const atualizado: AvaliacaoDesempenho = { ...rascunho, status };
-    const result = await salvarAvaliacaoDesempenho(atualizado);
+    const result = await persistir(status);
     setSalvando(null);
-    if (result.ok) {
-      setRascunho(atualizado);
-      if (tipo === "concluir") onClose();
-    }
+    if (result.ok && tipo === "concluir") onClose();
   }
 
   return (
@@ -95,7 +138,15 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
         <Badge bg="var(--color-brand-pale, #eef7f9)" fg="var(--color-brand)">
           {rascunho.status}
         </Badge>
-        {!podeEditar && rascunho.status === "Concluída" && <span className={styles.trancada}>Avaliação concluída — sem edição.</span>}
+        {!podeEditar && rascunho.status === "Concluída" && (
+          <span className={styles.trancada}>
+            Concluída por {rascunho.concluidoPor || "—"} em {formatarDataHora(rascunho.concluidoEm)}.
+          </span>
+        )}
+        {!podeEditar && rascunho.status !== "Concluída" && <span className={styles.trancada}>Ciclo encerrado — sem edição.</span>}
+        {podeEditar && (salvandoAuto || ultimoSalvoAutoHora) && (
+          <span className={styles.autosaveIndicador}>{salvandoAuto ? "Salvando..." : `Salvo automaticamente às ${ultimoSalvoAutoHora}`}</span>
+        )}
       </div>
 
       <h4 className={styles.sectionTitle}>Competências Comportamentais</h4>
@@ -199,7 +250,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
           className={styles.textarea}
           rows={2}
           value={rascunho.comentarioComportamental}
-          onChange={(e) => setRascunho({ ...rascunho, comentarioComportamental: e.target.value })}
+          onChange={(e) => atualizarComentario("comentarioComportamental", e.target.value)}
           disabled={!podeEditar}
         />
       </div>
@@ -212,7 +263,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
           className={styles.textarea}
           rows={2}
           value={rascunho.comentarioTecnico}
-          onChange={(e) => setRascunho({ ...rascunho, comentarioTecnico: e.target.value })}
+          onChange={(e) => atualizarComentario("comentarioTecnico", e.target.value)}
           disabled={!podeEditar}
         />
       </div>
@@ -225,10 +276,21 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
           className={styles.textarea}
           rows={2}
           value={rascunho.comentarioGeral}
-          onChange={(e) => setRascunho({ ...rascunho, comentarioGeral: e.target.value })}
+          onChange={(e) => atualizarComentario("comentarioGeral", e.target.value)}
           disabled={!podeEditar}
         />
       </div>
+
+      {podeEditar && !completa && pendencias.length > 0 && (
+        <div className={styles.pendencias}>
+          <span className={styles.pendenciasTitulo}>Itens pendentes para concluir:</span>
+          <ul className={styles.pendenciasLista}>
+            {pendencias.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {podeEditar && (
         <div className={styles.edicaoAcoes}>

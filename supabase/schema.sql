@@ -535,3 +535,61 @@ alter table public.peopleflow_avaliacoes_desempenho
 comment on column public.peopleflow_avaliacoes_desempenho.ciclo_id is 'Referencia peopleflow_ciclos_avaliacao_desempenho.id (sem FK) — a coluna ciclo (texto) continua guardando o nome do ciclo, pra exibição sem join.';
 comment on column public.peopleflow_avaliacoes_desempenho.resultados_comportamentais is 'Array de { competenciaId, notasAfirmacoes: (number|null)[] } — o conjunto de competências (e quantas afirmações cada uma tinha) fica travado no momento da criação da avaliação, não é recalculado depois.';
 comment on column public.peopleflow_avaliacoes_desempenho.resultados_kpis is 'Array de { kpiId, resultado: number|null } — o conjunto de KPIs (do cargo do colaborador no momento da criação) fica travado, o gestor não pode incluir indicador manualmente.';
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 10) Gestão de Desempenho — complementação da etapa 2
+-- ─────────────────────────────────────────────────────────────────────────
+-- Status do ciclo: só ciclo "Aberto" aceita edição das suas avaliações —
+-- "Encerrado" trava todas elas de uma vez (ver podeEditarAvaliacaoDesempenho()
+-- em usePortalData.ts). Não existe reabertura de ciclo nesta etapa.
+alter table public.peopleflow_ciclos_avaliacao_desempenho
+  add column if not exists status text not null default 'Aberto';
+
+comment on column public.peopleflow_ciclos_avaliacao_desempenho.status is '''Aberto'' ou ''Encerrado'' — encerrar trava a edição de todas as avaliações do ciclo, mesmo as "Em andamento". Sem reabertura nesta etapa.';
+
+-- cargo/departamento/gestor_avaliador: snapshot da estrutura organizacional
+-- no momento em que o ciclo gerou a avaliação (mesmo espírito de "travar no
+-- momento da criação" já usado pra competências/KPIs) — preserva o dado
+-- histórico mesmo que o colaborador seja promovido/transferido depois.
+-- gestor_avaliador em branco = colaborador sem gestor cadastrado na hora da
+-- geração; a avaliação só aparece pro RH tratar (nenhum gestor bate com
+-- string vazia em podeEditarAvaliacaoDesempenho()).
+alter table public.peopleflow_avaliacoes_desempenho
+  add column if not exists cargo text,
+  add column if not exists departamento text,
+  add column if not exists gestor_avaliador text,
+  add column if not exists concluido_por text,
+  add column if not exists concluido_em timestamptz,
+  add column if not exists nota_final numeric,
+  add column if not exists media_tecnica numeric,
+  add column if not exists media_comportamental numeric;
+
+comment on column public.peopleflow_avaliacoes_desempenho.gestor_avaliador is 'Snapshot de colaboradores.gestor no momento da criação — vazio significa colaborador sem gestor definido, avaliação só visível/tratável pelo RH.';
+comment on column public.peopleflow_avaliacoes_desempenho.concluido_por is 'Quem clicou em "Concluir avaliação" — só preenchido quando status = Concluída.';
+comment on column public.peopleflow_avaliacoes_desempenho.nota_final is 'Nota final calculada (ver domain/avaliacaoDesempenho.ts) — recalculada e regravada a cada save, não só na conclusão. Junto com media_tecnica/media_comportamental, é a base do histórico por colaborador/ciclo (comparativo entre ciclos, Matriz 9 Box etc. ficam pra etapas futuras).';
+
+-- Auditoria básica — append-only (nenhuma policy de update/delete é
+-- necessária, RLS libera só select/insert na prática pelo app).
+create table if not exists public.peopleflow_log_avaliacao_desempenho (
+  id bigint generated always as identity primary key,
+  ciclo_id text,
+  avaliacao_id text,
+  acao text not null,
+  detalhe text,
+  usuario text not null,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_log_avaliacao_desempenho is
+  'Auditoria básica da AVD (criação de ciclo, geração de avaliações, início, salvamentos, conclusão) — gravação best-effort, nunca bloqueia a ação principal. Ver registrarLogAvaliacaoDesempenho() em src/repositories/logAvaliacaoDesempenhoRepository.ts.';
+comment on column public.peopleflow_log_avaliacao_desempenho.acao is 'Ex.: CICLO_CRIADO, AVALIACOES_GERADAS, AVALIACAO_INICIADA, AVALIACAO_SALVA, AVALIACAO_CONCLUIDA.';
+
+alter table public.peopleflow_log_avaliacao_desempenho enable row level security;
+
+drop policy if exists "authenticated_rw_log_avaliacao_desempenho" on public.peopleflow_log_avaliacao_desempenho;
+create policy "authenticated_rw_log_avaliacao_desempenho"
+  on public.peopleflow_log_avaliacao_desempenho
+  for all
+  to authenticated
+  using (true)
+  with check (true);

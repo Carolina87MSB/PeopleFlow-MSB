@@ -34,6 +34,15 @@ export function mesIsoFromDataBr(dataBr: string | null | undefined): string | nu
   return `${ano}-${String(mesIdx + 1).padStart(2, "0")}`;
 }
 
+/** Formata um timestamp ISO completo (com hora) como "dd/mm/aaaa hh:mm" — usado
+ * em auditoria e registros de conclusão (ex.: "Concluída por X em ..."). */
+export function formatarDataHora(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 /** Rótulo curto para exibição em gráfico (ex.: "Jul/26") a partir de um bucket "aaaa-mm". */
 export function mesLabel(mesIso: string): string {
   const [ano, mes] = mesIso.split("-");
