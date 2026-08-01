@@ -3,11 +3,13 @@
 
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { SupabaseNotConfiguredError } from "./colaboradoresRepository";
-import type { AvaliacaoDesempenho, ResultadoComportamental, ResultadoKpi, StatusAvaliacaoDesempenho } from "../types/domain";
+import type { AvaliacaoDesempenho, ResultadoComportamental, ResultadoKpi, StatusAvaliacaoDesempenho, TipoAvaliacaoDesempenho } from "../types/domain";
 
 interface AvaliacaoDesempenhoRow {
   id: string;
+  tipo: string;
   colaborador_nome: string;
+  avaliado: string | null;
   cargo: string | null;
   departamento: string | null;
   gestor_avaliador: string | null;
@@ -32,7 +34,9 @@ interface AvaliacaoDesempenhoRow {
 function fromRow(row: AvaliacaoDesempenhoRow): AvaliacaoDesempenho {
   return {
     id: row.id,
+    tipo: row.tipo as TipoAvaliacaoDesempenho,
     colaboradorNome: row.colaborador_nome,
+    avaliado: row.avaliado ?? row.colaborador_nome,
     cargo: row.cargo ?? "",
     departamento: row.departamento ?? "",
     gestorAvaliador: row.gestor_avaliador ?? "",
@@ -58,7 +62,9 @@ function fromRow(row: AvaliacaoDesempenhoRow): AvaliacaoDesempenho {
 function toRow(a: AvaliacaoDesempenho) {
   return {
     id: a.id,
+    tipo: a.tipo,
     colaborador_nome: a.colaboradorNome,
+    avaliado: a.avaliado || null,
     cargo: a.cargo || null,
     departamento: a.departamento || null,
     gestor_avaliador: a.gestorAvaliador || null,

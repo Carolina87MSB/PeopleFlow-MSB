@@ -8,17 +8,23 @@ import {
   mediaAfirmacoes,
   mediaComportamental,
   mediaTecnica,
-  notaFinalAvaliacao,
+  notaFinalPorTipo,
   notaKpi,
   percentualAtingimentoKpi,
 } from "../../domain/avaliacaoDesempenho";
 import { formatarDataHora, formatarHoraAtual } from "../../domain/dates";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalData } from "../../store/usePortalData";
-import type { AvaliacaoDesempenho, StatusAvaliacaoDesempenho } from "../../types/domain";
+import type { AvaliacaoDesempenho, StatusAvaliacaoDesempenho, TipoAvaliacaoDesempenho } from "../../types/domain";
 import styles from "./AvaliacaoDesempenhoDrawer.module.css";
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
+
+const TIPO_LABEL: Record<TipoAvaliacaoDesempenho, string> = {
+  GESTOR: "Avaliação do Gestor",
+  AUTOAVALIACAO: "Autoavaliação",
+  LIDERANCA: "Avaliação da Liderança",
+};
 
 interface AvaliacaoDesempenhoDrawerProps {
   avaliacao: AvaliacaoDesempenho;
@@ -31,10 +37,17 @@ interface AvaliacaoDesempenhoDrawerProps {
  * ao vivo (ver domain/avaliacaoDesempenho.ts). "Concluir avaliação" só fica
  * disponível quando tudo estiver preenchido, e trava a edição depois. */
 export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesempenhoDrawerProps) {
-  const { competenciasComportamentais, kpisCargo, configAvaliacaoDesempenho, salvarAvaliacaoDesempenho, podeEditarAvaliacaoDesempenho } =
-    usePortalData();
+  const {
+    competenciasComportamentais,
+    kpisCargo,
+    configAvaliacaoDesempenho,
+    ciclosAvaliacaoDesempenho,
+    salvarAvaliacaoDesempenho,
+    podeEditarAvaliacaoDesempenho,
+  } = usePortalData();
 
   const podeEditar = podeEditarAvaliacaoDesempenho(avaliacao);
+  const cicloEncerrado = ciclosAvaliacaoDesempenho.find((c) => c.id === avaliacao.cicloId)?.status === "Encerrado";
 
   // Recuperação da última versão salva: o rascunho sempre parte do que está
   // persistido no Supabase (prop `avaliacao`), então reabrir o Drawer já
@@ -54,7 +67,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
 
   const mediaTecnicaValor = mediaTecnica(rascunho.resultadosKpis, kpisCargo);
   const mediaComportamentalValor = mediaComportamental(rascunho.resultadosComportamentais);
-  const notaFinal = notaFinalAvaliacao(mediaTecnicaValor, mediaComportamentalValor, configAvaliacaoDesempenho);
+  const notaFinal = notaFinalPorTipo(rascunho.tipo, mediaTecnicaValor, mediaComportamentalValor, configAvaliacaoDesempenho);
   const completa = avaliacaoCompleta(rascunho);
   const pendencias = useMemo(
     () => itensPendentes(rascunho, competenciasComportamentais, kpisCargo),
@@ -128,6 +141,9 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
         <div className={styles.drawerHeader}>
           <div className={styles.drawerNome}>{avaliacao.colaboradorNome}</div>
           <div className={styles.drawerSub}>
+            {TIPO_LABEL[avaliacao.tipo]}
+            {avaliacao.tipo === "LIDERANCA" && ` de ${avaliacao.avaliado}`}
+            {" · "}
             {avaliacao.cargo ? formatarNomeCargo(avaliacao.cargo) : "—"} · {avaliacao.ciclo}
           </div>
         </div>
@@ -142,7 +158,12 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
             Concluída por {rascunho.concluidoPor || "—"} em {formatarDataHora(rascunho.concluidoEm)}.
           </span>
         )}
-        {!podeEditar && rascunho.status !== "Concluída" && <span className={styles.trancada}>Ciclo encerrado — sem edição.</span>}
+        {!podeEditar && rascunho.status !== "Concluída" && cicloEncerrado && (
+          <span className={styles.trancada}>Ciclo encerrado — sem edição.</span>
+        )}
+        {!podeEditar && rascunho.status !== "Concluída" && !cicloEncerrado && (
+          <span className={styles.trancada}>Somente leitura — quem preenche é {rascunho.gestorAvaliador || "outra pessoa"}.</span>
+        )}
         {podeEditar && (salvandoAuto || ultimoSalvoAutoHora) && (
           <span className={styles.autosaveIndicador}>{salvandoAuto ? "Salvando..." : `Salvo automaticamente às ${ultimoSalvoAutoHora}`}</span>
         )}
@@ -188,69 +209,82 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
         );
       })}
 
-      <h4 className={styles.sectionTitle}>Competências Técnicas (KPIs)</h4>
-      {rascunho.resultadosKpis.map((resultado) => {
-        // Nome/descrição/meta/unidade/sentido/peso vêm do snapshot congelado
-        // no próprio resultado — o catálogo (kpisPorId) só serve de fallback
-        // pra avaliações antigas, geradas antes do snapshot existir.
-        const kpiCatalogo = kpisPorId.get(resultado.kpiId);
-        const nome = resultado.kpiNome || kpiCatalogo?.nomeIndicador || `KPI #${resultado.kpiId}`;
-        const descricao = resultado.kpiDescricao || kpiCatalogo?.observacao || "";
-        const meta = resultado.meta ?? kpiCatalogo?.meta ?? null;
-        const unidadeMedida = resultado.unidadeMedida || kpiCatalogo?.unidadeMedida || "";
-        const sentidoMeta = resultado.sentidoMeta ?? kpiCatalogo?.sentidoMeta;
-        const peso = resultado.peso ?? kpiCatalogo?.peso ?? null;
-        const percentual = sentidoMeta ? percentualAtingimentoKpi(meta, resultado.resultado, sentidoMeta) : null;
-        const nota = notaKpi(resultado, kpiCatalogo);
-        return (
-          <div key={resultado.kpiId} className={styles.kpiBloco}>
-            <div className={styles.kpiTopo}>
-              <span className={styles.kpiNome}>{nome}</span>
-              {nota !== null && (
-                <span className={styles.mediaPill}>
-                  {arredondar(percentual)}% · Nota {nota}
-                </span>
-              )}
-            </div>
-            {descricao && <p className={styles.competenciaDescricao}>{descricao}</p>}
-            <div className={styles.kpiDetalhes}>
-              <span>
-                Meta: <strong>{meta ?? "—"}</strong> {unidadeMedida}
-              </span>
-              <span>{sentidoMeta}</span>
-              {peso !== null && <span>Peso: {peso}</span>}
-            </div>
-            <div className={styles.resultadoCampo}>
-              <label className={styles.label} htmlFor={`kpi-resultado-${resultado.kpiId}`}>
-                Resultado obtido
-              </label>
-              <input
-                id={`kpi-resultado-${resultado.kpiId}`}
-                className={styles.input}
-                value={resultado.resultado ?? ""}
-                onChange={(e) => atualizarResultadoKpi(resultado.kpiId, e.target.value)}
-                disabled={!podeEditar}
-                inputMode="decimal"
-              />
-            </div>
-          </div>
-        );
-      })}
+      {rascunho.resultadosKpis.length > 0 && (
+        <>
+          <h4 className={styles.sectionTitle}>Competências Técnicas (KPIs)</h4>
+          {rascunho.resultadosKpis.map((resultado) => {
+            // Nome/descrição/meta/unidade/sentido/peso vêm do snapshot congelado
+            // no próprio resultado — o catálogo (kpisPorId) só serve de fallback
+            // pra avaliações antigas, geradas antes do snapshot existir.
+            const kpiCatalogo = kpisPorId.get(resultado.kpiId);
+            const nome = resultado.kpiNome || kpiCatalogo?.nomeIndicador || `KPI #${resultado.kpiId}`;
+            const descricao = resultado.kpiDescricao || kpiCatalogo?.observacao || "";
+            const meta = resultado.meta ?? kpiCatalogo?.meta ?? null;
+            const unidadeMedida = resultado.unidadeMedida || kpiCatalogo?.unidadeMedida || "";
+            const sentidoMeta = resultado.sentidoMeta ?? kpiCatalogo?.sentidoMeta;
+            const peso = resultado.peso ?? kpiCatalogo?.peso ?? null;
+            const percentual = sentidoMeta ? percentualAtingimentoKpi(meta, resultado.resultado, sentidoMeta) : null;
+            const nota = notaKpi(resultado, kpiCatalogo);
+            return (
+              <div key={resultado.kpiId} className={styles.kpiBloco}>
+                <div className={styles.kpiTopo}>
+                  <span className={styles.kpiNome}>{nome}</span>
+                  {nota !== null && (
+                    <span className={styles.mediaPill}>
+                      {arredondar(percentual)}% · Nota {nota}
+                    </span>
+                  )}
+                </div>
+                {descricao && <p className={styles.competenciaDescricao}>{descricao}</p>}
+                <div className={styles.kpiDetalhes}>
+                  <span>
+                    Meta: <strong>{meta ?? "—"}</strong> {unidadeMedida}
+                  </span>
+                  <span>{sentidoMeta}</span>
+                  {peso !== null && <span>Peso: {peso}</span>}
+                </div>
+                <div className={styles.resultadoCampo}>
+                  <label className={styles.label} htmlFor={`kpi-resultado-${resultado.kpiId}`}>
+                    Resultado obtido
+                  </label>
+                  <input
+                    id={`kpi-resultado-${resultado.kpiId}`}
+                    className={styles.input}
+                    value={resultado.resultado ?? ""}
+                    onChange={(e) => atualizarResultadoKpi(resultado.kpiId, e.target.value)}
+                    disabled={!podeEditar}
+                    inputMode="decimal"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
 
       <div className={styles.resumo}>
         <h4 className={styles.sectionTitle}>Resumo</h4>
-        <div className={styles.resumoLinha}>
-          <span>Média Competências Técnicas</span>
-          <strong>{arredondar(mediaTecnicaValor) ?? "—"}</strong>
-        </div>
-        <div className={styles.resumoLinha}>
-          <span>Média Competências Comportamentais</span>
-          <strong>{arredondar(mediaComportamentalValor) ?? "—"}</strong>
-        </div>
-        <div className={styles.resumoLinhaFinal}>
-          <span>Nota Final da Avaliação</span>
-          <strong>{arredondar(notaFinal) ?? "—"}</strong>
-        </div>
+        {rascunho.resultadosKpis.length > 0 ? (
+          <>
+            <div className={styles.resumoLinha}>
+              <span>Média Competências Técnicas</span>
+              <strong>{arredondar(mediaTecnicaValor) ?? "—"}</strong>
+            </div>
+            <div className={styles.resumoLinha}>
+              <span>Média Competências Comportamentais</span>
+              <strong>{arredondar(mediaComportamentalValor) ?? "—"}</strong>
+            </div>
+            <div className={styles.resumoLinhaFinal}>
+              <span>Nota Final da Avaliação</span>
+              <strong>{arredondar(notaFinal) ?? "—"}</strong>
+            </div>
+          </>
+        ) : (
+          <div className={styles.resumoLinhaFinal}>
+            <span>Média Competências de Liderança</span>
+            <strong>{arredondar(mediaComportamentalValor) ?? "—"}</strong>
+          </div>
+        )}
       </div>
 
       <h4 className={styles.sectionTitle}>Comentários (opcionais)</h4>

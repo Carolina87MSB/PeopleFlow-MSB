@@ -14,6 +14,7 @@ interface CompetenciaComportamentalRow {
   afirmacoes: string[] | null;
   ordem: number;
   ativo: boolean;
+  categoria: string | null;
   updated_at: string;
   updated_by: string | null;
 }
@@ -26,6 +27,7 @@ function fromRow(row: CompetenciaComportamentalRow): CompetenciaComportamental {
     afirmacoes: row.afirmacoes ?? [],
     ordem: row.ordem,
     ativo: row.ativo,
+    categoria: row.categoria === "Lideranca" ? "Lideranca" : "Comportamental",
     updatedAt: row.updated_at,
     updatedBy: row.updated_by ?? "",
   };
@@ -51,6 +53,7 @@ export async function salvarCompetenciaComportamental(competencia: CompetenciaCo
       afirmacoes: competencia.afirmacoes,
       ordem: competencia.ordem,
       ativo: competencia.ativo,
+      categoria: competencia.categoria,
       updated_at: new Date().toISOString(),
       updated_by: editadoPor,
     },

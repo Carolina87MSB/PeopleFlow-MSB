@@ -51,11 +51,14 @@ export interface ResultadoCriacaoCiclo {
  * transação multi-tabela) — se o segundo falhar, o ciclo fica criado sem
  * avaliações; aceitável nesta etapa.
  *
- * Validação contra duplicidade: antes de inserir, confere quais colaboradores
- * já têm avaliação para este `ciclo_id` (id sempre novo, mas protege contra
- * reenvio duplo do formulário/corrida de rede que já tenha inserido parte das
- * avaliações) — nunca insere uma segunda avaliação pro mesmo colaborador no
- * mesmo ciclo. */
+ * Validação contra duplicidade: antes de inserir, confere quais (tipo,
+ * colaborador) já têm avaliação para este `ciclo_id` (id sempre novo, mas
+ * protege contra reenvio duplo do formulário/corrida de rede que já tenha
+ * inserido parte das avaliações) — nunca insere uma segunda avaliação do
+ * mesmo tipo pro mesmo colaborador no mesmo ciclo. A chave é `tipo:colaborador`
+ * (não `colaborador` sozinho) porque, desde a Etapa 2.1, cada colaborador
+ * pode ter até 3 fichas legítimas (GESTOR/AUTOAVALIACAO/LIDERANCA) no mesmo
+ * ciclo. */
 export async function criarCicloComAvaliacoes(
   ciclo: CicloAvaliacaoDesempenho,
   avaliacoes: AvaliacaoDesempenho[],
@@ -74,14 +77,14 @@ export async function criarCicloComAvaliacoes(
 
   const { data: existentes, error: errorExistentes } = await supabase
     .from("peopleflow_avaliacoes_desempenho")
-    .select("colaborador_nome")
+    .select("colaborador_nome, tipo")
     .eq("ciclo_id", ciclo.id);
   if (errorExistentes) {
     throw new Error(`Falha ao validar avaliações já existentes no ciclo no Supabase: ${errorExistentes.message}`);
   }
 
-  const nomesExistentes = new Set((existentes ?? []).map((r) => r.colaborador_nome as string));
-  const avaliacoesCriadas = avaliacoes.filter((a) => !nomesExistentes.has(a.colaboradorNome));
+  const chavesExistentes = new Set((existentes ?? []).map((r) => `${r.tipo}:${r.colaborador_nome}`));
+  const avaliacoesCriadas = avaliacoes.filter((a) => !chavesExistentes.has(`${a.tipo}:${a.colaboradorNome}`));
 
   await criarAvaliacoesDesempenho(avaliacoesCriadas);
   return { avaliacoesCriadas, duplicadas: avaliacoes.length - avaliacoesCriadas.length };

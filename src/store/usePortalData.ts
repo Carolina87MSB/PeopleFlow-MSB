@@ -39,11 +39,12 @@ import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligado
 import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
 import {
   arredondar,
+  elegivelParaCicloAvaliacaoDesempenho,
   gerarIdAvaliacaoDesempenho,
   gerarIdCicloAvaliacaoDesempenho,
   mediaComportamental,
   mediaTecnica,
-  notaFinalAvaliacao,
+  notaFinalPorTipo,
 } from "../domain/avaliacaoDesempenho";
 import {
   calcularIndicacao,
@@ -228,15 +229,25 @@ export function usePortalData(): PortalData {
     return perfil === "RH" ? todas : todas.filter((p) => p.colaborador.gestor === me);
   }, [state.colaboradores, state.avaliacoesExperiencia, state.dispensasAvaliacaoExperiencia, perfil, me]);
 
-  // Usa o gestorAvaliador CONGELADO na avaliação (snapshot do momento da
-  // criação do ciclo), não o colaborador.gestor atual — se o colaborador
-  // trocar de gestor no meio do ciclo, quem avalia continua sendo quem era
-  // responsável quando a avaliação foi gerada. Vazio = sem gestor definido
-  // na criação, só o RH vê/trata (nenhum gestor bate com string vazia).
+  const colaboradorPorNome = useMemo(() => new Map(state.colaboradores.map((c) => [c.nome, c])), [state.colaboradores]);
+
+  /** RH vê tudo. Fora isso: cada um vê suas próprias 3 fichas do ciclo (a
+   * ficha GESTOR sobre si mesmo fica oculta pro perfil "Colaborador" — regra
+   * explícita, ele nunca vê a avaliação que o gestor fez dele — mas visível
+   * pra Gestor/Diretoria, que também são "colaborador" de alguém); e quem é
+   * gestor de alguém (`colaborador.gestor === me`, atual/ao vivo) vê as até
+   * 3 fichas desse liderado, mas só edita a do tipo GESTOR
+   * (podeEditarAvaliacaoDesempenho já cuida disso via gestorAvaliador). */
   const avaliacoesDesempenhoVisiveis = useMemo(() => {
     if (perfil === "RH") return state.avaliacoesDesempenho;
-    return state.avaliacoesDesempenho.filter((a) => a.gestorAvaliador === me);
-  }, [state.avaliacoesDesempenho, perfil, me]);
+    return state.avaliacoesDesempenho.filter((a) => {
+      if (a.colaboradorNome === me) {
+        if (a.tipo === "GESTOR") return perfil !== "Colaborador";
+        return true;
+      }
+      return colaboradorPorNome.get(a.colaboradorNome)?.gestor === me;
+    });
+  }, [state.avaliacoesDesempenho, colaboradorPorNome, perfil, me]);
 
   const podeEditarAvaliacaoDesempenhoFn = useCallback(
     (avaliacao: AvaliacaoDesempenho) => {
@@ -588,69 +599,119 @@ export function usePortalData(): PortalData {
         criadoPor: me,
         criadoEm: agora,
       };
-      // Elegibilidade nesta etapa: todo colaborador ativo. Regras (tempo
-      // mínimo de empresa, afastamentos etc.) ficam pra próxima etapa.
-      const ativos = state.colaboradores.filter((c) => !c.desligado);
-      const competenciasAtivas = state.competenciasComportamentais.filter((c) => c.ativo);
-      const avaliacoes: AvaliacaoDesempenho[] = ativos.map((c) => ({
-        id: gerarIdAvaliacaoDesempenho(),
-        colaboradorNome: c.nome,
-        // Snapshot da estrutura organizacional no momento da criação — não é
-        // recalculado depois, mesmo que o colaborador seja promovido/mude de
-        // gestor (ver comentário em types/domain.ts). Colaborador sem gestor
-        // cadastrado nasce com gestorAvaliador vazio — só o RH enxerga essa
-        // avaliação (nenhum gestor bate com string vazia).
-        cargo: c.cargo,
-        departamento: c.depto,
-        gestorAvaliador: c.gestor || "",
-        cicloId: ciclo.id,
-        ciclo: ciclo.nome,
-        status: "Não iniciada",
-        // Competências/KPIs ficam travados no momento da criação — ver
-        // README > "Gestão de Desempenho" e comentário em schema.sql. Não é
-        // só o conjunto (ids) que fica congelado: nome/descrição/afirmações
-        // da competência e nome/descrição/meta/unidade/sentido/peso do KPI
-        // também são copiados aqui (snapshot completo) — se o cadastro
-        // original mudar depois, esta avaliação continua mostrando
-        // exatamente o que foi avaliado.
-        resultadosComportamentais: competenciasAtivas.map((comp) => ({
+
+      // Elegibilidade: ativo + 6 meses completos de empresa até a data de
+      // corte (data de encerramento do ciclo) — quem não passa não recebe
+      // nenhuma ficha, só um registro no log de auditoria com o motivo.
+      const naoElegiveis: { nome: string; motivo: string }[] = [];
+      const elegiveis: Colaborador[] = [];
+      for (const c of state.colaboradores) {
+        const resultado = elegivelParaCicloAvaliacaoDesempenho(c, ciclo.dataEncerramento);
+        if (resultado.elegivel) elegiveis.push(c);
+        else naoElegiveis.push({ nome: c.nome, motivo: resultado.motivo ?? "Não elegível" });
+      }
+
+      const competenciasComportamentaisAtivas = state.competenciasComportamentais.filter(
+        (c) => c.ativo && c.categoria !== "Lideranca",
+      );
+      const competenciasLiderancaAtivas = state.competenciasComportamentais.filter(
+        (c) => c.ativo && c.categoria === "Lideranca",
+      );
+
+      function snapshotComportamental(competencias: CompetenciaComportamental[]) {
+        return competencias.map((comp) => ({
           competenciaId: comp.id,
           competenciaNome: comp.nome,
           competenciaDescricao: comp.descricao,
           afirmacoes: [...comp.afirmacoes],
           notasAfirmacoes: comp.afirmacoes.map(() => null),
-        })),
-        resultadosKpis: state.kpisCargo
-          .filter((k) => k.cargoNome === c.cargo)
-          .map((k) => ({
-            kpiId: k.id,
-            kpiNome: k.nomeIndicador,
-            kpiDescricao: k.observacao,
-            meta: k.meta,
-            unidadeMedida: k.unidadeMedida,
-            sentidoMeta: k.sentidoMeta,
-            peso: k.peso,
-            resultado: null,
-          })),
-        comentarioComportamental: "",
-        comentarioTecnico: "",
-        comentarioGeral: "",
-        avaliadoPor: "",
-        concluidoPor: "",
-        concluidoEm: null,
-        notaFinal: null,
-        mediaTecnica: null,
-        mediaComportamental: null,
-        criadoEm: agora,
-        updatedAt: agora,
-      }));
+        }));
+      }
+
+      function snapshotKpis(kpis: KpiCargo[]) {
+        return kpis.map((k) => ({
+          kpiId: k.id,
+          kpiNome: k.nomeIndicador,
+          kpiDescricao: k.observacao,
+          meta: k.meta,
+          unidadeMedida: k.unidadeMedida,
+          sentidoMeta: k.sentidoMeta,
+          peso: k.peso,
+          resultado: null,
+        }));
+      }
+
+      // Snapshot da estrutura organizacional e do catálogo no momento da
+      // criação — não é recalculado depois, mesmo que o colaborador seja
+      // promovido/mude de gestor ou o catálogo mude (ver comentário em
+      // types/domain.ts). Colaborador sem gestor cadastrado nasce com
+      // gestorAvaliador vazio na ficha GESTOR — só o RH enxerga essa ficha —
+      // e não recebe ficha LIDERANCA (não existe gestor pra avaliar).
+      const avaliacoes: AvaliacaoDesempenho[] = [];
+      for (const c of elegiveis) {
+        const kpisDoCargo = state.kpisCargo.filter((k) => k.cargoNome === c.cargo);
+        const base = {
+          cicloId: ciclo.id,
+          ciclo: ciclo.nome,
+          cargo: c.cargo,
+          departamento: c.depto,
+          status: "Não iniciada" as const,
+          comentarioComportamental: "",
+          comentarioTecnico: "",
+          comentarioGeral: "",
+          avaliadoPor: "",
+          concluidoPor: "",
+          concluidoEm: null,
+          notaFinal: null,
+          mediaTecnica: null,
+          mediaComportamental: null,
+          criadoEm: agora,
+          updatedAt: agora,
+        };
+
+        avaliacoes.push({
+          ...base,
+          id: gerarIdAvaliacaoDesempenho(),
+          tipo: "AUTOAVALIACAO",
+          colaboradorNome: c.nome,
+          avaliado: c.nome,
+          gestorAvaliador: c.nome,
+          resultadosComportamentais: snapshotComportamental(competenciasComportamentaisAtivas),
+          resultadosKpis: snapshotKpis(kpisDoCargo),
+        });
+
+        avaliacoes.push({
+          ...base,
+          id: gerarIdAvaliacaoDesempenho(),
+          tipo: "GESTOR",
+          colaboradorNome: c.nome,
+          avaliado: c.nome,
+          gestorAvaliador: c.gestor || "",
+          resultadosComportamentais: snapshotComportamental(competenciasComportamentaisAtivas),
+          resultadosKpis: snapshotKpis(kpisDoCargo),
+        });
+
+        if (c.gestor) {
+          avaliacoes.push({
+            ...base,
+            id: gerarIdAvaliacaoDesempenho(),
+            tipo: "LIDERANCA",
+            colaboradorNome: c.nome,
+            avaliado: c.gestor,
+            gestorAvaliador: c.nome,
+            resultadosComportamentais: snapshotComportamental(competenciasLiderancaAtivas),
+            resultadosKpis: [],
+          });
+        }
+      }
+
       try {
         const { avaliacoesCriadas, duplicadas } = await criarCicloComAvaliacoesNoSupabase(ciclo, avaliacoes);
         dispatch({ type: "CRIAR_CICLO_AVALIACAO_DESEMPENHO", ciclo, avaliacoes: avaliacoesCriadas });
         flash(
           duplicadas > 0
-            ? `Ciclo "${ciclo.nome}" aberto — ${avaliacoesCriadas.length} avaliação(ões) gerada(s) (${duplicadas} colaborador(es) já tinham avaliação neste ciclo).`
-            : `Ciclo "${ciclo.nome}" aberto — ${avaliacoesCriadas.length} avaliação(ões) gerada(s).`,
+            ? `Ciclo "${ciclo.nome}" aberto — ${avaliacoesCriadas.length} avaliação(ões) gerada(s) (${duplicadas} já existentes ignoradas).`
+            : `Ciclo "${ciclo.nome}" aberto — ${avaliacoesCriadas.length} avaliação(ões) gerada(s)${naoElegiveis.length > 0 ? `, ${naoElegiveis.length} colaborador(es) não elegível(is)` : ""}.`,
         );
         void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: ciclo.id, acao: "CICLO_CRIADO", usuario: me });
         void registrarLogAvaliacaoDesempenhoNoSupabase({
@@ -659,6 +720,14 @@ export function usePortalData(): PortalData {
           detalhe: `${avaliacoesCriadas.length} avaliação(ões) geradas`,
           usuario: me,
         });
+        for (const item of naoElegiveis) {
+          void registrarLogAvaliacaoDesempenhoNoSupabase({
+            cicloId: ciclo.id,
+            acao: "COLABORADOR_NAO_ELEGIVEL",
+            detalhe: `${item.nome}: ${item.motivo}`,
+            usuario: me,
+          });
+        }
         return { ok: true as const, quantidade: avaliacoesCriadas.length };
       } catch (err) {
         flash(err instanceof Error ? err.message : "Falha ao abrir ciclo de avaliação de desempenho.");
@@ -689,7 +758,9 @@ export function usePortalData(): PortalData {
       const anterior = state.avaliacoesDesempenho.find((a) => a.id === avaliacao.id);
       const mediaTecnicaValor = arredondar(mediaTecnica(avaliacao.resultadosKpis, state.kpisCargo));
       const mediaComportamentalValor = arredondar(mediaComportamental(avaliacao.resultadosComportamentais));
-      const notaFinalValor = arredondar(notaFinalAvaliacao(mediaTecnicaValor, mediaComportamentalValor, state.configAvaliacaoDesempenho));
+      const notaFinalValor = arredondar(
+        notaFinalPorTipo(avaliacao.tipo, mediaTecnicaValor, mediaComportamentalValor, state.configAvaliacaoDesempenho),
+      );
       // "Concluída" trava — concluidoPor/Em só são gravados na transição, nunca
       // recalculados depois (preserva quem/quando concluiu de fato).
       const concluindoAgora = avaliacao.status === "Concluída" && anterior?.status !== "Concluída";

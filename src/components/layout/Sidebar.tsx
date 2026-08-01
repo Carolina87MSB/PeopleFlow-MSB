@@ -51,6 +51,44 @@ export function Sidebar() {
   const pendentesCount = movimentacoesVisiveis.filter((m) => m.status === "Em Aprovação").length;
   const aprovadasCount = movimentacoesVisiveis.filter((m) => m.status === "Aprovado" || m.status === "Concluído").length;
 
+  // Perfil "Colaborador" (acesso restrito à AVD) só alcança /desempenho —
+  // menu mínimo em vez da navegação completa, que só levaria a telas que o
+  // AppShell já bloqueia pra esse perfil.
+  if (conta?.perfil === "Colaborador") {
+    return (
+      <aside className={styles.sidebar}>
+        <div className={styles.brand}>
+          <img src="/assets/msb-logo.png" alt="MSB — Medical System do Brasil" className={styles.logo} />
+          <div className={styles.brandRow}>
+            <span className={styles.brandDot} />
+            <div>
+              <div className={styles.brandName}>Portal PeopleFlow</div>
+              <div className={styles.brandSub}>Avaliação de Desempenho</div>
+            </div>
+          </div>
+        </div>
+
+        <nav className={styles.nav}>
+          <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Minhas Avaliações" />
+        </nav>
+
+        <div className={styles.footer}>
+          <div className={styles.profile}>
+            <Avatar nome={conta.nome} size={34} />
+            <div className={styles.profileInfo}>
+              <div className={styles.profileName}>{conta.nome}</div>
+              <div className={styles.profileRole}>{conta.cargo}</div>
+            </div>
+          </div>
+          <button type="button" className={styles.logout} onClick={logout}>
+            <LogOut size={15} strokeWidth={1.9} />
+            Sair
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className={styles.sidebar}>
       <div className={styles.brand}>
@@ -76,9 +114,11 @@ export function Sidebar() {
           <>
             <NavItem to="/departamentos" icon={<Building2 size={18} strokeWidth={1.9} />} label="Departamentos" badge={totalDeptos} badgeTone="neutral" />
             <NavItem to="/cargos" icon={<Briefcase size={18} strokeWidth={1.9} />} label="Cargos" badge={totalCargos} badgeTone="neutral" />
-            <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Gestão de Desempenho" />
           </>
         )}
+        {/* Visível pra todo mundo (não só RH) desde a Etapa 2.1 — Gestor/Diretoria
+            precisam chegar lá pra preencher avaliações dos liderados/próprias. */}
+        <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Gestão de Desempenho" />
         <NavItem to="/tipos" icon={<ArrowLeftRight size={18} strokeWidth={1.9} />} label="Tipos de movimentação" />
         {podeVerCadastros && <NavItem to="/acessos" icon={<KeyRound size={18} strokeWidth={1.9} />} label="Acessos" />}
 

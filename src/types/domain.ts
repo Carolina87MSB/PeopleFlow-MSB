@@ -1,4 +1,7 @@
-export type Perfil = "RH" | "Gestor" | "Diretoria";
+/** "Colaborador" é um perfil restrito: só acesso à Avaliação de Desempenho
+ * (suas próprias fichas) — ver buildAccessAvd() em domain/hierarquia.ts e o
+ * bloqueio de rota em AppShell.tsx. */
+export type Perfil = "RH" | "Gestor" | "Diretoria" | "Colaborador";
 
 export type Nivel =
   | "Diretoria"
@@ -326,7 +329,10 @@ export interface ConfigAvaliacaoDesempenho {
 
 /** Competência comportamental do catálogo corporativo — igual para todos os
  * cargos (diferente dos KPIs, que são por cargo). `afirmacoes` fica vazio na
- * carga inicial, preenchido depois. */
+ * carga inicial, preenchido depois. `categoria` separa o catálogo usado nas
+ * avaliações GESTOR/AUTOAVALIACAO ("Comportamental") do catálogo exclusivo
+ * da avaliação LIDERANCA ("Lideranca") — mesma tabela, mesma estrutura,
+ * só filtrada por categoria na hora de gerar o snapshot do ciclo. */
 export interface CompetenciaComportamental {
   id: string;
   nome: string;
@@ -334,6 +340,7 @@ export interface CompetenciaComportamental {
   afirmacoes: string[];
   ordem: number;
   ativo: boolean;
+  categoria: "Comportamental" | "Lideranca";
   updatedAt: string;
   updatedBy: string;
 }
@@ -423,9 +430,17 @@ export interface NovoCicloAvaliacaoForm {
  * (só reabertura de ciclo, funcionalidade futura, desfaz isso). */
 export type StatusAvaliacaoDesempenho = "Não iniciada" | "Em andamento" | "Concluída";
 
-/** Avaliação de Desempenho por colaborador/ciclo — cálculo de nota
- * automático, sem fluxo de aprovação, autoavaliação, calibração ou reabertura
- * de ciclo ainda (ver README > "Gestão de Desempenho"). `cargo`/`departamento`/
+/** Cada colaborador elegível pode ter até 3 fichas no mesmo ciclo, todas com
+ * a mesma estrutura (`AvaliacaoDesempenho`), diferenciadas só por `tipo`:
+ * GESTOR (nota oficial da AVD), AUTOAVALIACAO (mesma estrutura, nota
+ * armazenada à parte, nunca compõe a oficial) e LIDERANCA (só competências
+ * de liderança, sem KPI — gerada só se o colaborador tiver gestor). Ver
+ * README > "Gestão de Desempenho". */
+export type TipoAvaliacaoDesempenho = "GESTOR" | "AUTOAVALIACAO" | "LIDERANCA";
+
+/** Avaliação de Desempenho por colaborador/ciclo/tipo — cálculo de nota
+ * automático, sem fluxo de aprovação, calibração ou reabertura de ciclo
+ * ainda (ver README > "Gestão de Desempenho"). `cargo`/`departamento`/
  * `gestorAvaliador` são snapshot da estrutura organizacional no momento da
  * criação — preservam o histórico mesmo que o colaborador seja promovido
  * depois. `notaFinal`/`mediaTecnica`/`mediaComportamental` são recalculados e
@@ -434,11 +449,24 @@ export type StatusAvaliacaoDesempenho = "Não iniciada" | "Em andamento" | "Conc
  * Box ficam pra etapas futuras, mas o dado já fica disponível). */
 export interface AvaliacaoDesempenho {
   id: string;
+  tipo: TipoAvaliacaoDesempenho;
+  /** Dono do conjunto de até 3 fichas geradas pra ele neste ciclo — sempre o
+   * liderado, inclusive na ficha LIDERANCA (onde quem está sendo avaliado é
+   * o gestor dele, ver `avaliado`). Garante que (cicloId, tipo,
+   * colaboradorNome) seja sempre único. */
   colaboradorNome: string;
+  /** Quem está sendo avaliado nesta ficha especificamente — igual a
+   * `colaboradorNome` em GESTOR/AUTOAVALIACAO; na LIDERANCA é o gestor cujo
+   * estilo de liderança está sendo avaliado (snapshot, não recalculado se o
+   * colaborador trocar de gestor depois). */
+  avaliado: string;
   cargo: string;
   departamento: string;
-  /** Nome do gestor responsável por avaliar — vazio quando o colaborador não
-   * tinha gestor definido no momento da geração (RH precisa tratar). */
+  /** Quem deve preencher esta ficha — o gestor real (tipo GESTOR) ou o
+   * próprio colaborador (AUTOAVALIACAO/LIDERANCA). Vazio quando o
+   * colaborador não tinha gestor definido no momento da geração (RH precisa
+   * tratar). Nome mantido por compatibilidade — o significado é mais amplo
+   * que "gestor" desde a Etapa 2.1. */
   gestorAvaliador: string;
   cicloId: string;
   ciclo: string;

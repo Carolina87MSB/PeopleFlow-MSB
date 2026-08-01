@@ -2,7 +2,17 @@
 // dependência de UI/Supabase. Ver README > "Gestão de Desempenho" para as
 // regras de negócio por trás de cada fórmula.
 
-import type { AvaliacaoDesempenho, CompetenciaComportamental, ConfigAvaliacaoDesempenho, KpiCargo, ResultadoComportamental, ResultadoKpi } from "../types/domain";
+import { mesesCompletos } from "./dates";
+import type {
+  AvaliacaoDesempenho,
+  Colaborador,
+  CompetenciaComportamental,
+  ConfigAvaliacaoDesempenho,
+  KpiCargo,
+  ResultadoComportamental,
+  ResultadoKpi,
+  TipoAvaliacaoDesempenho,
+} from "../types/domain";
 
 /** Escala fixa de avaliação das afirmações comportamentais — igual pra todas
  * as competências, não é configurável (ver peopleflow_competencias_comportamentais
@@ -123,6 +133,43 @@ export function notaFinalAvaliacao(
   const somaPesos = pesoKpis + pesoComportamental;
   if (somaPesos === 0) return null;
   return (mediaTecnicaValor * pesoKpis + mediaComportamentalValor * pesoComportamental) / somaPesos;
+}
+
+/** Nota final por tipo de avaliação — LIDERANCA nunca tem bloco técnico
+ * (sem KPI), então `notaFinalAvaliacao()` sempre retornaria `null` pra ela
+ * (precisa dos dois blocos); aqui a nota da liderança é a própria média
+ * comportamental. GESTOR/AUTOAVALIACAO usam a ponderação normal — a nota da
+ * autoavaliação é calculada e gravada igual, só nunca é lida por nada além
+ * da própria ficha (não compõe a nota oficial da AVD, que é sempre a do
+ * tipo GESTOR). */
+export function notaFinalPorTipo(
+  tipo: TipoAvaliacaoDesempenho,
+  mediaTecnicaValor: number | null,
+  mediaComportamentalValor: number | null,
+  config: ConfigAvaliacaoDesempenho | null,
+): number | null {
+  if (tipo === "LIDERANCA") return mediaComportamentalValor;
+  return notaFinalAvaliacao(mediaTecnicaValor, mediaComportamentalValor, config);
+}
+
+/** Elegibilidade pra Avaliação de Desempenho: colaborador ativo com 6 meses
+ * completos de empresa até a data de corte do ciclo (inicialmente, a data de
+ * encerramento do período avaliado). Colaborador não elegível não recebe
+ * nenhuma ficha — o motivo é registrado no log de auditoria do ciclo. */
+export function elegivelParaCicloAvaliacaoDesempenho(
+  colaborador: Colaborador,
+  dataCorteIso: string,
+): { elegivel: boolean; motivo?: string } {
+  if (colaborador.desligado) return { elegivel: false, motivo: "Colaborador desligado" };
+
+  const meses = mesesCompletos(colaborador.admissaoIso, dataCorteIso);
+  if (meses < 6) {
+    return {
+      elegivel: false,
+      motivo: `Menos de 6 meses completos de empresa na data de corte (${meses} ${meses === 1 ? "mês" : "meses"})`,
+    };
+  }
+  return { elegivel: true };
 }
 
 /** true quando todas as afirmações comportamentais e todos os KPIs

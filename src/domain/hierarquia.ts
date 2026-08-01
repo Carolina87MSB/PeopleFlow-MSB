@@ -1,3 +1,4 @@
+import { hojeIso, mesesCompletos } from "./dates.js";
 import type { Colaborador, Conta, Perfil } from "../types/domain.js";
 
 const DIACRITICS = new RegExp("[" + String.fromCharCode(0x0300) + "-" + String.fromCharCode(0x036f) + "]", "g");
@@ -26,26 +27,37 @@ export function emailOf(nome: string): string {
 const CARGO_DIRETORIA = /^(ceo|diretor(a)?)\b/;
 
 /**
- * Classifica o perfil pelo cargo/depto. O cargo precisa COMEÇAR com "CEO" ou
- * "Diretor(a)" para contar como Diretoria — antes bastava a palavra aparecer
- * em qualquer lugar do texto, o que classificava cargos de apoio como
- * "Assistente de Diretoria" ou "Secretária de Diretoria" (que contêm
- * "Diretor" dentro de "Diretoria") como Diretoria por engano, tirando o
- * acesso de Gestor dessas pessoas (ex.: botão "Nova movimentação").
+ * Classifica o perfil pelo cargo/depto/hierarquia. O cargo precisa COMEÇAR
+ * com "CEO" ou "Diretor(a)" para contar como Diretoria — antes bastava a
+ * palavra aparecer em qualquer lugar do texto, o que classificava cargos de
+ * apoio como "Assistente de Diretoria" ou "Secretária de Diretoria" (que
+ * contêm "Diretor" dentro de "Diretoria") como Diretoria por engano, tirando
+ * o acesso de Gestor dessas pessoas (ex.: botão "Nova movimentação").
+ *
+ * `gestoresImediatos` (nomes que aparecem na coluna `gestor` de alguém) é o
+ * que diferencia "Gestor" (gerencia pelo menos um colaborador) de
+ * "Colaborador" (individual, sem reporte) — antes da Etapa 2.1 esse segundo
+ * caso nunca acontecia aqui porque buildAccess() já excluía quem não fosse
+ * gestor real; agora buildAccessAvd() também usa esta função e precisa da
+ * distinção certa.
  */
-export function perfilOf(colaborador: Colaborador): Perfil {
+export function perfilOf(colaborador: Colaborador, gestoresImediatos: Set<string>): Perfil {
   if (CARGO_DIRETORIA.test(norm(colaborador.cargo))) return "Diretoria";
   if (colaborador.depto === "Recursos Humanos") return "RH";
-  return "Gestor";
+  if (gestoresImediatos.has(colaborador.nome)) return "Gestor";
+  return "Colaborador";
 }
 
 /**
- * Contas elegíveis para acessar o portal: RH e Diretoria sempre (por cargo/
- * depto, ver perfilOf), e perfil Gestor só para quem de fato aparece como
- * gestor imediato de pelo menos um colaborador (tem reporte direto na coluna
- * `gestor`). Colaborador individual (sem reporte, não-RH, não-Diretoria) não
- * entra na lista — o portal é para quem participa do fluxo de aprovação
- * (solicitar/aprovar movimentações da própria equipe), não para todo mundo.
+ * Contas elegíveis para o acesso "principal" do portal: RH e Diretoria
+ * sempre (por cargo/depto, ver perfilOf), e perfil Gestor só para quem de
+ * fato aparece como gestor imediato de pelo menos um colaborador (tem
+ * reporte direto na coluna `gestor`). Colaborador individual (sem reporte,
+ * não-RH, não-Diretoria) não entra nesta lista — ela é pra quem participa do
+ * fluxo de aprovação (solicitar/aprovar movimentações da própria equipe),
+ * não pra todo mundo. Comportamento idêntico ao de antes da Etapa 2.1 (só a
+ * implementação de perfilOf mudou de assinatura); quem precisa de acesso
+ * mais amplo (AVD) usa buildAccessAvd() abaixo, uma lista separada.
  *
  * O verdadeiro portão de acesso continua sendo a conta do Supabase Auth (só
  * quem o RH provisiona lá consegue pedir o link mágico — ver AuthContext);
@@ -58,15 +70,43 @@ export function buildAccess(colaboradores: Colaborador[]): Conta[] {
   return colaboradores
     .filter((c) => !c.desligado)
     .filter((c) => {
-      const perfil = perfilOf(c);
-      return perfil === "RH" || perfil === "Diretoria" || gestoresImediatos.has(c.nome);
+      const perfil = perfilOf(c, gestoresImediatos);
+      return perfil === "RH" || perfil === "Diretoria" || perfil === "Gestor";
     })
     .map((c) => ({
       nome: c.nome,
       cargo: c.cargo,
       depto: c.depto,
       email: emailOf(c.nome),
-      perfil: perfilOf(c),
+      perfil: perfilOf(c, gestoresImediatos),
+    }));
+}
+
+/**
+ * Lista separada de candidatos ao acesso restrito da Avaliação de
+ * Desempenho (perfil "Colaborador") — quem NÃO está em buildAccess() (ou
+ * seja, individual, sem reporte, não-RH, não-Diretoria), ativo, e com pelo
+ * menos 6 meses completos de empresa até hoje (mesmo patamar da
+ * elegibilidade de ciclo, ver elegivelParaCicloAvaliacaoDesempenho() em
+ * domain/avaliacaoDesempenho.ts — aqui é só um corte pra decidir quem já é
+ * candidato a RECEBER acesso, não uma checagem por ciclo específico).
+ * Nunca reaproveitado pela tela "/acessos" (RH/Diretoria/gestor) — ver aba
+ * "Acessos AVD" em GestaoDesempenhoPage.tsx.
+ */
+export function buildAccessAvd(colaboradores: Colaborador[]): Conta[] {
+  const gestoresImediatos = new Set(colaboradores.map((c) => c.gestor));
+  const hoje = hojeIso();
+
+  return colaboradores
+    .filter((c) => !c.desligado)
+    .filter((c) => perfilOf(c, gestoresImediatos) === "Colaborador")
+    .filter((c) => mesesCompletos(c.admissaoIso, hoje) >= 6)
+    .map((c) => ({
+      nome: c.nome,
+      cargo: c.cargo,
+      depto: c.depto,
+      email: emailOf(c.nome),
+      perfil: "Colaborador" as const,
     }));
 }
 

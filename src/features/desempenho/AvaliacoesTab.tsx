@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Badge, Button, EmptyState, tableStyles } from "../../components/ui";
-import { arredondar, mediaComportamental, mediaTecnica, notaFinalAvaliacao } from "../../domain/avaliacaoDesempenho";
+import { arredondar, mediaComportamental, mediaTecnica, notaFinalPorTipo } from "../../domain/avaliacaoDesempenho";
 import { formatarDataHora, formatarDataIso } from "../../domain/dates";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { getIniciosAvaliacoesDesempenho, getLogAvaliacaoDesempenho } from "../../repositories/logAvaliacaoDesempenhoRepository";
 import { usePortalData } from "../../store/usePortalData";
-import type { AvaliacaoDesempenho, CicloAvaliacaoDesempenho, LogAvaliacaoDesempenho } from "../../types/domain";
+import type { AvaliacaoDesempenho, CicloAvaliacaoDesempenho, LogAvaliacaoDesempenho, TipoAvaliacaoDesempenho } from "../../types/domain";
 import { AvaliacaoDesempenhoDrawer } from "./AvaliacaoDesempenhoDrawer";
 import { NovoCicloModal } from "./NovoCicloModal";
 import styles from "./AvaliacoesTab.module.css";
@@ -29,6 +29,13 @@ const ACAO_LOG_LABEL: Record<string, string> = {
   AVALIACAO_INICIADA: "Avaliação iniciada",
   AVALIACAO_SALVA: "Avaliação salva",
   AVALIACAO_CONCLUIDA: "Avaliação concluída",
+  COLABORADOR_NAO_ELEGIVEL: "Colaborador não elegível",
+};
+
+const TIPO_LABEL: Record<TipoAvaliacaoDesempenho, string> = {
+  GESTOR: "Avaliação do Gestor",
+  AUTOAVALIACAO: "Autoavaliação",
+  LIDERANCA: "Avaliação da Liderança",
 };
 
 function notaFinalDe(
@@ -38,7 +45,7 @@ function notaFinalDe(
 ): number | null {
   const tecnica = mediaTecnica(avaliacao.resultadosKpis, kpisCargo);
   const comportamental = mediaComportamental(avaliacao.resultadosComportamentais);
-  return notaFinalAvaliacao(tecnica, comportamental, config);
+  return notaFinalPorTipo(avaliacao.tipo, tecnica, comportamental, config);
 }
 
 function acaoParaAvaliacao(status: AvaliacaoDesempenho["status"]): string {
@@ -153,6 +160,7 @@ export function AvaliacoesTab() {
   } = usePortalData();
   const [cicloFiltro, setCicloFiltro] = useState("Todos");
   const [statusFiltro, setStatusFiltro] = useState("Todos");
+  const [tipoFiltro, setTipoFiltro] = useState("Todos");
   const [departamentoFiltro, setDepartamentoFiltro] = useState("Todos");
   const [somenteSemGestor, setSomenteSemGestor] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
@@ -186,10 +194,11 @@ export function AvaliacoesTab() {
         (a) =>
           (cicloFiltro === "Todos" || a.ciclo === cicloFiltro) &&
           (statusFiltro === "Todos" || a.status === statusFiltro) &&
+          (tipoFiltro === "Todos" || a.tipo === tipoFiltro) &&
           (departamentoFiltro === "Todos" || a.departamento === departamentoFiltro) &&
           (!somenteSemGestor || !a.gestorAvaliador),
       ),
-    [avaliacoesDesempenhoVisiveis, cicloFiltro, statusFiltro, departamentoFiltro, somenteSemGestor],
+    [avaliacoesDesempenhoVisiveis, cicloFiltro, statusFiltro, tipoFiltro, departamentoFiltro, somenteSemGestor],
   );
 
   const avaliacaoAberta = avaliacaoAbertaId ? avaliacoesDesempenhoVisiveis.find((a) => a.id === avaliacaoAbertaId) ?? null : null;
@@ -267,6 +276,14 @@ export function AvaliacoesTab() {
             </option>
           ))}
         </select>
+        <select className={styles.select} value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)}>
+          <option value="Todos">Todos os tipos</option>
+          {(Object.keys(TIPO_LABEL) as TipoAvaliacaoDesempenho[]).map((t) => (
+            <option key={t} value={t}>
+              {TIPO_LABEL[t]}
+            </option>
+          ))}
+        </select>
         {opcoesDepartamento.length > 2 && (
           <select className={styles.select} value={departamentoFiltro} onChange={(e) => setDepartamentoFiltro(e.target.value)}>
             {opcoesDepartamento.map((o) => (
@@ -292,6 +309,8 @@ export function AvaliacoesTab() {
             <thead>
               <tr>
                 <th>Colaborador</th>
+                <th>Tipo</th>
+                <th>Avaliado</th>
                 <th>Cargo</th>
                 <th>Departamento</th>
                 <th>Ciclo</th>
@@ -311,6 +330,8 @@ export function AvaliacoesTab() {
                 return (
                   <tr key={a.id} className={tableStyles.clickable} onClick={() => setAvaliacaoAbertaId(a.id)}>
                     <td>{a.colaboradorNome}</td>
+                    <td>{TIPO_LABEL[a.tipo]}</td>
+                    <td>{a.avaliado}</td>
                     <td>{formatarNomeCargo(a.cargo)}</td>
                     <td>{a.departamento}</td>
                     <td>{a.ciclo}</td>

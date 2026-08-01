@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { useConta } from "../../store/useConta";
@@ -9,6 +9,7 @@ export function AppShell() {
   const { state, loading, error } = usePortalStore();
   const conta = useConta();
   const { logout } = useAuth();
+  const location = useLocation();
 
   if (error) {
     return (
@@ -38,6 +39,14 @@ export function AppShell() {
         </button>
       </div>
     );
+  }
+
+  // Perfil "Colaborador" (acesso restrito à AVD) só alcança /desempenho —
+  // centralizado aqui em vez de espalhar guarda em cada página, pra nenhuma
+  // tela nova esquecer de bloquear esse perfil (ver README > "Gestão de
+  // Desempenho").
+  if (conta.perfil === "Colaborador" && location.pathname !== "/desempenho") {
+    return <Navigate to="/desempenho" replace />;
   }
 
   return (

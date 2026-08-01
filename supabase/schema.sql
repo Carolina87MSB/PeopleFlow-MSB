@@ -607,3 +607,24 @@ comment on column public.peopleflow_avaliacoes_desempenho.resultados_comportamen
   'Array de { competenciaId, competenciaNome, competenciaDescricao, afirmacoes: string[], notasAfirmacoes: (number|null)[] } — nome/descrição/afirmações da competência ficam congelados no momento da criação (snapshot), não refletem edições futuras em peopleflow_competencias_comportamentais.';
 comment on column public.peopleflow_avaliacoes_desempenho.resultados_kpis is
   'Array de { kpiId, kpiNome, kpiDescricao, meta, unidadeMedida, sentidoMeta, peso, resultado } — nome/descrição/meta/unidade/sentido/peso do KPI ficam congelados no momento da criação (snapshot), não refletem edições futuras em peopleflow_kpis_cargo.';
+
+-- =====================================================================
+-- 12) Gestão de Desempenho — Etapa 2.1: múltiplos tipos de avaliação
+-- (Gestor/Autoavaliação/Liderança) no mesmo ciclo, elegibilidade por tempo
+-- de empresa e catálogo de competências de Liderança.
+-- =====================================================================
+
+alter table public.peopleflow_avaliacoes_desempenho
+  add column if not exists tipo text not null default 'GESTOR',
+  add column if not exists avaliado text;
+
+comment on column public.peopleflow_avaliacoes_desempenho.tipo is
+  '''GESTOR'' (nota oficial da AVD, gestor avalia o liderado) | ''AUTOAVALIACAO'' (mesma estrutura, nota armazenada à parte, nunca compõe a oficial) | ''LIDERANCA'' (só competências de liderança, sem KPI — gerada só se o colaborador tiver gestor).';
+comment on column public.peopleflow_avaliacoes_desempenho.avaliado is
+  'Quem está sendo avaliado nesta ficha — igual a colaborador_nome em GESTOR/AUTOAVALIACAO; em LIDERANCA é o gestor cujo estilo de liderança está sendo avaliado (colaborador_nome continua sendo o liderado "dono" do conjunto de até 3 fichas do ciclo).';
+
+alter table public.peopleflow_competencias_comportamentais
+  add column if not exists categoria text not null default 'Comportamental';
+
+comment on column public.peopleflow_competencias_comportamentais.categoria is
+  '''Comportamental'' (catálogo corporativo, usado nas avaliações GESTOR/AUTOAVALIACAO) ou ''Lideranca'' (catálogo exclusivo da avaliação LIDERANCA) — mesma tabela, só filtrada por categoria na hora de gerar o snapshot do ciclo.';

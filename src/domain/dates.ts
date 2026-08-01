@@ -50,6 +50,21 @@ export function mesLabel(mesIso: string): string {
   return `${MESES_LABEL[idx] ?? mes}/${ano.slice(2)}`;
 }
 
+/** Quantidade de meses completos entre duas datas ISO ("yyyy-mm-dd") — usado
+ * pela regra de elegibilidade da Avaliação de Desempenho (6 meses completos
+ * de empresa até a data de corte do ciclo). Parsing manual de string, sem
+ * `new Date(iso)`, mesmo motivo do resto deste arquivo (evitar bug de fuso). */
+export function mesesCompletos(inicioIso: string | null | undefined, fimIso: string | null | undefined): number {
+  if (!inicioIso || !fimIso) return 0;
+  const [anoI, mesI, diaI] = inicioIso.split("-").map(Number);
+  const [anoF, mesF, diaF] = fimIso.split("-").map(Number);
+  if ([anoI, mesI, diaI, anoF, mesF, diaF].some(Number.isNaN)) return 0;
+
+  let meses = (anoF - anoI) * 12 + (mesF - mesI);
+  if (diaF < diaI) meses -= 1;
+  return Math.max(0, meses);
+}
+
 /** Tempo decorrido desde a admissão (ISO "yyyy-mm-dd", como vem do Postgres) até hoje, em texto
  * ("2 anos e 3 meses", "8 meses", "12 dias"...). `hoje` é injetável só para facilitar teste. */
 export function tempoDeEmpresa(iso: string | null | undefined, hoje: Date = new Date()): string {
