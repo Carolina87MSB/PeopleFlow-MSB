@@ -791,3 +791,47 @@ create policy "authenticated_rw_avaliacoes_potencial"
   to authenticated
   using (true)
   with check (true);
+
+-- =====================================================================
+-- 15) Gestão de Desempenho — Etapa 5: Matriz 9 Box. NÃO cria tabela nova —
+-- a matriz é uma view puramente derivada de peopleflow_avaliacoes_desempenho
+-- (tipo GESTOR, status Concluída) + peopleflow_avaliacoes_potencial (status
+-- Concluída), nunca persistida, sem edição manual de posição. Só precisa de
+-- 4 limiares configuráveis pelo RH + reforço de unicidade nas 2 tabelas de
+-- origem (o join da matriz depende de no máximo 1 ficha Concluída por
+-- colaborador/ciclo em cada uma).
+-- =====================================================================
+
+alter table public.peopleflow_config_avaliacao_desempenho
+  add column if not exists matriz_desempenho_limite_medio numeric not null default 3,
+  add column if not exists matriz_desempenho_limite_alto numeric not null default 4,
+  add column if not exists matriz_potencial_limite_medio numeric not null default 3,
+  add column if not exists matriz_potencial_limite_alto numeric not null default 4;
+
+comment on column public.peopleflow_config_avaliacao_desempenho.matriz_desempenho_limite_medio is
+  'Nota mínima (escala 1-5) pra classificar Desempenho como "Médio" na Matriz 9 Box — abaixo disso é "Baixo". Editável pelo RH na aba Configuração.';
+comment on column public.peopleflow_config_avaliacao_desempenho.matriz_desempenho_limite_alto is
+  'Nota mínima (escala 1-5) pra classificar Desempenho como "Alto" na Matriz 9 Box. Editável pelo RH na aba Configuração.';
+comment on column public.peopleflow_config_avaliacao_desempenho.matriz_potencial_limite_medio is
+  'Nota mínima (escala 1-5) pra classificar Potencial como "Médio" na Matriz 9 Box — abaixo disso é "Baixo". Editável pelo RH na aba Configuração.';
+comment on column public.peopleflow_config_avaliacao_desempenho.matriz_potencial_limite_alto is
+  'Nota mínima (escala 1-5) pra classificar Potencial como "Alto" na Matriz 9 Box. Editável pelo RH na aba Configuração.';
+
+-- Reforço de unicidade — a checagem "select antes de inserir" já existente em
+-- criarCicloComAvaliacoes()/criarAvaliacoesPotencial() protege contra
+-- duplicidade no caminho normal, mas não é uma garantia de banco. O join da
+-- Matriz 9 Box (1 ficha GESTOR Concluída + 1 ficha de Potencial Concluída
+-- por colaborador/ciclo, escolhida via Map) depende dessa unicidade de
+-- verdade. Se esta migração falhar, já existe uma duplicidade real nos
+-- dados — investigar manualmente antes de tentar de novo, não ignorar.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'avaliacoes_desempenho_ciclo_tipo_colaborador_key') then
+    alter table public.peopleflow_avaliacoes_desempenho
+      add constraint avaliacoes_desempenho_ciclo_tipo_colaborador_key unique (ciclo_id, tipo, colaborador_nome);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'avaliacoes_potencial_ciclo_colaborador_key') then
+    alter table public.peopleflow_avaliacoes_potencial
+      add constraint avaliacoes_potencial_ciclo_colaborador_key unique (ciclo_id, colaborador_nome);
+  end if;
+end $$;

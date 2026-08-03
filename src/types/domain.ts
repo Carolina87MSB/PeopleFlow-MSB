@@ -326,9 +326,20 @@ export interface ConfigAvaliacaoDesempenho {
   /** Nota mínima (escala 1-5) — competências/KPIs abaixo deste valor são
    * sugeridos automaticamente pro PDI na conclusão da avaliação GESTOR. */
   notaMinimaPdi: number;
+  /** Limiares (escala 1-5) da Matriz 9 Box — abaixo de `*LimiteMedio` é
+   * "Baixo", entre os dois é "Médio", igual ou acima de `*LimiteAlto` é
+   * "Alto" (ver classificarFaixaMatriz9Box() em domain/matriz9Box.ts). */
+  matrizDesempenhoLimiteMedio: number;
+  matrizDesempenhoLimiteAlto: number;
+  matrizPotencialLimiteMedio: number;
+  matrizPotencialLimiteAlto: number;
   updatedAt: string;
   updatedBy: string;
 }
+
+/** Classificação de uma nota (Desempenho ou Potencial) pra posicionamento na
+ * Matriz 9 Box — ver domain/matriz9Box.ts. */
+export type FaixaMatriz9Box = "Baixo" | "Médio" | "Alto";
 
 /** Competência comportamental do catálogo corporativo — igual para todos os
  * cargos (diferente dos KPIs, que são por cargo). `afirmacoes` fica vazio na

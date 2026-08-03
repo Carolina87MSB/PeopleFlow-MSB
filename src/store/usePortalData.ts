@@ -58,6 +58,7 @@ import {
 } from "../domain/avaliacaoDesempenho";
 import { gerarIdPdiAcao, gerarIdPdiItem, sugerirObjetivoEAcoes, validarNotaMinimaPdi } from "../domain/pdi";
 import { PERGUNTAS_POTENCIAL, calcularNotaPotencial, gerarIdAvaliacaoPotencial } from "../domain/avaliacaoPotencial";
+import { validarLimiaresMatriz9Box } from "../domain/matriz9Box";
 import {
   calcularIndicacao,
   calcularNotaFinalPct,
@@ -152,9 +153,7 @@ export interface PortalData {
   /** Gestão de Desempenho — etapa 1, só estrutura (ver README). */
   configAvaliacaoDesempenho: ConfigAvaliacaoDesempenho | null;
   atualizarConfigAvaliacaoDesempenho: (
-    pesoKpis: number,
-    pesoComportamental: number,
-    notaMinimaPdi: number,
+    config: Omit<ConfigAvaliacaoDesempenho, "updatedAt" | "updatedBy">,
   ) => Promise<{ ok: true } | { ok: false }>;
   competenciasComportamentais: CompetenciaComportamental[];
   salvarCompetenciaComportamental: (competencia: CompetenciaComportamental) => Promise<{ ok: true } | { ok: false }>;
@@ -202,6 +201,10 @@ export interface PortalData {
   salvarAvaliacaoPotencial: (avaliacao: AvaliacaoPotencial) => Promise<{ ok: true } | { ok: false }>;
   /** RH-only — sem gate de ciclo encerrado (é o caminho de correção pra isso). */
   reabrirAvaliacaoPotencial: (avaliacao: AvaliacaoPotencial) => Promise<{ ok: true } | { ok: false }>;
+  /** RH vê todos (incl. desligados); Gestor/Diretoria só quem tem `gestor === me`;
+   * Colaborador, nunca — fonte de colaboradores pra Matriz 9 Box (etapa 5), que
+   * faz o join com avaliacoesDesempenho/avaliacoesPotencial localmente. */
+  colaboradoresParaMatriz9Box: Colaborador[];
 }
 
 /**
@@ -246,6 +249,17 @@ export function usePortalData(): PortalData {
     if (perfil === "Gestor") return ativosGlobal.filter((c) => c.gestor === me);
     return ativosGlobal;
   }, [perfil, me, ativosGlobal]);
+
+  /** Matriz 9 Box (etapa 5) — RH vê todos, incl. desligados (o filtro de
+   * status Ativo/Inativo é da própria tela); Gestor/Diretoria só quem tem
+   * `gestor === me` (mesma regra da AVD/Potencial, não a de
+   * `colaboradoresListagem`, que dá visão total à Diretoria); Colaborador,
+   * nunca (defesa em profundidade — a aba já é bloqueada em GestaoDesempenhoPage.tsx). */
+  const colaboradoresParaMatriz9Box = useMemo(() => {
+    if (perfil === "RH") return state.colaboradores;
+    if (perfil === "Colaborador") return [];
+    return state.colaboradores.filter((c) => c.gestor === me);
+  }, [state.colaboradores, perfil, me]);
 
   const souDiretorIndustrial = useMemo(
     () => ehDiretorIndustrial(state.colaboradores.find((c) => c.nome === me)),
@@ -609,27 +623,37 @@ export function usePortalData(): PortalData {
   );
 
   const atualizarConfigAvaliacaoDesempenhoFn = useCallback(
-    async (pesoKpis: number, pesoComportamental: number, notaMinimaPdi: number) => {
+    async (config: Omit<ConfigAvaliacaoDesempenho, "updatedAt" | "updatedBy">) => {
       // Validação de negócio, independente de UI — bloqueia qualquer soma
-      // diferente de 100% (ou nota mínima fora da escala 1-5) antes de
-      // sequer tentar gravar, não importa por onde esta função seja
-      // chamada (ver validarConfigAvaliacaoDesempenho()/validarNotaMinimaPdi()
-      // em domain/avaliacaoDesempenho.ts e domain/pdi.ts).
-      const validacaoPesos = validarConfigAvaliacaoDesempenho(pesoKpis, pesoComportamental);
+      // diferente de 100%, nota mínima ou limiares da Matriz 9 Box fora da
+      // escala, antes de sequer tentar gravar, não importa por onde esta
+      // função seja chamada (ver validarConfigAvaliacaoDesempenho()/
+      // validarNotaMinimaPdi()/validarLimiaresMatriz9Box()).
+      const validacaoPesos = validarConfigAvaliacaoDesempenho(config.pesoKpis, config.pesoComportamental);
       if (!validacaoPesos.ok) {
         flash(validacaoPesos.error);
         return { ok: false as const };
       }
-      const validacaoNota = validarNotaMinimaPdi(notaMinimaPdi);
+      const validacaoNota = validarNotaMinimaPdi(config.notaMinimaPdi);
       if (!validacaoNota.ok) {
         flash(validacaoNota.error);
         return { ok: false as const };
       }
+      const validacaoDesempenho = validarLimiaresMatriz9Box(config.matrizDesempenhoLimiteMedio, config.matrizDesempenhoLimiteAlto);
+      if (!validacaoDesempenho.ok) {
+        flash(validacaoDesempenho.error);
+        return { ok: false as const };
+      }
+      const validacaoPotencial = validarLimiaresMatriz9Box(config.matrizPotencialLimiteMedio, config.matrizPotencialLimiteAlto);
+      if (!validacaoPotencial.ok) {
+        flash(validacaoPotencial.error);
+        return { ok: false as const };
+      }
       try {
-        await atualizarConfigAvaliacaoDesempenhoNoSupabase(pesoKpis, pesoComportamental, notaMinimaPdi, me);
+        await atualizarConfigAvaliacaoDesempenhoNoSupabase(config, me);
         dispatch({
           type: "ATUALIZAR_CONFIG_AVALIACAO_DESEMPENHO",
-          config: { pesoKpis, pesoComportamental, notaMinimaPdi, updatedAt: new Date().toISOString(), updatedBy: me },
+          config: { ...config, updatedAt: new Date().toISOString(), updatedBy: me },
         });
         flash("Configuração da Avaliação de Desempenho atualizada.");
         return { ok: true as const };
@@ -1287,5 +1311,6 @@ export function usePortalData(): PortalData {
     podeEditarAvaliacaoPotencial: podeEditarAvaliacaoPotencialFn,
     salvarAvaliacaoPotencial: salvarAvaliacaoPotencialFn,
     reabrirAvaliacaoPotencial: reabrirAvaliacaoPotencialFn,
+    colaboradoresParaMatriz9Box,
   };
 }
