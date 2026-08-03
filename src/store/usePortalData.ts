@@ -206,6 +206,11 @@ export interface PortalData {
    * Colaborador, nunca — fonte de colaboradores pra Matriz 9 Box (etapa 5), que
    * faz o join com avaliacoesDesempenho/avaliacoesPotencial localmente. */
   colaboradoresParaMatriz9Box: Colaborador[];
+  /** RH e Diretoria veem a empresa toda (incl. desligados); Gestor só quem tem
+   * `gestor === me`; Colaborador vê o próprio registro — fonte de colaboradores
+   * pro Histórico (etapa 9), que faz o join com avaliacoesDesempenho/
+   * avaliacoesPotencial/pdi/ciclosAvaliacaoDesempenho localmente. */
+  colaboradoresParaHistorico: Colaborador[];
   /** RH-only, e só quando a ficha GESTOR já está "Aguardando Calibração"
    * (Comitê de Calibração, etapa 6). */
   podeCalibrarAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => boolean;
@@ -273,6 +278,20 @@ export function usePortalData(): PortalData {
   const colaboradoresParaMatriz9Box = useMemo(() => {
     if (perfil === "RH") return state.colaboradores;
     if (perfil === "Colaborador") return [];
+    return state.colaboradores.filter((c) => c.gestor === me);
+  }, [state.colaboradores, perfil, me]);
+
+  /** Histórico (etapa 9) — inclui desligados, mesma ideia de
+   * `colaboradoresParaMatriz9Box` (histórico é registro, não gestão do
+   * presente), mas com escopo por perfil DIFERENTE: RH e Diretoria veem a
+   * empresa toda (decisão confirmada com o usuário — o spec desta etapa só
+   * lista RH/Gestor/Colaborador, omitindo Diretoria; tratado como RH em vez
+   * de como Gestor); Gestor só quem tem `gestor === me`; Colaborador vê o
+   * próprio registro (não `[]` como em Matriz 9 Box — aqui o colaborador tem
+   * acesso à própria linha do tempo). */
+  const colaboradoresParaHistorico = useMemo(() => {
+    if (perfil === "RH" || perfil === "Diretoria") return state.colaboradores;
+    if (perfil === "Colaborador") return state.colaboradores.filter((c) => c.nome === me);
     return state.colaboradores.filter((c) => c.gestor === me);
   }, [state.colaboradores, perfil, me]);
 
@@ -1563,5 +1582,6 @@ export function usePortalData(): PortalData {
     homologarCalibracao: homologarCalibracaoFn,
     podeMarcarDevolutiva: podeMarcarDevolutivaFn,
     marcarDevolutivaRealizada: marcarDevolutivaRealizadaFn,
+    colaboradoresParaHistorico,
   };
 }
