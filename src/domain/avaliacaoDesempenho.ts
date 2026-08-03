@@ -152,6 +152,58 @@ export function notaFinalPorTipo(
   return notaFinalAvaliacao(mediaTecnicaValor, mediaComportamentalValor, config);
 }
 
+export interface ResultadoCalculoAvaliacao {
+  mediaTecnica: number | null;
+  mediaComportamental: number | null;
+  notaFinal: number | null;
+}
+
+/** Ponto ÚNICO de cálculo das notas agregadas de uma avaliação (média
+ * técnica, média comportamental, nota final) — use esta função em QUALQUER
+ * lugar que precise desses 3 números: preview no Drawer, gravação em
+ * salvarAvaliacaoDesempenho, exibição na lista de Avaliações, e qualquer
+ * funcionalidade futura que use a nota (relatórios, dashboards, Matriz 9
+ * Box, PDI). Nunca recalcule esses 3 valores separadamente fora daqui — o
+ * preview (antes de salvar) e o valor persistido devem ser sempre
+ * idênticos.
+ *
+ * Regra de arredondamento: cada um dos 3 valores é calculado a partir dos
+ * dados brutos em precisão total e só arredondado (1 casa decimal) no
+ * final, individualmente — a nota final NUNCA é calculada a partir de
+ * médias já arredondadas (evitava divergência entre o preview e o valor
+ * gravado antes desta unificação). */
+export function calcularNotasAvaliacao(
+  avaliacao: Pick<AvaliacaoDesempenho, "tipo" | "resultadosComportamentais" | "resultadosKpis">,
+  kpisCargo: KpiCargo[],
+  config: ConfigAvaliacaoDesempenho | null,
+): ResultadoCalculoAvaliacao {
+  const mediaTecnicaValor = mediaTecnica(avaliacao.resultadosKpis, kpisCargo);
+  const mediaComportamentalValor = mediaComportamental(avaliacao.resultadosComportamentais);
+  const notaFinalValor = notaFinalPorTipo(avaliacao.tipo, mediaTecnicaValor, mediaComportamentalValor, config);
+  return {
+    mediaTecnica: arredondar(mediaTecnicaValor),
+    mediaComportamental: arredondar(mediaComportamentalValor),
+    notaFinal: arredondar(notaFinalValor),
+  };
+}
+
+/** Valida a configuração da Avaliação de Desempenho (soma dos pesos =
+ * 100%) — camada de negócio, independente de qualquer UI. Chamada antes de
+ * gravar em `atualizarConfigAvaliacaoDesempenho()` (usePortalData.ts), pra
+ * nenhuma configuração inválida chegar a ser persistida, não importa por
+ * onde a gravação seja disparada. Mesma tolerância (0,01) já usada na
+ * validação instantânea da tela de Configuração. */
+export function validarConfigAvaliacaoDesempenho(
+  pesoKpis: number,
+  pesoComportamental: number,
+): { ok: true } | { ok: false; error: string } {
+  const soma = pesoKpis + pesoComportamental;
+  if (Number.isNaN(soma) || Math.abs(soma - 100) > 0.01) {
+    return { ok: false, error: "A soma dos pesos de Competências Técnicas e Comportamentais deve ser exatamente 100%." };
+  }
+  return { ok: true };
+}
+
 /** Elegibilidade pra Avaliação de Desempenho: colaborador ativo com 6 meses
  * completos de empresa até a data de corte do ciclo (inicialmente, a data de
  * encerramento do período avaliado). Colaborador não elegível não recebe

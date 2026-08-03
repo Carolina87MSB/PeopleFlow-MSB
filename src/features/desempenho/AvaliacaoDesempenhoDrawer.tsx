@@ -3,12 +3,10 @@ import { Badge, Button, Drawer } from "../../components/ui";
 import {
   arredondar,
   avaliacaoCompleta,
+  calcularNotasAvaliacao,
   ESCALA_COMPORTAMENTAL,
   itensPendentes,
   mediaAfirmacoes,
-  mediaComportamental,
-  mediaTecnica,
-  notaFinalPorTipo,
   notaKpi,
   percentualAtingimentoKpi,
 } from "../../domain/avaliacaoDesempenho";
@@ -65,9 +63,15 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
   const kpisPorId = useMemo(() => new Map(kpisCargo.map((k) => [k.id, k])), [kpisCargo]);
   const competenciasPorId = useMemo(() => new Map(competenciasComportamentais.map((c) => [c.id, c])), [competenciasComportamentais]);
 
-  const mediaTecnicaValor = mediaTecnica(rascunho.resultadosKpis, kpisCargo);
-  const mediaComportamentalValor = mediaComportamental(rascunho.resultadosComportamentais);
-  const notaFinal = notaFinalPorTipo(rascunho.tipo, mediaTecnicaValor, mediaComportamentalValor, configAvaliacaoDesempenho);
+  // Ponto único de cálculo — o mesmo usado ao salvar e na lista de
+  // Avaliações, pra este preview nunca divergir do valor efetivamente
+  // gravado (ver calcularNotasAvaliacao() em domain/avaliacaoDesempenho.ts).
+  // Já vem arredondado (1 casa) — não precisa de arredondar() de novo abaixo.
+  const { mediaTecnica: mediaTecnicaValor, mediaComportamental: mediaComportamentalValor, notaFinal } = calcularNotasAvaliacao(
+    rascunho,
+    kpisCargo,
+    configAvaliacaoDesempenho,
+  );
   const completa = avaliacaoCompleta(rascunho);
   const pendencias = useMemo(
     () => itensPendentes(rascunho, competenciasComportamentais, kpisCargo),
@@ -268,21 +272,21 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
           <>
             <div className={styles.resumoLinha}>
               <span>Média Competências Técnicas</span>
-              <strong>{arredondar(mediaTecnicaValor) ?? "—"}</strong>
+              <strong>{mediaTecnicaValor ?? "—"}</strong>
             </div>
             <div className={styles.resumoLinha}>
               <span>Média Competências Comportamentais</span>
-              <strong>{arredondar(mediaComportamentalValor) ?? "—"}</strong>
+              <strong>{mediaComportamentalValor ?? "—"}</strong>
             </div>
             <div className={styles.resumoLinhaFinal}>
               <span>Nota Final da Avaliação</span>
-              <strong>{arredondar(notaFinal) ?? "—"}</strong>
+              <strong>{notaFinal ?? "—"}</strong>
             </div>
           </>
         ) : (
           <div className={styles.resumoLinhaFinal}>
             <span>Média Competências de Liderança</span>
-            <strong>{arredondar(mediaComportamentalValor) ?? "—"}</strong>
+            <strong>{mediaComportamentalValor ?? "—"}</strong>
           </div>
         )}
       </div>

@@ -38,13 +38,11 @@ import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
 import {
-  arredondar,
+  calcularNotasAvaliacao,
   elegivelParaCicloAvaliacaoDesempenho,
   gerarIdAvaliacaoDesempenho,
   gerarIdCicloAvaliacaoDesempenho,
-  mediaComportamental,
-  mediaTecnica,
-  notaFinalPorTipo,
+  validarConfigAvaliacaoDesempenho,
 } from "../domain/avaliacaoDesempenho";
 import {
   calcularIndicacao,
@@ -507,6 +505,15 @@ export function usePortalData(): PortalData {
 
   const atualizarConfigAvaliacaoDesempenhoFn = useCallback(
     async (pesoKpis: number, pesoComportamental: number) => {
+      // Validação de negócio, independente de UI — bloqueia qualquer soma
+      // diferente de 100% antes de sequer tentar gravar, não importa por
+      // onde esta função seja chamada (ver validarConfigAvaliacaoDesempenho()
+      // em domain/avaliacaoDesempenho.ts).
+      const validacao = validarConfigAvaliacaoDesempenho(pesoKpis, pesoComportamental);
+      if (!validacao.ok) {
+        flash(validacao.error);
+        return { ok: false as const };
+      }
       try {
         await atualizarConfigAvaliacaoDesempenhoNoSupabase(pesoKpis, pesoComportamental, me);
         dispatch({
@@ -756,11 +763,11 @@ export function usePortalData(): PortalData {
   const salvarAvaliacaoDesempenhoFn = useCallback(
     async (avaliacao: AvaliacaoDesempenho) => {
       const anterior = state.avaliacoesDesempenho.find((a) => a.id === avaliacao.id);
-      const mediaTecnicaValor = arredondar(mediaTecnica(avaliacao.resultadosKpis, state.kpisCargo));
-      const mediaComportamentalValor = arredondar(mediaComportamental(avaliacao.resultadosComportamentais));
-      const notaFinalValor = arredondar(
-        notaFinalPorTipo(avaliacao.tipo, mediaTecnicaValor, mediaComportamentalValor, state.configAvaliacaoDesempenho),
-      );
+      // Ponto único de cálculo — o mesmo usado no preview do Drawer e na
+      // lista de Avaliações, pra nota exibida e nota gravada serem sempre
+      // idênticas (ver calcularNotasAvaliacao() em domain/avaliacaoDesempenho.ts).
+      const { mediaTecnica: mediaTecnicaValor, mediaComportamental: mediaComportamentalValor, notaFinal: notaFinalValor } =
+        calcularNotasAvaliacao(avaliacao, state.kpisCargo, state.configAvaliacaoDesempenho);
       // "Concluída" trava — concluidoPor/Em só são gravados na transição, nunca
       // recalculados depois (preserva quem/quando concluiu de fato).
       const concluindoAgora = avaliacao.status === "Concluída" && anterior?.status !== "Concluída";

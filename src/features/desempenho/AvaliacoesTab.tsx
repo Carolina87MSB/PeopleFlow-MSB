@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Badge, Button, EmptyState, tableStyles } from "../../components/ui";
-import { arredondar, mediaComportamental, mediaTecnica, notaFinalPorTipo } from "../../domain/avaliacaoDesempenho";
+import { calcularNotasAvaliacao } from "../../domain/avaliacaoDesempenho";
 import { formatarDataHora, formatarDataIso } from "../../domain/dates";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { getIniciosAvaliacoesDesempenho, getLogAvaliacaoDesempenho } from "../../repositories/logAvaliacaoDesempenhoRepository";
@@ -38,14 +38,16 @@ const TIPO_LABEL: Record<TipoAvaliacaoDesempenho, string> = {
   LIDERANCA: "Avaliação da Liderança",
 };
 
+// Ponto único de cálculo — o mesmo usado no preview do Drawer e ao salvar,
+// pra esta coluna nunca divergir do valor efetivamente gravado (ver
+// calcularNotasAvaliacao() em domain/avaliacaoDesempenho.ts). Já vem
+// arredondado — não precisa de arredondar() no call site.
 function notaFinalDe(
   avaliacao: AvaliacaoDesempenho,
   kpisCargo: ReturnType<typeof usePortalData>["kpisCargo"],
   config: ReturnType<typeof usePortalData>["configAvaliacaoDesempenho"],
 ): number | null {
-  const tecnica = mediaTecnica(avaliacao.resultadosKpis, kpisCargo);
-  const comportamental = mediaComportamental(avaliacao.resultadosComportamentais);
-  return notaFinalPorTipo(avaliacao.tipo, tecnica, comportamental, config);
+  return calcularNotasAvaliacao(avaliacao, kpisCargo, config).notaFinal;
 }
 
 function acaoParaAvaliacao(status: AvaliacaoDesempenho["status"]): string {
@@ -324,7 +326,7 @@ export function AvaliacoesTab() {
             </thead>
             <tbody>
               {filtradas.map((a) => {
-                const nota = a.notaFinal ?? arredondar(notaFinalDe(a, kpisCargo, configAvaliacaoDesempenho));
+                const nota = a.notaFinal ?? notaFinalDe(a, kpisCargo, configAvaliacaoDesempenho);
                 const tone = STATUS_TONE[a.status] ?? STATUS_TONE["Não iniciada"];
                 const iniciadoEm = iniciosPorAvaliacao.get(a.id);
                 return (
