@@ -68,23 +68,25 @@ export function Matriz9BoxTab() {
     [colaboradoresParaMatriz9Box, departamentoFiltro, gestorFiltro, cargoFiltro, statusFiltro],
   );
 
-  // Fichas Concluídas do ciclo selecionado, indexadas por colaborador — o
-  // filtro é sempre por status === "Concluída" explicitamente, nunca por
-  // nota-não-nula: uma ficha AVD "Em andamento" já tem notaFinal recalculado
-  // a cada save, e uma ficha de Potencial reaberta mantém a nota antiga até
-  // ser salva de novo — nenhuma das duas pode ser tratada como definitiva.
+  // Fichas Homologadas do ciclo selecionado, indexadas por colaborador — o
+  // filtro é por statusCalibracao === "Homologada" explicitamente (Etapa 6:
+  // Comitê de Calibração), nunca por status === "Concluída"/nota-não-nula:
+  // uma ficha só "Concluída" (nem sequer entrou em calibração ainda) ou uma
+  // "Aguardando Calibração" não é definitiva — só depois de homologada a
+  // Nota Oficial (notaFinalOficial/notaOficial) é o que a Matriz consome,
+  // nunca a nota bruta do gestor.
   const { entradas, semPosicao } = useMemo(() => {
     if (!cicloSelecionado) return { entradas: [] as EntradaMatriz9Box[], semPosicao: 0 };
 
     const gestorPorColaborador = new Map<string, AvaliacaoDesempenho>();
     for (const a of avaliacoesDesempenho) {
-      if (a.tipo === "GESTOR" && a.status === "Concluída" && a.cicloId === cicloSelecionado.id) {
+      if (a.tipo === "GESTOR" && a.statusCalibracao === "Homologada" && a.cicloId === cicloSelecionado.id) {
         gestorPorColaborador.set(a.colaboradorNome, a);
       }
     }
     const potencialPorColaborador = new Map<string, AvaliacaoPotencial>();
     for (const a of avaliacoesPotencial) {
-      if (a.status === "Concluída" && a.cicloId === cicloSelecionado.id) {
+      if (a.statusCalibracao === "Homologada" && a.cicloId === cicloSelecionado.id) {
         potencialPorColaborador.set(a.colaboradorNome, a);
       }
     }
@@ -94,8 +96,8 @@ export function Matriz9BoxTab() {
     for (const colaborador of colaboradoresFiltrados) {
       const avaliacaoGestor = gestorPorColaborador.get(colaborador.nome);
       const avaliacaoPotencial = potencialPorColaborador.get(colaborador.nome);
-      const notaDesempenho = avaliacaoGestor?.notaFinal ?? null;
-      const notaPotencial = avaliacaoPotencial?.notaPotencial ?? null;
+      const notaDesempenho = avaliacaoGestor?.notaFinalOficial ?? null;
+      const notaPotencial = avaliacaoPotencial?.notaOficial ?? null;
       const posicao = posicionarMatriz9Box(notaDesempenho, notaPotencial, configAvaliacaoDesempenho);
       if (!posicao || notaDesempenho === null || notaPotencial === null) {
         semPosicaoResult += 1;
@@ -114,9 +116,9 @@ export function Matriz9BoxTab() {
     <>
       <div className={styles.topo}>
         <p className={styles.explicacao}>
-          Posição calculada automaticamente a partir da nota final da avaliação do gestor (Desempenho) e da nota da
-          Avaliação de Potencial — sem preenchimento manual. Pra mudar a posição de alguém, atualize as avaliações de
-          origem.
+          Posição calculada automaticamente a partir da Nota Oficial de Desempenho e da Nota Oficial de Potencial —
+          só depois que as duas avaliações são homologadas pelo RH (aba Calibração). Sem preenchimento manual: pra
+          mudar a posição de alguém, calibre/atualize as avaliações de origem.
         </p>
       </div>
 
@@ -159,7 +161,7 @@ export function Matriz9BoxTab() {
       {semPosicao > 0 && (
         <p className={styles.semPosicao}>
           {semPosicao} colaborador(es) sem posição neste ciclo (avaliação de desempenho e/ou de potencial ainda não
-          concluída).
+          concluída, ou aguardando homologação do RH na aba Calibração).
         </p>
       )}
 

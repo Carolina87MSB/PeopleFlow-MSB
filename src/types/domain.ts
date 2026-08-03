@@ -497,6 +497,26 @@ export interface AvaliacaoDesempenho {
   notaFinal: number | null;
   mediaTecnica: number | null;
   mediaComportamental: number | null;
+  /** Fluxo de calibração do Comitê (RH), Etapa 6 — independente de `status`
+   * acima (que nunca muda de significado). Só avança pra além de "Não
+   * iniciada" em fichas tipo GESTOR, e só quando a ficha de Potencial irmã
+   * (mesmo colaborador/ciclo) também estiver "Concluída". */
+  statusCalibracao: StatusCalibracao;
+  /** Override do RH pra `mediaComportamental` — `null` = sem calibração,
+   * mantém o valor original do gestor. Média técnica (KPIs) nunca é
+   * calibrável (resultado objetivo). */
+  mediaComportamentalCalibrada: number | null;
+  /** Nota Oficial da AVD — calculada só na homologação
+   * (calcularNotaOficialAvd() em domain/calibracao.ts). É esta nota, nunca
+   * `notaFinal` do gestor, que a Matriz 9 Box e demais módulos consomem. */
+  notaFinalOficial: number | null;
+  /** Obrigatória quando `mediaComportamentalCalibrada` difere do original. */
+  justificativaCalibracao: string;
+  /** Preenchidos só na homologação (mesmo usuário/timestamp de `homologadoPor`/`homologadoEm` nesta implementação — 1 ação só, sem rascunho salvo separado). */
+  calibradoPor: string;
+  calibradoEm: string | null;
+  homologadoPor: string;
+  homologadoEm: string | null;
   criadoEm: string;
   updatedAt: string;
 }
@@ -542,11 +562,31 @@ export interface AvaliacaoPotencial {
   comentario: string;
   status: StatusAvaliacaoDesempenho;
   notaPotencial: number | null;
+  /** Fluxo de calibração do Comitê (RH), Etapa 6 — mesma regra da AVD
+   * (avança junto com a ficha GESTOR irmã do mesmo colaborador/ciclo). */
+  statusCalibracao: StatusCalibracao;
+  /** Override do RH pra `notaPotencial` — `null` = sem calibração. */
+  notaPotencialCalibrada: number | null;
+  /** Nota Oficial de Potencial — calculada só na homologação
+   * (calcularNotaOficialPotencial() em domain/calibracao.ts). */
+  notaOficial: number | null;
+  justificativaCalibracao: string;
+  calibradoPor: string;
+  calibradoEm: string | null;
+  homologadoPor: string;
+  homologadoEm: string | null;
   concluidoPor: string;
   concluidoEm: string | null;
   criadoEm: string;
   updatedAt: string;
 }
+
+/** Fluxo de calibração do Comitê de Calibração (Etapa 6) — RH revisa a AVD
+ * (ficha GESTOR) e a Avaliação de Potencial já concluídas pelo gestor e,
+ * quando necessário, ajusta as notas antes de virarem Nota Oficial. Campo
+ * independente de `status` (que continua só indicando se o gestor
+ * terminou). Ver domain/calibracao.ts. */
+export type StatusCalibracao = "Não iniciada" | "Aguardando Calibração" | "Homologada";
 
 /** Status do plano de PDI inteiro (diferente do status de cada item/ação). */
 export type StatusPdi = "Não iniciado" | "Em andamento" | "Concluído";

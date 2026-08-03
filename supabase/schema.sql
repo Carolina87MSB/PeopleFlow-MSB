@@ -835,3 +835,54 @@ begin
       add constraint avaliacoes_potencial_ciclo_colaborador_key unique (ciclo_id, colaborador_nome);
   end if;
 end $$;
+
+-- =====================================================================
+-- 16) Gestão de Desempenho — Etapa 6: Comitê de Calibração. RH (que
+-- representa o Comitê — não é perfil novo) revisa a AVD (ficha GESTOR) e a
+-- Avaliação de Potencial já concluídas pelo gestor e, se necessário, ajusta
+-- a média comportamental e/ou a nota de potencial antes de virarem Nota
+-- Oficial. `status` (AVD/Potencial) NÃO muda de significado — continua
+-- "Não iniciada"/"Em andamento"/"Concluída", indicando só se o gestor
+-- terminou de preencher. `status_calibracao`, campo novo e independente,
+-- carrega o fluxo de calibração em cima disso: "Não iniciada" (default,
+-- irrelevante pra AUTOAVALIACAO/LIDERANCA, que nunca saem daqui) →
+-- "Aguardando Calibração" (as 2 fichas do par concluídas pelo gestor) →
+-- "Homologada" (RH decidiu). A nota original do gestor (notaFinal/
+-- notaPotencial) NUNCA é sobrescrita — nota_final_oficial/nota_oficial são
+-- campos à parte, preservando o histórico completo (nota inicial, nota
+-- oficial, quem/quando calibrou e homologou) sem precisar de tabela nova.
+-- =====================================================================
+
+alter table public.peopleflow_avaliacoes_desempenho
+  add column if not exists status_calibracao text not null default 'Não iniciada',
+  add column if not exists media_comportamental_calibrada numeric,
+  add column if not exists nota_final_oficial numeric,
+  add column if not exists justificativa_calibracao text not null default '',
+  add column if not exists calibrado_por text,
+  add column if not exists calibrado_em timestamptz,
+  add column if not exists homologado_por text,
+  add column if not exists homologado_em timestamptz;
+
+comment on column public.peopleflow_avaliacoes_desempenho.status_calibracao is
+  '''Não iniciada'' | ''Aguardando Calibração'' | ''Homologada'' — fluxo de calibração do Comitê (RH), independente de `status`. Só avança pra além de "Não iniciada" em fichas tipo GESTOR (nunca AUTOAVALIACAO/LIDERANCA), e só quando a ficha de Potencial irmã (mesmo ciclo/colaborador) também estiver "Concluída".';
+comment on column public.peopleflow_avaliacoes_desempenho.media_comportamental_calibrada is
+  'Override do RH pra media_comportamental — null significa "sem calibração, mantém o valor original do gestor". Média técnica (KPIs) nunca é calibrável.';
+comment on column public.peopleflow_avaliacoes_desempenho.nota_final_oficial is
+  'Nota Oficial da AVD — calculada na homologação (calcularNotaOficialAvd()), usando media_comportamental_calibrada quando presente, senão a média original. É esta nota, nunca notaFinal do gestor, que a Matriz 9 Box e demais módulos devem consumir.';
+
+alter table public.peopleflow_avaliacoes_potencial
+  add column if not exists status_calibracao text not null default 'Não iniciada',
+  add column if not exists nota_potencial_calibrada numeric,
+  add column if not exists nota_oficial numeric,
+  add column if not exists justificativa_calibracao text not null default '',
+  add column if not exists calibrado_por text,
+  add column if not exists calibrado_em timestamptz,
+  add column if not exists homologado_por text,
+  add column if not exists homologado_em timestamptz;
+
+comment on column public.peopleflow_avaliacoes_potencial.status_calibracao is
+  '''Não iniciada'' | ''Aguardando Calibração'' | ''Homologada'' — mesmo fluxo/mesma regra da AVD (avança junto com a ficha GESTOR irmã do mesmo ciclo/colaborador).';
+comment on column public.peopleflow_avaliacoes_potencial.nota_potencial_calibrada is
+  'Override do RH pra nota_potencial — null significa "sem calibração, mantém o valor original".';
+comment on column public.peopleflow_avaliacoes_potencial.nota_oficial is
+  'Nota Oficial de Potencial — calculada na homologação (calcularNotaOficialPotencial()). É esta nota, nunca nota_potencial do gestor, que a Matriz 9 Box e demais módulos devem consumir.';

@@ -10,7 +10,9 @@ interface Matriz9BoxDrawerProps {
 
 /** Detalhe read-only de um marcador da Matriz 9 Box — sem nenhum controle de
  * edição (a posição nunca é editada manualmente; qualquer mudança vem de
- * atualizar a AVD/Avaliação de Potencial de origem, ver README). */
+ * calibrar/atualizar a AVD/Avaliação de Potencial de origem, ver README).
+ * As notas mostradas aqui são sempre as Oficiais (pós-homologação do RH,
+ * Etapa 6) — só um colaborador homologado chega a aparecer na Matriz. */
 export function Matriz9BoxDrawer({ entrada, onClose }: Matriz9BoxDrawerProps) {
   return (
     <Drawer
@@ -26,11 +28,11 @@ export function Matriz9BoxDrawer({ entrada, onClose }: Matriz9BoxDrawerProps) {
     >
       <div className={styles.resumo}>
         <div className={styles.resumoLinha}>
-          <span>Nota Final da Avaliação de Desempenho</span>
+          <span>Nota Oficial da Avaliação de Desempenho</span>
           <strong>{entrada.notaDesempenho}</strong>
         </div>
         <div className={styles.resumoLinha}>
-          <span>Nota Final de Potencial</span>
+          <span>Nota Oficial de Potencial</span>
           <strong>{entrada.notaPotencial}</strong>
         </div>
         <div className={styles.resumoLinha}>

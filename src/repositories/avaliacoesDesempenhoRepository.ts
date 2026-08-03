@@ -27,6 +27,14 @@ interface AvaliacaoDesempenhoRow {
   nota_final: number | null;
   media_tecnica: number | null;
   media_comportamental: number | null;
+  status_calibracao: string | null;
+  media_comportamental_calibrada: number | null;
+  nota_final_oficial: number | null;
+  justificativa_calibracao: string | null;
+  calibrado_por: string | null;
+  calibrado_em: string | null;
+  homologado_por: string | null;
+  homologado_em: string | null;
   criado_em: string;
   updated_at: string;
 }
@@ -54,14 +62,25 @@ function fromRow(row: AvaliacaoDesempenhoRow): AvaliacaoDesempenho {
     notaFinal: row.nota_final,
     mediaTecnica: row.media_tecnica,
     mediaComportamental: row.media_comportamental,
+    statusCalibracao: (row.status_calibracao as AvaliacaoDesempenho["statusCalibracao"]) ?? "Não iniciada",
+    mediaComportamentalCalibrada: row.media_comportamental_calibrada,
+    notaFinalOficial: row.nota_final_oficial,
+    justificativaCalibracao: row.justificativa_calibracao ?? "",
+    calibradoPor: row.calibrado_por ?? "",
+    calibradoEm: row.calibrado_em,
+    homologadoPor: row.homologado_por ?? "",
+    homologadoEm: row.homologado_em,
     criadoEm: row.criado_em,
     updatedAt: row.updated_at,
   };
 }
 
-function toRow(a: AvaliacaoDesempenho) {
+// Tipado contra a Row (menos id/criado_em/updated_at, geridos à parte) —
+// garante em tempo de compilação que nenhum campo novo fique esquecido
+// aqui (achado da revisão adversarial: um toRow() incompleto faz a
+// gravação "funcionar" no estado local e sumir num reload, silenciosamente).
+function toRow(a: AvaliacaoDesempenho): Omit<AvaliacaoDesempenhoRow, "id" | "criado_em" | "updated_at"> {
   return {
-    id: a.id,
     tipo: a.tipo,
     colaborador_nome: a.colaboradorNome,
     avaliado: a.avaliado || null,
@@ -82,6 +101,14 @@ function toRow(a: AvaliacaoDesempenho) {
     nota_final: a.notaFinal,
     media_tecnica: a.mediaTecnica,
     media_comportamental: a.mediaComportamental,
+    status_calibracao: a.statusCalibracao,
+    media_comportamental_calibrada: a.mediaComportamentalCalibrada,
+    nota_final_oficial: a.notaFinalOficial,
+    justificativa_calibracao: a.justificativaCalibracao,
+    calibrado_por: a.calibradoPor || null,
+    calibrado_em: a.calibradoEm,
+    homologado_por: a.homologadoPor || null,
+    homologado_em: a.homologadoEm,
   };
 }
 
@@ -98,7 +125,7 @@ export async function criarAvaliacoesDesempenho(avaliacoes: AvaliacaoDesempenho[
   if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
   if (avaliacoes.length === 0) return;
 
-  const { error } = await supabase.from("peopleflow_avaliacoes_desempenho").insert(avaliacoes.map(toRow));
+  const { error } = await supabase.from("peopleflow_avaliacoes_desempenho").insert(avaliacoes.map((a) => ({ id: a.id, ...toRow(a) })));
   if (error) throw new Error(`Falha ao gerar avaliações de desempenho no Supabase: ${error.message}`);
 }
 

@@ -5,6 +5,7 @@ import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalData } from "../../store/usePortalData";
 import type { AvaliacaoPotencial } from "../../types/domain";
 import { AvaliacaoPotencialDrawer } from "./AvaliacaoPotencialDrawer";
+import { STATUS_CALIBRACAO_TONE } from "./CalibracaoTab";
 import styles from "./AvaliacoesTab.module.css";
 
 const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
@@ -113,9 +114,16 @@ export function AvaliacoesPotencialTab() {
                     <td>{a.departamento}</td>
                     <td>{a.ciclo}</td>
                     <td>
-                      <Badge bg={tone.bg} fg={tone.fg}>
-                        {a.status}
-                      </Badge>
+                      <div className={styles.statusBadges}>
+                        <Badge bg={tone.bg} fg={tone.fg}>
+                          {a.status}
+                        </Badge>
+                        {a.statusCalibracao !== "Não iniciada" && (
+                          <Badge bg={STATUS_CALIBRACAO_TONE[a.statusCalibracao].bg} fg={STATUS_CALIBRACAO_TONE[a.statusCalibracao].fg}>
+                            {a.statusCalibracao}
+                          </Badge>
+                        )}
+                      </div>
                     </td>
                     {podeEditarGestaoDesempenho && (
                       <td>{a.gestorAvaliador || <span className={styles.semGestor}>Sem gestor</span>}</td>

@@ -17,6 +17,14 @@ interface AvaliacaoPotencialRow {
   comentario: string | null;
   status: string;
   nota_potencial: number | null;
+  status_calibracao: string | null;
+  nota_potencial_calibrada: number | null;
+  nota_oficial: number | null;
+  justificativa_calibracao: string | null;
+  calibrado_por: string | null;
+  calibrado_em: string | null;
+  homologado_por: string | null;
+  homologado_em: string | null;
   concluido_por: string | null;
   concluido_em: string | null;
   criado_em: string;
@@ -36,6 +44,14 @@ function fromRow(row: AvaliacaoPotencialRow): AvaliacaoPotencial {
     comentario: row.comentario ?? "",
     status: row.status as StatusAvaliacaoDesempenho,
     notaPotencial: row.nota_potencial,
+    statusCalibracao: (row.status_calibracao as AvaliacaoPotencial["statusCalibracao"]) ?? "Não iniciada",
+    notaPotencialCalibrada: row.nota_potencial_calibrada,
+    notaOficial: row.nota_oficial,
+    justificativaCalibracao: row.justificativa_calibracao ?? "",
+    calibradoPor: row.calibrado_por ?? "",
+    calibradoEm: row.calibrado_em,
+    homologadoPor: row.homologado_por ?? "",
+    homologadoEm: row.homologado_em,
     concluidoPor: row.concluido_por ?? "",
     concluidoEm: row.concluido_em,
     criadoEm: row.criado_em,
@@ -43,9 +59,10 @@ function fromRow(row: AvaliacaoPotencialRow): AvaliacaoPotencial {
   };
 }
 
-function toRow(a: AvaliacaoPotencial) {
+// Tipado contra a Row (menos id/criado_em/updated_at) — mesma proteção em
+// tempo de compilação contra campo novo esquecido (ver avaliacoesDesempenhoRepository.ts).
+function toRow(a: AvaliacaoPotencial): Omit<AvaliacaoPotencialRow, "id" | "criado_em" | "updated_at"> {
   return {
-    id: a.id,
     ciclo_id: a.cicloId,
     ciclo: a.ciclo,
     colaborador_nome: a.colaboradorNome,
@@ -56,6 +73,14 @@ function toRow(a: AvaliacaoPotencial) {
     comentario: a.comentario,
     status: a.status,
     nota_potencial: a.notaPotencial,
+    status_calibracao: a.statusCalibracao,
+    nota_potencial_calibrada: a.notaPotencialCalibrada,
+    nota_oficial: a.notaOficial,
+    justificativa_calibracao: a.justificativaCalibracao,
+    calibrado_por: a.calibradoPor || null,
+    calibrado_em: a.calibradoEm,
+    homologado_por: a.homologadoPor || null,
+    homologado_em: a.homologadoEm,
     concluido_por: a.concluidoPor || null,
     concluido_em: a.concluidoEm,
   };
@@ -90,7 +115,7 @@ export async function criarAvaliacoesPotencial(avaliacoes: AvaliacaoPotencial[])
   const avaliacoesCriadas = avaliacoes.filter((a) => !nomesExistentes.has(a.colaboradorNome));
   if (avaliacoesCriadas.length === 0) return [];
 
-  const { error } = await supabase.from("peopleflow_avaliacoes_potencial").insert(avaliacoesCriadas.map(toRow));
+  const { error } = await supabase.from("peopleflow_avaliacoes_potencial").insert(avaliacoesCriadas.map((a) => ({ id: a.id, ...toRow(a) })));
   if (error) throw new Error(`Falha ao gerar avaliações de potencial no Supabase: ${error.message}`);
   return avaliacoesCriadas;
 }

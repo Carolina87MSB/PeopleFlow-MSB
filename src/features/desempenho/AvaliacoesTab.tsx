@@ -9,6 +9,7 @@ import { usePortalData } from "../../store/usePortalData";
 import type { AvaliacaoDesempenho, CicloAvaliacaoDesempenho, LogAvaliacaoDesempenho, TipoAvaliacaoDesempenho } from "../../types/domain";
 import { AvaliacaoDesempenhoDrawer } from "./AvaliacaoDesempenhoDrawer";
 import { NovoCicloModal } from "./NovoCicloModal";
+import { STATUS_CALIBRACAO_TONE } from "./CalibracaoTab";
 import styles from "./AvaliacoesTab.module.css";
 
 const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
@@ -30,6 +31,8 @@ const ACAO_LOG_LABEL: Record<string, string> = {
   AVALIACAO_SALVA: "Avaliação salva",
   AVALIACAO_CONCLUIDA: "Avaliação concluída",
   COLABORADOR_NAO_ELEGIVEL: "Colaborador não elegível",
+  AGUARDANDO_CALIBRACAO: "Aguardando calibração",
+  AVALIACAO_HOMOLOGADA: "Avaliação homologada",
 };
 
 const TIPO_LABEL: Record<TipoAvaliacaoDesempenho, string> = {
@@ -338,9 +341,16 @@ export function AvaliacoesTab() {
                     <td>{a.departamento}</td>
                     <td>{a.ciclo}</td>
                     <td>
-                      <Badge bg={tone.bg} fg={tone.fg}>
-                        {a.status}
-                      </Badge>
+                      <div className={styles.statusBadges}>
+                        <Badge bg={tone.bg} fg={tone.fg}>
+                          {a.status}
+                        </Badge>
+                        {a.tipo === "GESTOR" && a.statusCalibracao !== "Não iniciada" && (
+                          <Badge bg={STATUS_CALIBRACAO_TONE[a.statusCalibracao].bg} fg={STATUS_CALIBRACAO_TONE[a.statusCalibracao].fg}>
+                            {a.statusCalibracao}
+                          </Badge>
+                        )}
+                      </div>
                     </td>
                     {podeEditarGestaoDesempenho && (
                       <td>{a.gestorAvaliador || <span className={styles.semGestor}>Sem gestor</span>}</td>

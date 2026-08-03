@@ -59,6 +59,7 @@ import {
 import { gerarIdPdiAcao, gerarIdPdiItem, sugerirObjetivoEAcoes, validarNotaMinimaPdi } from "../domain/pdi";
 import { PERGUNTAS_POTENCIAL, calcularNotaPotencial, gerarIdAvaliacaoPotencial } from "../domain/avaliacaoPotencial";
 import { validarLimiaresMatriz9Box } from "../domain/matriz9Box";
+import { calcularNotaOficialAvd, calcularNotaOficialPotencial, validarCalibracao } from "../domain/calibracao";
 import {
   calcularIndicacao,
   calcularNotaFinalPct,
@@ -205,6 +206,16 @@ export interface PortalData {
    * Colaborador, nunca — fonte de colaboradores pra Matriz 9 Box (etapa 5), que
    * faz o join com avaliacoesDesempenho/avaliacoesPotencial localmente. */
   colaboradoresParaMatriz9Box: Colaborador[];
+  /** RH-only, e só quando a ficha GESTOR já está "Aguardando Calibração"
+   * (Comitê de Calibração, etapa 6). */
+  podeCalibrarAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => boolean;
+  /** Homologa um par (ficha GESTOR + Potencial) de uma vez — RH-only,
+   * checado dentro da própria função. */
+  homologarCalibracao: (
+    avaliacaoDesempenho: AvaliacaoDesempenho,
+    avaliacaoPotencial: AvaliacaoPotencial,
+    ajustes: { mediaComportamentalCalibrada: number | null; notaPotencialCalibrada: number | null; justificativa: string },
+  ) => Promise<{ ok: true } | { ok: false }>;
 }
 
 /**
@@ -363,11 +374,18 @@ export function usePortalData(): PortalData {
 
   /** RH sempre, checado PRIMEIRO e incondicionalmente (diferente da AVD,
    * que bloqueia até o RH quando o ciclo está encerrado — aqui isso seria
-   * um beco sem saída depois de reabrir uma ficha de ciclo já encerrado).
-   * Senão, só quem `gestorAvaliador` aponta (congelado, igual à AVD) — e só
-   * enquanto não "Concluída" e o ciclo não estiver "Encerrado". */
+   * um beco sem saída depois de reabrir uma ficha de ciclo já encerrado) —
+   * **exceto** se já entrou no fluxo de calibração (achado da revisão da
+   * Etapa 6: sem esse guard, o RH conseguiria editar respostas ou reabrir
+   * uma ficha já "Aguardando Calibração"/"Homologada" por este caminho,
+   * recalculando notaPotencial e desincronizando a Nota Oficial/Matriz 9
+   * Box sem justificativa nem rastro — a calibração de verdade só acontece
+   * pela aba Calibração). Senão, só quem `gestorAvaliador` aponta
+   * (congelado, igual à AVD) — e só enquanto não "Concluída" e o ciclo não
+   * estiver "Encerrado". */
   const podeEditarAvaliacaoPotencialFn = useCallback(
     (avaliacao: AvaliacaoPotencial) => {
+      if (avaliacao.statusCalibracao !== "Não iniciada") return false;
       if (perfil === "RH") return true;
       if (avaliacao.status === "Concluída") return false;
       const ciclo = state.ciclosAvaliacaoDesempenho.find((c) => c.id === avaliacao.cicloId);
@@ -805,6 +823,14 @@ export function usePortalData(): PortalData {
         comentario: "",
         status: "Não iniciada",
         notaPotencial: null,
+        statusCalibracao: "Não iniciada",
+        notaPotencialCalibrada: null,
+        notaOficial: null,
+        justificativaCalibracao: "",
+        calibradoPor: "",
+        calibradoEm: null,
+        homologadoPor: "",
+        homologadoEm: null,
         concluidoPor: "",
         concluidoEm: null,
         criadoEm: agora,
@@ -829,6 +855,14 @@ export function usePortalData(): PortalData {
           notaFinal: null,
           mediaTecnica: null,
           mediaComportamental: null,
+          statusCalibracao: "Não iniciada" as const,
+          mediaComportamentalCalibrada: null,
+          notaFinalOficial: null,
+          justificativaCalibracao: "",
+          calibradoPor: "",
+          calibradoEm: null,
+          homologadoPor: "",
+          homologadoEm: null,
           criadoEm: agora,
           updatedAt: agora,
         };
@@ -941,6 +975,59 @@ export function usePortalData(): PortalData {
     [dispatch, me, flash],
   );
 
+  /** Comitê de Calibração (Etapa 6) — quando a ficha GESTOR e a ficha de
+   * Potencial de um mesmo colaborador/ciclo estão AMBAS "Concluída" (pelo
+   * gestor) e nenhuma delas já entrou no fluxo de calibração, as duas viram
+   * "Aguardando Calibração" juntas. Best-effort — uma falha aqui não desfaz
+   * a conclusão que disparou a checagem, só avisa (mesmo espírito do
+   * gerarPdiSeNecessario). Quem acabou de ser salvo é passado direto (não
+   * relido de `state`, que ainda não reflete um dispatch em andamento na
+   * mesma execução) — só o lado QUE NÃO acabou de ser salvo é lido de
+   * `state` (correto ali, pois reflete uma conclusão anterior já renderizada). */
+  const verificarEIniciarCalibracaoFn = useCallback(
+    async (
+      avdRecemSalva: AvaliacaoDesempenho | null,
+      potencialRecemSalva: AvaliacaoPotencial | null,
+      colaboradorNome: string,
+      cicloId: string,
+    ) => {
+      const avd =
+        avdRecemSalva ?? state.avaliacoesDesempenho.find((a) => a.tipo === "GESTOR" && a.colaboradorNome === colaboradorNome && a.cicloId === cicloId);
+      const potencial = potencialRecemSalva ?? state.avaliacoesPotencial.find((a) => a.colaboradorNome === colaboradorNome && a.cicloId === cicloId);
+      if (!avd || !potencial) return;
+      if (avd.status !== "Concluída" || potencial.status !== "Concluída") return;
+      if (avd.statusCalibracao !== "Não iniciada" || potencial.statusCalibracao !== "Não iniciada") return;
+
+      const avdAtualizada: AvaliacaoDesempenho = { ...avd, statusCalibracao: "Aguardando Calibração" };
+      const potencialAtualizada: AvaliacaoPotencial = { ...potencial, statusCalibracao: "Aguardando Calibração" };
+      try {
+        await atualizarAvaliacaoDesempenhoNoSupabase(avdAtualizada);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_DESEMPENHO", avaliacao: avdAtualizada });
+        await atualizarAvaliacaoPotencialNoSupabase(potencialAtualizada);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_POTENCIAL", avaliacao: potencialAtualizada });
+        void registrarLogAvaliacaoDesempenhoNoSupabase({
+          cicloId,
+          avaliacaoId: avdAtualizada.id,
+          acao: "AGUARDANDO_CALIBRACAO",
+          detalhe: colaboradorNome,
+          usuario: me,
+        });
+      } catch (err) {
+        flash(err instanceof Error ? `Falha ao iniciar a calibração de ${colaboradorNome}: ${err.message}` : `Falha ao iniciar a calibração de ${colaboradorNome}.`);
+      }
+    },
+    [dispatch, me, flash, state.avaliacoesDesempenho, state.avaliacoesPotencial],
+  );
+
+  /** RH-only — sem checagem de ciclo encerrado (mesma decisão do reabrir do
+   * Potencial: a autoridade de correção do RH não fica presa a um lock
+   * pensado pro gestor). Só a ficha GESTOR é calibrável — AUTOAVALIACAO/
+   * LIDERANCA nunca saem de "Não iniciada" em statusCalibracao. */
+  const podeCalibrarAvaliacaoDesempenhoFn = useCallback(
+    (avaliacao: AvaliacaoDesempenho) => perfil === "RH" && avaliacao.tipo === "GESTOR" && avaliacao.statusCalibracao === "Aguardando Calibração",
+    [perfil],
+  );
+
   const salvarAvaliacaoDesempenhoFn = useCallback(
     async (avaliacao: AvaliacaoDesempenho) => {
       const anterior = state.avaliacoesDesempenho.find((a) => a.id === avaliacao.id);
@@ -973,6 +1060,13 @@ export function usePortalData(): PortalData {
         // GESTOR (nota oficial da AVD) — nunca por AUTOAVALIACAO/LIDERANCA.
         if (concluindoAgora && atualizado.tipo === "GESTOR") {
           void gerarPdiSeNecessario(atualizado);
+          // Comitê de Calibração (Etapa 6) — verifica se a ficha de
+          // Potencial irmã (mesmo colaborador/ciclo) também já foi
+          // concluída pelo gestor; se sim, as duas viram "Aguardando
+          // Calibração" juntas. Passa `atualizado` direto (não relê de
+          // `state`, que ainda reflete o valor pré-dispatch nesta mesma
+          // execução — só o lado da Potencial é lido de `state`).
+          void verificarEIniciarCalibracaoFn(atualizado, null, atualizado.colaboradorNome, atualizado.cicloId);
         }
 
         return { ok: true as const };
@@ -1105,7 +1199,7 @@ export function usePortalData(): PortalData {
         }
       }
     },
-    [dispatch, me, flash, state.avaliacoesDesempenho, state.kpisCargo, state.configAvaliacaoDesempenho, state.pdiBiblioteca],
+    [dispatch, me, flash, state.avaliacoesDesempenho, state.kpisCargo, state.configAvaliacaoDesempenho, state.pdiBiblioteca, verificarEIniciarCalibracaoFn],
   );
 
   /** Salva um PDI (comentários, itens/ações, mudança de status, conclusão)
@@ -1217,21 +1311,34 @@ export function usePortalData(): PortalData {
         flash(concluindoAgora ? "Avaliação de potencial concluída." : "Progresso da avaliação de potencial salvo.");
         const acao = concluindoAgora ? "POTENCIAL_CONCLUIDA" : iniciandoAgora ? "POTENCIAL_INICIADA" : "POTENCIAL_SALVA";
         void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: atualizado.cicloId, avaliacaoId: atualizado.id, acao, usuario: me });
+
+        // Comitê de Calibração (Etapa 6) — ver comentário em verificarEIniciarCalibracaoFn.
+        if (concluindoAgora) {
+          void verificarEIniciarCalibracaoFn(null, atualizado, atualizado.colaboradorNome, atualizado.cicloId);
+        }
+
         return { ok: true as const };
       } catch (err) {
         flash(err instanceof Error ? err.message : "Falha ao salvar avaliação de potencial.");
         return { ok: false as const };
       }
     },
-    [dispatch, me, flash, state.avaliacoesPotencial],
+    [dispatch, me, flash, state.avaliacoesPotencial, verificarEIniciarCalibracaoFn],
   );
 
   /** RH-only — sem gate de ciclo encerrado (é o caminho de correção pra
-   * uma ficha de potencial cujo ciclo já foi encerrado). */
+   * uma ficha de potencial cujo ciclo já foi encerrado). Bloqueado assim
+   * que a ficha entra no fluxo de calibração (achado da revisão da Etapa
+   * 6 — ver podeEditarAvaliacaoPotencialFn): a partir daí, reabrir é
+   * responsabilidade da aba Calibração, não deste caminho. */
   const reabrirAvaliacaoPotencialFn = useCallback(
     async (avaliacao: AvaliacaoPotencial) => {
       if (perfil !== "RH") {
         flash("Só o RH pode reabrir uma avaliação de potencial.");
+        return { ok: false as const };
+      }
+      if (avaliacao.statusCalibracao !== "Não iniciada") {
+        flash("Esta avaliação já está no fluxo de calibração — use a aba Calibração.");
         return { ok: false as const };
       }
       const reaberta: AvaliacaoPotencial = { ...avaliacao, status: "Em andamento", concluidoPor: "", concluidoEm: null };
@@ -1247,6 +1354,90 @@ export function usePortalData(): PortalData {
       }
     },
     [dispatch, me, flash, perfil],
+  );
+
+  /** Homologa um par (ficha GESTOR + Avaliação de Potencial) — ação única
+   * do Comitê de Calibração: RH define (ou deixa em branco, mantendo o
+   * original) a média comportamental e/ou a nota de potencial calibradas,
+   * justifica se alterou algo, e a Nota Oficial de cada uma é calculada e
+   * gravada nas duas fichas de uma vez (calibradoPor/Em e homologadoPor/Em
+   * = mesmo usuário/timestamp — não existe rascunho de calibração salvo
+   * separadamente nesta implementação). RH-only, checado dentro da própria
+   * função (mesmo padrão de reabrirAvaliacaoPotencialFn). */
+  const homologarCalibracaoFn = useCallback(
+    async (
+      avaliacaoDesempenho: AvaliacaoDesempenho,
+      avaliacaoPotencial: AvaliacaoPotencial,
+      ajustes: { mediaComportamentalCalibrada: number | null; notaPotencialCalibrada: number | null; justificativa: string },
+    ) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode homologar uma avaliação.");
+        return { ok: false as const };
+      }
+      const validacao = validarCalibracao(
+        avaliacaoDesempenho.mediaComportamental,
+        ajustes.mediaComportamentalCalibrada,
+        avaliacaoPotencial.notaPotencial,
+        ajustes.notaPotencialCalibrada,
+        ajustes.justificativa,
+      );
+      if (!validacao.ok) {
+        flash(validacao.error);
+        return { ok: false as const };
+      }
+
+      const agora = new Date().toISOString();
+      const notaFinalOficial = calcularNotaOficialAvd(
+        avaliacaoDesempenho.mediaTecnica,
+        avaliacaoDesempenho.mediaComportamental,
+        ajustes.mediaComportamentalCalibrada,
+        state.configAvaliacaoDesempenho,
+      );
+      const notaOficial = calcularNotaOficialPotencial(avaliacaoPotencial.notaPotencial, ajustes.notaPotencialCalibrada);
+
+      const avdHomologada: AvaliacaoDesempenho = {
+        ...avaliacaoDesempenho,
+        mediaComportamentalCalibrada: ajustes.mediaComportamentalCalibrada,
+        notaFinalOficial,
+        justificativaCalibracao: ajustes.justificativa,
+        calibradoPor: me,
+        calibradoEm: agora,
+        homologadoPor: me,
+        homologadoEm: agora,
+        statusCalibracao: "Homologada",
+      };
+      const potencialHomologada: AvaliacaoPotencial = {
+        ...avaliacaoPotencial,
+        notaPotencialCalibrada: ajustes.notaPotencialCalibrada,
+        notaOficial,
+        justificativaCalibracao: ajustes.justificativa,
+        calibradoPor: me,
+        calibradoEm: agora,
+        homologadoPor: me,
+        homologadoEm: agora,
+        statusCalibracao: "Homologada",
+      };
+
+      try {
+        await atualizarAvaliacaoDesempenhoNoSupabase(avdHomologada);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_DESEMPENHO", avaliacao: avdHomologada });
+        await atualizarAvaliacaoPotencialNoSupabase(potencialHomologada);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_POTENCIAL", avaliacao: potencialHomologada });
+        flash("Avaliação homologada.");
+        void registrarLogAvaliacaoDesempenhoNoSupabase({
+          cicloId: avdHomologada.cicloId,
+          avaliacaoId: avdHomologada.id,
+          acao: "AVALIACAO_HOMOLOGADA",
+          detalhe: avdHomologada.colaboradorNome,
+          usuario: me,
+        });
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao homologar avaliação.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, perfil, state.configAvaliacaoDesempenho],
   );
 
   return {
@@ -1312,5 +1503,7 @@ export function usePortalData(): PortalData {
     salvarAvaliacaoPotencial: salvarAvaliacaoPotencialFn,
     reabrirAvaliacaoPotencial: reabrirAvaliacaoPotencialFn,
     colaboradoresParaMatriz9Box,
+    podeCalibrarAvaliacaoDesempenho: podeCalibrarAvaliacaoDesempenhoFn,
+    homologarCalibracao: homologarCalibracaoFn,
   };
 }

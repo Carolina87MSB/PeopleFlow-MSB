@@ -10,6 +10,7 @@ import { PdiTab } from "./PdiTab";
 import { PdiBibliotecaTab } from "./PdiBibliotecaTab";
 import { AvaliacoesPotencialTab } from "./AvaliacoesPotencialTab";
 import { Matriz9BoxTab } from "./Matriz9BoxTab";
+import { CalibracaoTab } from "./CalibracaoTab";
 import styles from "./GestaoDesempenhoPage.module.css";
 
 type Aba =
@@ -21,7 +22,8 @@ type Aba =
   | "acessos"
   | "pdi"
   | "pdiBiblioteca"
-  | "matriz9box";
+  | "matriz9box"
+  | "calibracao";
 
 const ABAS_RH: { id: Aba; label: string }[] = [
   { id: "configuracao", label: "Configuração" },
@@ -30,6 +32,7 @@ const ABAS_RH: { id: Aba; label: string }[] = [
   { id: "avaliacoes", label: "Avaliações" },
   { id: "potencial", label: "Potencial" },
   { id: "matriz9box", label: "Matriz 9 Box" },
+  { id: "calibracao", label: "Calibração" },
   { id: "acessos", label: "Acessos AVD" },
   { id: "pdi", label: "PDI" },
   { id: "pdiBiblioteca", label: "Biblioteca de PDI" },
@@ -47,7 +50,9 @@ const ABAS_GESTAO: Aba[] = ["potencial", "matriz9box"];
  * `colaboradoresListagem`); hoje Gestor e Diretoria enxergam exatamente as
  * mesmas abas que o Colaborador ("Avaliações"/"PDI"), mais "Potencial"/
  * "Matriz 9 Box". "Configuração"/"Competências"/"Acessos AVD"/"Biblioteca de
- * PDI" são RH-only; "Avaliações" e "PDI" são abertas a todo perfil (RH
+ * PDI"/"Calibração" são RH-only (o Comitê de Calibração é sempre o RH, não
+ * um perfil novo — spec da Etapa 6 não menciona Gestor/Diretoria em nenhum
+ * momento pra esta aba); "Avaliações" e "PDI" são abertas a todo perfil (RH
  * gerencia ciclos/PDIs e vê tudo, Gestor/Diretoria preenchem as avaliações
  * dos liderados e veem/editam os PDIs de quem lideram, e o perfil
  * "Colaborador" — acesso restrito à AVD, ver AppShell.tsx — só enxerga suas
@@ -89,6 +94,7 @@ export function GestaoDesempenhoPage() {
       {aba === "avaliacoes" && <AvaliacoesTab />}
       {perfil !== "Colaborador" && aba === "potencial" && <AvaliacoesPotencialTab />}
       {perfil !== "Colaborador" && aba === "matriz9box" && <Matriz9BoxTab />}
+      {podeVerCadastros && aba === "calibracao" && <CalibracaoTab />}
       {podeVerCadastros && aba === "acessos" && <AcessosAvdTab />}
       {aba === "pdi" && <PdiTab />}
       {podeVerCadastros && aba === "pdiBiblioteca" && <PdiBibliotecaTab />}
