@@ -216,6 +216,10 @@ export interface PortalData {
     avaliacaoPotencial: AvaliacaoPotencial,
     ajustes: { mediaComportamentalCalibrada: number | null; notaPotencialCalibrada: number | null; justificativa: string },
   ) => Promise<{ ok: true } | { ok: false }>;
+  /** RH ou o `gestorAvaliador` da ficha, só quando `statusCalibracao ===
+   * "Homologada"` e ainda não marcada (Etapa 8). */
+  podeMarcarDevolutiva: (avaliacao: AvaliacaoDesempenho) => boolean;
+  marcarDevolutivaRealizada: (avaliacao: AvaliacaoDesempenho) => Promise<{ ok: true } | { ok: false }>;
 }
 
 /**
@@ -863,6 +867,9 @@ export function usePortalData(): PortalData {
           calibradoEm: null,
           homologadoPor: "",
           homologadoEm: null,
+          devolutivaRealizada: false,
+          devolutivaPor: "",
+          devolutivaEm: null,
           criadoEm: agora,
           updatedAt: agora,
         };
@@ -1440,6 +1447,55 @@ export function usePortalData(): PortalData {
     [dispatch, me, flash, perfil, state.configAvaliacaoDesempenho],
   );
 
+  /** Devolutiva (Etapa 8) — marca que a conversa de feedback pós-homologação
+   * já aconteceu. Permitido pro RH ou por quem `gestorAvaliador` aponta
+   * (congelado, mesmo padrão de sempre), só quando `statusCalibracao ===
+   * "Homologada"` e ainda não marcada. Espelha deliberadamente o mesmo
+   * precedente de `podeCalibrarAvaliacaoDesempenhoFn`/`homologarCalibracaoFn`:
+   * SEM gate de ciclo-encerrado — homologação (e agora devolutiva)
+   * naturalmente acontece perto ou depois do fechamento do ciclo, herdar
+   * esse gate deixaria a ação inacessível bem no momento em que mais se usa.
+   * Sem "desmarcar" — nada no spec pede isso. */
+  const podeMarcarDevolutivaFn = useCallback(
+    (avaliacao: AvaliacaoDesempenho) =>
+      (perfil === "RH" || avaliacao.gestorAvaliador === me) &&
+      avaliacao.statusCalibracao === "Homologada" &&
+      !avaliacao.devolutivaRealizada,
+    [perfil, me],
+  );
+
+  const marcarDevolutivaRealizadaFn = useCallback(
+    async (avaliacao: AvaliacaoDesempenho) => {
+      if (!podeMarcarDevolutivaFn(avaliacao)) {
+        flash("Você não pode marcar a devolutiva desta avaliação.");
+        return { ok: false as const };
+      }
+      const atualizado: AvaliacaoDesempenho = {
+        ...avaliacao,
+        devolutivaRealizada: true,
+        devolutivaPor: me,
+        devolutivaEm: new Date().toISOString(),
+      };
+      try {
+        await atualizarAvaliacaoDesempenhoNoSupabase(atualizado);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_DESEMPENHO", avaliacao: atualizado });
+        flash("Devolutiva marcada como realizada.");
+        void registrarLogAvaliacaoDesempenhoNoSupabase({
+          cicloId: atualizado.cicloId,
+          avaliacaoId: atualizado.id,
+          acao: "DEVOLUTIVA_REALIZADA",
+          detalhe: atualizado.colaboradorNome,
+          usuario: me,
+        });
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao marcar devolutiva.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, podeMarcarDevolutivaFn],
+  );
+
   return {
     conta,
     perfil,
@@ -1505,5 +1561,7 @@ export function usePortalData(): PortalData {
     colaboradoresParaMatriz9Box,
     podeCalibrarAvaliacaoDesempenho: podeCalibrarAvaliacaoDesempenhoFn,
     homologarCalibracao: homologarCalibracaoFn,
+    podeMarcarDevolutiva: podeMarcarDevolutivaFn,
+    marcarDevolutivaRealizada: marcarDevolutivaRealizadaFn,
   };
 }

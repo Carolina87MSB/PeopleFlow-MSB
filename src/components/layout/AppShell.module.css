@@ -44,3 +44,13 @@
 .loading button:hover {
   background: var(--color-surface-alt);
 }
+
+/* Impressão/PDF (Etapa 8) — esconde a Sidebar em qualquer página do portal;
+   regra global única, reaproveitada por todos os "Exportar PDF", não só
+   pelos dashboards de Gestão de Desempenho (Sidebar é sempre o 1º filho de
+   .shell, ver AppShell.tsx). */
+@media print {
+  .shell > *:first-child {
+    display: none;
+  }
+}

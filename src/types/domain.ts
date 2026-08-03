@@ -517,6 +517,12 @@ export interface AvaliacaoDesempenho {
   calibradoEm: string | null;
   homologadoPor: string;
   homologadoEm: string | null;
+  /** Devolutiva (Etapa 8) — conversa de feedback gestor→colaborador pós-
+   * homologação. Só uma ação disponível pra ficha tipo GESTOR com
+   * `statusCalibracao === "Homologada"`; sem "desmarcar" no fluxo atual. */
+  devolutivaRealizada: boolean;
+  devolutivaPor: string;
+  devolutivaEm: string | null;
   criadoEm: string;
   updatedAt: string;
 }

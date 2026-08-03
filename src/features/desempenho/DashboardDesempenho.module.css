@@ -1,0 +1,126 @@
+.topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.explicacao {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-muted);
+  max-width: 620px;
+}
+
+.acoes {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.select {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font: 600 12.5px var(--font-sans);
+  color: var(--color-text);
+  background: #fff;
+  min-width: 160px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.mainGrid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 16px;
+}
+
+.spanAll {
+  grid-column: 1 / -1;
+}
+
+.cardTitle {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+
+.setorLista {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.setorLinha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.setorNome {
+  width: 150px;
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.setorMedia {
+  width: 32px;
+  flex: none;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+
+.rankingGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.semDados {
+  font-size: 11.5px;
+  color: var(--color-muted-light);
+  font-style: italic;
+  margin: 0;
+}
+
+@media (max-width: 1024px) {
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .mainGrid,
+  .rankingGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .acoes,
+  .filtros {
+    display: none;
+  }
+  .mainGrid {
+    grid-template-columns: 1fr;
+  }
+}

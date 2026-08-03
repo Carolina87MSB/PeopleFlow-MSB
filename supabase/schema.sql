@@ -886,3 +886,26 @@ comment on column public.peopleflow_avaliacoes_potencial.nota_potencial_calibrad
   'Override do RH pra nota_potencial — null significa "sem calibração, mantém o valor original".';
 comment on column public.peopleflow_avaliacoes_potencial.nota_oficial is
   'Nota Oficial de Potencial — calculada na homologação (calcularNotaOficialPotencial()). É esta nota, nunca nota_potencial do gestor, que a Matriz 9 Box e demais módulos devem consumir.';
+
+-- =====================================================================
+-- 17) Gestão de Desempenho — Etapa 8: Dashboards e Relatórios. NÃO cria
+-- tabela nova — os 3 dashboards (RH/Gestor/Diretoria) são puramente
+-- derivados dos dados já existentes. A única adição real é o rastreio da
+-- "devolutiva" (conversa de feedback gestor→colaborador pós-avaliação),
+-- que não tinha nenhum registro até aqui: 3 colunas na ficha AVD, só
+-- relevantes pra ficha tipo GESTOR já Homologada pelo Comitê de
+-- Calibração (dar feedback baseado numa nota que ainda pode ser
+-- recalibrada não faz sentido).
+-- =====================================================================
+
+alter table public.peopleflow_avaliacoes_desempenho
+  add column if not exists devolutiva_realizada boolean not null default false,
+  add column if not exists devolutiva_por text,
+  add column if not exists devolutiva_em timestamptz;
+
+comment on column public.peopleflow_avaliacoes_desempenho.devolutiva_realizada is
+  'Marca se a conversa de feedback (devolutiva) pós-homologação já aconteceu — só uma ação disponível pra ficha tipo GESTOR com status_calibracao = ''Homologada''. Sem "desmarcar" no fluxo atual.';
+comment on column public.peopleflow_avaliacoes_desempenho.devolutiva_por is
+  'Nome de quem marcou a devolutiva como realizada (RH ou o gestor_avaliador da ficha).';
+comment on column public.peopleflow_avaliacoes_desempenho.devolutiva_em is
+  'Timestamp de quando a devolutiva foi marcada como realizada.';

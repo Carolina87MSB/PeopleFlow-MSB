@@ -35,6 +35,9 @@ interface AvaliacaoDesempenhoRow {
   calibrado_em: string | null;
   homologado_por: string | null;
   homologado_em: string | null;
+  devolutiva_realizada: boolean | null;
+  devolutiva_por: string | null;
+  devolutiva_em: string | null;
   criado_em: string;
   updated_at: string;
 }
@@ -70,6 +73,9 @@ function fromRow(row: AvaliacaoDesempenhoRow): AvaliacaoDesempenho {
     calibradoEm: row.calibrado_em,
     homologadoPor: row.homologado_por ?? "",
     homologadoEm: row.homologado_em,
+    devolutivaRealizada: row.devolutiva_realizada ?? false,
+    devolutivaPor: row.devolutiva_por ?? "",
+    devolutivaEm: row.devolutiva_em,
     criadoEm: row.criado_em,
     updatedAt: row.updated_at,
   };
@@ -109,6 +115,9 @@ function toRow(a: AvaliacaoDesempenho): Omit<AvaliacaoDesempenhoRow, "id" | "cri
     calibrado_em: a.calibradoEm,
     homologado_por: a.homologadoPor || null,
     homologado_em: a.homologadoEm,
+    devolutiva_realizada: a.devolutivaRealizada,
+    devolutiva_por: a.devolutivaPor || null,
+    devolutiva_em: a.devolutivaEm,
   };
 }
 

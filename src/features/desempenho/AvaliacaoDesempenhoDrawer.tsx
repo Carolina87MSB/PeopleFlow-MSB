@@ -14,6 +14,7 @@ import { formatarDataHora, formatarHoraAtual } from "../../domain/dates";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalData } from "../../store/usePortalData";
 import type { AvaliacaoDesempenho, StatusAvaliacaoDesempenho, TipoAvaliacaoDesempenho } from "../../types/domain";
+import { STATUS_CALIBRACAO_TONE } from "./CalibracaoTab";
 import styles from "./AvaliacaoDesempenhoDrawer.module.css";
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
@@ -36,12 +37,15 @@ interface AvaliacaoDesempenhoDrawerProps {
  * disponível quando tudo estiver preenchido, e trava a edição depois. */
 export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesempenhoDrawerProps) {
   const {
+    conta,
     competenciasComportamentais,
     kpisCargo,
     configAvaliacaoDesempenho,
     ciclosAvaliacaoDesempenho,
     salvarAvaliacaoDesempenho,
     podeEditarAvaliacaoDesempenho,
+    podeMarcarDevolutiva,
+    marcarDevolutivaRealizada,
   } = usePortalData();
 
   const podeEditar = podeEditarAvaliacaoDesempenho(avaliacao);
@@ -59,6 +63,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
   const [sujo, setSujo] = useState(false);
   const [salvandoAuto, setSalvandoAuto] = useState(false);
   const [ultimoSalvoAutoHora, setUltimoSalvoAutoHora] = useState<string | null>(null);
+  const [marcandoDevolutiva, setMarcandoDevolutiva] = useState(false);
 
   const kpisPorId = useMemo(() => new Map(kpisCargo.map((k) => [k.id, k])), [kpisCargo]);
   const competenciasPorId = useMemo(() => new Map(competenciasComportamentais.map((c) => [c.id, c])), [competenciasComportamentais]);
@@ -136,6 +141,18 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
     const result = await persistir(status);
     setSalvando(null);
     if (result.ok && tipo === "concluir") onClose();
+  }
+
+  // Devolutiva (Etapa 8) — ação independente do fluxo de edição da ficha em
+  // si (a ficha já está travada, "Concluída" há muito tempo quando isso se
+  // aplica); atualiza o rascunho local direto, sem esperar o Drawer reabrir.
+  async function handleMarcarDevolutiva() {
+    setMarcandoDevolutiva(true);
+    const result = await marcarDevolutivaRealizada(rascunho);
+    if (result.ok) {
+      setRascunho((r) => ({ ...r, devolutivaRealizada: true, devolutivaPor: conta.nome, devolutivaEm: new Date().toISOString() }));
+    }
+    setMarcandoDevolutiva(false);
   }
 
   return (
@@ -290,6 +307,39 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
           </div>
         )}
       </div>
+
+      {avaliacao.tipo === "GESTOR" && rascunho.statusCalibracao !== "Não iniciada" && (
+        <div className={styles.resumo}>
+          <h4 className={styles.sectionTitle}>Calibração</h4>
+          <div className={styles.resumoLinha}>
+            <span>Status da calibração</span>
+            <Badge bg={STATUS_CALIBRACAO_TONE[rascunho.statusCalibracao].bg} fg={STATUS_CALIBRACAO_TONE[rascunho.statusCalibracao].fg}>
+              {rascunho.statusCalibracao}
+            </Badge>
+          </div>
+          {rascunho.statusCalibracao === "Homologada" && (
+            <>
+              <div className={styles.resumoLinhaFinal}>
+                <span>Nota Oficial</span>
+                <strong>{rascunho.notaFinalOficial ?? "—"}</strong>
+              </div>
+              <div className={styles.resumoLinha}>
+                {rascunho.devolutivaRealizada ? (
+                  <span className={styles.trancada}>
+                    Devolutiva realizada por {rascunho.devolutivaPor || "—"} em {formatarDataHora(rascunho.devolutivaEm)}.
+                  </span>
+                ) : podeMarcarDevolutiva(rascunho) ? (
+                  <Button variant="secondary" onClick={handleMarcarDevolutiva} disabled={marcandoDevolutiva}>
+                    {marcandoDevolutiva ? "Marcando..." : "Marcar devolutiva como realizada"}
+                  </Button>
+                ) : (
+                  <span className={styles.trancada}>Devolutiva ainda não realizada.</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <h4 className={styles.sectionTitle}>Comentários (opcionais)</h4>
       <div className={styles.campo}>

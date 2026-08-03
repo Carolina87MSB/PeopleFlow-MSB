@@ -35,3 +35,11 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+
+/* Impressão/PDF (Etapa 8) — esconde o Header em qualquer página do portal;
+   par da regra global em AppShell.module.css. */
+@media print {
+  .header {
+    display: none;
+  }
+}
