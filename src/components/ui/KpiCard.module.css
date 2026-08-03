@@ -24,8 +24,15 @@
   opacity: 0.5;
 }
 
-.label {
+.labelRow {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.label {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;

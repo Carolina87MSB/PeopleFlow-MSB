@@ -58,6 +58,15 @@ export interface Conta {
   perfil: Perfil;
 }
 
+/** Configuração do Dashboard Executivo de RH — linha única. `headcountPlanejado`
+ * é o único indicador parametrizado manualmente em todo o dashboard (usado pra
+ * calcular "Aderência ao Planejamento"); `null` = ainda não definido pelo RH. */
+export interface ConfigDashboard {
+  headcountPlanejado: number | null;
+  updatedAt: string;
+  updatedBy: string;
+}
+
 export type TipoCod = "ADM" | "PRO" | "SAL" | "TRF" | "DES" | "AFA";
 
 export interface TipoMovimentacao {

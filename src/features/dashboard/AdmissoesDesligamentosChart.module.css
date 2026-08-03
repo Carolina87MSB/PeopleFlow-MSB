@@ -1,0 +1,20 @@
+.legenda {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.legendaItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.legendaCor {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}

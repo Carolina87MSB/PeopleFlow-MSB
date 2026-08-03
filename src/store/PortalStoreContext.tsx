@@ -9,6 +9,7 @@ import { efetivarSincronizacoesPendentes, getMovimentacoes } from "../repositori
 import { getAvaliacoesExperiencia, getDispensasAvaliacaoExperiencia } from "../repositories/avaliacoesExperienciaRepository";
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
 import { getConfigAvaliacaoDesempenho } from "../repositories/configAvaliacaoDesempenhoRepository";
+import { getConfigDashboard } from "../repositories/configDashboardRepository";
 import { getCompetenciasComportamentais } from "../repositories/competenciasComportamentaisRepository";
 import { getKpisCargo } from "../repositories/kpisCargoRepository";
 import { getAvaliacoesDesempenho } from "../repositories/avaliacoesDesempenhoRepository";
@@ -69,6 +70,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getPdi(),
       getPdiBiblioteca(),
       getAvaliacoesPotencial(),
+      getConfigDashboard(),
     ])
       .then(
         async ([
@@ -89,6 +91,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           pdi,
           pdiBiblioteca,
           avaliacoesPotencial,
+          configDashboard,
         ]) => {
           if (cancelado) return;
           // Efetiva promoções/transferências aprovadas cuja "Data prevista" já
@@ -117,6 +120,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             pdi,
             pdiBiblioteca,
             avaliacoesPotencial,
+            configDashboard,
           });
         },
       )

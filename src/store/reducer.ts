@@ -20,6 +20,7 @@ export const initialPortalState: PortalState = {
   pdi: [],
   pdiBiblioteca: [],
   avaliacoesPotencial: [],
+  configDashboard: null,
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -44,6 +45,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         pdi: action.pdi,
         pdiBiblioteca: action.pdiBiblioteca,
         avaliacoesPotencial: action.avaliacoesPotencial,
+        configDashboard: action.configDashboard,
       };
 
     case "CRIAR_AVALIACAO_EXPERIENCIA":
@@ -107,6 +109,9 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
 
     case "ATUALIZAR_CONFIG_AVALIACAO_DESEMPENHO":
       return { ...state, configAvaliacaoDesempenho: action.config };
+
+    case "ATUALIZAR_CONFIG_DASHBOARD":
+      return { ...state, configDashboard: action.config };
 
     case "SALVAR_COMPETENCIA_COMPORTAMENTAL": {
       const existe = state.competenciasComportamentais.some((c) => c.id === action.competencia.id);

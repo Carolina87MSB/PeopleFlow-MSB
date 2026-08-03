@@ -34,6 +34,18 @@ export function mesIsoFromDataBr(dataBr: string | null | undefined): string | nu
   return `${ano}-${String(mesIdx + 1).padStart(2, "0")}`;
 }
 
+/** Converte "dd/mmm/aaaa" (formato usado no app) para ISO "aaaa-mm-dd" — inverso
+ * de formatarDataIso(), com precisão de dia (mesIsoFromDataBr() só dá o bucket
+ * "aaaa-mm"). Usado para comparar `dataDesligamento` com os limites exatos de
+ * um período filtrado no Dashboard Executivo. */
+export function dataBrParaIso(dataBr: string | null | undefined): string | null {
+  if (!dataBr) return null;
+  const [dia, mesAbrev, ano] = dataBr.split("/");
+  const mesIdx = MESES.indexOf((mesAbrev ?? "").toLowerCase());
+  if (!ano || !dia || mesIdx < 0) return null;
+  return `${ano}-${String(mesIdx + 1).padStart(2, "0")}-${dia.padStart(2, "0")}`;
+}
+
 /** Formata um timestamp ISO completo (com hora) como "dd/mm/aaaa hh:mm" — usado
  * em auditoria e registros de conclusão (ex.: "Concluída por X em ..."). */
 export function formatarDataHora(iso: string | null | undefined): string {

@@ -21,6 +21,7 @@ import {
   criarDispensaAvaliacaoExperiencia as criarDispensaAvaliacaoExperienciaNoSupabase,
 } from "../repositories/avaliacoesExperienciaRepository";
 import { atualizarConfigAvaliacaoDesempenho as atualizarConfigAvaliacaoDesempenhoNoSupabase } from "../repositories/configAvaliacaoDesempenhoRepository";
+import { atualizarConfigDashboard as atualizarConfigDashboardNoSupabase } from "../repositories/configDashboardRepository";
 import { salvarCompetenciaComportamental as salvarCompetenciaComportamentalNoSupabase } from "../repositories/competenciasComportamentaisRepository";
 import {
   atualizarKpiCargo as atualizarKpiCargoNoSupabase,
@@ -81,6 +82,7 @@ import type {
   Colaborador,
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
+  ConfigDashboard,
   Conta,
   DescricaoCargo,
   DesligamentoFinanceiro,
@@ -225,6 +227,14 @@ export interface PortalData {
    * "Homologada"` e ainda não marcada (Etapa 8). */
   podeMarcarDevolutiva: (avaliacao: AvaliacaoDesempenho) => boolean;
   marcarDevolutivaRealizada: (avaliacao: AvaliacaoDesempenho) => Promise<{ ok: true } | { ok: false }>;
+  /** RH e Diretoria veem a empresa toda (incl. desligados); Gestor toda a árvore
+   * de reportes (`scopeSet`, mesma hierarquia de `colaboradoresVisiveis`) — fonte
+   * de colaboradores pro Dashboard Executivo de RH, que reconstrói
+   * headcount/turnover em qualquer data a partir de admissaoIso/dataDesligamento. */
+  colaboradoresParaDashboardExecutivo: Colaborador[];
+  configDashboard: ConfigDashboard | null;
+  /** RH-only — único indicador manual do Dashboard Executivo. */
+  atualizarConfigDashboard: (headcountPlanejado: number) => Promise<{ ok: true } | { ok: false }>;
 }
 
 /**
@@ -294,6 +304,16 @@ export function usePortalData(): PortalData {
     if (perfil === "Colaborador") return state.colaboradores.filter((c) => c.nome === me);
     return state.colaboradores.filter((c) => c.gestor === me);
   }, [state.colaboradores, perfil, me]);
+
+  /** Dashboard Executivo de RH — mesma regra de escopo de `colaboradoresVisiveis`
+   * (RH/Diretoria: empresa toda; Gestor: toda a árvore de reportes via
+   * `scopeSet`, não só diretos), mas a partir de `state.colaboradores` em vez
+   * de `ativosGlobal` — precisa também dos desligados do escopo pra
+   * reconstruir headcount/turnover em datas passadas (`domain/dashboardExecutivo.ts`). */
+  const colaboradoresParaDashboardExecutivo = useMemo(
+    () => (perfil === "Gestor" && scopeSet ? state.colaboradores.filter((c) => scopeSet.has(c.nome)) : state.colaboradores),
+    [perfil, scopeSet, state.colaboradores],
+  );
 
   const souDiretorIndustrial = useMemo(
     () => ehDiretorIndustrial(state.colaboradores.find((c) => c.nome === me)),
@@ -704,6 +724,34 @@ export function usePortalData(): PortalData {
       }
     },
     [dispatch, me, flash],
+  );
+
+  /** Headcount Planejado — único indicador manual do Dashboard Executivo,
+   * RH-only. */
+  const atualizarConfigDashboardFn = useCallback(
+    async (headcountPlanejado: number) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode atualizar o Headcount Planejado.");
+        return { ok: false as const };
+      }
+      if (!Number.isFinite(headcountPlanejado) || headcountPlanejado < 0) {
+        flash("Headcount Planejado precisa ser um número maior ou igual a zero.");
+        return { ok: false as const };
+      }
+      try {
+        await atualizarConfigDashboardNoSupabase(headcountPlanejado, me);
+        dispatch({
+          type: "ATUALIZAR_CONFIG_DASHBOARD",
+          config: { headcountPlanejado, updatedAt: new Date().toISOString(), updatedBy: me },
+        });
+        flash("Headcount Planejado atualizado.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao atualizar o Headcount Planejado.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, perfil],
   );
 
   const salvarCompetenciaComportamentalFn = useCallback(
@@ -1583,5 +1631,8 @@ export function usePortalData(): PortalData {
     podeMarcarDevolutiva: podeMarcarDevolutivaFn,
     marcarDevolutivaRealizada: marcarDevolutivaRealizadaFn,
     colaboradoresParaHistorico,
+    colaboradoresParaDashboardExecutivo,
+    configDashboard: state.configDashboard,
+    atualizarConfigDashboard: atualizarConfigDashboardFn,
   };
 }

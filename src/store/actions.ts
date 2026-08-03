@@ -7,6 +7,7 @@ import type {
   Colaborador,
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
+  ConfigDashboard,
   DescricaoCargo,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
@@ -38,6 +39,7 @@ export type PortalAction =
       pdi: Pdi[];
       pdiBiblioteca: PdiBibliotecaItem[];
       avaliacoesPotencial: AvaliacaoPotencial[];
+      configDashboard: ConfigDashboard | null;
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
@@ -63,4 +65,5 @@ export type PortalAction =
   | { type: "EXCLUIR_ITEM_BIBLIOTECA_PDI"; chave: string; tipoCompetencia: PdiBibliotecaItem["tipoCompetencia"] }
   | { type: "CRIAR_AVALIACOES_POTENCIAL"; avaliacoes: AvaliacaoPotencial[] }
   | { type: "ATUALIZAR_AVALIACAO_POTENCIAL"; avaliacao: AvaliacaoPotencial }
+  | { type: "ATUALIZAR_CONFIG_DASHBOARD"; config: ConfigDashboard }
   | { type: "RESET" };

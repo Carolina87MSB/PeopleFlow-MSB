@@ -909,3 +909,35 @@ comment on column public.peopleflow_avaliacoes_desempenho.devolutiva_por is
   'Nome de quem marcou a devolutiva como realizada (RH ou o gestor_avaliador da ficha).';
 comment on column public.peopleflow_avaliacoes_desempenho.devolutiva_em is
   'Timestamp de quando a devolutiva foi marcada como realizada.';
+
+-- =====================================================================
+-- 18) Dashboard Executivo de RH (People Analytics) — evolução do Dashboard
+-- Gerencial. Linha única (id='default'), mesmo padrão de
+-- peopleflow_config_avaliacao_desempenho. headcount_planejado é o ÚNICO
+-- indicador parametrizado manualmente pelo RH em todo o Dashboard Executivo
+-- — todos os outros (Headcount Real, Aderência, Turnover, Admissões,
+-- Desligamentos, Tempo Médio de Empresa etc.) são calculados a partir de
+-- dados já existentes (colaboradores.admissao_iso/desligado/data_desligamento).
+-- =====================================================================
+
+create table if not exists public.peopleflow_config_dashboard (
+  id text primary key default 'default',
+  headcount_planejado numeric,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+comment on table public.peopleflow_config_dashboard is
+  'Configuração do Dashboard Executivo de RH — linha única. Ver ConfigDashboard em src/types/domain.ts.';
+comment on column public.peopleflow_config_dashboard.headcount_planejado is
+  'Quantidade de colaboradores planejada pela empresa — único valor manual do Dashboard Executivo, usado pra calcular "Aderência ao Planejamento" (Headcount Real ÷ Headcount Planejado). null = ainda não definido pelo RH.';
+
+alter table public.peopleflow_config_dashboard enable row level security;
+
+drop policy if exists "authenticated_rw_config_dashboard" on public.peopleflow_config_dashboard;
+create policy "authenticated_rw_config_dashboard"
+  on public.peopleflow_config_dashboard
+  for all
+  to authenticated
+  using (true)
+  with check (true);
