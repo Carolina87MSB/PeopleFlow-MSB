@@ -628,3 +628,121 @@ alter table public.peopleflow_competencias_comportamentais
 
 comment on column public.peopleflow_competencias_comportamentais.categoria is
   '''Comportamental'' (catálogo corporativo, usado nas avaliações GESTOR/AUTOAVALIACAO) ou ''Lideranca'' (catálogo exclusivo da avaliação LIDERANCA) — mesma tabela, só filtrada por categoria na hora de gerar o snapshot do ciclo.';
+
+-- =====================================================================
+-- 13) Gestão de Desempenho — Etapa 3: Plano de Desenvolvimento Individual
+-- (PDI). Gerado automaticamente quando uma avaliação GESTOR é concluída,
+-- identificando competências/KPIs abaixo da nota mínima configurável.
+-- `peopleflow_pdi` (existente desde a etapa 1, nunca teve dado real) vira o
+-- cabeçalho do plano; `acao`/`prazo`/`responsavel`/`origem` (antigas, uma
+-- linha = uma "ação" solta) ficam sem uso, mantidas por não serem
+-- destrutivas.
+-- =====================================================================
+
+alter table public.peopleflow_pdi
+  add column if not exists ciclo_id text,
+  add column if not exists ciclo text,
+  add column if not exists gestor_responsavel text,
+  add column if not exists comentarios text,
+  add column if not exists concluido_por text,
+  add column if not exists concluido_em timestamptz;
+
+-- `acao` era NOT NULL sem default (fazia sentido quando cada linha era uma
+-- ação solta) — o novo cabeçalho de plano nunca preenche essa coluna, então
+-- precisa parar de exigir valor. `status` também troca de significado: era
+-- o status de uma ação solta ("Pendente"), passa a ser o status do PLANO
+-- INTEIRO ("Não iniciado" | "Em andamento" | "Concluído").
+alter table public.peopleflow_pdi alter column acao drop not null;
+alter table public.peopleflow_pdi alter column status set default 'Não iniciado';
+
+comment on table public.peopleflow_pdi is
+  'Plano de Desenvolvimento Individual — cabeçalho do plano (etapa 3). Gerado automaticamente na conclusão de uma avaliação GESTOR, vinculado ao mesmo ciclo. ciclo_id referencia peopleflow_ciclos_avaliacao_desempenho.id (sem FK). gestor_responsavel é snapshot do gestor_avaliador da avaliação que originou o plano (mesma lógica de congelamento da AVD) — autoridade de edição usa este campo OU o gestor atual do colaborador (união). Colunas acao/prazo/responsavel/origem são da etapa 1 (uma linha = uma ação solta) e ficam sem uso — os itens/ações de verdade vivem em peopleflow_pdi_itens/peopleflow_pdi_acoes. Ver Pdi em src/types/domain.ts.';
+comment on column public.peopleflow_pdi.status is '''Não iniciado'' | ''Em andamento'' | ''Concluído'' — status do plano inteiro, não de uma ação (ver peopleflow_pdi_acoes.status pra isso).';
+comment on column public.peopleflow_pdi.gestor_responsavel is 'Snapshot de avaliacoes_desempenho.gestor_avaliador no momento da geração do PDI — não recalculado se o colaborador trocar de gestor depois.';
+
+create table if not exists public.peopleflow_pdi_itens (
+  id text primary key,
+  pdi_id bigint not null,
+  competencia_id text,
+  competencia_nome text not null,
+  tipo_competencia text not null,
+  nota_obtida numeric,
+  origem_manual boolean not null default false,
+  objetivo_desenvolvimento text not null default '',
+  responsavel text not null default '',
+  data_inicio date,
+  data_prevista_conclusao date,
+  status text not null default 'Não iniciada',
+  observacoes text not null default '',
+  ordem integer not null default 0,
+  criado_em timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.peopleflow_pdi_itens is
+  'Um item de desenvolvimento (1 competência comportamental ou KPI) dentro de um PDI — pdi_id referencia peopleflow_pdi.id (sem FK). id gerado no cliente (gerarIdPdiItem()), não bigint identity, pra poder montar a árvore toda antes de inserir.';
+comment on column public.peopleflow_pdi_itens.tipo_competencia is '''Comportamental'' | ''Tecnica''.';
+comment on column public.peopleflow_pdi_itens.origem_manual is 'true = gestor incluiu manualmente; false = sugerido automaticamente por nota abaixo do limite configurado (config_avaliacao_desempenho.nota_minima_pdi).';
+comment on column public.peopleflow_pdi_itens.status is '''Não iniciada'' | ''Em andamento'' | ''Concluída'' | ''Cancelada''.';
+
+create table if not exists public.peopleflow_pdi_acoes (
+  id text primary key,
+  item_id text not null,
+  descricao text not null,
+  responsavel text not null default '',
+  prazo date,
+  status text not null default 'Não iniciada',
+  ordem integer not null default 0,
+  criado_em timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.peopleflow_pdi_acoes is
+  'Uma ação de desenvolvimento dentro de um item do PDI — item_id referencia peopleflow_pdi_itens.id (sem FK). Sem limite de quantidade por item.';
+
+create table if not exists public.peopleflow_pdi_biblioteca (
+  chave text not null,
+  tipo_competencia text not null,
+  objetivo_sugerido text not null default '',
+  acoes_sugeridas jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by text,
+  primary key (chave, tipo_competencia)
+);
+
+comment on table public.peopleflow_pdi_biblioteca is
+  'Biblioteca de modelos de objetivo/ações por competência, mantida pelo RH — consultada na geração automática do PDI. chave é o id estável de peopleflow_competencias_comportamentais (tipo_competencia=''Comportamental'') ou o nome do KPI (tipo_competencia=''Tecnica'', sem id estável entre cargos). Sem modelo cadastrado, a geração usa um objetivo genérico e nenhuma ação pré-sugerida.';
+comment on column public.peopleflow_pdi_biblioteca.acoes_sugeridas is 'Array de strings (descrição da ação) — sem responsável/prazo, que são só por instância.';
+
+alter table public.peopleflow_pdi_itens enable row level security;
+drop policy if exists "authenticated_rw_pdi_itens" on public.peopleflow_pdi_itens;
+create policy "authenticated_rw_pdi_itens"
+  on public.peopleflow_pdi_itens
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+alter table public.peopleflow_pdi_acoes enable row level security;
+drop policy if exists "authenticated_rw_pdi_acoes" on public.peopleflow_pdi_acoes;
+create policy "authenticated_rw_pdi_acoes"
+  on public.peopleflow_pdi_acoes
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+alter table public.peopleflow_pdi_biblioteca enable row level security;
+drop policy if exists "authenticated_rw_pdi_biblioteca" on public.peopleflow_pdi_biblioteca;
+create policy "authenticated_rw_pdi_biblioteca"
+  on public.peopleflow_pdi_biblioteca
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+alter table public.peopleflow_config_avaliacao_desempenho
+  add column if not exists nota_minima_pdi numeric not null default 3;
+
+comment on column public.peopleflow_config_avaliacao_desempenho.nota_minima_pdi is
+  'Nota mínima (escala 1-5) — competências/KPIs com nota abaixo deste valor são sugeridos automaticamente pro PDI na conclusão da avaliação GESTOR. Editável pelo RH na aba Configuração.';

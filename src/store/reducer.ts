@@ -18,6 +18,7 @@ export const initialPortalState: PortalState = {
   avaliacoesDesempenho: [],
   ciclosAvaliacaoDesempenho: [],
   pdi: [],
+  pdiBiblioteca: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -40,6 +41,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         avaliacoesDesempenho: action.avaliacoesDesempenho,
         ciclosAvaliacaoDesempenho: action.ciclosAvaliacaoDesempenho,
         pdi: action.pdi,
+        pdiBiblioteca: action.pdiBiblioteca,
       };
 
     case "CRIAR_AVALIACAO_EXPERIENCIA":
@@ -139,6 +141,32 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         ...state,
         ciclosAvaliacaoDesempenho: state.ciclosAvaliacaoDesempenho.map((c) =>
           c.id === action.id ? { ...c, status: "Encerrado" } : c,
+        ),
+      };
+
+    case "CRIAR_PDI":
+      return { ...state, pdi: [action.pdi, ...state.pdi] };
+
+    case "ATUALIZAR_PDI":
+      return { ...state, pdi: state.pdi.map((p) => (p.id === action.pdi.id ? action.pdi : p)) };
+
+    case "SALVAR_ITEM_BIBLIOTECA_PDI": {
+      const existe = state.pdiBiblioteca.some(
+        (b) => b.chave === action.item.chave && b.tipoCompetencia === action.item.tipoCompetencia,
+      );
+      const pdiBiblioteca = existe
+        ? state.pdiBiblioteca.map((b) =>
+            b.chave === action.item.chave && b.tipoCompetencia === action.item.tipoCompetencia ? action.item : b,
+          )
+        : [...state.pdiBiblioteca, action.item];
+      return { ...state, pdiBiblioteca };
+    }
+
+    case "EXCLUIR_ITEM_BIBLIOTECA_PDI":
+      return {
+        ...state,
+        pdiBiblioteca: state.pdiBiblioteca.filter(
+          (b) => !(b.chave === action.chave && b.tipoCompetencia === action.tipoCompetencia),
         ),
       };
 

@@ -323,6 +323,9 @@ export interface DispensaAvaliacaoExperiencia {
 export interface ConfigAvaliacaoDesempenho {
   pesoKpis: number;
   pesoComportamental: number;
+  /** Nota mínima (escala 1-5) — competências/KPIs abaixo deste valor são
+   * sugeridos automaticamente pro PDI na conclusão da avaliação GESTOR. */
+  notaMinimaPdi: number;
   updatedAt: string;
   updatedBy: string;
 }
@@ -499,17 +502,100 @@ export interface LogAvaliacaoDesempenho {
   criadoEm: string;
 }
 
-/** Plano de Desenvolvimento Individual — estrutura inicial, sem geração
- * automática a partir de competências com baixo desempenho ainda. */
+/** Status do plano de PDI inteiro (diferente do status de cada item/ação). */
+export type StatusPdi = "Não iniciado" | "Em andamento" | "Concluído";
+
+/** Status de um item ou de uma ação do PDI — mesma escala pros dois níveis. */
+export type StatusItemPdi = "Não iniciada" | "Em andamento" | "Concluída" | "Cancelada";
+
+/** "Comportamental" (vem de resultadosComportamentais da AVD) ou "Tecnica"
+ * (vem de resultadosKpis — nunca reaproveita "Comportamental" mesmo sendo o
+ * termo usado noutros lugares pra competência, aqui é especificamente sobre
+ * a origem do item: competência comportamental ou KPI). */
+export type TipoCompetenciaPdi = "Comportamental" | "Tecnica";
+
+/** Quem é responsável por uma ação/item do PDI — só informativo, sem regra
+ * de acesso vinculada (colaborador não edita o PDI antes da conclusão,
+ * mesmo que "responsavel" aponte pra ele). */
+export type ResponsavelPdi = "Colaborador" | "Gestor" | "Ambos" | "";
+
+/** Uma ação de desenvolvimento dentro de um PdiItem — sem limite de
+ * quantidade, o gestor adiciona/edita/remove livremente. */
+export interface PdiAcao {
+  id: string;
+  itemId: string;
+  descricao: string;
+  responsavel: ResponsavelPdi;
+  prazo: string | null;
+  status: StatusItemPdi;
+  ordem: number;
+  criadoEm: string;
+  updatedAt: string;
+}
+
+/** Um item de desenvolvimento do PDI = 1 competência comportamental ou KPI.
+ * Gerado automaticamente quando a nota dela ficou abaixo de
+ * `ConfigAvaliacaoDesempenho.notaMinimaPdi` na avaliação GESTOR que originou
+ * o plano (`origemManual: false`), ou incluído à mão pelo gestor depois
+ * (`origemManual: true`). `objetivoDesenvolvimento` já nasce preenchido a
+ * partir de `peopleflow_pdi_biblioteca` (ou um texto genérico, se a
+ * competência não tiver modelo cadastrado) — editável livremente depois. */
+export interface PdiItem {
+  id: string;
+  pdiId: number;
+  competenciaId: string;
+  competenciaNome: string;
+  tipoCompetencia: TipoCompetenciaPdi;
+  /** Nota que motivou a inclusão automática — null se incluído manualmente
+   * sem uma nota de origem. */
+  notaObtida: number | null;
+  origemManual: boolean;
+  objetivoDesenvolvimento: string;
+  responsavel: ResponsavelPdi;
+  dataInicio: string | null;
+  dataPrevistaConclusao: string | null;
+  status: StatusItemPdi;
+  observacoes: string;
+  ordem: number;
+  acoes: PdiAcao[];
+  criadoEm: string;
+  updatedAt: string;
+}
+
+/** Plano de Desenvolvimento Individual — gerado automaticamente quando a
+ * avaliação GESTOR de um ciclo é concluída (nunca por AUTOAVALIACAO/
+ * LIDERANCA), permanece vinculado a esse ciclo. `gestorResponsavel` é
+ * snapshot do `gestorAvaliador` da avaliação que originou o plano — a
+ * autoridade de edição usa esse campo OU o gestor atual do colaborador
+ * (união, ver `podeEditarPdi()` em usePortalData.ts), pra não perder acesso
+ * numa transferência nem exigir intervenção do RH pro gestor novo assumir.
+ * Colaborador só vê depois de `status === "Concluído"` (diferente da AVD,
+ * onde a ficha GESTOR nunca é vista por ele). */
 export interface Pdi {
   id: number;
   colaboradorNome: string;
+  cicloId: string | null;
+  ciclo: string;
   avaliacaoId: string | null;
-  origem: string;
-  acao: string;
-  prazo: string | null;
-  status: string;
-  responsavel: string;
+  gestorResponsavel: string;
+  status: StatusPdi;
+  comentarios: string;
+  concluidoPor: string;
+  concluidoEm: string | null;
+  itens: PdiItem[];
   criadoEm: string;
   updatedAt: string;
+}
+
+/** Modelo de objetivo/ações por competência, mantido pelo RH — consultado na
+ * geração automática do PDI. `chave` é o id estável da competência
+ * comportamental (tipoCompetencia="Comportamental") ou o nome do KPI
+ * (tipoCompetencia="Tecnica", sem id estável entre cargos). */
+export interface PdiBibliotecaItem {
+  chave: string;
+  tipoCompetencia: TipoCompetenciaPdi;
+  objetivoSugerido: string;
+  acoesSugeridas: string[];
+  updatedAt: string;
+  updatedBy: string;
 }

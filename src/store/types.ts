@@ -12,6 +12,7 @@ import type {
   KpiCargo,
   Movimentacao,
   Pdi,
+  PdiBibliotecaItem,
   Perfil2Info,
   TipoMovimentacao,
 } from "../types/domain";
@@ -32,4 +33,5 @@ export interface PortalState {
   avaliacoesDesempenho: AvaliacaoDesempenho[];
   ciclosAvaliacaoDesempenho: CicloAvaliacaoDesempenho[];
   pdi: Pdi[];
+  pdiBiblioteca: PdiBibliotecaItem[];
 }

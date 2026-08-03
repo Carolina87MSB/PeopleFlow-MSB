@@ -11,22 +11,26 @@ export function ConfiguracaoAvaliacaoTab() {
 
   const [pesoKpis, setPesoKpis] = useState(String(configAvaliacaoDesempenho?.pesoKpis ?? 60));
   const [pesoComportamental, setPesoComportamental] = useState(String(configAvaliacaoDesempenho?.pesoComportamental ?? 40));
+  const [notaMinimaPdi, setNotaMinimaPdi] = useState(String(configAvaliacaoDesempenho?.notaMinimaPdi ?? 3));
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     setPesoKpis(String(configAvaliacaoDesempenho?.pesoKpis ?? 60));
     setPesoComportamental(String(configAvaliacaoDesempenho?.pesoComportamental ?? 40));
+    setNotaMinimaPdi(String(configAvaliacaoDesempenho?.notaMinimaPdi ?? 3));
   }, [configAvaliacaoDesempenho]);
 
   const numKpis = Number(pesoKpis.replace(",", "."));
   const numComportamental = Number(pesoComportamental.replace(",", "."));
+  const numNotaMinimaPdi = Number(notaMinimaPdi.replace(",", "."));
   const soma = numKpis + numComportamental;
   const somaValida = !Number.isNaN(soma) && Math.abs(soma - 100) < 0.01;
+  const notaMinimaValida = !Number.isNaN(numNotaMinimaPdi) && numNotaMinimaPdi >= 1 && numNotaMinimaPdi <= 5;
 
   async function handleSalvar() {
-    if (!somaValida) return;
+    if (!somaValida || !notaMinimaValida) return;
     setSalvando(true);
-    await atualizarConfigAvaliacaoDesempenho(numKpis, numComportamental);
+    await atualizarConfigAvaliacaoDesempenho(numKpis, numComportamental, numNotaMinimaPdi);
     setSalvando(false);
   }
 

@@ -12,6 +12,7 @@ import type {
   KpiCargo,
   Movimentacao,
   Pdi,
+  PdiBibliotecaItem,
   Perfil2Info,
   TipoMovimentacao,
 } from "../types/domain";
@@ -34,6 +35,7 @@ export type PortalAction =
       avaliacoesDesempenho: AvaliacaoDesempenho[];
       ciclosAvaliacaoDesempenho: CicloAvaliacaoDesempenho[];
       pdi: Pdi[];
+      pdiBiblioteca: PdiBibliotecaItem[];
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
@@ -53,4 +55,8 @@ export type PortalAction =
   | { type: "CRIAR_CICLO_AVALIACAO_DESEMPENHO"; ciclo: CicloAvaliacaoDesempenho; avaliacoes: AvaliacaoDesempenho[] }
   | { type: "ATUALIZAR_AVALIACAO_DESEMPENHO"; avaliacao: AvaliacaoDesempenho }
   | { type: "ENCERRAR_CICLO_AVALIACAO_DESEMPENHO"; id: string }
+  | { type: "CRIAR_PDI"; pdi: Pdi }
+  | { type: "ATUALIZAR_PDI"; pdi: Pdi }
+  | { type: "SALVAR_ITEM_BIBLIOTECA_PDI"; item: PdiBibliotecaItem }
+  | { type: "EXCLUIR_ITEM_BIBLIOTECA_PDI"; chave: string; tipoCompetencia: PdiBibliotecaItem["tipoCompetencia"] }
   | { type: "RESET" };

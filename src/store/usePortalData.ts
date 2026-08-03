@@ -33,17 +33,26 @@ import {
   encerrarCiclo as encerrarCicloNoSupabase,
 } from "../repositories/ciclosAvaliacaoDesempenhoRepository";
 import { registrarLogAvaliacaoDesempenho as registrarLogAvaliacaoDesempenhoNoSupabase } from "../repositories/logAvaliacaoDesempenhoRepository";
+import { criarPdi as criarPdiNoSupabase, salvarPdi as salvarPdiNoSupabase } from "../repositories/pdiRepository";
+import {
+  excluirItemBiblioteca as excluirItemBibliotecaNoSupabase,
+  salvarItemBiblioteca as salvarItemBibliotecaNoSupabase,
+} from "../repositories/pdiBibliotecaRepository";
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
 import {
+  arredondar,
   calcularNotasAvaliacao,
   elegivelParaCicloAvaliacaoDesempenho,
   gerarIdAvaliacaoDesempenho,
   gerarIdCicloAvaliacaoDesempenho,
+  mediaAfirmacoes,
+  notaKpi,
   validarConfigAvaliacaoDesempenho,
 } from "../domain/avaliacaoDesempenho";
+import { gerarIdPdiAcao, gerarIdPdiItem, sugerirObjetivoEAcoes, validarNotaMinimaPdi } from "../domain/pdi";
 import {
   calcularIndicacao,
   calcularNotaFinalPct,
@@ -75,9 +84,12 @@ import type {
   NovaMovimentacaoForm,
   NovoCicloAvaliacaoForm,
   Pdi,
+  PdiBibliotecaItem,
+  PdiItem,
   Perfil,
   RespostaAvaliacaoExperiencia,
   ResultadoAvaliacaoExperiencia,
+  TipoCompetenciaPdi,
 } from "../types/domain";
 
 export interface PortalData {
@@ -133,7 +145,11 @@ export interface PortalData {
   dispensarAvaliacaoExperiencia: (colaboradorNome: string, motivo: string) => Promise<{ ok: true } | { ok: false }>;
   /** Gestão de Desempenho — etapa 1, só estrutura (ver README). */
   configAvaliacaoDesempenho: ConfigAvaliacaoDesempenho | null;
-  atualizarConfigAvaliacaoDesempenho: (pesoKpis: number, pesoComportamental: number) => Promise<{ ok: true } | { ok: false }>;
+  atualizarConfigAvaliacaoDesempenho: (
+    pesoKpis: number,
+    pesoComportamental: number,
+    notaMinimaPdi: number,
+  ) => Promise<{ ok: true } | { ok: false }>;
   competenciasComportamentais: CompetenciaComportamental[];
   salvarCompetenciaComportamental: (competencia: CompetenciaComportamental) => Promise<{ ok: true } | { ok: false }>;
   kpisCargo: KpiCargo[];
@@ -152,6 +168,21 @@ export interface PortalData {
    * for o gestor do colaborador avaliado — e ela ainda não estiver "Concluída" (trava total). */
   podeEditarAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => boolean;
   pdi: Pdi[];
+  /** RH vê todo mundo; dono só vê depois de "Concluído"; quem é gestor atual do dono vê sempre. */
+  pdiVisiveis: Pdi[];
+  /** RH sempre (inclusive pra reabrir um PDI concluído); senão, quem originou o plano
+   * (gestorResponsavel) OU o gestor atual do colaborador — e só enquanto não estiver "Concluído". */
+  podeEditarPdi: (pdi: Pdi) => boolean;
+  /** Retorna o Pdi salvo (com o `updatedAt` novo gerado pelo Supabase) — o
+   * chamador deve substituir seu rascunho local por ele antes de qualquer
+   * gravação seguinte, senão a trava de concorrência otimista (ver
+   * salvarPdi() em pdiRepository.ts) rejeitaria o próprio salvamento. */
+  salvarPdi: (pdi: Pdi) => Promise<{ ok: true; pdi: Pdi } | { ok: false }>;
+  /** RH-only — volta um PDI concluído pra "Em andamento", limpando concluidoPor/Em. */
+  reabrirPdi: (pdi: Pdi) => Promise<{ ok: true; pdi: Pdi } | { ok: false }>;
+  pdiBiblioteca: PdiBibliotecaItem[];
+  salvarItemBibliotecaPdi: (item: PdiBibliotecaItem) => Promise<{ ok: true } | { ok: false }>;
+  excluirItemBibliotecaPdi: (chave: string, tipoCompetencia: TipoCompetenciaPdi) => Promise<{ ok: true } | { ok: false }>;
   podeEditarGestaoDesempenho: boolean;
 }
 
@@ -256,6 +287,32 @@ export function usePortalData(): PortalData {
       return avaliacao.gestorAvaliador === me;
     },
     [perfil, me, state.ciclosAvaliacaoDesempenho],
+  );
+
+  /** RH vê tudo. Dono (`colaboradorNome === me`) só vê depois de concluído —
+   * diferente da AVD (lá a ficha GESTOR nunca é vista pelo perfil
+   * Colaborador), aqui é só uma questão de tempo: vê assim que o gestor
+   * concluir. Quem é gestor atual do dono (ao vivo) vê sempre. */
+  const pdiVisiveis = useMemo(() => {
+    if (perfil === "RH") return state.pdi;
+    return state.pdi.filter((p) => {
+      if (p.colaboradorNome === me) return p.status === "Concluído";
+      return colaboradorPorNome.get(p.colaboradorNome)?.gestor === me;
+    });
+  }, [state.pdi, colaboradorPorNome, perfil, me]);
+
+  /** RH sempre — inclusive um PDI já concluído, é assim que ele "reabre".
+   * Senão, quem originou o plano (gestorResponsavel, congelado — mesma
+   * lógica de gestorAvaliador na AVD, pra não perder acesso numa
+   * transferência) OU o gestor atual do colaborador (pra um gestor novo
+   * poder assumir sem precisar do RH) — e só enquanto não "Concluído". */
+  const podeEditarPdiFn = useCallback(
+    (pdi: Pdi) => {
+      if (perfil === "RH") return true;
+      if (pdi.status === "Concluído") return false;
+      return pdi.gestorResponsavel === me || colaboradorPorNome.get(pdi.colaboradorNome)?.gestor === me;
+    },
+    [perfil, me, colaboradorPorNome],
   );
 
   const aprovarEtapaFn = useCallback(
@@ -504,21 +561,27 @@ export function usePortalData(): PortalData {
   );
 
   const atualizarConfigAvaliacaoDesempenhoFn = useCallback(
-    async (pesoKpis: number, pesoComportamental: number) => {
+    async (pesoKpis: number, pesoComportamental: number, notaMinimaPdi: number) => {
       // Validação de negócio, independente de UI — bloqueia qualquer soma
-      // diferente de 100% antes de sequer tentar gravar, não importa por
-      // onde esta função seja chamada (ver validarConfigAvaliacaoDesempenho()
-      // em domain/avaliacaoDesempenho.ts).
-      const validacao = validarConfigAvaliacaoDesempenho(pesoKpis, pesoComportamental);
-      if (!validacao.ok) {
-        flash(validacao.error);
+      // diferente de 100% (ou nota mínima fora da escala 1-5) antes de
+      // sequer tentar gravar, não importa por onde esta função seja
+      // chamada (ver validarConfigAvaliacaoDesempenho()/validarNotaMinimaPdi()
+      // em domain/avaliacaoDesempenho.ts e domain/pdi.ts).
+      const validacaoPesos = validarConfigAvaliacaoDesempenho(pesoKpis, pesoComportamental);
+      if (!validacaoPesos.ok) {
+        flash(validacaoPesos.error);
+        return { ok: false as const };
+      }
+      const validacaoNota = validarNotaMinimaPdi(notaMinimaPdi);
+      if (!validacaoNota.ok) {
+        flash(validacaoNota.error);
         return { ok: false as const };
       }
       try {
-        await atualizarConfigAvaliacaoDesempenhoNoSupabase(pesoKpis, pesoComportamental, me);
+        await atualizarConfigAvaliacaoDesempenhoNoSupabase(pesoKpis, pesoComportamental, notaMinimaPdi, me);
         dispatch({
           type: "ATUALIZAR_CONFIG_AVALIACAO_DESEMPENHO",
-          config: { pesoKpis, pesoComportamental, updatedAt: new Date().toISOString(), updatedBy: me },
+          config: { pesoKpis, pesoComportamental, notaMinimaPdi, updatedAt: new Date().toISOString(), updatedBy: me },
         });
         flash("Configuração da Avaliação de Desempenho atualizada.");
         return { ok: true as const };
@@ -788,13 +851,229 @@ export function usePortalData(): PortalData {
         const acao = concluindoAgora ? "AVALIACAO_CONCLUIDA" : iniciandoAgora ? "AVALIACAO_INICIADA" : "AVALIACAO_SALVA";
         void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: atualizado.cicloId, avaliacaoId: atualizado.id, acao, usuario: me });
 
+        // PDI é gerado automaticamente só na 1ª conclusão de uma avaliação
+        // GESTOR (nota oficial da AVD) — nunca por AUTOAVALIACAO/LIDERANCA.
+        if (concluindoAgora && atualizado.tipo === "GESTOR") {
+          void gerarPdiSeNecessario(atualizado);
+        }
+
         return { ok: true as const };
       } catch (err) {
         flash(err instanceof Error ? err.message : "Falha ao salvar avaliação de desempenho.");
         return { ok: false as const };
       }
+
+      // Identifica competências comportamentais/KPIs abaixo da nota mínima
+      // configurável e monta o PDI (cabeçalho sempre criado, mesmo com zero
+      // itens) — objetivo/ações vêm da biblioteca do RH quando existe um
+      // modelo pra essa competência, senão um texto genérico. A
+      // duplicidade é checada no repositório (consulta o Supabase direto,
+      // não o estado local — protege contra RH+gestor concluindo a mesma
+      // avaliação quase ao mesmo tempo).
+      async function gerarPdiSeNecessario(avaliacaoConcluida: AvaliacaoDesempenho) {
+        const kpisPorId = new Map(state.kpisCargo.map((k) => [k.id, k]));
+        const notaMinima = state.configAvaliacaoDesempenho?.notaMinimaPdi ?? 3;
+        const agora = new Date().toISOString();
+        const itens: PdiItem[] = [];
+
+        for (const resultado of avaliacaoConcluida.resultadosComportamentais) {
+          const media = mediaAfirmacoes(resultado.notasAfirmacoes);
+          if (media === null || media >= notaMinima) continue;
+          const itemId = gerarIdPdiItem();
+          const { objetivo, acoesSugeridas } = sugerirObjetivoEAcoes(
+            resultado.competenciaId,
+            "Comportamental",
+            resultado.competenciaNome,
+            state.pdiBiblioteca,
+          );
+          itens.push({
+            id: itemId,
+            pdiId: 0, // placeholder — o repositório substitui pelo id real após criar o cabeçalho
+            competenciaId: resultado.competenciaId,
+            competenciaNome: resultado.competenciaNome,
+            tipoCompetencia: "Comportamental",
+            notaObtida: arredondar(media),
+            origemManual: false,
+            objetivoDesenvolvimento: objetivo,
+            responsavel: "",
+            dataInicio: null,
+            dataPrevistaConclusao: null,
+            status: "Não iniciada",
+            observacoes: "",
+            ordem: itens.length,
+            acoes: acoesSugeridas.map((descricao, i) => ({
+              id: gerarIdPdiAcao(),
+              itemId,
+              descricao,
+              responsavel: "",
+              prazo: null,
+              status: "Não iniciada",
+              ordem: i,
+              criadoEm: agora,
+              updatedAt: agora,
+            })),
+            criadoEm: agora,
+            updatedAt: agora,
+          });
+        }
+
+        for (const resultado of avaliacaoConcluida.resultadosKpis) {
+          const kpi = kpisPorId.get(resultado.kpiId);
+          const nota = notaKpi(resultado, kpi);
+          if (nota === null || nota >= notaMinima) continue;
+          const nomeKpi = resultado.kpiNome || kpi?.nomeIndicador || `KPI #${resultado.kpiId}`;
+          const itemId = gerarIdPdiItem();
+          const { objetivo, acoesSugeridas } = sugerirObjetivoEAcoes(nomeKpi, "Tecnica", nomeKpi, state.pdiBiblioteca);
+          itens.push({
+            id: itemId,
+            pdiId: 0,
+            competenciaId: "",
+            competenciaNome: nomeKpi,
+            tipoCompetencia: "Tecnica",
+            notaObtida: nota,
+            origemManual: false,
+            objetivoDesenvolvimento: objetivo,
+            responsavel: "",
+            dataInicio: null,
+            dataPrevistaConclusao: null,
+            status: "Não iniciada",
+            observacoes: "",
+            ordem: itens.length,
+            acoes: acoesSugeridas.map((descricao, i) => ({
+              id: gerarIdPdiAcao(),
+              itemId,
+              descricao,
+              responsavel: "",
+              prazo: null,
+              status: "Não iniciada",
+              ordem: i,
+              criadoEm: agora,
+              updatedAt: agora,
+            })),
+            criadoEm: agora,
+            updatedAt: agora,
+          });
+        }
+
+        const novoPdi: Pdi = {
+          id: 0, // placeholder — o repositório substitui pelo id bigint gerado pelo Supabase
+          colaboradorNome: avaliacaoConcluida.colaboradorNome,
+          cicloId: avaliacaoConcluida.cicloId,
+          ciclo: avaliacaoConcluida.ciclo,
+          avaliacaoId: avaliacaoConcluida.id,
+          gestorResponsavel: avaliacaoConcluida.gestorAvaliador,
+          status: "Não iniciado",
+          comentarios: "",
+          concluidoPor: "",
+          concluidoEm: null,
+          itens,
+          criadoEm: agora,
+          updatedAt: agora,
+        };
+
+        try {
+          const criado = await criarPdiNoSupabase(novoPdi);
+          if (!criado) return; // já existia (corrida RH+gestor concluindo quase ao mesmo tempo)
+          dispatch({ type: "CRIAR_PDI", pdi: criado });
+          void registrarLogAvaliacaoDesempenhoNoSupabase({
+            cicloId: criado.cicloId,
+            avaliacaoId: criado.avaliacaoId,
+            acao: "PDI_GERADO",
+            detalhe: `${itens.length} item(ns) de desenvolvimento`,
+            usuario: me,
+          });
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao gerar o PDI automaticamente.");
+        }
+      }
     },
-    [dispatch, me, flash, state.avaliacoesDesempenho, state.kpisCargo, state.configAvaliacaoDesempenho],
+    [dispatch, me, flash, state.avaliacoesDesempenho, state.kpisCargo, state.configAvaliacaoDesempenho, state.pdiBiblioteca],
+  );
+
+  /** Salva um PDI (comentários, itens/ações, mudança de status, conclusão)
+   * — um só ponto pra tudo, igual salvarAvaliacaoDesempenho. Detecta a
+   * transição pra "Concluído" e grava concluidoPor/Em só nesse momento.
+   * `pdi.updatedAt` (o valor lido por último) vai pro repositório como
+   * trava de concorrência otimista — se alguém salvou por cima entre a
+   * leitura e esta gravação, PdiConflitoError avisa em vez de apagar o
+   * trabalho da outra pessoa (ver salvarPdi() em pdiRepository.ts). */
+  const salvarPdiFn = useCallback(
+    async (pdi: Pdi) => {
+      const anterior = state.pdi.find((p) => p.id === pdi.id);
+      const concluindoAgora = pdi.status === "Concluído" && anterior?.status !== "Concluído";
+      const atualizado: Pdi = {
+        ...pdi,
+        concluidoPor: concluindoAgora ? me : anterior?.concluidoPor ?? pdi.concluidoPor,
+        concluidoEm: concluindoAgora ? new Date().toISOString() : anterior?.concluidoEm ?? pdi.concluidoEm,
+      };
+      try {
+        const salvo = await salvarPdiNoSupabase(atualizado, pdi.updatedAt);
+        dispatch({ type: "ATUALIZAR_PDI", pdi: salvo });
+        flash(concluindoAgora ? "PDI concluído." : "PDI salvo.");
+        void registrarLogAvaliacaoDesempenhoNoSupabase({
+          cicloId: salvo.cicloId,
+          avaliacaoId: salvo.avaliacaoId,
+          acao: concluindoAgora ? "PDI_CONCLUIDO" : "PDI_SALVO",
+          usuario: me,
+        });
+        return { ok: true as const, pdi: salvo };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao salvar o PDI.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, state.pdi],
+  );
+
+  const reabrirPdiFn = useCallback(
+    async (pdi: Pdi) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode reabrir um PDI.");
+        return { ok: false as const };
+      }
+      const reaberto: Pdi = { ...pdi, status: "Em andamento", concluidoPor: "", concluidoEm: null };
+      try {
+        const salvo = await salvarPdiNoSupabase(reaberto, pdi.updatedAt);
+        dispatch({ type: "ATUALIZAR_PDI", pdi: salvo });
+        flash("PDI reaberto.");
+        void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: salvo.cicloId, avaliacaoId: salvo.avaliacaoId, acao: "PDI_REABERTO", usuario: me });
+        return { ok: true as const, pdi: salvo };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao reabrir o PDI.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, perfil],
+  );
+
+  const salvarItemBibliotecaPdiFn = useCallback(
+    async (item: PdiBibliotecaItem) => {
+      try {
+        await salvarItemBibliotecaNoSupabase(item, me);
+        dispatch({ type: "SALVAR_ITEM_BIBLIOTECA_PDI", item: { ...item, updatedAt: new Date().toISOString(), updatedBy: me } });
+        flash("Modelo salvo na biblioteca de PDI.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao salvar modelo da biblioteca de PDI.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash],
+  );
+
+  const excluirItemBibliotecaPdiFn = useCallback(
+    async (chave: string, tipoCompetencia: TipoCompetenciaPdi) => {
+      try {
+        await excluirItemBibliotecaNoSupabase(chave, tipoCompetencia);
+        dispatch({ type: "EXCLUIR_ITEM_BIBLIOTECA_PDI", chave, tipoCompetencia });
+        flash("Modelo removido da biblioteca de PDI.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao remover modelo da biblioteca de PDI.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, flash],
   );
 
   return {
@@ -846,6 +1125,13 @@ export function usePortalData(): PortalData {
     excluirKpiCargo: excluirKpiCargoFn,
     avaliacoesDesempenho: state.avaliacoesDesempenho,
     pdi: state.pdi,
+    pdiVisiveis,
+    podeEditarPdi: podeEditarPdiFn,
+    salvarPdi: salvarPdiFn,
+    reabrirPdi: reabrirPdiFn,
+    pdiBiblioteca: state.pdiBiblioteca,
+    salvarItemBibliotecaPdi: salvarItemBibliotecaPdiFn,
+    excluirItemBibliotecaPdi: excluirItemBibliotecaPdiFn,
     podeEditarGestaoDesempenho: perfil === "RH",
   };
 }

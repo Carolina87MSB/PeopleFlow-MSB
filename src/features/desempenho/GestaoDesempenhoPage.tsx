@@ -7,9 +7,10 @@ import { CompetenciasTecnicasTab } from "./CompetenciasTecnicasTab";
 import { AvaliacoesTab } from "./AvaliacoesTab";
 import { AcessosAvdTab } from "./AcessosAvdTab";
 import { PdiTab } from "./PdiTab";
+import { PdiBibliotecaTab } from "./PdiBibliotecaTab";
 import styles from "./GestaoDesempenhoPage.module.css";
 
-type Aba = "configuracao" | "comportamentais" | "tecnicas" | "avaliacoes" | "acessos" | "pdi";
+type Aba = "configuracao" | "comportamentais" | "tecnicas" | "avaliacoes" | "acessos" | "pdi" | "pdiBiblioteca";
 
 const ABAS_RH: { id: Aba; label: string }[] = [
   { id: "configuracao", label: "Configuração" },
@@ -18,19 +19,25 @@ const ABAS_RH: { id: Aba; label: string }[] = [
   { id: "avaliacoes", label: "Avaliações" },
   { id: "acessos", label: "Acessos AVD" },
   { id: "pdi", label: "PDI" },
+  { id: "pdiBiblioteca", label: "Biblioteca de PDI" },
 ];
 
+const ABAS_ABERTAS: Aba[] = ["avaliacoes", "pdi"];
+
 /** Módulo Gestão de Desempenho. As abas "Configuração"/"Competências"/
- * "Acessos AVD"/"PDI" são RH-only; "Avaliações" é aberta a qualquer perfil
- * autenticado — RH gerencia ciclos e vê tudo, Gestor/Diretoria preenchem as
- * avaliações dos liderados e as próprias, e o perfil "Colaborador" (acesso
- * restrito à AVD, ver AppShell.tsx) só alcança esta página e só enxerga a
- * aba Avaliações, com suas próprias fichas. */
+ * "Acessos AVD"/"Biblioteca de PDI" são RH-only (Diretoria também alcança,
+ * sem os botões de edição — mesmo padrão de `colaboradoresListagem`);
+ * "Avaliações" e "PDI" são abertas a qualquer perfil autenticado — RH
+ * gerencia ciclos/PDIs e vê tudo, Gestor/Diretoria preenchem as avaliações
+ * dos liderados e veem/editam os PDIs de quem lideram, e o perfil
+ * "Colaborador" (acesso restrito à AVD, ver AppShell.tsx) só alcança esta
+ * página e só enxerga suas próprias fichas/PDI (o PDI só depois de
+ * concluído pelo gestor, ver pdiVisiveis em usePortalData.ts). */
 export function GestaoDesempenhoPage() {
   const { podeVerCadastros } = usePortalData();
   const [aba, setAba] = useState<Aba>(() => (podeVerCadastros ? "configuracao" : "avaliacoes"));
 
-  const abasVisiveis = podeVerCadastros ? ABAS_RH : ABAS_RH.filter((a) => a.id === "avaliacoes");
+  const abasVisiveis = podeVerCadastros ? ABAS_RH : ABAS_RH.filter((a) => ABAS_ABERTAS.includes(a.id));
 
   return (
     <>
@@ -56,7 +63,8 @@ export function GestaoDesempenhoPage() {
       {podeVerCadastros && aba === "tecnicas" && <CompetenciasTecnicasTab />}
       {aba === "avaliacoes" && <AvaliacoesTab />}
       {podeVerCadastros && aba === "acessos" && <AcessosAvdTab />}
-      {podeVerCadastros && aba === "pdi" && <PdiTab />}
+      {aba === "pdi" && <PdiTab />}
+      {podeVerCadastros && aba === "pdiBiblioteca" && <PdiBibliotecaTab />}
     </>
   );
 }

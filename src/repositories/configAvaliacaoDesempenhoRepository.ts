@@ -11,6 +11,7 @@ const ID_CONFIG = "default";
 interface ConfigAvaliacaoDesempenhoRow {
   peso_kpis: number;
   peso_comportamental: number;
+  nota_minima_pdi: number | null;
   updated_at: string;
   updated_by: string | null;
 }
@@ -19,6 +20,7 @@ function fromRow(row: ConfigAvaliacaoDesempenhoRow): ConfigAvaliacaoDesempenho {
   return {
     pesoKpis: row.peso_kpis,
     pesoComportamental: row.peso_comportamental,
+    notaMinimaPdi: row.nota_minima_pdi ?? 3,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by ?? "",
   };
@@ -41,6 +43,7 @@ export async function getConfigAvaliacaoDesempenho(): Promise<ConfigAvaliacaoDes
 export async function atualizarConfigAvaliacaoDesempenho(
   pesoKpis: number,
   pesoComportamental: number,
+  notaMinimaPdi: number,
   editadoPor: string,
 ): Promise<void> {
   if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
@@ -50,6 +53,7 @@ export async function atualizarConfigAvaliacaoDesempenho(
       id: ID_CONFIG,
       peso_kpis: pesoKpis,
       peso_comportamental: pesoComportamental,
+      nota_minima_pdi: notaMinimaPdi,
       updated_at: new Date().toISOString(),
       updated_by: editadoPor,
     },
