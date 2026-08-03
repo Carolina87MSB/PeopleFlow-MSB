@@ -19,6 +19,7 @@ export const initialPortalState: PortalState = {
   ciclosAvaliacaoDesempenho: [],
   pdi: [],
   pdiBiblioteca: [],
+  avaliacoesPotencial: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -42,6 +43,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         ciclosAvaliacaoDesempenho: action.ciclosAvaliacaoDesempenho,
         pdi: action.pdi,
         pdiBiblioteca: action.pdiBiblioteca,
+        avaliacoesPotencial: action.avaliacoesPotencial,
       };
 
     case "CRIAR_AVALIACAO_EXPERIENCIA":
@@ -168,6 +170,15 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         pdiBiblioteca: state.pdiBiblioteca.filter(
           (b) => !(b.chave === action.chave && b.tipoCompetencia === action.tipoCompetencia),
         ),
+      };
+
+    case "CRIAR_AVALIACOES_POTENCIAL":
+      return { ...state, avaliacoesPotencial: [...action.avaliacoes, ...state.avaliacoesPotencial] };
+
+    case "ATUALIZAR_AVALIACAO_POTENCIAL":
+      return {
+        ...state,
+        avaliacoesPotencial: state.avaliacoesPotencial.map((a) => (a.id === action.avaliacao.id ? action.avaliacao : a)),
       };
 
     default:

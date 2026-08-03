@@ -38,6 +38,10 @@ import {
   excluirItemBiblioteca as excluirItemBibliotecaNoSupabase,
   salvarItemBiblioteca as salvarItemBibliotecaNoSupabase,
 } from "../repositories/pdiBibliotecaRepository";
+import {
+  atualizarAvaliacaoPotencial as atualizarAvaliacaoPotencialNoSupabase,
+  criarAvaliacoesPotencial as criarAvaliacoesPotencialNoSupabase,
+} from "../repositories/avaliacoesPotencialRepository";
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
@@ -53,6 +57,7 @@ import {
   validarConfigAvaliacaoDesempenho,
 } from "../domain/avaliacaoDesempenho";
 import { gerarIdPdiAcao, gerarIdPdiItem, sugerirObjetivoEAcoes, validarNotaMinimaPdi } from "../domain/pdi";
+import { PERGUNTAS_POTENCIAL, calcularNotaPotencial, gerarIdAvaliacaoPotencial } from "../domain/avaliacaoPotencial";
 import {
   calcularIndicacao,
   calcularNotaFinalPct,
@@ -69,6 +74,7 @@ import { useConta } from "./useConta";
 import type {
   AvaliacaoDesempenho,
   AvaliacaoExperiencia,
+  AvaliacaoPotencial,
   CicloAvaliacaoDesempenho,
   Colaborador,
   CompetenciaComportamental,
@@ -184,6 +190,18 @@ export interface PortalData {
   salvarItemBibliotecaPdi: (item: PdiBibliotecaItem) => Promise<{ ok: true } | { ok: false }>;
   excluirItemBibliotecaPdi: (chave: string, tipoCompetencia: TipoCompetenciaPdi) => Promise<{ ok: true } | { ok: false }>;
   podeEditarGestaoDesempenho: boolean;
+  avaliacoesPotencial: AvaliacaoPotencial[];
+  /** RH vê tudo; senão, só quem é gestor ATUAL do colaborador — o próprio
+   * colaborador NUNCA vê a própria ficha (regra absoluta, mais restrita que
+   * a AVD), mesmo sendo Gestor/Diretoria de outras pessoas. */
+  avaliacoesPotencialVisiveis: AvaliacaoPotencial[];
+  /** RH sempre, incondicionalmente (inclusive depois de reabrir com o ciclo já
+   * encerrado); senão, só quem `gestorAvaliador` aponta (congelado, igual à
+   * AVD) — e só enquanto não "Concluída" e o ciclo não estiver "Encerrado". */
+  podeEditarAvaliacaoPotencial: (avaliacao: AvaliacaoPotencial) => boolean;
+  salvarAvaliacaoPotencial: (avaliacao: AvaliacaoPotencial) => Promise<{ ok: true } | { ok: false }>;
+  /** RH-only — sem gate de ciclo encerrado (é o caminho de correção pra isso). */
+  reabrirAvaliacaoPotencial: (avaliacao: AvaliacaoPotencial) => Promise<{ ok: true } | { ok: false }>;
 }
 
 /**
@@ -313,6 +331,36 @@ export function usePortalData(): PortalData {
       return pdi.gestorResponsavel === me || colaboradorPorNome.get(pdi.colaboradorNome)?.gestor === me;
     },
     [perfil, me, colaboradorPorNome],
+  );
+
+  /** Regra absoluta (mais restrita que a AVD): o colaborador NUNCA vê a
+   * própria Avaliação de Potencial — checagem explícita e incondicional,
+   * antes de qualquer outra, pra não depender só da comparação com o
+   * gestor atual (que poderia dar falso-positivo numa qualidade de dado
+   * onde colaborador.gestor === colaborador.nome). RH vê tudo; senão, só
+   * quem é gestor atual do colaborador. */
+  const avaliacoesPotencialVisiveis = useMemo(() => {
+    if (perfil === "RH") return state.avaliacoesPotencial;
+    return state.avaliacoesPotencial.filter((a) => {
+      if (a.colaboradorNome === me) return false;
+      return colaboradorPorNome.get(a.colaboradorNome)?.gestor === me;
+    });
+  }, [state.avaliacoesPotencial, colaboradorPorNome, perfil, me]);
+
+  /** RH sempre, checado PRIMEIRO e incondicionalmente (diferente da AVD,
+   * que bloqueia até o RH quando o ciclo está encerrado — aqui isso seria
+   * um beco sem saída depois de reabrir uma ficha de ciclo já encerrado).
+   * Senão, só quem `gestorAvaliador` aponta (congelado, igual à AVD) — e só
+   * enquanto não "Concluída" e o ciclo não estiver "Encerrado". */
+  const podeEditarAvaliacaoPotencialFn = useCallback(
+    (avaliacao: AvaliacaoPotencial) => {
+      if (perfil === "RH") return true;
+      if (avaliacao.status === "Concluída") return false;
+      const ciclo = state.ciclosAvaliacaoDesempenho.find((c) => c.id === avaliacao.cicloId);
+      if (ciclo?.status === "Encerrado") return false;
+      return avaliacao.gestorAvaliador === me;
+    },
+    [perfil, me, state.ciclosAvaliacaoDesempenho],
   );
 
   const aprovarEtapaFn = useCallback(
@@ -717,6 +765,28 @@ export function usePortalData(): PortalData {
       // types/domain.ts). Colaborador sem gestor cadastrado nasce com
       // gestorAvaliador vazio na ficha GESTOR — só o RH enxerga essa ficha —
       // e não recebe ficha LIDERANCA (não existe gestor pra avaliar).
+      // Avaliação de Potencial (Etapa 4) — módulo independente, gerado junto
+      // com a AVD pra cada colaborador elegível (mesma regra de
+      // elegibilidade), sempre (mesmo sem gestor, igual à ficha GESTOR).
+      // Nunca compõe nota_final/media_* da AVD nem o PDI.
+      const avaliacoesPotencial: AvaliacaoPotencial[] = elegiveis.map((c) => ({
+        id: gerarIdAvaliacaoPotencial(),
+        cicloId: ciclo.id,
+        ciclo: ciclo.nome,
+        colaboradorNome: c.nome,
+        cargo: c.cargo,
+        departamento: c.depto,
+        gestorAvaliador: c.gestor || "",
+        respostas: PERGUNTAS_POTENCIAL.map((p) => ({ perguntaId: p.id, pergunta: p.pergunta, nota: null })),
+        comentario: "",
+        status: "Não iniciada",
+        notaPotencial: null,
+        concluidoPor: "",
+        concluidoEm: null,
+        criadoEm: agora,
+        updatedAt: agora,
+      }));
+
       const avaliacoes: AvaliacaoDesempenho[] = [];
       for (const c of elegiveis) {
         const kpisDoCargo = state.kpisCargo.filter((k) => k.cargoNome === c.cargo);
@@ -798,6 +868,30 @@ export function usePortalData(): PortalData {
             usuario: me,
           });
         }
+
+        // 3º passo sequencial, best-effort: gerar as Avaliações de Potencial
+        // do ciclo. Falhar aqui não desfaz a abertura do ciclo nem as
+        // avaliações da AVD já criadas — só avisa (mesmo espírito do
+        // gerarPdiSeNecessario() em salvarAvaliacaoDesempenhoFn).
+        try {
+          const potencialCriadas = await criarAvaliacoesPotencialNoSupabase(avaliacoesPotencial);
+          if (potencialCriadas.length > 0) {
+            dispatch({ type: "CRIAR_AVALIACOES_POTENCIAL", avaliacoes: potencialCriadas });
+          }
+          void registrarLogAvaliacaoDesempenhoNoSupabase({
+            cicloId: ciclo.id,
+            acao: "POTENCIAL_GERADO",
+            detalhe: `${potencialCriadas.length} avaliação(ões) de potencial geradas`,
+            usuario: me,
+          });
+        } catch (err) {
+          flash(
+            err instanceof Error
+              ? `Ciclo aberto, mas falhou ao gerar avaliações de potencial: ${err.message}`
+              : "Ciclo aberto, mas falhou ao gerar avaliações de potencial.",
+          );
+        }
+
         return { ok: true as const, quantidade: avaliacoesCriadas.length };
       } catch (err) {
         flash(err instanceof Error ? err.message : "Falha ao abrir ciclo de avaliação de desempenho.");
@@ -1076,6 +1170,61 @@ export function usePortalData(): PortalData {
     [dispatch, flash],
   );
 
+  /** Salva uma Avaliação de Potencial (respostas/comentário, mudança de
+   * status, conclusão) — um só ponto pra tudo, igual salvarAvaliacaoDesempenho.
+   * Recalcula notaPotencial via calcularNotaPotencial() antes de gravar
+   * (ponto único de cálculo, nunca recalculado em outro lugar). Detecta a
+   * transição pra "Concluída" e grava concluidoPor/Em só nesse momento. */
+  const salvarAvaliacaoPotencialFn = useCallback(
+    async (avaliacao: AvaliacaoPotencial) => {
+      const anterior = state.avaliacoesPotencial.find((a) => a.id === avaliacao.id);
+      const notaPotencial = calcularNotaPotencial(avaliacao.respostas);
+      const concluindoAgora = avaliacao.status === "Concluída" && anterior?.status !== "Concluída";
+      const iniciandoAgora = anterior?.status === "Não iniciada" && avaliacao.status !== "Não iniciada";
+      const atualizado: AvaliacaoPotencial = {
+        ...avaliacao,
+        notaPotencial,
+        concluidoPor: concluindoAgora ? me : anterior?.concluidoPor ?? avaliacao.concluidoPor,
+        concluidoEm: concluindoAgora ? new Date().toISOString() : anterior?.concluidoEm ?? avaliacao.concluidoEm,
+      };
+      try {
+        await atualizarAvaliacaoPotencialNoSupabase(atualizado);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_POTENCIAL", avaliacao: atualizado });
+        flash(concluindoAgora ? "Avaliação de potencial concluída." : "Progresso da avaliação de potencial salvo.");
+        const acao = concluindoAgora ? "POTENCIAL_CONCLUIDA" : iniciandoAgora ? "POTENCIAL_INICIADA" : "POTENCIAL_SALVA";
+        void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: atualizado.cicloId, avaliacaoId: atualizado.id, acao, usuario: me });
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao salvar avaliação de potencial.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, state.avaliacoesPotencial],
+  );
+
+  /** RH-only — sem gate de ciclo encerrado (é o caminho de correção pra
+   * uma ficha de potencial cujo ciclo já foi encerrado). */
+  const reabrirAvaliacaoPotencialFn = useCallback(
+    async (avaliacao: AvaliacaoPotencial) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode reabrir uma avaliação de potencial.");
+        return { ok: false as const };
+      }
+      const reaberta: AvaliacaoPotencial = { ...avaliacao, status: "Em andamento", concluidoPor: "", concluidoEm: null };
+      try {
+        await atualizarAvaliacaoPotencialNoSupabase(reaberta);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_POTENCIAL", avaliacao: reaberta });
+        flash("Avaliação de potencial reaberta.");
+        void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: reaberta.cicloId, avaliacaoId: reaberta.id, acao: "POTENCIAL_REABERTA", usuario: me });
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao reabrir avaliação de potencial.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, perfil],
+  );
+
   return {
     conta,
     perfil,
@@ -1133,5 +1282,10 @@ export function usePortalData(): PortalData {
     salvarItemBibliotecaPdi: salvarItemBibliotecaPdiFn,
     excluirItemBibliotecaPdi: excluirItemBibliotecaPdiFn,
     podeEditarGestaoDesempenho: perfil === "RH",
+    avaliacoesPotencial: state.avaliacoesPotencial,
+    avaliacoesPotencialVisiveis,
+    podeEditarAvaliacaoPotencial: podeEditarAvaliacaoPotencialFn,
+    salvarAvaliacaoPotencial: salvarAvaliacaoPotencialFn,
+    reabrirAvaliacaoPotencial: reabrirAvaliacaoPotencialFn,
   };
 }

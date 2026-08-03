@@ -746,3 +746,48 @@ alter table public.peopleflow_config_avaliacao_desempenho
 
 comment on column public.peopleflow_config_avaliacao_desempenho.nota_minima_pdi is
   'Nota mínima (escala 1-5) — competências/KPIs com nota abaixo deste valor são sugeridos automaticamente pro PDI na conclusão da avaliação GESTOR. Editável pelo RH na aba Configuração.';
+
+-- =====================================================================
+-- 14) Gestão de Desempenho — Etapa 4: Avaliação de Potencial. Módulo
+-- independente da AVD (não altera nota_final nem o PDI), gerado
+-- automaticamente junto com o ciclo de AVD, 5 perguntas fixas de escala
+-- 1-5, nota = média simples. Usada só pra alimentar a futura Matriz 9 Box
+-- (não implementada nesta etapa) — a nota já fica disponível pra consumo
+-- futuro por outros módulos.
+-- =====================================================================
+
+create table if not exists public.peopleflow_avaliacoes_potencial (
+  id text primary key,
+  ciclo_id text not null,
+  ciclo text not null,
+  colaborador_nome text not null,
+  cargo text,
+  departamento text,
+  gestor_avaliador text,
+  respostas jsonb not null default '[]'::jsonb,
+  comentario text not null default '',
+  status text not null default 'Não iniciada',
+  nota_potencial numeric,
+  concluido_por text,
+  concluido_em timestamptz,
+  criado_em timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.peopleflow_avaliacoes_potencial is
+  'Avaliação de Potencial — independente da AVD, gerada automaticamente junto com o ciclo (1 por colaborador elegível, mesma regra de elegibilidade de peopleflow_avaliacoes_desempenho). ciclo_id referencia peopleflow_ciclos_avaliacao_desempenho.id (sem FK). gestor_avaliador é snapshot de colaborador.gestor no momento da geração. Nunca altera nota_final/media_* da AVD nem o PDI — só alimenta a futura Matriz 9 Box. Ver AvaliacaoPotencial em src/types/domain.ts.';
+comment on column public.peopleflow_avaliacoes_potencial.respostas is
+  'Array de { perguntaId, pergunta, nota } — pergunta é snapshot do texto no momento da geração (mesma lógica de snapshot da AVD), não reflete mudanças futuras nas 5 perguntas fixas (ver PERGUNTAS_POTENCIAL em src/domain/avaliacaoPotencial.ts).';
+comment on column public.peopleflow_avaliacoes_potencial.status is
+  '''Não iniciada'' | ''Em andamento'' | ''Concluída'' — mesmo domínio de peopleflow_avaliacoes_desempenho.status.';
+comment on column public.peopleflow_avaliacoes_potencial.nota_potencial is
+  'Média simples das respostas já dadas, recalculada a cada gravação (calcularNotaPotencial()) — nunca calculada em outro lugar.';
+
+alter table public.peopleflow_avaliacoes_potencial enable row level security;
+drop policy if exists "authenticated_rw_avaliacoes_potencial" on public.peopleflow_avaliacoes_potencial;
+create policy "authenticated_rw_avaliacoes_potencial"
+  on public.peopleflow_avaliacoes_potencial
+  for all
+  to authenticated
+  using (true)
+  with check (true);

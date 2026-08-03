@@ -1,6 +1,7 @@
 import type {
   AvaliacaoDesempenho,
   AvaliacaoExperiencia,
+  AvaliacaoPotencial,
   CargoCustom,
   CicloAvaliacaoDesempenho,
   Colaborador,
@@ -34,4 +35,5 @@ export interface PortalState {
   ciclosAvaliacaoDesempenho: CicloAvaliacaoDesempenho[];
   pdi: Pdi[];
   pdiBiblioteca: PdiBibliotecaItem[];
+  avaliacoesPotencial: AvaliacaoPotencial[];
 }

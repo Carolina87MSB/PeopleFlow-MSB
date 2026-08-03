@@ -502,6 +502,41 @@ export interface LogAvaliacaoDesempenho {
   criadoEm: string;
 }
 
+/** Uma resposta de Avaliação de Potencial — `pergunta` é snapshot do texto
+ * no momento da geração (mesma lógica de snapshot da AVD), não reflete
+ * mudanças futuras em PERGUNTAS_POTENCIAL (domain/avaliacaoPotencial.ts). */
+export interface RespostaPotencial {
+  perguntaId: string;
+  pergunta: string;
+  nota: number | null;
+}
+
+/** Avaliação de Potencial (Etapa 4) — independente da AVD, gerada
+ * automaticamente junto com o ciclo (1 por colaborador elegível, mesma
+ * elegibilidade da AVD). Nunca altera nota_final/media_* da AVD nem o PDI —
+ * só alimenta a futura Matriz 9 Box. `cargo`/`departamento`/`gestorAvaliador`
+ * são snapshot da estrutura organizacional no momento da geração (mesma
+ * lógica da AVD). */
+export interface AvaliacaoPotencial {
+  id: string;
+  cicloId: string;
+  ciclo: string;
+  colaboradorNome: string;
+  cargo: string;
+  departamento: string;
+  /** Snapshot de colaborador.gestor no momento da geração. Vazio quando o
+   * colaborador não tinha gestor definido (RH precisa tratar). */
+  gestorAvaliador: string;
+  respostas: RespostaPotencial[];
+  comentario: string;
+  status: StatusAvaliacaoDesempenho;
+  notaPotencial: number | null;
+  concluidoPor: string;
+  concluidoEm: string | null;
+  criadoEm: string;
+  updatedAt: string;
+}
+
 /** Status do plano de PDI inteiro (diferente do status de cada item/ação). */
 export type StatusPdi = "Não iniciado" | "Em andamento" | "Concluído";
 

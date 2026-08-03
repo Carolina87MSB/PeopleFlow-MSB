@@ -15,6 +15,7 @@ import { getAvaliacoesDesempenho } from "../repositories/avaliacoesDesempenhoRep
 import { getCiclosAvaliacaoDesempenho } from "../repositories/ciclosAvaliacaoDesempenhoRepository";
 import { getPdi } from "../repositories/pdiRepository";
 import { getPdiBiblioteca } from "../repositories/pdiBibliotecaRepository";
+import { getAvaliacoesPotencial } from "../repositories/avaliacoesPotencialRepository";
 import type { PortalAction } from "./actions";
 import { initialPortalState, portalReducer } from "./reducer";
 import type { PortalState } from "./types";
@@ -67,6 +68,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getCiclosAvaliacaoDesempenho(),
       getPdi(),
       getPdiBiblioteca(),
+      getAvaliacoesPotencial(),
     ])
       .then(
         async ([
@@ -86,6 +88,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           ciclosAvaliacaoDesempenho,
           pdi,
           pdiBiblioteca,
+          avaliacoesPotencial,
         ]) => {
           if (cancelado) return;
           // Efetiva promoções/transferências aprovadas cuja "Data prevista" já
@@ -113,6 +116,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             ciclosAvaliacaoDesempenho,
             pdi,
             pdiBiblioteca,
+            avaliacoesPotencial,
           });
         },
       )

@@ -1,6 +1,7 @@
 import type {
   AvaliacaoDesempenho,
   AvaliacaoExperiencia,
+  AvaliacaoPotencial,
   CargoCustom,
   CicloAvaliacaoDesempenho,
   Colaborador,
@@ -36,6 +37,7 @@ export type PortalAction =
       ciclosAvaliacaoDesempenho: CicloAvaliacaoDesempenho[];
       pdi: Pdi[];
       pdiBiblioteca: PdiBibliotecaItem[];
+      avaliacoesPotencial: AvaliacaoPotencial[];
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
@@ -59,4 +61,6 @@ export type PortalAction =
   | { type: "ATUALIZAR_PDI"; pdi: Pdi }
   | { type: "SALVAR_ITEM_BIBLIOTECA_PDI"; item: PdiBibliotecaItem }
   | { type: "EXCLUIR_ITEM_BIBLIOTECA_PDI"; chave: string; tipoCompetencia: PdiBibliotecaItem["tipoCompetencia"] }
+  | { type: "CRIAR_AVALIACOES_POTENCIAL"; avaliacoes: AvaliacaoPotencial[] }
+  | { type: "ATUALIZAR_AVALIACAO_POTENCIAL"; avaliacao: AvaliacaoPotencial }
   | { type: "RESET" };
