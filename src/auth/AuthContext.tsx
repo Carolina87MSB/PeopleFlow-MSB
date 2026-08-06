@@ -5,6 +5,12 @@ import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 
 const DOMINIO_CORPORATIVO = "@msbbrasil.com";
 
+// Exceção pontual — Daiana Pereira Leite e Pedro Henrique Lages Rocha usam o
+// e-mail corporativo de "Biomedical" (empresa afiliada), não @msbbrasil.com.
+// Caso específico desses 2 e-mails, não uma liberação geral do domínio
+// @biomedical.com.br — ver EMAIL_OVERRIDES em domain/hierarquia.ts.
+const EMAILS_PERMITIDOS_FORA_DO_DOMINIO = new Set(["daiana.leite@biomedical.com.br", "pedro.rocha@biomedical.com.br"]);
+
 type AuthStatus = "loading" | "signed-out" | "signed-in";
 
 export type MagicLinkResult = { ok: true } | { ok: false; error: string };
@@ -46,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       return { ok: false, error: "Informe um e-mail válido." };
     }
-    if (!email.endsWith(DOMINIO_CORPORATIVO)) {
+    if (!email.endsWith(DOMINIO_CORPORATIVO) && !EMAILS_PERMITIDOS_FORA_DO_DOMINIO.has(email)) {
       return { ok: false, error: "Acesso permitido apenas com e-mail corporativo @msbbrasil.com — e-mails pessoais não são aceitos." };
     }
     if (!supabaseConfigured) {
