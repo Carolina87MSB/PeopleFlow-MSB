@@ -39,6 +39,22 @@ function paraNumero(valor: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/** Aviso (não bloqueia salvar) para o erro real que motivou esta função: meta
+ * de KPI em % digitada em formato decimal-fração (0,98 em vez de 98). Não
+ * bloqueia porque a mesma unidade "%" também cobre metas legitimamente < 1
+ * (ex.: "Erro de Separação / Expedição" = 0,2%, "Retrabalho Comercial" =
+ * 0,9%) — um bloqueio de "< 1" impediria justamente essas metas reais de
+ * serem salvas de novo. Só sinaliza o padrão suspeito pra quem está digitando
+ * decidir, evitando o retrabalho sem travar um caso legítimo. */
+function avisoMetaPercentual(unidadeMedida: string, meta: string): string | null {
+  if (unidadeMedida.trim() !== "%") return null;
+  const n = paraNumero(meta);
+  if (n === null) return null;
+  if (n > 0 && n < 1) return `Unidade "%" usa escala 0–100 (ex.: 98, não 0,98). Confirme: ${n} representa ${n}%.`;
+  if (n > 100) return `Unidade "%" usa escala 0–100 — ${n} parece alto para uma meta em %.`;
+  return null;
+}
+
 /** KPIs (Competências Técnicas) de um cargo específico — listar, editar,
  * excluir e adicionar novo. Etapa 1: sem cálculo de resultado, só cadastro. */
 export function KpiCargoDrawer({ cargoNome, onClose }: KpiCargoDrawerProps) {
@@ -180,6 +196,7 @@ interface FormularioKpiProps {
 }
 
 function FormularioKpi({ rascunho, setRascunho, onCancelar, onSalvar, salvando, novo }: FormularioKpiProps) {
+  const aviso = avisoMetaPercentual(rascunho.unidadeMedida, rascunho.meta);
   return (
     <div className={styles.formularioKpi}>
       <input
@@ -216,6 +233,7 @@ function FormularioKpi({ rascunho, setRascunho, onCancelar, onSalvar, salvando, 
           onChange={(e) => setRascunho({ ...rascunho, peso: e.target.value })}
         />
       </div>
+      {aviso && <p className={styles.avisoMeta}>{aviso}</p>}
       <textarea
         className={styles.textarea}
         rows={2}
