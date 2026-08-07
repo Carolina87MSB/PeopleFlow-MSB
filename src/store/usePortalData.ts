@@ -354,11 +354,13 @@ export function usePortalData(): PortalData {
    * 3 fichas desse liderado, mas só edita a do tipo GESTOR
    * (podeEditarAvaliacaoDesempenho já cuida disso via gestorAvaliador). */
   const avaliacoesDesempenhoVisiveis = useMemo(() => {
-    if (perfil === "RH") return state.avaliacoesDesempenho;
-    return state.avaliacoesDesempenho.filter((a) => {
-      // "Não Elegível" (RH corrigiu inclusão por engano) nunca aparece pra
-      // colaborador/gestor — só pro RH, que enxerga tudo (linha acima).
-      if (a.status === "Não Elegível") return false;
+    // "Não Elegível" (RH corrigiu inclusão por engano) nunca aparece na
+    // lista de trabalho de ninguém, nem do RH — o histórico completo
+    // continua em `avaliacoesDesempenho` (usado só pela seção "Ciclos",
+    // RH-only) e no log de auditoria do ciclo.
+    const semNaoElegivel = state.avaliacoesDesempenho.filter((a) => a.status !== "Não Elegível");
+    if (perfil === "RH") return semNaoElegivel;
+    return semNaoElegivel.filter((a) => {
       if (a.colaboradorNome === me) {
         if (a.tipo === "GESTOR") return perfil !== "Colaborador";
         return true;
@@ -411,11 +413,10 @@ export function usePortalData(): PortalData {
    * onde colaborador.gestor === colaborador.nome). RH vê tudo; senão, só
    * quem é gestor atual do colaborador. */
   const avaliacoesPotencialVisiveis = useMemo(() => {
-    if (perfil === "RH") return state.avaliacoesPotencial;
-    return state.avaliacoesPotencial.filter((a) => {
-      // Mesma exclusão de avaliacoesDesempenhoVisiveis — "Não Elegível" só
-      // fica visível pro RH.
-      if (a.status === "Não Elegível") return false;
+    // Mesma exclusão universal de avaliacoesDesempenhoVisiveis.
+    const semNaoElegivel = state.avaliacoesPotencial.filter((a) => a.status !== "Não Elegível");
+    if (perfil === "RH") return semNaoElegivel;
+    return semNaoElegivel.filter((a) => {
       if (a.colaboradorNome === me) return false;
       return colaboradorPorNome.get(a.colaboradorNome)?.gestor === me;
     });

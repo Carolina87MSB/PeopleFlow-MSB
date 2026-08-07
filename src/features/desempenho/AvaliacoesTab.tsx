@@ -16,7 +16,6 @@ const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
   "Não iniciada": { bg: "var(--color-surface, #f6fafb)", fg: "var(--color-muted)" },
   "Em andamento": { bg: "var(--color-warning-bg, #fbeee0)", fg: "var(--color-warning-fg, #a3672a)" },
   Concluída: { bg: "var(--color-success-bg)", fg: "var(--color-success-fg)" },
-  "Não Elegível": { bg: "var(--color-danger-bg, #fbe4e4)", fg: "var(--color-danger-fg, #9b3b3b)" },
 };
 
 const CICLO_TONE: Record<string, { bg: string; fg: string }> = {
@@ -55,7 +54,6 @@ function notaFinalDe(
 }
 
 function acaoParaAvaliacao(status: AvaliacaoDesempenho["status"]): string {
-  if (status === "Não Elegível") return "Não elegível";
   if (status === "Concluída") return "Visualizar";
   if (status === "Em andamento") return "Continuar";
   return "Iniciar";
@@ -277,7 +275,7 @@ export function AvaliacoesTab() {
           ))}
         </select>
         <select className={styles.select} value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
-          {["Todos", "Não iniciada", "Em andamento", "Concluída", "Não Elegível"].map((o) => (
+          {["Todos", "Não iniciada", "Em andamento", "Concluída"].map((o) => (
             <option key={o} value={o}>
               {o}
             </option>
