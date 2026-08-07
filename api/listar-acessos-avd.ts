@@ -32,10 +32,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (data.users.length < perPage) break;
     }
 
-    const contas = buildAccessAvd(auth.colaboradores).map((conta) => ({
-      ...conta,
-      provisionado: emailsComConta.has(conta.email),
-    }));
+    // Quem não é elegível pro(s) ciclo(s) atualmente abertos (admissão depois
+    // da data de corte de cada um) não entra na lista de candidatos a acesso
+    // — sem ciclo aberto com corte definido, ou sem admissaoIso conhecido,
+    // não filtra (mantém o comportamento de antes: só tenure de buildAccessAvd()).
+    const { data: ciclosAbertos, error: erroCiclos } = await supabaseAdmin
+      .from("peopleflow_ciclos_avaliacao_desempenho")
+      .select("data_corte_admissao")
+      .eq("status", "Aberto");
+    if (erroCiclos) {
+      res.status(500).json({ error: erroCiclos.message });
+      return;
+    }
+    const cortesAbertos = (ciclosAbertos ?? [])
+      .map((c) => c.data_corte_admissao as string | null)
+      .filter((corte): corte is string => Boolean(corte));
+
+    const colaboradorPorNome = new Map(auth.colaboradores.map((c) => [c.nome, c]));
+    const contas = buildAccessAvd(auth.colaboradores)
+      .filter((conta) => {
+        if (cortesAbertos.length === 0) return true;
+        const admissaoIso = colaboradorPorNome.get(conta.nome)?.admissaoIso;
+        if (!admissaoIso) return true;
+        return cortesAbertos.some((corte) => admissaoIso <= corte);
+      })
+      .map((conta) => ({
+        ...conta,
+        provisionado: emailsComConta.has(conta.email),
+      }));
 
     res.status(200).json({ contas });
   } catch (err) {

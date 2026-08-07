@@ -7,9 +7,11 @@ import styles from "./AcessosAvdTab.module.css";
 
 /** Lista separada da tela "/acessos" principal — só colaboradores elegíveis
  * pra Avaliação de Desempenho (ativos, 6+ meses de empresa) que não são
- * RH/Diretoria/gestor (ver buildAccessAvd() em domain/hierarquia.ts). Liberar
- * acesso aqui dá ao colaborador um perfil restrito: só a própria Avaliação
- * de Desempenho, nada mais do portal. */
+ * RH/Diretoria/gestor (ver buildAccessAvd() em domain/hierarquia.ts), MENOS
+ * quem não é elegível pro(s) ciclo(s) atualmente abertos (admissão depois da
+ * data de corte do ciclo — filtro aplicado em api/listar-acessos-avd.ts).
+ * Liberar acesso aqui dá ao colaborador um perfil restrito: só a própria
+ * Avaliação de Desempenho, nada mais do portal. */
 export function AcessosAvdTab() {
   const { flash } = useToast();
 
@@ -49,9 +51,9 @@ export function AcessosAvdTab() {
       <div className={styles.banner}>
         <KeyRound size={16} strokeWidth={1.8} />
         <span>
-          Colaboradores elegíveis para a Avaliação de Desempenho (ativos, 6+ meses de empresa) que ainda não têm
-          acesso ao portal. Ao liberar, o colaborador loga e vê só a própria Avaliação de Desempenho — nada mais do
-          portal.
+          Colaboradores elegíveis para a Avaliação de Desempenho (ativos, 6+ meses de empresa, e elegíveis pro ciclo
+          atualmente aberto) que ainda não têm acesso ao portal. Ao liberar, o colaborador loga e vê só a própria
+          Avaliação de Desempenho — nada mais do portal.
         </span>
       </div>
 
