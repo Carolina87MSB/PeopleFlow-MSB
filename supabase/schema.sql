@@ -941,3 +941,22 @@ create policy "authenticated_rw_config_dashboard"
   to authenticated
   using (true)
   with check (true);
+
+-- =====================================================================
+-- 19) Gestão de Desempenho — correção da regra de elegibilidade da AVD. A
+-- elegibilidade deixa de ser "6 meses completos de empresa até a data de
+-- encerramento do ciclo" (cálculo relativo, que dependia de quando o ciclo
+-- fechava e podia incluir por engano quem foi admitido depois do período
+-- avaliado) e passa a ser uma data de corte de admissão explícita, definida
+-- pelo RH na abertura do ciclo: colaborador com admissão em ou antes dessa
+-- data é elegível, depois dela não é — ver
+-- elegivelParaCicloAvaliacaoDesempenho() em src/domain/avaliacaoDesempenho.ts.
+-- Coluna nullable só porque ciclos já existentes antes desta etapa não têm
+-- valor (nenhuma ficha antiga é recalculada); todo ciclo novo sempre grava,
+-- o formulário de abertura exige o campo.
+-- =====================================================================
+
+alter table public.peopleflow_ciclos_avaliacao_desempenho add column if not exists data_corte_admissao date;
+
+comment on column public.peopleflow_ciclos_avaliacao_desempenho.data_corte_admissao is
+  'Data de corte de admissão deste ciclo — colaborador com admissão em ou antes desta data é elegível, depois dela não é. Substitui o cálculo de "6 meses completos de empresa", que dependia de quando o ciclo fechava.';

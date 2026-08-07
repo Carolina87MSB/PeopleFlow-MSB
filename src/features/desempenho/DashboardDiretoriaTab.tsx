@@ -20,7 +20,7 @@ import { Matriz9BoxDistribuicao } from "./Matriz9BoxDistribuicao";
 import { RankingLista } from "./RankingLista";
 import styles from "./DashboardDesempenho.module.css";
 
-const STATUS_AVALIACAO: (StatusAvaliacaoDesempenho | "Todos")[] = ["Todos", "Não iniciada", "Em andamento", "Concluída"];
+const STATUS_AVALIACAO: (StatusAvaliacaoDesempenho | "Todos")[] = ["Todos", "Não iniciada", "Em andamento", "Concluída", "Não Elegível"];
 
 /** Dashboard da Diretoria (Etapa 8) — painel executivo, empresa toda
  * (`colaboradoresListagem`, mesma fonte do RH — exceção deliberada ao

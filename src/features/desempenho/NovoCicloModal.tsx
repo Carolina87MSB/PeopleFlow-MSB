@@ -9,8 +9,9 @@ interface NovoCicloModalProps {
 
 /** Abertura de um novo ciclo de Avaliação de Desempenho (RH-only) — ao
  * confirmar, o sistema gera automaticamente a avaliação de cada colaborador
- * ativo (elegibilidade nesta etapa: todo mundo ativo, sem regra de tempo
- * mínimo de empresa ainda). */
+ * ativo com admissão em ou antes da "Data de corte de admissão" informada
+ * (elegibilidade: ver elegivelParaCicloAvaliacaoDesempenho() em
+ * domain/avaliacaoDesempenho.ts). */
 export function NovoCicloModal({ onClose }: NovoCicloModalProps) {
   const { criarCicloAvaliacaoDesempenho } = usePortalData();
 
@@ -18,10 +19,11 @@ export function NovoCicloModal({ onClose }: NovoCicloModalProps) {
   const [periodoReferencia, setPeriodoReferencia] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataEncerramento, setDataEncerramento] = useState("");
+  const [dataCorteAdmissao, setDataCorteAdmissao] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const valido = nome.trim() && periodoReferencia.trim() && dataInicio && dataEncerramento;
+  const valido = nome.trim() && periodoReferencia.trim() && dataInicio && dataEncerramento && dataCorteAdmissao;
 
   async function handleConfirmar() {
     if (!valido) return;
@@ -32,6 +34,7 @@ export function NovoCicloModal({ onClose }: NovoCicloModalProps) {
       periodoReferencia: periodoReferencia.trim(),
       dataInicio,
       dataEncerramento,
+      dataCorteAdmissao,
     });
     setSalvando(false);
     if (result.ok) onClose();
@@ -99,6 +102,20 @@ export function NovoCicloModal({ onClose }: NovoCicloModalProps) {
             onChange={(e) => setDataEncerramento(e.target.value)}
           />
         </div>
+      </div>
+
+      <div className={styles.campo}>
+        <label className={styles.label} htmlFor="ciclo-corte-admissao">
+          Data de corte de admissão
+        </label>
+        <input
+          id="ciclo-corte-admissao"
+          type="date"
+          className={styles.input}
+          value={dataCorteAdmissao}
+          onChange={(e) => setDataCorteAdmissao(e.target.value)}
+        />
+        <p className={styles.ajuda}>Só participa deste ciclo quem foi admitido em ou antes desta data.</p>
       </div>
 
       {erro && <p className={styles.erro}>{erro}</p>}

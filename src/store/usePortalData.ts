@@ -356,6 +356,9 @@ export function usePortalData(): PortalData {
   const avaliacoesDesempenhoVisiveis = useMemo(() => {
     if (perfil === "RH") return state.avaliacoesDesempenho;
     return state.avaliacoesDesempenho.filter((a) => {
+      // "Não Elegível" (RH corrigiu inclusão por engano) nunca aparece pra
+      // colaborador/gestor — só pro RH, que enxerga tudo (linha acima).
+      if (a.status === "Não Elegível") return false;
       if (a.colaboradorNome === me) {
         if (a.tipo === "GESTOR") return perfil !== "Colaborador";
         return true;
@@ -366,7 +369,7 @@ export function usePortalData(): PortalData {
 
   const podeEditarAvaliacaoDesempenhoFn = useCallback(
     (avaliacao: AvaliacaoDesempenho) => {
-      if (avaliacao.status === "Concluída") return false;
+      if (avaliacao.status === "Concluída" || avaliacao.status === "Não Elegível") return false;
       const ciclo = state.ciclosAvaliacaoDesempenho.find((c) => c.id === avaliacao.cicloId);
       if (ciclo?.status === "Encerrado") return false;
       if (perfil === "RH") return true;
@@ -410,6 +413,9 @@ export function usePortalData(): PortalData {
   const avaliacoesPotencialVisiveis = useMemo(() => {
     if (perfil === "RH") return state.avaliacoesPotencial;
     return state.avaliacoesPotencial.filter((a) => {
+      // Mesma exclusão de avaliacoesDesempenhoVisiveis — "Não Elegível" só
+      // fica visível pro RH.
+      if (a.status === "Não Elegível") return false;
       if (a.colaboradorNome === me) return false;
       return colaboradorPorNome.get(a.colaboradorNome)?.gestor === me;
     });
@@ -430,7 +436,7 @@ export function usePortalData(): PortalData {
     (avaliacao: AvaliacaoPotencial) => {
       if (avaliacao.statusCalibracao !== "Não iniciada") return false;
       if (perfil === "RH") return true;
-      if (avaliacao.status === "Concluída") return false;
+      if (avaliacao.status === "Concluída" || avaliacao.status === "Não Elegível") return false;
       const ciclo = state.ciclosAvaliacaoDesempenho.find((c) => c.id === avaliacao.cicloId);
       if (ciclo?.status === "Encerrado") return false;
       return avaliacao.gestorAvaliador === me;
@@ -826,18 +832,19 @@ export function usePortalData(): PortalData {
         periodoReferencia: form.periodoReferencia.trim(),
         dataInicio: form.dataInicio,
         dataEncerramento: form.dataEncerramento,
+        dataCorteAdmissao: form.dataCorteAdmissao,
         status: "Aberto",
         criadoPor: me,
         criadoEm: agora,
       };
 
-      // Elegibilidade: ativo + 6 meses completos de empresa até a data de
-      // corte (data de encerramento do ciclo) — quem não passa não recebe
-      // nenhuma ficha, só um registro no log de auditoria com o motivo.
+      // Elegibilidade: ativo + admissão em ou antes da data de corte definida
+      // pelo RH neste ciclo — quem não passa não recebe nenhuma ficha, só um
+      // registro no log de auditoria com o motivo.
       const naoElegiveis: { nome: string; motivo: string }[] = [];
       const elegiveis: Colaborador[] = [];
       for (const c of state.colaboradores) {
-        const resultado = elegivelParaCicloAvaliacaoDesempenho(c, ciclo.dataEncerramento);
+        const resultado = elegivelParaCicloAvaliacaoDesempenho(c, ciclo.dataCorteAdmissao!);
         if (resultado.elegivel) elegiveis.push(c);
         else naoElegiveis.push({ nome: c.nome, motivo: resultado.motivo ?? "Não elegível" });
       }

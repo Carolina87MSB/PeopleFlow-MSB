@@ -36,6 +36,12 @@
   gap: 12px;
 }
 
+.ajuda {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-muted-light);
+}
+
 .erro {
   margin: 4px 0 0;
   font-size: 12.5px;

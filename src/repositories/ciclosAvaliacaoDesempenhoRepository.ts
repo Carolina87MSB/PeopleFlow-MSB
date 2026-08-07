@@ -12,6 +12,7 @@ interface CicloAvaliacaoDesempenhoRow {
   periodo_referencia: string;
   data_inicio: string;
   data_encerramento: string;
+  data_corte_admissao: string | null;
   status: string;
   criado_por: string | null;
   criado_em: string;
@@ -24,6 +25,7 @@ function fromRow(row: CicloAvaliacaoDesempenhoRow): CicloAvaliacaoDesempenho {
     periodoReferencia: row.periodo_referencia,
     dataInicio: row.data_inicio,
     dataEncerramento: row.data_encerramento,
+    dataCorteAdmissao: row.data_corte_admissao ?? null,
     status: row.status as CicloAvaliacaoDesempenho["status"],
     criadoPor: row.criado_por ?? "",
     criadoEm: row.criado_em,
@@ -71,6 +73,7 @@ export async function criarCicloComAvaliacoes(
     periodo_referencia: ciclo.periodoReferencia,
     data_inicio: ciclo.dataInicio,
     data_encerramento: ciclo.dataEncerramento,
+    data_corte_admissao: ciclo.dataCorteAdmissao,
     criado_por: ciclo.criadoPor || null,
   });
   if (error) throw new Error(`Falha ao criar ciclo de avaliação de desempenho no Supabase: ${error.message}`);

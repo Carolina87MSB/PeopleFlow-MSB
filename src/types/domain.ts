@@ -435,6 +435,11 @@ export interface CicloAvaliacaoDesempenho {
   periodoReferencia: string;
   dataInicio: string;
   dataEncerramento: string;
+  /** Colaborador com admissão em ou antes desta data é elegível pra este
+   * ciclo; depois dela não é (ver elegivelParaCicloAvaliacaoDesempenho() em
+   * domain/avaliacaoDesempenho.ts). `null` só em ciclos criados antes desta
+   * regra existir — nunca em ciclo novo, o formulário exige o campo. */
+  dataCorteAdmissao: string | null;
   status: StatusCicloAvaliacaoDesempenho;
   criadoPor: string;
   criadoEm: string;
@@ -446,12 +451,18 @@ export interface NovoCicloAvaliacaoForm {
   periodoReferencia: string;
   dataInicio: string;
   dataEncerramento: string;
+  dataCorteAdmissao: string;
 }
 
 /** Status possíveis de uma AvaliacaoDesempenho — avança sozinho conforme o
  * gestor preenche (nunca regride); "Concluída" trava a edição por completo
- * (só reabertura de ciclo, funcionalidade futura, desfaz isso). */
-export type StatusAvaliacaoDesempenho = "Não iniciada" | "Em andamento" | "Concluída";
+ * (só reabertura de ciclo, funcionalidade futura, desfaz isso). "Não
+ * Elegível" é a única exceção que pode ser aplicada a uma ficha já criada
+ * (nunca avançada pelo fluxo normal) — RH corrige manualmente quando um
+ * colaborador foi incluído no ciclo por engano (admissão depois da data de
+ * corte); a partir daí a ficha some das listas de pendência de colaborador e
+ * gestor, mas continua visível pro RH (auditoria). */
+export type StatusAvaliacaoDesempenho = "Não iniciada" | "Em andamento" | "Concluída" | "Não Elegível";
 
 /** Cada colaborador elegível pode ter até 3 fichas no mesmo ciclo, todas com
  * a mesma estrutura (`AvaliacaoDesempenho`), diferenciadas só por `tipo`:

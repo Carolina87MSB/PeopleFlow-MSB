@@ -18,7 +18,7 @@ import { Matriz9BoxDistribuicao } from "./Matriz9BoxDistribuicao";
 import { RankingLista } from "./RankingLista";
 import styles from "./DashboardDesempenho.module.css";
 
-const STATUS_AVALIACAO: (StatusAvaliacaoDesempenho | "Todos")[] = ["Todos", "Não iniciada", "Em andamento", "Concluída"];
+const STATUS_AVALIACAO: (StatusAvaliacaoDesempenho | "Todos")[] = ["Todos", "Não iniciada", "Em andamento", "Concluída", "Não Elegível"];
 
 /** Dashboard do Gestor (Etapa 8) — só a própria equipe (`colaboradoresListagem`
  * já filtra por `gestor === me` pro perfil Gestor). Read-only, puramente
@@ -94,7 +94,7 @@ export function DashboardGestorTab() {
 
   const competencias = useMemo(() => mediasPorCompetencia(fichasConcluidas), [fichasConcluidas]);
 
-  const avaliacoesPendentes = fichasFiltradas.filter((f) => f.status !== "Concluída").length;
+  const avaliacoesPendentes = fichasFiltradas.filter((f) => f.status !== "Concluída" && f.status !== "Não Elegível").length;
   const devolutivasPendentes = fichasHomologadas.filter((f) => !f.devolutivaRealizada).length;
 
   const pdisFiltrados = useMemo(() => {

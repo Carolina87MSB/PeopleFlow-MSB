@@ -2,7 +2,6 @@
 // dependência de UI/Supabase. Ver README > "Gestão de Desempenho" para as
 // regras de negócio por trás de cada fórmula.
 
-import { mesesCompletos } from "./dates";
 import type {
   AvaliacaoDesempenho,
   Colaborador,
@@ -204,21 +203,24 @@ export function validarConfigAvaliacaoDesempenho(
   return { ok: true };
 }
 
-/** Elegibilidade pra Avaliação de Desempenho: colaborador ativo com 6 meses
- * completos de empresa até a data de corte do ciclo (inicialmente, a data de
- * encerramento do período avaliado). Colaborador não elegível não recebe
- * nenhuma ficha — o motivo é registrado no log de auditoria do ciclo. */
+/** Elegibilidade pra Avaliação de Desempenho: colaborador ativo com admissão
+ * em ou antes da data de corte definida pelo RH na abertura do ciclo
+ * (`CicloAvaliacaoDesempenho.dataCorteAdmissao`) — comparação direta de data,
+ * não mais "6 meses completos de empresa até o encerramento do ciclo" (regra
+ * antiga: dependia de quando o ciclo fechava, e podia incluir por engano
+ * quem foi admitido depois do período avaliado se o ciclo demorasse pra
+ * encerrar). Colaborador não elegível não recebe nenhuma ficha — o motivo é
+ * registrado no log de auditoria do ciclo. */
 export function elegivelParaCicloAvaliacaoDesempenho(
   colaborador: Colaborador,
-  dataCorteIso: string,
+  dataCorteAdmissaoIso: string,
 ): { elegivel: boolean; motivo?: string } {
   if (colaborador.desligado) return { elegivel: false, motivo: "Colaborador desligado" };
 
-  const meses = mesesCompletos(colaborador.admissaoIso, dataCorteIso);
-  if (meses < 6) {
+  if (!colaborador.admissaoIso || colaborador.admissaoIso > dataCorteAdmissaoIso) {
     return {
       elegivel: false,
-      motivo: `Menos de 6 meses completos de empresa na data de corte (${meses} ${meses === 1 ? "mês" : "meses"})`,
+      motivo: `Admissão (${colaborador.admissaoIso || "não informada"}) posterior à data de corte do ciclo (${dataCorteAdmissaoIso})`,
     };
   }
   return { elegivel: true };

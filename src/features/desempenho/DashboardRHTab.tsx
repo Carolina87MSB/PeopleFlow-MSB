@@ -21,7 +21,7 @@ import { Matriz9BoxDistribuicao } from "./Matriz9BoxDistribuicao";
 import { RankingLista } from "./RankingLista";
 import styles from "./DashboardDesempenho.module.css";
 
-const STATUS_AVALIACAO: (StatusAvaliacaoDesempenho | "Todos")[] = ["Todos", "Não iniciada", "Em andamento", "Concluída"];
+const STATUS_AVALIACAO: (StatusAvaliacaoDesempenho | "Todos")[] = ["Todos", "Não iniciada", "Em andamento", "Concluída", "Não Elegível"];
 
 /** Dashboard do RH (Etapa 8) — painel gerencial, empresa toda
  * (`colaboradoresListagem`, que já dá visão total ao RH). Read-only,
@@ -120,7 +120,7 @@ export function DashboardRHTab() {
   const kpis = useMemo(() => mediasPorKpi(fichasConcluidas), [fichasConcluidas]);
   const kpisComCargo = useMemo(() => kpis.map((k) => ({ nome: `${k.nome} (${formatarNomeCargo(k.cargo)})`, media: k.media })), [kpis]);
 
-  const avaliacoesPendentes = fichasFiltradas.filter((f) => f.status !== "Concluída").length;
+  const avaliacoesPendentes = fichasFiltradas.filter((f) => f.status !== "Concluída" && f.status !== "Não Elegível").length;
   const avaliacoesHomologadas = fichasHomologadas.length;
   const devolutivasPendentes = fichasHomologadas.filter((f) => !f.devolutivaRealizada).length;
 
