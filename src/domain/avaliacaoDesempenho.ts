@@ -240,6 +240,36 @@ export function arredondar(valor: number | null, casas = 1): number | null {
   return Math.round(valor * fator) / fator;
 }
 
+export interface NotaLiderancaPorCiclo {
+  cicloId: string;
+  ciclo: string;
+  mediaFinal: number;
+  quantidadeAvaliacoes: number;
+}
+
+/** Notas agregadas de Liderança recebidas por um líder — 1 valor por ciclo,
+ * média das fichas LIDERANCA já concluídas em que ele é o avaliado. É a
+ * ÚNICA visão que o líder avaliado tem sobre a própria Avaliação de
+ * Liderança — a ficha crua (respostas individuais/comentários) é
+ * RH/Diretoria-only (ver avaliacoesDesempenhoVisiveis em usePortalData.ts),
+ * pra nunca expor quem respondeu o quê. Ciclo sem nenhuma ficha concluída
+ * ainda não entra no resultado (nada a mostrar, em vez de 0). */
+export function notasLiderancaPorCiclo(avaliacoes: AvaliacaoDesempenho[], liderNome: string): NotaLiderancaPorCiclo[] {
+  const porCiclo = new Map<string, { ciclo: string; notas: number[] }>();
+  for (const a of avaliacoes) {
+    if (a.tipo !== "LIDERANCA" || a.avaliado !== liderNome || a.status !== "Concluída" || a.notaFinal === null) continue;
+    const entrada = porCiclo.get(a.cicloId) ?? { ciclo: a.ciclo, notas: [] };
+    entrada.notas.push(a.notaFinal);
+    porCiclo.set(a.cicloId, entrada);
+  }
+  return Array.from(porCiclo.entries()).map(([cicloId, { ciclo, notas }]) => ({
+    cicloId,
+    ciclo,
+    mediaFinal: arredondar(notas.reduce((soma, n) => soma + n, 0) / notas.length, 1) as number,
+    quantidadeAvaliacoes: notas.length,
+  }));
+}
+
 /** Lista textual do que falta preencher pra poder concluir a avaliação —
  * exibida ao gestor em vez de só desabilitar o botão em silêncio. Usa o
  * nome congelado no próprio `resultado`; `competencias`/`kpis` (catálogo

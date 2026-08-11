@@ -31,6 +31,7 @@ export function DashboardGestorTab() {
     ciclosAvaliacaoDesempenho,
     pdi,
     configAvaliacaoDesempenho,
+    notasLiderancaVisiveis,
   } = usePortalData();
 
   const [cicloId, setCicloId] = useState(() => ciclosAvaliacaoDesempenho[0]?.id ?? "");
@@ -211,6 +212,25 @@ export function DashboardGestorTab() {
         <Card>
           <h3 className={styles.cardTitle}>Distribuição da equipe na Matriz 9 Box</h3>
           <Matriz9BoxDistribuicao distribuicao={distMatriz9Box} />
+        </Card>
+
+        <Card>
+          <h3 className={styles.cardTitle}>Minha nota de Liderança (recebida da equipe)</h3>
+          {notasLiderancaVisiveis.length === 0 ? (
+            <p className={styles.semDados}>Sem avaliações de liderança concluídas ainda.</p>
+          ) : (
+            <ul className={styles.notasLideranca}>
+              {notasLiderancaVisiveis.map((n) => (
+                <li key={n.cicloId}>
+                  <span>{n.ciclo}</span>
+                  <strong>{n.mediaFinal.toFixed(1)}</strong>
+                  <span className={styles.notasLiderancaContagem}>
+                    {n.quantidadeAvaliacoes} {n.quantidadeAvaliacoes === 1 ? "avaliação" : "avaliações"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <Card className={styles.spanAll}>

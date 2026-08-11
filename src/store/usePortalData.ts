@@ -55,8 +55,10 @@ import {
   gerarIdCicloAvaliacaoDesempenho,
   mediaAfirmacoes,
   notaKpi,
+  notasLiderancaPorCiclo,
   validarConfigAvaliacaoDesempenho,
 } from "../domain/avaliacaoDesempenho";
+import type { NotaLiderancaPorCiclo } from "../domain/avaliacaoDesempenho";
 import { gerarIdPdiAcao, gerarIdPdiItem, sugerirObjetivoEAcoes, validarNotaMinimaPdi } from "../domain/pdi";
 import { PERGUNTAS_POTENCIAL, calcularNotaPotencial, gerarIdAvaliacaoPotencial } from "../domain/avaliacaoPotencial";
 import { validarLimiaresMatriz9Box } from "../domain/matriz9Box";
@@ -167,6 +169,7 @@ export interface PortalData {
   avaliacoesDesempenho: AvaliacaoDesempenho[];
   /** RH vê todas; Gestor só as de colaboradores com `gestor === conta.nome` (reporte direto). */
   avaliacoesDesempenhoVisiveis: AvaliacaoDesempenho[];
+  notasLiderancaVisiveis: NotaLiderancaPorCiclo[];
   ciclosAvaliacaoDesempenho: CicloAvaliacaoDesempenho[];
   criarCicloAvaliacaoDesempenho: (form: NovoCicloAvaliacaoForm) => Promise<{ ok: true; quantidade: number } | { ok: false }>;
   /** Trava todas as avaliações do ciclo (mesmo as "Em andamento") — sem reabertura nesta etapa. */
@@ -361,6 +364,18 @@ export function usePortalData(): PortalData {
     const semNaoElegivel = state.avaliacoesDesempenho.filter((a) => a.status !== "Não Elegível");
     if (perfil === "RH") return semNaoElegivel;
     return semNaoElegivel.filter((a) => {
+      // Ficha LIDERANCA (liderado avalia o próprio líder): a ficha crua (com
+      // respostas/comentários individuais) só é visível pro RH (linha acima)
+      // e pra Diretoria — nunca pro líder avaliado, mesmo sendo "gestor" de
+      // quem preencheu (a checagem genérica abaixo daria falso-positivo
+      // nesse caso específico: o líder AVALIADO é sempre gestor do liderado
+      // que preencheu). O líder avaliado só recebe as notas agregadas, em
+      // separado (ver notasLiderancaVisiveis). Quem preencheu continua vendo
+      // a própria ficha sempre.
+      if (a.tipo === "LIDERANCA") {
+        if (perfil === "Diretoria") return true;
+        return a.colaboradorNome === me;
+      }
       if (a.colaboradorNome === me) {
         if (a.tipo === "GESTOR") return perfil !== "Colaborador";
         return true;
@@ -368,6 +383,16 @@ export function usePortalData(): PortalData {
       return colaboradorPorNome.get(a.colaboradorNome)?.gestor === me;
     });
   }, [state.avaliacoesDesempenho, colaboradorPorNome, perfil, me]);
+
+  // Única visão que o líder avaliado tem da própria Avaliação de Liderança:
+  // 1 média por ciclo, nunca a ficha individual (ver comentário acima em
+  // avaliacoesDesempenhoVisiveis). Lida direto de `state.avaliacoesDesempenho`
+  // (não da lista já filtrada), já que o agregado em si é seguro de expor —
+  // só a ficha crua que precisa ficar restrita.
+  const notasLiderancaVisiveis = useMemo(
+    () => notasLiderancaPorCiclo(state.avaliacoesDesempenho, me),
+    [state.avaliacoesDesempenho, me],
+  );
 
   const podeEditarAvaliacaoDesempenhoFn = useCallback(
     (avaliacao: AvaliacaoDesempenho) => {
@@ -1609,6 +1634,7 @@ export function usePortalData(): PortalData {
     competenciasComportamentais: state.competenciasComportamentais,
     salvarCompetenciaComportamental: salvarCompetenciaComportamentalFn,
     avaliacoesDesempenhoVisiveis,
+    notasLiderancaVisiveis,
     ciclosAvaliacaoDesempenho: state.ciclosAvaliacaoDesempenho,
     criarCicloAvaliacaoDesempenho: criarCicloAvaliacaoDesempenhoFn,
     encerrarCicloAvaliacaoDesempenho: encerrarCicloAvaliacaoDesempenhoFn,
