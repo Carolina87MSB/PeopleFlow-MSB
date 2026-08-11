@@ -77,3 +77,31 @@
   bottom: 0;
   background: #fff;
 }
+
+@media (max-width: 700px) {
+  .overlay {
+    padding: 12px;
+    align-items: flex-start;
+  }
+
+  .dialog {
+    max-height: calc(100vh - 24px);
+  }
+
+  .header {
+    padding: 18px 18px 14px;
+  }
+
+  .body {
+    padding: 16px 18px;
+  }
+
+  .footer {
+    padding: 14px 18px 18px;
+    flex-wrap: wrap;
+  }
+
+  .footer > * {
+    flex: 1;
+  }
+}

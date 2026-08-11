@@ -3,7 +3,13 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
-  overflow: hidden;
+  /* overflow-x: auto (não "hidden") — tabela mais larga que a tela agora
+   * rola em vez de ser cortada; overflow-y continua "hidden" só pra manter
+   * o recorte do border-radius nos cantos (não há altura fixa aqui, então
+   * nunca corta linha nenhuma verticalmente). */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table {

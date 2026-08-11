@@ -13,6 +13,7 @@ import {
   Target,
   UserMinus,
   Users,
+  X,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { agregarCargos, agregarDepartamentos } from "../../domain/agregados";
@@ -33,7 +34,14 @@ function NavItem({ to, icon, label, badge, badgeTone }: { to: string; icon: Reac
   );
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  /** Controla o menu off-canvas em telas ≤1024px (ver AppShell.tsx) — sem
+   * efeito acima desse breakpoint, onde a sidebar já é sempre visível. */
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export function Sidebar({ open, onClose }: SidebarProps) {
   const { logout } = useAuth();
   const { state } = usePortalStore();
   const {
@@ -56,7 +64,7 @@ export function Sidebar() {
   // AppShell já bloqueia pra esse perfil.
   if (conta?.perfil === "Colaborador") {
     return (
-      <aside className={styles.sidebar}>
+      <aside className={[styles.sidebar, open ? styles.open : ""].join(" ")}>
         <div className={styles.brand}>
           <img src="/assets/msb-logo.png" alt="MSB — Medical System do Brasil" className={styles.logo} />
           <div className={styles.brandRow}>
@@ -66,9 +74,12 @@ export function Sidebar() {
               <div className={styles.brandSub}>Avaliação de Desempenho</div>
             </div>
           </div>
+          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Fechar menu">
+            <X size={18} strokeWidth={2} />
+          </button>
         </div>
 
-        <nav className={styles.nav}>
+        <nav className={styles.nav} onClick={onClose}>
           <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Minhas Avaliações" />
         </nav>
 
@@ -90,7 +101,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={[styles.sidebar, open ? styles.open : ""].join(" ")}>
       <div className={styles.brand}>
         <img src="/assets/msb-logo.png" alt="MSB — Medical System do Brasil" className={styles.logo} />
         <div className={styles.brandRow}>
@@ -100,9 +111,12 @@ export function Sidebar() {
             <div className={styles.brandSub}>Movimentações de Pessoal</div>
           </div>
         </div>
+        <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Fechar menu">
+          <X size={18} strokeWidth={2} />
+        </button>
       </div>
 
-      <nav className={styles.nav}>
+      <nav className={styles.nav} onClick={onClose}>
         <div className={styles.sectionLabel}>Visão geral</div>
         <NavItem to="/dashboard" icon={<LayoutDashboard size={18} strokeWidth={1.9} />} label="Dashboard" />
 

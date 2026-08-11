@@ -16,6 +16,14 @@
   cursor: not-allowed;
 }
 
+/* Alvo de toque recomendado (~44px) em telas de celular — acima disso o
+ * padding normal já é confortável pra clique de mouse. */
+@media (max-width: 700px) {
+  .button {
+    min-height: 44px;
+  }
+}
+
 .primary {
   background: var(--color-brand);
   color: #fff;
