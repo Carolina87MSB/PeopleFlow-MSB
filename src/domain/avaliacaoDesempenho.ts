@@ -240,6 +240,27 @@ export function arredondar(valor: number | null, casas = 1): number | null {
   return Math.round(valor * fator) / fator;
 }
 
+/** Converte o texto digitado no campo "Resultado obtido" de um KPI pro
+ * número armazenado. Aceita vírgula OU ponto como separador decimal e
+ * ignora um "%" opcional em qualquer posição (decorativo — a unidade já
+ * vem de KpiCargo.unidadeMedida, ver KpiCargoDrawer.tsx) — nunca multiplica
+ * ou divide por 100: o resultado fica sempre na mesma escala da meta (ex.:
+ * meta cadastrada como 98%, resultado real de 42,5% → armazenado 42.5, não
+ * 0.425 nem 4250). */
+export function parseResultadoKpi(valor: string): number | null {
+  const limpo = valor.trim().replace(/%/g, "").replace(",", ".");
+  if (limpo === "") return null;
+  const n = Number(limpo);
+  return Number.isNaN(n) ? null : n;
+}
+
+/** Inverso de parseResultadoKpi() pra exibir o valor já salvo no campo de
+ * texto — formata com vírgula (padrão pt-BR), sem arredondar (nunca perder
+ * um dígito que o gestor digitou só por reabrir a ficha depois). */
+export function formatarResultadoKpi(valor: number | null): string {
+  return valor === null ? "" : String(valor).replace(".", ",");
+}
+
 export interface NotaLiderancaPorCiclo {
   cicloId: string;
   ciclo: string;

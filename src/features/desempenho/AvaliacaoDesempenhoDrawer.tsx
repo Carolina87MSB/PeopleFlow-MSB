@@ -5,9 +5,11 @@ import {
   avaliacaoCompleta,
   calcularNotasAvaliacao,
   ESCALA_COMPORTAMENTAL,
+  formatarResultadoKpi,
   itensPendentes,
   mediaAfirmacoes,
   notaKpi,
+  parseResultadoKpi,
   percentualAtingimentoKpi,
 } from "../../domain/avaliacaoDesempenho";
 import { formatarDataHora, formatarHoraAtual } from "../../domain/dates";
@@ -59,6 +61,18 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
     resultadosComportamentais: avaliacao.resultadosComportamentais.map((r) => ({ ...r, notasAfirmacoes: [...r.notasAfirmacoes] })),
     resultadosKpis: avaliacao.resultadosKpis.map((r) => ({ ...r })),
   }));
+  // Texto exatamente como o gestor digita em cada campo "Resultado obtido" —
+  // NUNCA lido de volta do número já convertido (isso é o que causava vírgula/
+  // ponto/"%" sendo engolidos a cada tecla: o input reexibia o valor já
+  // arredondado/convertido pelo Number(), então cada novo caractere digitado
+  // se combinava com um número "errado", tipo 0,425 virando 42500). O número
+  // usado no cálculo (`rascunho.resultadosKpis[...].resultado`) é atualizado à
+  // parte, em paralelo — ver atualizarResultadoKpi().
+  const [resultadoTexto, setResultadoTexto] = useState<Record<number, string>>(() => {
+    const mapa: Record<number, string> = {};
+    for (const r of avaliacao.resultadosKpis) mapa[r.kpiId] = formatarResultadoKpi(r.resultado);
+    return mapa;
+  });
   const [salvando, setSalvando] = useState<"progresso" | "concluir" | null>(null);
   const [sujo, setSujo] = useState(false);
   const [salvandoAuto, setSalvandoAuto] = useState(false);
@@ -121,11 +135,12 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
     setSujo(true);
   }
 
-  function atualizarResultadoKpi(kpiId: number, valor: string) {
-    const resultado = valor.trim() === "" ? null : Number(valor.replace(",", "."));
+  function atualizarResultadoKpi(kpiId: number, valorTexto: string) {
+    setResultadoTexto((t) => ({ ...t, [kpiId]: valorTexto }));
+    const resultado = parseResultadoKpi(valorTexto);
     setRascunho((r) => ({
       ...r,
-      resultadosKpis: r.resultadosKpis.map((res) => (res.kpiId === kpiId ? { ...res, resultado: Number.isNaN(resultado) ? null : resultado } : res)),
+      resultadosKpis: r.resultadosKpis.map((res) => (res.kpiId === kpiId ? { ...res, resultado } : res)),
     }));
     setSujo(true);
   }
@@ -271,7 +286,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
                   <input
                     id={`kpi-resultado-${resultado.kpiId}`}
                     className={styles.input}
-                    value={resultado.resultado ?? ""}
+                    value={resultadoTexto[resultado.kpiId] ?? ""}
                     onChange={(e) => atualizarResultadoKpi(resultado.kpiId, e.target.value)}
                     disabled={!podeEditar}
                     inputMode="decimal"
