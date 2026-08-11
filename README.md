@@ -365,3 +365,17 @@ Os dois portais MSB usam o **mesmo projeto Supabase**, mas cada um só lê/escre
 | `peopleflow_descricoes_cargo_historico` | Portal PeopleFlow | Só PeopleFlow | Só PeopleFlow — log append-only, uma linha por campo editado em `peopleflow_descricoes_cargo` |
 
 Isso significa: **qualquer pessoa cadastrada no SST também aparece automaticamente no PeopleFlow** (mesmo nome/cargo/departamento), mas só consegue **entrar** no PeopleFlow se tiver uma conta Supabase Auth provisionada (passo 2 acima) — ter conta no SST não dá acesso automático ao PeopleFlow, e vice-versa.
+
+## Responsividade
+
+Passe completo de otimização mobile/tablet — só CSS/layout, nenhuma regra de negócio, cálculo, schema ou fluxo mudou. Dois breakpoints usados em todo o portal (consistentes com o que já existia antes deste passe, ex.: `DepartamentosPage.module.css`):
+- **`@media (max-width: 1024px)`** — tablet: sidebar recolhe pra menu off-canvas, grids de 3-4 colunas caem pra 2.
+- **`@media (max-width: 700px)`** — celular: grids caem pra 1 coluna, filtros/formulários empilham em largura total. Dentro de Modal/Drawer (contexto já mais estreito) alguns grids usam `480px`/`560px` como limite próprio, já que o container em si é bem menor que a página.
+
+**Menu off-canvas** (`components/layout/Sidebar.tsx` + `AppShell.tsx`) — a sidebar (`width: 256px`, sempre visível) não tinha nenhum mecanismo de recolher. Acima de 1024px, comportamento idêntico ao de sempre (nenhuma mudança). Abaixo de 1024px, `Sidebar` recebe `open`/`onClose` de `AppShell` (`useState` local, só controla exibição): vira `position: fixed`, desliza por `transform: translateX(...)` com um overlay escurecido atrás, e um botão hambúrguer novo (`.mobileMenuBtn`, também só ≤1024px) abre o menu. Fecha ao clicar num link, no botão X, no overlay, ou ao trocar de rota (`useEffect` em `AppShell.tsx`).
+
+**Tabelas** (`components/ui/Table.module.css`) — `.wrap` usava `overflow: hidden`, cortando (não rolando) qualquer tabela mais larga que a tela; virou `overflow-x: auto` — resolve as ~18 páginas que reaproveitam `tableStyles`, sem precisar tocar em nenhuma delas individualmente.
+
+**Componentes compartilhados** — `Button` ganha `min-height: 44px` (alvo de toque) só ≤700px; `Modal`/`Drawer` ganham padding mais compacto ≤700px (`max-width: 100%` já existia, sempre funcionou); `Header`/`AppShell .content` reduzem padding e empilham `.actions` em coluna ≤700px.
+
+**Matrizes 2D** (Matriz 9 Box, `Matriz9BoxTab.module.css`/`Matriz9BoxDistribuicao.module.css`) — deliberadamente **não** colapsam pra 1 coluna (perderiam o sentido como grid 3×3); mantêm `overflow-x: auto` própria, já existente, só com `-webkit-overflow-scrolling: touch` adicionado.

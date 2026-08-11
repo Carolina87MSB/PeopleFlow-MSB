@@ -1,6 +1,7 @@
 .filtersRow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin: 14px 0 16px;
 }
@@ -15,6 +16,7 @@
   padding: 10px 14px;
   color: var(--color-muted-light);
   flex: 1;
+  min-width: 200px;
   max-width: 360px;
 }
 
@@ -35,6 +37,15 @@
   color: var(--color-text);
   background: #fff;
   min-width: 220px;
+}
+
+@media (max-width: 700px) {
+  .search,
+  .select {
+    flex: 1 1 100%;
+    max-width: none;
+    min-width: 0;
+  }
 }
 
 .pessoa {

@@ -4,6 +4,11 @@
   margin: 14px 0 20px;
   border-bottom: 1px solid var(--color-divider);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* Esmaece as bordas quando há mais abas fora da tela (RH chega a ver até
+   * 12 abas) — dica visual de que dá pra arrastar, sem precisar de seta. */
+  mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
 }
 
 .aba,

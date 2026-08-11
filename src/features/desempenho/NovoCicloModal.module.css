@@ -36,6 +36,12 @@
   gap: 12px;
 }
 
+@media (max-width: 480px) {
+  .linhaDatas {
+    grid-template-columns: 1fr;
+  }
+}
+
 .ajuda {
   margin: 0;
   font-size: 11.5px;

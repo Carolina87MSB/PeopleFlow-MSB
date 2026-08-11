@@ -42,6 +42,7 @@
   grid-template-columns: 130px repeat(3, minmax(180px, 1fr));
   gap: 8px;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .eixoCanto {

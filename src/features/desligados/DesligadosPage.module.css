@@ -71,6 +71,12 @@
   gap: 12px;
 }
 
+@media (max-width: 480px) {
+  .financeiroGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .campo {
   display: flex;
   flex-direction: column;

@@ -261,3 +261,21 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 700px) {
+  .detalheHeader {
+    padding: 16px 18px;
+  }
+
+  .detalheBody {
+    padding: 18px;
+  }
+
+  .detalheHeaderTop {
+    flex-wrap: wrap;
+  }
+
+  .detalheHeaderRight {
+    text-align: left;
+  }
+}

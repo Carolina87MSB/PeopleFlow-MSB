@@ -110,6 +110,12 @@
   gap: 8px;
 }
 
+@media (max-width: 560px) {
+  .linhaFormulario {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .input,
 .inputPequeno,
 .textarea {

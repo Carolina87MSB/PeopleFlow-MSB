@@ -343,3 +343,24 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 700px) {
+  .kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .search,
+  .select {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .periodoCampo {
+    width: 100%;
+  }
+
+  .deptName {
+    width: auto;
+    flex: 1;
+  }
+}
