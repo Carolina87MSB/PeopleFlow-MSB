@@ -7,16 +7,20 @@ export function norm(s: string): string {
   return (s || "").normalize("NFD").replace(DIACRITICS, "").toLowerCase();
 }
 
-/** Sobrenomes compostos (grafados com espaço no cadastro, ex.: "Sant Ana")
- * que a heurística de primeiro+último nome de emailOf() erra — mapeados pelo
- * nome completo normalizado para o e-mail corporativo correto. Também usado
- * para as 2 exceções pontuais de domínio (Daiana/Pedro, e-mail corporativo
- * de "Biomedical", empresa afiliada — não é uma liberação geral do domínio
+/** Exceções pontuais em que a heurística de primeiro+último nome de
+ * emailOf() não bate com o e-mail corporativo real da pessoa — mapeadas
+ * pelo nome completo normalizado. 3 motivos diferentes já cobertos aqui:
+ * sobrenome composto grafado com espaço no cadastro (Tassio, "Sant Ana");
+ * e-mail real usa o nome do meio, não o último sobrenome (Janete → Carvalho,
+ * Bruna → Santos); e domínio corporativo diferente, de empresa afiliada
+ * (Daiana/Pedro, "Biomedical" — não é uma liberação geral do domínio
  * @biomedical.com.br, ver EMAILS_PERMITIDOS_FORA_DO_DOMINIO em AuthContext.tsx). */
 const EMAIL_OVERRIDES: Record<string, string> = {
   "tassio antonio lima sant ana": "tassio.santana@msbbrasil.com",
   "daiana pereira leite": "daiana.leite@biomedical.com.br",
   "pedro henrique lages rocha": "pedro.rocha@biomedical.com.br",
+  "janete carvalho de jesus": "janete.carvalho@msbbrasil.com",
+  "bruna santos nascimento": "bruna.santos@msbbrasil.com",
 };
 
 export function emailOf(nome: string): string {
