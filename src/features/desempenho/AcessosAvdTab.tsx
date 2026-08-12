@@ -38,7 +38,12 @@ export function AcessosAvdTab() {
     try {
       const { jaExistia } = await provisionarAcesso(email);
       flash(jaExistia ? "Esse e-mail já tinha acesso provisionado." : `Acesso liberado para ${email}.`);
-      setContas((atual) => atual?.map((c) => (c.email === email ? { ...c, provisionado: true } : c)) ?? atual);
+      // Recarrega do servidor em vez de só marcar "provisionado" localmente —
+      // a chamada pode retornar sucesso sem o e-mail ficar de fato utilizável
+      // pro login (ex.: usuário criado no Supabase Auth sem identidade de
+      // e-mail associada); recarregar garante que o badge só mostra
+      // "Provisionado" quando listar-acessos-avd.ts confirma de novo.
+      carregar();
     } catch (err) {
       flash(err instanceof Error ? err.message : "Falha ao liberar acesso.");
     } finally {
