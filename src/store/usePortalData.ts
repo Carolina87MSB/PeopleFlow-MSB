@@ -73,7 +73,14 @@ import { descendants, ehDiretorIndustrial } from "../domain/hierarquia";
 import { notificacaoConcluida, notificacaoNovaEtapa, notificacaoReprovada } from "../domain/notificacoes";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
-import { aprovarEtapa as aprovarEtapaDomain, etapaAtual, reprovarEtapa as reprovarEtapaDomain } from "../domain/workflow";
+import {
+  aprovarEtapa as aprovarEtapaDomain,
+  editarDadosMovimentacao as editarDadosMovimentacaoDomain,
+  type EdicaoDadoMovimentacao,
+  etapaAtual,
+  reabrirParaRH,
+  reprovarEtapa as reprovarEtapaDomain,
+} from "../domain/workflow";
 import { usePortalStore } from "./PortalStoreContext";
 import { useConta } from "./useConta";
 import type {
@@ -133,6 +140,14 @@ export interface PortalData {
   loading: boolean;
   aprovarEtapa: (id: string) => void;
   reprovarEtapa: (id: string, comentario: string) => void;
+  /** RH-only — só tem efeito quando a última etapa (RH) é quem reprovou (ver
+   * reprovadaPeloRH() em domain/workflow.ts); devolve a movimentação para
+   * "Em Aprovação" com a etapa de RH de volta em "Em análise". */
+  restaurarMovimentacaoParaRH: (id: string) => void;
+  /** RH-only — corrige campos de exibição (`dados`) de uma movimentação
+   * ainda em aberto (hoje só Salário/Data prevista, ver MovimentacaoDetalhe.tsx);
+   * grava cada mudança no histórico da movimentação. */
+  editarDadosMovimentacao: (id: string, edicoes: EdicaoDadoMovimentacao[], novaDataPrevistaIso?: string) => void;
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   toggleDescricaoCargo: (nome: string) => void;
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
@@ -573,6 +588,42 @@ export function usePortalData(): PortalData {
       })();
     },
     [dispatch, state.movimentacoes, flash],
+  );
+
+  const restaurarMovimentacaoParaRHFn = useCallback(
+    (id: string) => {
+      const movimentacoes = reabrirParaRH(state.movimentacoes, id, me);
+      const atualizada = movimentacoes.find((m) => m.id === id);
+      if (!atualizada) return;
+      (async () => {
+        try {
+          await atualizarMovimentacao(atualizada);
+          dispatch({ type: "REABRIR_MOVIMENTACAO_RH", id, autor: me });
+          flash("Movimentação restaurada para nova análise do RH.");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao restaurar movimentação.");
+        }
+      })();
+    },
+    [dispatch, state.movimentacoes, flash, me],
+  );
+
+  const editarDadosMovimentacaoFn = useCallback(
+    (id: string, edicoes: EdicaoDadoMovimentacao[], novaDataPrevistaIso?: string) => {
+      const movimentacoes = editarDadosMovimentacaoDomain(state.movimentacoes, id, edicoes, novaDataPrevistaIso, me);
+      const atualizada = movimentacoes.find((m) => m.id === id);
+      if (!atualizada) return;
+      (async () => {
+        try {
+          await atualizarMovimentacao(atualizada);
+          dispatch({ type: "EDITAR_DADOS_MOVIMENTACAO", id, edicoes, novaDataPrevistaIso, autor: me });
+          flash("Alterações salvas na movimentação.");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao salvar alterações.");
+        }
+      })();
+    },
+    [dispatch, state.movimentacoes, flash, me],
   );
 
   const toggleDescricaoCargoFn = useCallback(
@@ -1641,6 +1692,8 @@ export function usePortalData(): PortalData {
     loading,
     aprovarEtapa: aprovarEtapaFn,
     reprovarEtapa: reprovarEtapaFn,
+    restaurarMovimentacaoParaRH: restaurarMovimentacaoParaRHFn,
+    editarDadosMovimentacao: editarDadosMovimentacaoFn,
     criarMovimentacao: criarMovimentacaoFn,
     toggleDescricaoCargo: toggleDescricaoCargoFn,
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,

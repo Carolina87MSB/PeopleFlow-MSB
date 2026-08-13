@@ -80,6 +80,16 @@ comment on column public.peopleflow_movimentacoes.atualizacao_info is 'Atualizac
 comment on column public.peopleflow_movimentacoes.desligamento_info is 'DesligamentoInfo (nome/motivo/dataIso) — só para tipo_cod = DES. Fixado na criação, nunca muda depois.';
 comment on column public.peopleflow_movimentacoes.sincronizado_em is 'Quando a sincronização de cargo/departamento/gestor com `colaboradores` foi de fato aplicada (PRO/TRF). Null = aprovada mas ainda não efetivada — respeita a "Data prevista" em atualizacao_info.dataPrevistaIso antes de aplicar.';
 
+-- Trilha de reabertura (RH reprova → RH restaura para nova análise) e de
+-- edição pontual de campos de `dados` (ex.: corrigir Salário/Data prevista
+-- antes de reanalisar) — ver EventoHistoricoMovimentacao em
+-- src/types/domain.ts e reabrirParaRH()/editarDadosMovimentacao() em
+-- src/domain/workflow.ts. Nunca sobrescrito, só anexado.
+alter table public.peopleflow_movimentacoes
+  add column if not exists historico jsonb not null default '[]'::jsonb;
+
+comment on column public.peopleflow_movimentacoes.historico is 'Array de { data, hora, autor, acao, detalhe } — reaberturas e edições pós-criação, nunca apagado.';
+
 create table if not exists public.peopleflow_cargos_custom (
   nome text primary key,
   depto text not null,

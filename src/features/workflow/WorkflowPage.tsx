@@ -7,7 +7,7 @@ import { ReprovarModal } from "../../components/shared/ReprovarModal";
 import { useToast } from "../../components/shared/ToastContext";
 import { Badge, Button, Card, Drawer, EmptyState, FilterChips, StatusBadge } from "../../components/ui";
 import { prioMeta, tipoColor } from "../../domain/colors";
-import { etapaAtual, podeAgir } from "../../domain/workflow";
+import { etapaAtual, podeAgir, reprovadaPeloRH } from "../../domain/workflow";
 import { usePortalData } from "../../store/usePortalData";
 import type { Etapa, EtapaStatus, Movimentacao } from "../../types/domain";
 import styles from "./WorkflowPage.module.css";
@@ -70,7 +70,8 @@ function comentarioParaExibir(m: Movimentacao): Etapa | undefined {
 }
 
 export function WorkflowPage() {
-  const { conta, movimentacoesVisiveis, podeCriar, aprovarEtapa, reprovarEtapa } = usePortalData();
+  const { conta, perfil, movimentacoesVisiveis, podeCriar, aprovarEtapa, reprovarEtapa, restaurarMovimentacaoParaRH, editarDadosMovimentacao } =
+    usePortalData();
   const { flash } = useToast();
   const [modalAberto, setModalAberto] = useState(false);
   const [filtro, setFiltro] = useState<string>("Em Aprovação");
@@ -111,6 +112,14 @@ export function WorkflowPage() {
     flash("Movimentação reprovada e registrada na trilha.");
     setReprovandoId(null);
   }
+
+  function handleRestaurar(id: string) {
+    restaurarMovimentacaoParaRH(id);
+  }
+
+  const detalheEditavel = Boolean(
+    movimentacaoDetalhe && perfil === "RH" && movimentacaoDetalhe.status === "Em Aprovação" && etapaAtual(movimentacaoDetalhe)?.papel === "RH",
+  );
 
   return (
     <>
@@ -225,6 +234,14 @@ export function WorkflowPage() {
                     <div>{comentarioEtapa.comentario}</div>
                   </div>
                 )}
+
+                {m.status === "Reprovado" && reprovadaPeloRH(m) && perfil === "RH" && (
+                  <div className={styles.actionsRow}>
+                    <Button variant="secondary" onClick={() => handleRestaurar(m.id)}>
+                      Restaurar para análise do RH
+                    </Button>
+                  </div>
+                )}
               </Card>
             );
           })}
@@ -235,7 +252,11 @@ export function WorkflowPage() {
 
       {movimentacaoDetalhe && (
         <Drawer onClose={() => setDetalheId(null)} header={<div className={styles.drawerHeaderTitulo}>Detalhes da movimentação</div>}>
-          <MovimentacaoDetalhe movimentacao={movimentacaoDetalhe} />
+          <MovimentacaoDetalhe
+            movimentacao={movimentacaoDetalhe}
+            editavel={detalheEditavel}
+            onSalvarEdicoes={(edicoes, novaDataPrevistaIso) => editarDadosMovimentacao(movimentacaoDetalhe.id, edicoes, novaDataPrevistaIso)}
+          />
         </Drawer>
       )}
 

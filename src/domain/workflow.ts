@@ -1,6 +1,15 @@
 import { formatarDataAtual, formatarHoraAtual } from "./dates";
 import { ehCEO, roleApprover } from "./hierarquia";
-import type { AdmissaoInfo, AtualizacaoCargoDeptoInfo, Colaborador, DesligamentoInfo, Etapa, Movimentacao, TipoMovimentacao } from "../types/domain";
+import type {
+  AdmissaoInfo,
+  AtualizacaoCargoDeptoInfo,
+  Colaborador,
+  DesligamentoInfo,
+  Etapa,
+  EventoHistoricoMovimentacao,
+  Movimentacao,
+  TipoMovimentacao,
+} from "../types/domain";
 
 export function nextId(movimentacoes: Movimentacao[]): string {
   const nums = movimentacoes
@@ -116,6 +125,103 @@ export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comenta
     etapas[idx].hora = agora;
     etapas[idx].comentario = comentario;
     return { ...m, etapas, status: "Reprovado" };
+  });
+}
+
+/** true só quando quem reprovou foi a própria etapa de RH — a última de toda
+ * matriz (ver tiposMovimentacao.json, "RH" é sempre o último papel). É o
+ * único caso em que "restaurar para o RH" faz sentido: se quem reprovou foi
+ * Gestor Solicitante ou Diretor Industrial, a decisão de reabrir é daquela
+ * etapa, não do RH. */
+export function reprovadaPeloRH(m: Movimentacao): boolean {
+  if (m.status !== "Reprovado") return false;
+  const ultima = m.etapas[m.etapas.length - 1];
+  return Boolean(ultima && ultima.papel === "RH" && ultima.status === "Reprovado");
+}
+
+/** Reabre uma movimentação reprovada pelo próprio RH, devolvendo-a para "Em
+ * Aprovação" com a etapa de RH de volta em "Em análise" (limpa data/hora/
+ * comentário da tentativa anterior) — as etapas já aprovadas antes dela
+ * (Gestor Solicitante, Diretor Industrial) não são tocadas, então a
+ * movimentação não volta ao início do fluxo. O motivo da reprovação anterior
+ * é preservado no histórico, não perdido. */
+export function reabrirParaRH(movimentacoes: Movimentacao[], id: string, autor: string): Movimentacao[] {
+  const hoje = formatarDataAtual();
+  const agora = formatarHoraAtual();
+  return movimentacoes.map((m) => {
+    if (m.id !== id || !reprovadaPeloRH(m)) return m;
+    const idxRH = m.etapas.length - 1;
+    const motivoAnterior = m.etapas[idxRH].comentario;
+    const etapas = m.etapas.map((e, i) =>
+      i === idxRH ? { ...e, status: "Em análise" as const, data: "", hora: "", comentario: "" } : e,
+    );
+    const evento: EventoHistoricoMovimentacao = {
+      data: hoje,
+      hora: agora,
+      autor,
+      acao: "Movimentação restaurada para nova análise do RH",
+      detalhe: motivoAnterior ? `Motivo da reprovação anterior: "${motivoAnterior}"` : undefined,
+    };
+    return { ...m, status: "Em Aprovação", etapas, historico: [...(m.historico ?? []), evento] };
+  });
+}
+
+export interface EdicaoDadoMovimentacao {
+  label: string;
+  valorAnterior: string;
+  valorNovo: string;
+}
+
+/** Aplica edições pontuais a campos de exibição (`dados`) de uma
+ * movimentação — hoje só usado pelo RH pra corrigir Salário/Data prevista ao
+ * reabrir uma reprovação (ver reabrirParaRH()). Quando `novaDataPrevistaIso`
+ * vem preenchido, também atualiza o campo estruturado correspondente
+ * (atualizacaoInfo.dataPrevistaIso / admissaoInfo.admissaoIso /
+ * desligamentoInfo.dataIso) — são esses campos que de fato disparam a
+ * sincronização com `colaboradores`, então não podem ficar defasados em
+ * relação ao texto exibido em `dados`. Cada edição entra no histórico. */
+export function editarDadosMovimentacao(
+  movimentacoes: Movimentacao[],
+  id: string,
+  edicoes: EdicaoDadoMovimentacao[],
+  novaDataPrevistaIso: string | undefined,
+  autor: string,
+): Movimentacao[] {
+  if (edicoes.length === 0) return movimentacoes;
+  const hoje = formatarDataAtual();
+  const agora = formatarHoraAtual();
+
+  return movimentacoes.map((m) => {
+    if (m.id !== id) return m;
+
+    const dados = (m.dados ?? []).map((d) => {
+      const edicao = edicoes.find((e) => e.label === d.label);
+      return edicao ? { ...d, value: edicao.valorNovo } : d;
+    });
+
+    const historicoNovo: EventoHistoricoMovimentacao[] = edicoes.map((e) => ({
+      data: hoje,
+      hora: agora,
+      autor,
+      acao: `Campo "${e.label}" editado pelo RH`,
+      detalhe: `De "${e.valorAnterior}" para "${e.valorNovo}".`,
+    }));
+
+    const atualizacaoInfo =
+      novaDataPrevistaIso !== undefined && m.atualizacaoInfo ? { ...m.atualizacaoInfo, dataPrevistaIso: novaDataPrevistaIso } : m.atualizacaoInfo;
+    const admissaoInfo =
+      novaDataPrevistaIso !== undefined && m.admissaoInfo ? { ...m.admissaoInfo, admissaoIso: novaDataPrevistaIso } : m.admissaoInfo;
+    const desligamentoInfo =
+      novaDataPrevistaIso !== undefined && m.desligamentoInfo ? { ...m.desligamentoInfo, dataIso: novaDataPrevistaIso } : m.desligamentoInfo;
+
+    return {
+      ...m,
+      dados,
+      atualizacaoInfo,
+      admissaoInfo,
+      desligamentoInfo,
+      historico: [...(m.historico ?? []), ...historicoNovo],
+    };
   });
 }
 

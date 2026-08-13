@@ -6,7 +6,17 @@
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { SupabaseNotConfiguredError, atualizarCargoDepto } from "./colaboradoresRepository";
 import { hojeIso } from "../domain/dates";
-import type { AdmissaoInfo, AprovacaoFinal, AtualizacaoCargoDeptoInfo, DadoField, DesligamentoInfo, Etapa, Movimentacao, TipoCod } from "../types/domain";
+import type {
+  AdmissaoInfo,
+  AprovacaoFinal,
+  AtualizacaoCargoDeptoInfo,
+  DadoField,
+  DesligamentoInfo,
+  Etapa,
+  EventoHistoricoMovimentacao,
+  Movimentacao,
+  TipoCod,
+} from "../types/domain";
 
 interface MovimentacaoRow {
   id: string;
@@ -27,6 +37,7 @@ interface MovimentacaoRow {
   desligamento_info: DesligamentoInfo | null;
   aprovacao_final: AprovacaoFinal | null;
   sincronizado_em: string | null;
+  historico: EventoHistoricoMovimentacao[] | null;
   legado: boolean;
 }
 
@@ -50,6 +61,7 @@ function fromRow(row: MovimentacaoRow): Movimentacao {
     desligamentoInfo: row.desligamento_info ?? undefined,
     aprovacaoFinal: row.aprovacao_final ?? null,
     sincronizadoEm: row.sincronizado_em ?? null,
+    historico: row.historico ?? undefined,
     legado: row.legado,
   };
 }
@@ -74,6 +86,7 @@ function toRow(m: Movimentacao): Omit<MovimentacaoRow, "legado"> & { legado: boo
     desligamento_info: m.desligamentoInfo ?? null,
     aprovacao_final: m.aprovacaoFinal ?? null,
     sincronizado_em: m.sincronizadoEm ?? null,
+    historico: m.historico ?? [],
     legado: m.legado ?? false,
   };
 }
@@ -97,7 +110,11 @@ export async function criarMovimentacao(m: Movimentacao): Promise<void> {
   if (error) throw new Error(`Falha ao criar movimentação no Supabase: ${error.message}`);
 }
 
-/** Persiste o novo estado de uma movimentação após aprovar/reprovar uma etapa. */
+/** Persiste o novo estado de uma movimentação após aprovar/reprovar/reabrir
+ * uma etapa, ou editar um campo de `dados` (ver domain/workflow.ts) — inclui
+ * `dados`/`*_info`/`historico` mesmo quando aprovar/reprovar não os altera
+ * (só reabrir/editar o fazem), pra manter uma única função de persistência
+ * em vez de uma por tipo de mutação. */
 export async function atualizarMovimentacao(m: Movimentacao): Promise<void> {
   if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
 
@@ -106,7 +123,12 @@ export async function atualizarMovimentacao(m: Movimentacao): Promise<void> {
     .update({
       status: m.status,
       etapas: m.etapas,
+      dados: m.dados ?? [],
+      admissao_info: m.admissaoInfo ?? null,
+      atualizacao_info: m.atualizacaoInfo ?? null,
+      desligamento_info: m.desligamentoInfo ?? null,
       aprovacao_final: m.aprovacaoFinal ?? null,
+      historico: m.historico ?? [],
       updated_at: new Date().toISOString(),
     })
     .eq("id", m.id);

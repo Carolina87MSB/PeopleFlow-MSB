@@ -1,4 +1,4 @@
-import { aprovarEtapa, reprovarEtapa } from "../domain/workflow";
+import { aprovarEtapa, editarDadosMovimentacao, reabrirParaRH, reprovarEtapa } from "../domain/workflow";
 import type { PortalAction } from "./actions";
 import type { PortalState } from "./types";
 
@@ -91,6 +91,15 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
 
     case "REPROVAR_ETAPA":
       return { ...state, movimentacoes: reprovarEtapa(state.movimentacoes, action.id, action.comentario) };
+
+    case "REABRIR_MOVIMENTACAO_RH":
+      return { ...state, movimentacoes: reabrirParaRH(state.movimentacoes, action.id, action.autor) };
+
+    case "EDITAR_DADOS_MOVIMENTACAO":
+      return {
+        ...state,
+        movimentacoes: editarDadosMovimentacao(state.movimentacoes, action.id, action.edicoes, action.novaDataPrevistaIso, action.autor),
+      };
 
     case "CRIAR_MOVIMENTACAO":
       return { ...state, movimentacoes: [action.movimentacao, ...state.movimentacoes] };

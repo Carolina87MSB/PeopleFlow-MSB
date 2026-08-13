@@ -45,6 +45,14 @@ export type PortalAction =
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
   | { type: "APROVAR_ETAPA"; id: string }
   | { type: "REPROVAR_ETAPA"; id: string; comentario: string }
+  | { type: "REABRIR_MOVIMENTACAO_RH"; id: string; autor: string }
+  | {
+      type: "EDITAR_DADOS_MOVIMENTACAO";
+      id: string;
+      edicoes: { label: string; valorAnterior: string; valorNovo: string }[];
+      novaDataPrevistaIso?: string;
+      autor: string;
+    }
   | { type: "CRIAR_MOVIMENTACAO"; movimentacao: Movimentacao }
   | { type: "REGISTRAR_CARGO_CUSTOM"; cargo: CargoCustom }
   | { type: "TOGGLE_DESCRICAO_CARGO"; nome: string }

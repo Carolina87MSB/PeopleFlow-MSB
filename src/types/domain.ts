@@ -150,6 +150,19 @@ export interface AprovacaoFinal {
   hora: string;
 }
 
+/** Evento de auditoria gravado dentro da própria movimentação — reabertura
+ * pelo RH ou edição de um campo de `dados` (ver reabrirParaRH()/
+ * editarDadosMovimentacao() em domain/workflow.ts). Nunca removido, mesmo que
+ * o valor editado seja sobrescrito de novo depois — é a trilha de "o que foi
+ * editado e por quem", pedida explicitamente pelo RH. */
+export interface EventoHistoricoMovimentacao {
+  data: string;
+  hora: string;
+  autor: string;
+  acao: string;
+  detalhe?: string;
+}
+
 export interface Movimentacao {
   id: string;
   tipo: string;
@@ -173,6 +186,8 @@ export interface Movimentacao {
    * a "Data prevista" (atualizacaoInfo.dataPrevistaIso) chegar. */
   sincronizadoEm?: string | null;
   legado?: boolean;
+  /** Trilha de reaberturas/edições pós-criação — ver EventoHistoricoMovimentacao. */
+  historico?: EventoHistoricoMovimentacao[];
 }
 
 export interface NovaMovimentacaoForm {

@@ -142,6 +142,10 @@ Cada card de movimentação (Workflow de aprovação e o widget "Aprovações pe
 
 **Reprovar** agora exige uma justificativa: em vez de reprovar direto no clique, abre um modal pedindo o motivo (`ReprovarModal.tsx`), que fica gravado no comentário da etapa reprovada e aparece na trilha ("JUSTIFICATIVA DA REPROVAÇÃO") — mesmo texto exibido tanto no card do Workflow quanto na ficha de detalhes.
 
+#### Restaurar movimentação reprovada pelo RH + editar Salário/Data prevista + histórico
+
+Quando quem reprova é a própria etapa de RH (a última de toda matriz, ver `tiposMovimentacao.json`) — o caso comum de um erro de digitação (ex.: salário errado) — o card no Workflow ganha um botão **"Restaurar para análise do RH"** (`reprovadaPeloRH()`/`reabrirParaRH()` em `domain/workflow.ts`): devolve a movimentação para "Em Aprovação" com a etapa de RH de volta em "Em análise", sem tocar nas etapas já aprovadas antes dela (Gestor Solicitante, Diretor Industrial). Enquanto a etapa atual for a de RH, a ficha de detalhes (`MovimentacaoDetalhe.tsx`, botão "Editar salário / data prevista") libera edição inline dos campos de Salário e Data prevista — só esses dois, nunca cargo/departamento/etc. Editar a Data prevista também atualiza o campo estruturado correspondente (`atualizacaoInfo.dataPrevistaIso`/`admissaoInfo.admissaoIso`/`desligamentoInfo.dataIso`), já que é ele que dispara a sincronização com `colaboradores` — não pode ficar defasado em relação ao texto exibido. Toda reabertura e toda edição de campo entra no novo array `historico` da movimentação (nunca apagado), exibido como "Histórico de edições" na própria ficha.
+
 ### Notificação de movimentação por e-mail (Gmail SMTP)
 
 Toda movimentação dispara e-mail nestes 3 momentos (ver `src/domain/notificacoes.ts`):
