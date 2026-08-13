@@ -353,9 +353,29 @@ export function usePortalData(): PortalData {
    * ficha GESTOR sobre si mesmo fica oculta pro perfil "Colaborador" — regra
    * explícita, ele nunca vê a avaliação que o gestor fez dele — mas visível
    * pra Gestor/Diretoria, que também são "colaborador" de alguém); e quem é
-   * gestor de alguém (`colaborador.gestor === me`, atual/ao vivo) vê as até
-   * 3 fichas desse liderado, mas só edita a do tipo GESTOR
-   * (podeEditarAvaliacaoDesempenho já cuida disso via gestorAvaliador). */
+   * gestor definido para AQUELE ciclo (`gestorAvaliador` congelado na
+   * própria ficha GESTOR do colaborador — não `colaborador.gestor`, atual/
+   * ao vivo: RH pode substituir manualmente quem avalia sem que o cadastro
+   * mude, ver comentário abaixo) vê as até 3 fichas desse liderado, mas só
+   * edita a do tipo GESTOR (podeEditarAvaliacaoDesempenho já cuida disso via
+   * gestorAvaliador). */
+  // Quem é "o gestor" de um colaborador NUM CICLO é definido pela própria
+  // ficha GESTOR dele (gestorAvaliador) — não por colaborador.gestor (atual/
+  // ao vivo). Nos ciclos gerados normalmente os dois valores são iguais (a
+  // ficha nasce com gestorAvaliador = colaborador.gestor daquele momento),
+  // mas RH pode corrigir manualmente qual gestor avalia sem tocar no
+  // cadastro (ex.: substituição pontual) — usar o campo vivo aqui faria o
+  // gestor errado continuar vendo a ficha, e o gestor certo (definido na
+  // correção) nunca a ver. Mapa por `cicloId::colaboradorNome` porque o
+  // mesmo colaborador pode ter gestores diferentes em ciclos diferentes.
+  const gestorAvaliadorPorColaboradorCiclo = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const a of state.avaliacoesDesempenho) {
+      if (a.tipo === "GESTOR") mapa.set(`${a.cicloId}::${a.colaboradorNome}`, a.gestorAvaliador);
+    }
+    return mapa;
+  }, [state.avaliacoesDesempenho]);
+
   const avaliacoesDesempenhoVisiveis = useMemo(() => {
     // "Não Elegível" (RH corrigiu inclusão por engano) nunca aparece na
     // lista de trabalho de ninguém, nem do RH — o histórico completo
@@ -380,9 +400,9 @@ export function usePortalData(): PortalData {
         if (a.tipo === "GESTOR") return perfil !== "Colaborador";
         return true;
       }
-      return colaboradorPorNome.get(a.colaboradorNome)?.gestor === me;
+      return gestorAvaliadorPorColaboradorCiclo.get(`${a.cicloId}::${a.colaboradorNome}`) === me;
     });
-  }, [state.avaliacoesDesempenho, colaboradorPorNome, perfil, me]);
+  }, [state.avaliacoesDesempenho, gestorAvaliadorPorColaboradorCiclo, perfil, me]);
 
   // Única visão que o líder avaliado tem da própria Avaliação de Liderança:
   // 1 média por ciclo, nunca a ficha individual (ver comentário acima em
@@ -436,16 +456,19 @@ export function usePortalData(): PortalData {
    * antes de qualquer outra, pra não depender só da comparação com o
    * gestor atual (que poderia dar falso-positivo numa qualidade de dado
    * onde colaborador.gestor === colaborador.nome). RH vê tudo; senão, só
-   * quem é gestor atual do colaborador. */
+   * quem a própria ficha aponta como `gestorAvaliador` (congelado na
+   * geração) — não o `colaboradores.gestor` ao vivo, senão uma correção
+   * manual de gestor (via SQL, mesmo mecanismo já usado na AVD) nunca
+   * mudaria quem vê a ficha, só quem pode editá-la. */
   const avaliacoesPotencialVisiveis = useMemo(() => {
     // Mesma exclusão universal de avaliacoesDesempenhoVisiveis.
     const semNaoElegivel = state.avaliacoesPotencial.filter((a) => a.status !== "Não Elegível");
     if (perfil === "RH") return semNaoElegivel;
     return semNaoElegivel.filter((a) => {
       if (a.colaboradorNome === me) return false;
-      return colaboradorPorNome.get(a.colaboradorNome)?.gestor === me;
+      return a.gestorAvaliador === me;
     });
-  }, [state.avaliacoesPotencial, colaboradorPorNome, perfil, me]);
+  }, [state.avaliacoesPotencial, perfil, me]);
 
   /** RH sempre, checado PRIMEIRO e incondicionalmente (diferente da AVD,
    * que bloqueia até o RH quando o ciclo está encerrado — aqui isso seria
