@@ -270,14 +270,14 @@ export function AvaliacoesTab() {
         <select className={styles.select} value={cicloFiltro} onChange={(e) => setCicloFiltro(e.target.value)}>
           {opcoesCiclo.map((o) => (
             <option key={o} value={o}>
-              {o}
+              {o === "Todos" ? "Todos os ciclos" : o}
             </option>
           ))}
         </select>
         <select className={styles.select} value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
           {["Todos", "Não iniciada", "Em andamento", "Concluída"].map((o) => (
             <option key={o} value={o}>
-              {o}
+              {o === "Todos" ? "Todos os status" : o}
             </option>
           ))}
         </select>
@@ -293,7 +293,7 @@ export function AvaliacoesTab() {
           <select className={styles.select} value={departamentoFiltro} onChange={(e) => setDepartamentoFiltro(e.target.value)}>
             {opcoesDepartamento.map((o) => (
               <option key={o} value={o}>
-                {o}
+                {o === "Todos" ? "Todos os departamentos" : o}
               </option>
             ))}
           </select>

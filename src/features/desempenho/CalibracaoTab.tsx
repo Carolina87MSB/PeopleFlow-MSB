@@ -69,7 +69,7 @@ export function CalibracaoTab() {
         <select className={styles.select} value={cicloFiltro} onChange={(e) => setCicloFiltro(e.target.value)}>
           {["Todos", ...ciclosAvaliacaoDesempenho.map((c) => c.nome)].map((o) => (
             <option key={o} value={o}>
-              {o}
+              {o === "Todos" ? "Todos os ciclos" : o}
             </option>
           ))}
         </select>
@@ -81,21 +81,21 @@ export function CalibracaoTab() {
         <select className={styles.select} value={departamentoFiltro} onChange={(e) => setDepartamentoFiltro(e.target.value)}>
           {opcoesDepartamento.map((o) => (
             <option key={o} value={o}>
-              {o}
+              {o === "Todos" ? "Todos os departamentos" : o}
             </option>
           ))}
         </select>
         <select className={styles.select} value={gestorFiltro} onChange={(e) => setGestorFiltro(e.target.value)}>
           {opcoesGestor.map((o) => (
             <option key={o} value={o}>
-              {o}
+              {o === "Todos" ? "Todos os gestores" : o}
             </option>
           ))}
         </select>
         <select className={styles.select} value={cargoFiltro} onChange={(e) => setCargoFiltro(e.target.value)}>
           {opcoesCargo.map((o) => (
             <option key={o} value={o}>
-              {o === "Todos" ? o : formatarNomeCargo(o)}
+              {o === "Todos" ? "Todos os cargos" : formatarNomeCargo(o)}
             </option>
           ))}
         </select>
