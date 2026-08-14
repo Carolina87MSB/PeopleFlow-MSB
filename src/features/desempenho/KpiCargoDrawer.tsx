@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button, Drawer } from "../../components/ui";
+import { classificarSentidoMeta } from "../../domain/avaliacaoDesempenho";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalData } from "../../store/usePortalData";
 import type { KpiCargo } from "../../types/domain";
@@ -164,7 +165,7 @@ export function KpiCargoDrawer({ cargoNome, onClose }: KpiCargoDrawerProps) {
                 <span>
                   Meta: <strong>{kpi.meta ?? "—"}</strong> {kpi.unidadeMedida}
                 </span>
-                <span>{kpi.sentidoMeta}</span>
+                <span>{classificarSentidoMeta(kpi.sentidoMeta) ?? kpi.sentidoMeta}</span>
                 {kpi.peso !== null && <span>Peso: {kpi.peso}</span>}
               </div>
               {kpi.observacao && <p className={styles.kpiObs}>{kpi.observacao}</p>}

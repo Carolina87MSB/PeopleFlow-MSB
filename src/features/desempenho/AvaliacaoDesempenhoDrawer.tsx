@@ -4,6 +4,7 @@ import {
   arredondar,
   avaliacaoCompleta,
   calcularNotasAvaliacao,
+  classificarSentidoMeta,
   ESCALA_COMPORTAMENTAL,
   formatarResultadoKpi,
   itensPendentes,
@@ -285,7 +286,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
                   <span>
                     Meta: <strong>{meta ?? "—"}</strong> {unidadeMedida}
                   </span>
-                  <span>{sentidoMeta}</span>
+                  <span>{classificarSentidoMeta(sentidoMeta) ?? sentidoMeta}</span>
                   {peso !== null && <span>Peso: {peso}</span>}
                 </div>
                 <div className={styles.resultadoCampo}>

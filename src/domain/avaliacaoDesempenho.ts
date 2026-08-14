@@ -2,6 +2,7 @@
 // dependência de UI/Supabase. Ver README > "Gestão de Desempenho" para as
 // regras de negócio por trás de cada fórmula.
 
+import { norm } from "./hierarquia";
 import type {
   AvaliacaoDesempenho,
   Colaborador,
@@ -59,14 +60,34 @@ export function mediaComportamental(resultados: ResultadoComportamental[]): numb
   return media(completas);
 }
 
+/** Classifica o texto de `sentidoMeta` por PREFIXO normalizado (sem acento,
+ * minúsculo) — não por igualdade estrita com o literal exato "Maior é
+ * Melhor"/"Menor é Melhor". Existe por causa de um bug real: KPIs cadastrados
+ * em massa (seed a partir de planilha) podem ter o texto gravado de um jeito
+ * levemente diferente do literal usado pelo app (ex.: "Maior Melhor", sem o
+ * "é") — uma comparação `===` estrita não reconhecia esse valor como "Maior é
+ * Melhor" e caía silenciosamente no ramo "Menor é Melhor", invertendo o
+ * percentual de atingimento (e a nota) de qualquer KPI "Maior é Melhor" cujo
+ * texto não fosse idêntico byte a byte ao literal — sem erro nem aviso, só o
+ * número errado na tela. `null` só quando o texto não começa com nenhum dos
+ * dois prefixos (dado realmente ausente/irreconhecível). */
+export function classificarSentidoMeta(sentido: string | null | undefined): "Maior é Melhor" | "Menor é Melhor" | null {
+  const normalizado = norm(sentido ?? "").trim();
+  if (normalizado.startsWith("maior")) return "Maior é Melhor";
+  if (normalizado.startsWith("menor")) return "Menor é Melhor";
+  return null;
+}
+
 /** Percentual de atingimento de um KPI. "Maior é Melhor": resultado/meta.
  * "Menor é Melhor": lógica inversa (meta/resultado) — resultado igual ou
  * menor que a meta já representa 100% ou mais. Resultado 0 num "Menor é
  * Melhor" é o melhor caso possível; sem meta pra dividir, usa um teto
  * pragmático de 200% em vez de Infinity (que quebraria o JSON). */
-export function percentualAtingimentoKpi(meta: number | null, resultado: number | null, sentido: KpiCargo["sentidoMeta"]): number | null {
+export function percentualAtingimentoKpi(meta: number | null, resultado: number | null, sentido: string | null | undefined): number | null {
   if (meta === null || resultado === null) return null;
-  if (sentido === "Maior é Melhor") {
+  const classificado = classificarSentidoMeta(sentido);
+  if (classificado === null) return null;
+  if (classificado === "Maior é Melhor") {
     if (meta === 0) return resultado === 0 ? 100 : 200;
     return (resultado / meta) * 100;
   }
