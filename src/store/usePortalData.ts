@@ -193,6 +193,14 @@ export interface PortalData {
   /** true quando `conta` pode editar ESSA avaliação especificamente — RH sempre, Gestor só se
    * for o gestor do colaborador avaliado — e ela ainda não estiver "Concluída" (trava total). */
   podeEditarAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => boolean;
+  /** RH-only — só quando `status === "Concluída"` e ainda não entrou no
+   * fluxo de calibração (`statusCalibracao === "Não iniciada"`); depois
+   * disso, a correção é responsabilidade da aba Calibração, não deste
+   * caminho (mesmo padrão de podeEditarAvaliacaoPotencial/
+   * reabrirAvaliacaoPotencial). Só devolve a própria ficha pra "Em
+   * andamento" — nunca toca em `colaboradores` ou em outra ficha. */
+  podeReabrirAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => boolean;
+  reabrirAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => Promise<{ ok: true } | { ok: false }>;
   pdi: Pdi[];
   /** RH vê todo mundo; dono só vê depois de "Concluído"; quem é gestor atual do dono vê sempre. */
   pdiVisiveis: Pdi[];
@@ -1383,6 +1391,44 @@ export function usePortalData(): PortalData {
     [dispatch, me, flash, state.avaliacoesDesempenho, state.kpisCargo, state.configAvaliacaoDesempenho, state.pdiBiblioteca, verificarEIniciarCalibracaoFn],
   );
 
+  const podeReabrirAvaliacaoDesempenhoFn = useCallback(
+    (avaliacao: AvaliacaoDesempenho) => perfil === "RH" && avaliacao.status === "Concluída" && avaliacao.statusCalibracao === "Não iniciada",
+    [perfil],
+  );
+
+  /** Devolve uma ficha "Concluída" pra "Em andamento" pra quem preenche (o
+   * `gestorAvaliador`, ver comentário na interface) poder corrigir alguma
+   * informação — só o status/concluidoPor/concluidoEm da própria ficha
+   * mudam; nota, cargo/departamento (snapshot) e o cadastro em
+   * `colaboradores` não são tocados. Uma vez que a ficha entra em
+   * calibração (Etapa 6), a correção passa a ser responsabilidade da aba
+   * Calibração — este caminho fecha (mesmo padrão de reabrirAvaliacaoPotencial). */
+  const reabrirAvaliacaoDesempenhoFn = useCallback(
+    async (avaliacao: AvaliacaoDesempenho) => {
+      if (!podeReabrirAvaliacaoDesempenhoFn(avaliacao)) {
+        flash("Esta avaliação não pode ser reaberta por aqui — se já estiver em calibração, use a aba Calibração.");
+        return { ok: false as const };
+      }
+      const reaberta: AvaliacaoDesempenho = { ...avaliacao, status: "Em andamento", concluidoPor: "", concluidoEm: null };
+      try {
+        await atualizarAvaliacaoDesempenhoNoSupabase(reaberta);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_DESEMPENHO", avaliacao: reaberta });
+        flash("Avaliação reaberta para edição.");
+        void registrarLogAvaliacaoDesempenhoNoSupabase({
+          cicloId: reaberta.cicloId,
+          avaliacaoId: reaberta.id,
+          acao: "AVALIACAO_DESEMPENHO_REABERTA",
+          usuario: me,
+        });
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao reabrir avaliação.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, podeReabrirAvaliacaoDesempenhoFn],
+  );
+
   /** Salva um PDI (comentários, itens/ações, mudança de status, conclusão)
    * — um só ponto pra tudo, igual salvarAvaliacaoDesempenho. Detecta a
    * transição pra "Concluído" e grava concluidoPor/Em só nesse momento.
@@ -1716,6 +1762,8 @@ export function usePortalData(): PortalData {
     encerrarCicloAvaliacaoDesempenho: encerrarCicloAvaliacaoDesempenhoFn,
     salvarAvaliacaoDesempenho: salvarAvaliacaoDesempenhoFn,
     podeEditarAvaliacaoDesempenho: podeEditarAvaliacaoDesempenhoFn,
+    podeReabrirAvaliacaoDesempenho: podeReabrirAvaliacaoDesempenhoFn,
+    reabrirAvaliacaoDesempenho: reabrirAvaliacaoDesempenhoFn,
     kpisCargo: state.kpisCargo,
     criarKpiCargo: criarKpiCargoFn,
     atualizarKpiCargo: atualizarKpiCargoFn,

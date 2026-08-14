@@ -46,6 +46,8 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
     ciclosAvaliacaoDesempenho,
     salvarAvaliacaoDesempenho,
     podeEditarAvaliacaoDesempenho,
+    podeReabrirAvaliacaoDesempenho,
+    reabrirAvaliacaoDesempenho,
     podeMarcarDevolutiva,
     marcarDevolutivaRealizada,
   } = usePortalData();
@@ -73,7 +75,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
     for (const r of avaliacao.resultadosKpis) mapa[r.kpiId] = formatarResultadoKpi(r.resultado);
     return mapa;
   });
-  const [salvando, setSalvando] = useState<"progresso" | "concluir" | null>(null);
+  const [salvando, setSalvando] = useState<"progresso" | "concluir" | "reabrir" | null>(null);
   const [sujo, setSujo] = useState(false);
   const [salvandoAuto, setSalvandoAuto] = useState(false);
   const [ultimoSalvoAutoHora, setUltimoSalvoAutoHora] = useState<string | null>(null);
@@ -156,6 +158,13 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
     const result = await persistir(status);
     setSalvando(null);
     if (result.ok && tipo === "concluir") onClose();
+  }
+
+  async function handleReabrir() {
+    setSalvando("reabrir");
+    const result = await reabrirAvaliacaoDesempenho(rascunho);
+    setSalvando(null);
+    if (result.ok) setRascunho((r) => ({ ...r, status: "Em andamento", concluidoPor: "", concluidoEm: null }));
   }
 
   // Devolutiva (Etapa 8) — ação independente do fluxo de edição da ficha em
@@ -408,14 +417,23 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
         </div>
       )}
 
-      {podeEditar && (
+      {(podeEditar || podeReabrirAvaliacaoDesempenho(rascunho)) && (
         <div className={styles.edicaoAcoes}>
-          <Button variant="secondary" onClick={() => handleSalvar("progresso")} disabled={salvando !== null}>
-            {salvando === "progresso" ? "Salvando..." : "Salvar progresso"}
-          </Button>
-          <Button variant="primary" onClick={() => handleSalvar("concluir")} disabled={!completa || salvando !== null}>
-            {salvando === "concluir" ? "Concluindo..." : "Concluir avaliação"}
-          </Button>
+          {podeReabrirAvaliacaoDesempenho(rascunho) && (
+            <Button variant="danger" onClick={handleReabrir} disabled={salvando !== null}>
+              {salvando === "reabrir" ? "Reabrindo..." : "Reabrir avaliação"}
+            </Button>
+          )}
+          {podeEditar && (
+            <>
+              <Button variant="secondary" onClick={() => handleSalvar("progresso")} disabled={salvando !== null}>
+                {salvando === "progresso" ? "Salvando..." : "Salvar progresso"}
+              </Button>
+              <Button variant="primary" onClick={() => handleSalvar("concluir")} disabled={!completa || salvando !== null}>
+                {salvando === "concluir" ? "Concluindo..." : "Concluir avaliação"}
+              </Button>
+            </>
+          )}
         </div>
       )}
     </Drawer>

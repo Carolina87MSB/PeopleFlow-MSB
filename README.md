@@ -263,8 +263,8 @@ garantida pela arquitetura de permissões das etapas anteriores, sem precisar de
 auditoria/versionamento novo: uma vez `statusCalibracao === "Homologada"`, não existe
 nenhum caminho no app que edite a ficha de novo (`podeCalibrarAvaliacaoDesempenho()`
 só libera calibrar quando `"Aguardando Calibração"`, nunca `"Homologada"`;
-`reabrirAvaliacaoPotencial()` bloqueia assim que `statusCalibracao !== "Não
-iniciada"`; e a ficha AVD tipo GESTOR não tem nenhuma função de reabertura). Como na
+`reabrirAvaliacaoPotencial()`/`reabrirAvaliacaoDesempenho()` bloqueiam assim que
+`statusCalibracao !== "Não iniciada"`, mesmo com `status === "Concluída"`). Como na
 Matriz 9 Box, a posição é sempre recalculada ao vivo com os limiares ATUAIS da
 configuração — nunca houve snapshot de limiares por ciclo em nenhuma etapa anterior,
 e não é o tipo de informação que o spec pede pra preservar (ele fala de notas de
@@ -295,7 +295,8 @@ visão dele como "sua própria linha do tempo", não uma busca.
 - Percentual de atingimento de um KPI: "Maior é Melhor" → `resultado/meta×100`; "Menor é Melhor" → `meta/resultado×100` (lógica invertida — resultado igual ou menor que a meta já é ≥100%). Percentual vira nota pela escala ≥95%→5, 93-94,99%→4, 90-92,99%→3, 85-89,99%→2, <85%→1.
 - Média das Competências Técnicas é ponderada por `peso` de cada KPI (`peso ?? 1`) — quando nenhum KPI tem peso definido, isso já dá exatamente a média simples pedida na especificação, sem precisar de um branch separado pros dois casos.
 - Nota final da avaliação pondera as duas médias pelos pesos de `ConfigAvaliacaoDesempenho`.
-- Status avança sozinho conforme o gestor preenche — "Não iniciada" → "Em andamento" (ao salvar progresso, manual ou automático) → "Concluída" (ao concluir, só disponível quando toda afirmação/KPI tem valor) — e **trava a edição por completo** depois de concluída, ou se o ciclo for encerrado antes disso; só uma futura funcionalidade de reabertura de ciclo desfaz isso.
+- Status avança sozinho conforme o gestor preenche — "Não iniciada" → "Em andamento" (ao salvar progresso, manual ou automático) → "Concluída" (ao concluir, só disponível quando toda afirmação/KPI tem valor) — e **trava a edição por completo** depois de concluída, ou se o ciclo for encerrado antes disso.
+  - **Reabrir uma ficha "Concluída"** (`podeReabrirAvaliacaoDesempenho()`/`reabrirAvaliacaoDesempenho()` em `usePortalData.ts`, botão "Reabrir avaliação" no Drawer, mesmo padrão de `reabrirAvaliacaoPotencial()`): RH-only, e só antes de entrar em calibração (`statusCalibracao === "Não iniciada"`) — depois disso a correção é responsabilidade da aba Calibração. Devolve `status` pra "Em andamento" e limpa `concluidoPor`/`concluidoEm`; nota, cargo/departamento (snapshot) e o cadastro em `colaboradores` nunca são tocados por essa ação.
 - `itensPendentes(avaliacao, competencias, kpis)` lista textualmente o que falta pra poder concluir (ex.: "Comunicação — afirmação 2", "KPI: OTIF") — exibida no Drawer em vez de só desabilitar o botão "Concluir avaliação" em silêncio.
 
 **Autosave e recuperação** (`AvaliacaoDesempenhoDrawer.tsx`): qualquer edição (nota, resultado de KPI, comentário) agenda uma gravação automática ~1,2s depois da última mudança, usando a mesma função de salvar do botão manual — sem toast a cada gravação, só um indicador textual discreto ("Salvando..." / "Salvo automaticamente às HH:MM"). A 1ª gravação (manual ou automática) já promove a avaliação de "Não iniciada" para "Em andamento" sozinha. "Recuperar a última versão salva" é o comportamento natural do Drawer (sempre parte do que está persistido no Supabase) — não precisou de lógica adicional.
