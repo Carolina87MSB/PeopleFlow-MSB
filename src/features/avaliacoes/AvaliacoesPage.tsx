@@ -8,15 +8,23 @@ import { DispensarAvaliacaoModal } from "./DispensarAvaliacaoModal";
 import styles from "./AvaliacoesPage.module.css";
 
 export function AvaliacoesPage() {
-  const { conta, perfil, avaliacoesExperiencia, pendenciasAvaliacaoExperiencia, criarAvaliacaoExperiencia, dispensarAvaliacaoExperiencia } =
+  const { conta, perfil, colaboradores, avaliacoesExperiencia, pendenciasAvaliacaoExperiencia, criarAvaliacaoExperiencia, dispensarAvaliacaoExperiencia } =
     usePortalData();
   const [selecionado, setSelecionado] = useState<{ colaborador: Colaborador; etapa: EtapaAvaliacaoExperiencia } | null>(null);
   const [dispensando, setDispensando] = useState<{ colaborador: Colaborador; etapa: EtapaAvaliacaoExperiencia } | null>(null);
 
+  // Gestor ATUAL do colaborador (colaboradores.gestor, ao vivo) — não
+  // `avaliadoPor` (quem preencheu, congelado): se o colaborador mudou de
+  // gestor depois da avaliação, é o gestor de hoje que precisa ver o
+  // histórico dele, não quem já não gerencia mais essa pessoa. Mesmo
+  // critério já usado em pendenciasAvaliacaoExperiencia (`p.colaborador.gestor === me`).
+  const gestorAtualPorColaborador = useMemo(() => new Map(colaboradores.map((c) => [c.nome, c.gestor])), [colaboradores]);
+
   const historico = useMemo(() => {
-    const base = perfil === "RH" ? avaliacoesExperiencia : avaliacoesExperiencia.filter((a) => a.avaliadoPor === conta.nome);
+    const base =
+      perfil === "RH" ? avaliacoesExperiencia : avaliacoesExperiencia.filter((a) => gestorAtualPorColaborador.get(a.colaboradorNome) === conta.nome);
     return base.slice().sort((a, b) => b.avaliadoEm.localeCompare(a.avaliadoEm));
-  }, [avaliacoesExperiencia, perfil, conta.nome]);
+  }, [avaliacoesExperiencia, perfil, conta.nome, gestorAtualPorColaborador]);
 
   return (
     <>
