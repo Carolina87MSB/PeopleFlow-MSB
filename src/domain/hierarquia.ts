@@ -23,6 +23,7 @@ const EMAIL_OVERRIDES: Record<string, string> = {
   "bruna santos nascimento": "bruna.santos@msbbrasil.com",
   "drielly mitie mizushima victor": "drielly.mitie@msbbrasil.com",
   "tais batista santos araujo": "tais.santos@msbbrasil.com",
+  "edilcelia souza de jesus": "edilcelia.souza@msbbrasil.com",
 };
 
 export function emailOf(nome: string): string {
