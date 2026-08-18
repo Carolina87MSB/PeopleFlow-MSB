@@ -163,6 +163,36 @@ export interface EventoHistoricoMovimentacao {
   detalhe?: string;
 }
 
+/** Ciência (não aprovação — essa já aconteceu no fluxo de Etapas) de um dos
+ * dois signatários da Carta de Movimentação. `data` só é preenchida quando
+ * `status` vira "Assinado". */
+export interface AssinaturaCarta {
+  nome: string;
+  cargo: string;
+  data: string | null;
+  status: "Pendente" | "Assinado";
+}
+
+/** Carta de Movimentação de Pessoal — só existe pra PRO/TRF/SAL já aprovadas
+ * (ver podeEmitirCarta() em domain/cartaMovimentacao.ts), gerada a partir dos
+ * dados já registrados na própria movimentação (nunca redigitados).
+ * `descricaoAlteracao` é um snapshot congelado no momento da emissão — não é
+ * recalculado se a movimentação for editada depois. As assinaturas são
+ * ciência digital (nome/cargo/data/status), nunca aprovação — a aprovação já
+ * aconteceu no fluxo de Etapas antes da carta existir. */
+export interface CartaMovimentacao {
+  emitidaEm: string;
+  emitidaPor: string;
+  descricaoAlteracao: string;
+  assinaturaGestor: AssinaturaCarta;
+  assinaturaRH: AssinaturaCarta;
+  /** Preenchida só quando as duas assinaturas viram "Assinado". */
+  finalizadaEm: string | null;
+  entregueAoColaborador: boolean;
+  entregueEm: string | null;
+  entreguePor: string | null;
+}
+
 export interface Movimentacao {
   id: string;
   tipo: string;
@@ -188,6 +218,9 @@ export interface Movimentacao {
   legado?: boolean;
   /** Trilha de reaberturas/edições pós-criação — ver EventoHistoricoMovimentacao. */
   historico?: EventoHistoricoMovimentacao[];
+  /** null/undefined = carta ainda não emitida. Só existe pra PRO/TRF/SAL já
+   * aprovadas — ver domain/cartaMovimentacao.ts. */
+  cartaMovimentacao?: CartaMovimentacao | null;
 }
 
 export interface NovaMovimentacaoForm {

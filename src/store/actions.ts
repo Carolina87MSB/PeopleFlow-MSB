@@ -3,6 +3,7 @@ import type {
   AvaliacaoExperiencia,
   AvaliacaoPotencial,
   CargoCustom,
+  CartaMovimentacao,
   CicloAvaliacaoDesempenho,
   Colaborador,
   CompetenciaComportamental,
@@ -53,6 +54,7 @@ export type PortalAction =
       novaDataPrevistaIso?: string;
       autor: string;
     }
+  | { type: "ATUALIZAR_CARTA_MOVIMENTACAO"; id: string; carta: CartaMovimentacao }
   | { type: "CRIAR_MOVIMENTACAO"; movimentacao: Movimentacao }
   | { type: "REGISTRAR_CARGO_CUSTOM"; cargo: CargoCustom }
   | { type: "TOGGLE_DESCRICAO_CARGO"; nome: string }

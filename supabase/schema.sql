@@ -90,6 +90,16 @@ alter table public.peopleflow_movimentacoes
 
 comment on column public.peopleflow_movimentacoes.historico is 'Array de { data, hora, autor, acao, detalhe } — reaberturas e edições pós-criação, nunca apagado.';
 
+-- Carta de Movimentação de Pessoal — integrada ao mesmo registro de
+-- movimentação (nunca uma tabela/fluxo separado), só pra PRO/TRF/SAL já
+-- aprovadas. Ver CartaMovimentacao em src/types/domain.ts e
+-- src/domain/cartaMovimentacao.ts (podeEmitirCarta/emitirCarta/darCiencia/
+-- marcarEntregue). null = carta ainda não emitida.
+alter table public.peopleflow_movimentacoes
+  add column if not exists carta_movimentacao jsonb;
+
+comment on column public.peopleflow_movimentacoes.carta_movimentacao is 'CartaMovimentacao — { emitidaEm, emitidaPor, descricaoAlteracao, assinaturaGestor, assinaturaRH, finalizadaEm, entregueAoColaborador, entregueEm, entreguePor }. As "assinaturas" são ciência (nome/cargo/data/status), nunca aprovação — a aprovação já aconteceu no fluxo de Etapas antes da carta existir.';
+
 create table if not exists public.peopleflow_cargos_custom (
   nome text primary key,
   depto text not null,

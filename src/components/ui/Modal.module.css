@@ -78,6 +78,33 @@
   background: #fff;
 }
 
+@media print {
+  .overlay {
+    position: static;
+    background: none;
+    backdrop-filter: none;
+    padding: 0;
+    display: block;
+  }
+
+  .dialog {
+    max-height: none;
+    overflow: visible;
+    box-shadow: none;
+    border-radius: 0;
+    animation: none;
+  }
+
+  .header,
+  .close {
+    display: none;
+  }
+
+  .body {
+    padding: 0;
+  }
+}
+
 @media (max-width: 700px) {
   .overlay {
     padding: 12px;

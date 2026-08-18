@@ -10,6 +10,7 @@ import type {
   AdmissaoInfo,
   AprovacaoFinal,
   AtualizacaoCargoDeptoInfo,
+  CartaMovimentacao,
   DadoField,
   DesligamentoInfo,
   Etapa,
@@ -38,6 +39,7 @@ interface MovimentacaoRow {
   aprovacao_final: AprovacaoFinal | null;
   sincronizado_em: string | null;
   historico: EventoHistoricoMovimentacao[] | null;
+  carta_movimentacao: CartaMovimentacao | null;
   legado: boolean;
 }
 
@@ -62,6 +64,7 @@ function fromRow(row: MovimentacaoRow): Movimentacao {
     aprovacaoFinal: row.aprovacao_final ?? null,
     sincronizadoEm: row.sincronizado_em ?? null,
     historico: row.historico ?? undefined,
+    cartaMovimentacao: row.carta_movimentacao ?? null,
     legado: row.legado,
   };
 }
@@ -87,6 +90,7 @@ function toRow(m: Movimentacao): Omit<MovimentacaoRow, "legado"> & { legado: boo
     aprovacao_final: m.aprovacaoFinal ?? null,
     sincronizado_em: m.sincronizadoEm ?? null,
     historico: m.historico ?? [],
+    carta_movimentacao: m.cartaMovimentacao ?? null,
     legado: m.legado ?? false,
   };
 }
@@ -129,6 +133,7 @@ export async function atualizarMovimentacao(m: Movimentacao): Promise<void> {
       desligamento_info: m.desligamentoInfo ?? null,
       aprovacao_final: m.aprovacaoFinal ?? null,
       historico: m.historico ?? [],
+      carta_movimentacao: m.cartaMovimentacao ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", m.id);

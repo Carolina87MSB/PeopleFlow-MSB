@@ -70,6 +70,15 @@ import {
   pendenciasAvaliacaoExperiencia as pendenciasAvaliacaoExperienciaDomain,
 } from "../domain/avaliacaoExperiencia";
 import { descendants, ehDiretorIndustrial } from "../domain/hierarquia";
+import {
+  darCiencia as darCiencaCartaDomain,
+  emitirCarta as emitirCartaDomain,
+  marcarEntregue as marcarEntregueCartaDomain,
+  podeDarCienciaComoGestor,
+  podeDarCienciaComoRH,
+  podeEmitirCarta as podeEmitirCartaDomain,
+  podeMarcarEntregue as podeMarcarEntregueDomain,
+} from "../domain/cartaMovimentacao";
 import { notificacaoConcluida, notificacaoNovaEtapa, notificacaoReprovada } from "../domain/notificacoes";
 import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
@@ -148,6 +157,17 @@ export interface PortalData {
    * ainda em aberto (hoje só Salário/Data prevista, ver MovimentacaoDetalhe.tsx);
    * grava cada mudança no histórico da movimentação. */
   editarDadosMovimentacao: (id: string, edicoes: EdicaoDadoMovimentacao[], novaDataPrevistaIso?: string) => void;
+  /** RH-only — só quando `podeEmitirCarta()` (Aprovado/Concluído, tipo
+   * PRO/TRF/SAL, sem carta ainda). Nunca cria uma movimentação nova; só
+   * preenche `cartaMovimentacao` na própria movimentação. */
+  emitirCartaMovimentacao: (id: string) => void;
+  /** Ciência (não aprovação) do gestor responsável ou do RH — `papel`
+   * decide qual das 2 assinaturas é gravada; a permissão de quem pode
+   * clicar é checada dentro da função. */
+  darCienciaCartaMovimentacao: (id: string, papel: "gestor" | "rh") => void;
+  /** RH-only, só depois da carta finalizada (as 2 ciências dadas) — não cria
+   * movimentação nova, só marca a entrega na mesma linha. */
+  marcarCartaMovimentacaoEntregue: (id: string) => void;
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   toggleDescricaoCargo: (nome: string) => void;
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
@@ -632,6 +652,85 @@ export function usePortalData(): PortalData {
       })();
     },
     [dispatch, state.movimentacoes, flash, me],
+  );
+
+  const emitirCartaMovimentacaoFn = useCallback(
+    (id: string) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode emitir a Carta de Movimentação.");
+        return;
+      }
+      const movimentacao = state.movimentacoes.find((m) => m.id === id);
+      if (!movimentacao || !podeEmitirCartaDomain(movimentacao)) {
+        flash("Esta movimentação não pode emitir carta agora.");
+        return;
+      }
+      const carta = emitirCartaDomain(movimentacao, me, state.colaboradores);
+      const atualizada = { ...movimentacao, cartaMovimentacao: carta };
+      (async () => {
+        try {
+          await atualizarMovimentacao(atualizada);
+          dispatch({ type: "ATUALIZAR_CARTA_MOVIMENTACAO", id, carta });
+          flash("Carta de Movimentação emitida.");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao emitir a carta de movimentação.");
+        }
+      })();
+    },
+    [dispatch, state.movimentacoes, state.colaboradores, flash, me, perfil],
+  );
+
+  const darCienciaCartaMovimentacaoFn = useCallback(
+    (id: string, papel: "gestor" | "rh") => {
+      const movimentacao = state.movimentacoes.find((m) => m.id === id);
+      const carta = movimentacao?.cartaMovimentacao;
+      if (!movimentacao || !carta) return;
+      const podeAssinar = papel === "gestor" ? podeDarCienciaComoGestor(movimentacao, me) : podeDarCienciaComoRH(movimentacao, perfil === "RH");
+      if (!podeAssinar) {
+        flash("Você não pode dar ciência nesta carta.");
+        return;
+      }
+      const cargo = state.colaboradores.find((c) => c.nome === me)?.cargo ?? "";
+      const cartaAtualizada = darCiencaCartaDomain(carta, papel, me, cargo);
+      const atualizada = { ...movimentacao, cartaMovimentacao: cartaAtualizada };
+      (async () => {
+        try {
+          await atualizarMovimentacao(atualizada);
+          dispatch({ type: "ATUALIZAR_CARTA_MOVIMENTACAO", id, carta: cartaAtualizada });
+          flash("Ciência registrada.");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao registrar ciência.");
+        }
+      })();
+    },
+    [dispatch, state.movimentacoes, state.colaboradores, flash, me, perfil],
+  );
+
+  const marcarCartaMovimentacaoEntregueFn = useCallback(
+    (id: string) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode marcar a carta como entregue.");
+        return;
+      }
+      const movimentacao = state.movimentacoes.find((m) => m.id === id);
+      const carta = movimentacao?.cartaMovimentacao;
+      if (!movimentacao || !carta || !podeMarcarEntregueDomain(carta)) {
+        flash("Esta carta ainda não pode ser marcada como entregue.");
+        return;
+      }
+      const cartaAtualizada = marcarEntregueCartaDomain(carta, me);
+      const atualizada = { ...movimentacao, cartaMovimentacao: cartaAtualizada };
+      (async () => {
+        try {
+          await atualizarMovimentacao(atualizada);
+          dispatch({ type: "ATUALIZAR_CARTA_MOVIMENTACAO", id, carta: cartaAtualizada });
+          flash("Carta marcada como entregue ao colaborador.");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao marcar entrega.");
+        }
+      })();
+    },
+    [dispatch, state.movimentacoes, flash, me, perfil],
   );
 
   const toggleDescricaoCargoFn = useCallback(
@@ -1740,6 +1839,9 @@ export function usePortalData(): PortalData {
     reprovarEtapa: reprovarEtapaFn,
     restaurarMovimentacaoParaRH: restaurarMovimentacaoParaRHFn,
     editarDadosMovimentacao: editarDadosMovimentacaoFn,
+    emitirCartaMovimentacao: emitirCartaMovimentacaoFn,
+    darCienciaCartaMovimentacao: darCienciaCartaMovimentacaoFn,
+    marcarCartaMovimentacaoEntregue: marcarCartaMovimentacaoEntregueFn,
     criarMovimentacao: criarMovimentacaoFn,
     toggleDescricaoCargo: toggleDescricaoCargoFn,
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,

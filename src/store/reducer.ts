@@ -101,6 +101,12 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         movimentacoes: editarDadosMovimentacao(state.movimentacoes, action.id, action.edicoes, action.novaDataPrevistaIso, action.autor),
       };
 
+    case "ATUALIZAR_CARTA_MOVIMENTACAO":
+      return {
+        ...state,
+        movimentacoes: state.movimentacoes.map((m) => (m.id === action.id ? { ...m, cartaMovimentacao: action.carta } : m)),
+      };
+
     case "CRIAR_MOVIMENTACAO":
       return { ...state, movimentacoes: [action.movimentacao, ...state.movimentacoes] };
 

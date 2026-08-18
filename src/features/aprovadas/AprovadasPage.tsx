@@ -1,9 +1,47 @@
 import { useMemo, useState } from "react";
 import { Header } from "../../components/layout/Header";
-import { Badge, EmptyState, StatusBadge, tableStyles } from "../../components/ui";
+import { Badge, Button, EmptyState, StatusBadge, tableStyles } from "../../components/ui";
 import { MovimentacaoDetalhe } from "../../components/shared/MovimentacaoDetalhe";
+import { CartaMovimentacaoModal } from "../../components/shared/CartaMovimentacaoModal";
 import { tipoColor } from "../../domain/colors";
+import { podeEmitirCarta, statusCarta } from "../../domain/cartaMovimentacao";
 import { usePortalData } from "../../store/usePortalData";
+import type { Movimentacao } from "../../types/domain";
+
+function AcaoCarta({ m }: { m: Movimentacao }) {
+  const { perfil, emitirCartaMovimentacao } = usePortalData();
+  const [aberta, setAberta] = useState(false);
+
+  if (!m.cartaMovimentacao) {
+    if (perfil !== "RH" || !podeEmitirCarta(m)) return null;
+    return (
+      <Button
+        variant="ghost"
+        onClick={(e) => {
+          e.stopPropagation();
+          emitirCartaMovimentacao(m.id);
+        }}
+      >
+        Emitir Carta de Movimentação
+      </Button>
+    );
+  }
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        onClick={(e) => {
+          e.stopPropagation();
+          setAberta(true);
+        }}
+      >
+        Carta ({statusCarta(m.cartaMovimentacao)})
+      </Button>
+      {aberta && <CartaMovimentacaoModal movimentacao={m} onClose={() => setAberta(false)} />}
+    </>
+  );
+}
 
 export function AprovadasPage() {
   const { movimentacoesVisiveis } = usePortalData();
@@ -41,7 +79,8 @@ export function AprovadasPage() {
                 <th>Departamento</th>
                 <th>Gestor solicitante</th>
                 <th>Status</th>
-                <th className={tableStyles.right}>Aprovação final</th>
+                <th>Aprovação final</th>
+                <th className={tableStyles.right}>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -59,8 +98,9 @@ export function AprovadasPage() {
                   <td>
                     <StatusBadge status={m.status} />
                   </td>
+                  <td>{m.aprovacaoFinal ? `${m.aprovacaoFinal.data} · ${m.aprovacaoFinal.hora}` : "—"}</td>
                   <td className={tableStyles.right}>
-                    {m.aprovacaoFinal ? `${m.aprovacaoFinal.data} · ${m.aprovacaoFinal.hora}` : "—"}
+                    <AcaoCarta m={m} />
                   </td>
                 </tr>
               ))}
