@@ -3,3 +3,24 @@
   justify-content: flex-end;
   margin-bottom: 12px;
 }
+
+/* O texto do botão de status da Carta ("Carta (Aguardando ciência)") varia de
+ * tamanho e, dentro da coluna "Ações" da tabela, era cortado na borda direita
+ * da tela porque o botão-base (Button.module.css) força `white-space: nowrap`.
+ * Aqui, só para este botão específico, deixamos quebrar em várias linhas
+ * dentro de uma largura máxima, em vez de depender só do scroll horizontal do
+ * container da tabela (`Table.module.css` já tem `overflow-x: auto` como
+ * reforço em telas bem estreitas). */
+.botaoCarta {
+  max-width: 230px;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+@media (max-width: 700px) {
+  .botaoCarta {
+    max-width: 160px;
+  }
+}

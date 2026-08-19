@@ -32,6 +32,8 @@ function AcaoCarta({ m }: { m: Movimentacao }) {
     <>
       <Button
         variant="ghost"
+        className={styles.botaoCarta}
+        title={`Carta (${statusCarta(m.cartaMovimentacao)})`}
         onClick={(e) => {
           e.stopPropagation();
           setAberta(true);
