@@ -7,6 +7,7 @@ import { tipoColor } from "../../domain/colors";
 import { podeEmitirCarta, statusCarta } from "../../domain/cartaMovimentacao";
 import { usePortalData } from "../../store/usePortalData";
 import type { Movimentacao } from "../../types/domain";
+import styles from "./AprovadasPage.module.css";
 
 function AcaoCarta({ m }: { m: Movimentacao }) {
   const { perfil, emitirCartaMovimentacao } = usePortalData();
@@ -58,6 +59,9 @@ export function AprovadasPage() {
     return (
       <>
         <Header />
+        <div className={styles.acaoCartaDetalhe}>
+          <AcaoCarta m={movimentacao} />
+        </div>
         <MovimentacaoDetalhe movimentacao={movimentacao} onVoltar={() => setSelecionado(null)} />
       </>
     );
