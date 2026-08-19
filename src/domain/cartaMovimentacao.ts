@@ -61,20 +61,17 @@ function assinaturaPendente(nome: string, cargo: string): AssinaturaCarta {
   return { nome, cargo, data: null, status: "Pendente" };
 }
 
-/** Monta a carta inicial — as 2 assinaturas nascem "Pendente"; nome/cargo já
- * vêm preenchidos (gestor responsável e, pro bloco de RH, quem está emitindo)
- * pra exibição, mesmo antes de dar ciência. */
+/** Monta a carta inicial — a ciência do gestor nasce "Pendente"; nome/cargo
+ * já vêm preenchidos pra exibição, mesmo antes de ele confirmar. */
 export function emitirCarta(m: Movimentacao, emitidoPor: string, colaboradores: Colaborador[]): CartaMovimentacao {
   const colaboradorPorNome = new Map(colaboradores.map((c) => [c.nome, c]));
   const nomeGestor = gestorResponsavel(m);
   const cargoGestor = colaboradorPorNome.get(nomeGestor)?.cargo ?? "";
-  const cargoRH = colaboradorPorNome.get(emitidoPor)?.cargo ?? "";
   return {
     emitidaEm: new Date().toISOString(),
     emitidaPor: emitidoPor,
     descricaoAlteracao: gerarDescricaoAlteracao(m),
     assinaturaGestor: assinaturaPendente(nomeGestor, cargoGestor),
-    assinaturaRH: assinaturaPendente(emitidoPor, cargoRH),
     finalizadaEm: null,
     entregueAoColaborador: false,
     entregueEm: null,
@@ -82,35 +79,30 @@ export function emitirCarta(m: Movimentacao, emitidoPor: string, colaboradores: 
   };
 }
 
+/** A carta fica finalizada só com a ciência do gestor responsável — não há
+ * ciência de RH nem do colaborador registradas no sistema (a do colaborador
+ * fica pra assinatura física, fora do portal, na carta impressa). */
 export function cartaFinalizada(carta: CartaMovimentacao): boolean {
-  return carta.assinaturaGestor.status === "Assinado" && carta.assinaturaRH.status === "Assinado";
+  return carta.assinaturaGestor.status === "Assinado";
 }
 
-/** Registra a ciência de um dos dois signatários — nunca aprovação, só
- * confirmação de que a pessoa tomou conhecimento. Quando as duas ficam
- * "Assinado", a carta fica finalizada (habilita o PDF). */
-export function darCiencia(carta: CartaMovimentacao, papel: "gestor" | "rh", nome: string, cargo: string): CartaMovimentacao {
+/** Registra a ciência do gestor responsável — nunca aprovação, só
+ * confirmação de que ele tomou conhecimento. Habilita o PDF. */
+export function darCienciaGestor(carta: CartaMovimentacao, nome: string, cargo: string): CartaMovimentacao {
   const agora = new Date().toISOString();
-  const assinatura: AssinaturaCarta = { nome, cargo, data: agora, status: "Assinado" };
-  const atualizada: CartaMovimentacao = {
+  return {
     ...carta,
-    assinaturaGestor: papel === "gestor" ? assinatura : carta.assinaturaGestor,
-    assinaturaRH: papel === "rh" ? assinatura : carta.assinaturaRH,
+    assinaturaGestor: { nome, cargo, data: agora, status: "Assinado" },
+    finalizadaEm: carta.finalizadaEm ?? agora,
   };
-  atualizada.finalizadaEm = cartaFinalizada(atualizada) ? carta.finalizadaEm ?? agora : null;
-  return atualizada;
 }
 
 export function podeDarCienciaComoGestor(m: Movimentacao, me: string): boolean {
   return Boolean(m.cartaMovimentacao) && gestorResponsavel(m) === me && m.cartaMovimentacao?.assinaturaGestor.status === "Pendente";
 }
 
-export function podeDarCienciaComoRH(m: Movimentacao, perfilRH: boolean): boolean {
-  return Boolean(m.cartaMovimentacao) && perfilRH && m.cartaMovimentacao?.assinaturaRH.status === "Pendente";
-}
-
-/** RH-only — só depois que as duas ciências existirem, e só uma vez (sem
- * "desmarcar" no fluxo atual, mesmo padrão de outras confirmações do portal). */
+/** RH-only — só depois da ciência do gestor, e só uma vez (sem "desmarcar"
+ * no fluxo atual, mesmo padrão de outras confirmações do portal). */
 export function podeMarcarEntregue(carta: CartaMovimentacao): boolean {
   return cartaFinalizada(carta) && !carta.entregueAoColaborador;
 }

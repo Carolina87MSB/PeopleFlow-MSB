@@ -98,7 +98,7 @@ comment on column public.peopleflow_movimentacoes.historico is 'Array de { data,
 alter table public.peopleflow_movimentacoes
   add column if not exists carta_movimentacao jsonb;
 
-comment on column public.peopleflow_movimentacoes.carta_movimentacao is 'CartaMovimentacao — { emitidaEm, emitidaPor, descricaoAlteracao, assinaturaGestor, assinaturaRH, finalizadaEm, entregueAoColaborador, entregueEm, entreguePor }. As "assinaturas" são ciência (nome/cargo/data/status), nunca aprovação — a aprovação já aconteceu no fluxo de Etapas antes da carta existir.';
+comment on column public.peopleflow_movimentacoes.carta_movimentacao is 'CartaMovimentacao — { emitidaEm, emitidaPor, descricaoAlteracao, assinaturaGestor, finalizadaEm, entregueAoColaborador, entregueEm, entreguePor }. A única ciência registrada no sistema é a do gestor responsável (nome/cargo/data/status), nunca aprovação — a aprovação já aconteceu no fluxo de Etapas antes da carta existir.';
 
 create table if not exists public.peopleflow_cargos_custom (
   nome text primary key,

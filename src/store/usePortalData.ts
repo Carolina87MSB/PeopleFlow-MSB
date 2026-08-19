@@ -71,11 +71,10 @@ import {
 } from "../domain/avaliacaoExperiencia";
 import { descendants, ehDiretorIndustrial } from "../domain/hierarquia";
 import {
-  darCiencia as darCiencaCartaDomain,
+  darCienciaGestor as darCienciaGestorCartaDomain,
   emitirCarta as emitirCartaDomain,
   marcarEntregue as marcarEntregueCartaDomain,
   podeDarCienciaComoGestor,
-  podeDarCienciaComoRH,
   podeEmitirCarta as podeEmitirCartaDomain,
   podeMarcarEntregue as podeMarcarEntregueDomain,
 } from "../domain/cartaMovimentacao";
@@ -161,12 +160,11 @@ export interface PortalData {
    * PRO/TRF/SAL, sem carta ainda). Nunca cria uma movimentação nova; só
    * preenche `cartaMovimentacao` na própria movimentação. */
   emitirCartaMovimentacao: (id: string) => void;
-  /** Ciência (não aprovação) do gestor responsável ou do RH — `papel`
-   * decide qual das 2 assinaturas é gravada; a permissão de quem pode
-   * clicar é checada dentro da função. */
-  darCienciaCartaMovimentacao: (id: string, papel: "gestor" | "rh") => void;
-  /** RH-only, só depois da carta finalizada (as 2 ciências dadas) — não cria
-   * movimentação nova, só marca a entrega na mesma linha. */
+  /** Ciência (não aprovação) do gestor responsável — a permissão de quem
+   * pode clicar é checada dentro da função. */
+  darCienciaCartaMovimentacao: (id: string) => void;
+  /** RH-only, só depois da ciência do gestor — não cria movimentação nova,
+   * só marca a entrega na mesma linha. */
   marcarCartaMovimentacaoEntregue: (id: string) => void;
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   toggleDescricaoCargo: (nome: string) => void;
@@ -681,17 +679,16 @@ export function usePortalData(): PortalData {
   );
 
   const darCienciaCartaMovimentacaoFn = useCallback(
-    (id: string, papel: "gestor" | "rh") => {
+    (id: string) => {
       const movimentacao = state.movimentacoes.find((m) => m.id === id);
       const carta = movimentacao?.cartaMovimentacao;
       if (!movimentacao || !carta) return;
-      const podeAssinar = papel === "gestor" ? podeDarCienciaComoGestor(movimentacao, me) : podeDarCienciaComoRH(movimentacao, perfil === "RH");
-      if (!podeAssinar) {
+      if (!podeDarCienciaComoGestor(movimentacao, me)) {
         flash("Você não pode dar ciência nesta carta.");
         return;
       }
       const cargo = state.colaboradores.find((c) => c.nome === me)?.cargo ?? "";
-      const cartaAtualizada = darCiencaCartaDomain(carta, papel, me, cargo);
+      const cartaAtualizada = darCienciaGestorCartaDomain(carta, me, cargo);
       const atualizada = { ...movimentacao, cartaMovimentacao: cartaAtualizada };
       (async () => {
         try {
@@ -703,7 +700,7 @@ export function usePortalData(): PortalData {
         }
       })();
     },
-    [dispatch, state.movimentacoes, state.colaboradores, flash, me, perfil],
+    [dispatch, state.movimentacoes, state.colaboradores, flash, me],
   );
 
   const marcarCartaMovimentacaoEntregueFn = useCallback(

@@ -1,7 +1,7 @@
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { formatarDataHora, formatarDataIso } from "../../domain/dates";
-import { cartaFinalizada, podeDarCienciaComoGestor, podeDarCienciaComoRH, podeMarcarEntregue, statusCarta } from "../../domain/cartaMovimentacao";
+import { cartaFinalizada, podeDarCienciaComoGestor, podeMarcarEntregue, statusCarta } from "../../domain/cartaMovimentacao";
 import { usePortalData } from "../../store/usePortalData";
 import { MSB_LOGO_PNG_BASE64 } from "../../assets/msbLogo";
 import type { Movimentacao } from "../../types/domain";
@@ -17,10 +17,11 @@ function valorDado(m: Movimentacao, label: string): string | null {
 }
 
 /** Ficha completa da Carta de Movimentação — texto formatado conforme o
- * modelo institucional, blocos de ciência (gestor/RH/colaborador) e o botão
- * de PDF (window.print() sobre a área com CSS de impressão dedicado, mesmo
- * padrão já usado nos dashboards de Gestão de Desempenho). Nunca cria uma
- * movimentação nova — tudo aqui lê/grava em `movimentacao.cartaMovimentacao`. */
+ * modelo institucional, o bloco de ciência do gestor responsável (só
+ * nome/cargo/data, sem linha de assinatura) e o botão de PDF (window.print()
+ * sobre a área com CSS de impressão dedicado, mesmo padrão já usado nos
+ * dashboards de Gestão de Desempenho). Nunca cria uma movimentação nova —
+ * tudo aqui lê/grava em `movimentacao.cartaMovimentacao`. */
 export function CartaMovimentacaoModal({ movimentacao: m, onClose }: CartaMovimentacaoModalProps) {
   const { conta, perfil, colaboradores, darCienciaCartaMovimentacao, marcarCartaMovimentacaoEntregue } = usePortalData();
   const carta = m.cartaMovimentacao;
@@ -37,7 +38,6 @@ export function CartaMovimentacaoModal({ movimentacao: m, onClose }: CartaMovime
 
   const finalizada = cartaFinalizada(carta);
   const podeAssinarGestor = podeDarCienciaComoGestor(m, conta.nome);
-  const podeAssinarRH = podeDarCienciaComoRH(m, perfil === "RH");
   const podeEntregar = perfil === "RH" && podeMarcarEntregue(carta);
 
   return (
@@ -80,33 +80,15 @@ export function CartaMovimentacaoModal({ movimentacao: m, onClose }: CartaMovime
             <div className={styles.blocoTitulo}>GESTOR RESPONSÁVEL</div>
             <div>Nome: {carta.assinaturaGestor.nome || "—"}</div>
             <div>Cargo: {carta.assinaturaGestor.cargo || "—"}</div>
-            <div>Data: {carta.assinaturaGestor.data ? formatarDataHora(carta.assinaturaGestor.data) : "—"}</div>
-            <div className={styles.linhaAssinatura}>Assinatura: ______________________________</div>
+            <div>Data da ciência: {carta.assinaturaGestor.data ? formatarDataHora(carta.assinaturaGestor.data) : "—"}</div>
             <div className={styles.statusAssinatura}>{carta.assinaturaGestor.status === "Assinado" ? "Ciência registrada" : "Aguardando ciência"}</div>
-          </div>
-
-          <div className={styles.blocoAssinatura}>
-            <div className={styles.blocoTitulo}>RECURSOS HUMANOS</div>
-            <div>Nome: {carta.assinaturaRH.nome || "—"}</div>
-            <div>Cargo: {carta.assinaturaRH.cargo || "—"}</div>
-            <div>Data: {carta.assinaturaRH.data ? formatarDataHora(carta.assinaturaRH.data) : "—"}</div>
-            <div className={styles.linhaAssinatura}>Assinatura: ______________________________</div>
-            <div className={styles.statusAssinatura}>{carta.assinaturaRH.status === "Assinado" ? "Ciência registrada" : "Aguardando ciência"}</div>
-          </div>
-
-          <div className={styles.blocoAssinatura}>
-            <div className={styles.blocoTitulo}>CIÊNCIA DO COLABORADOR</div>
-            <div>Nome: {m.colaborador}</div>
-            <div>Data: ______________________________</div>
-            <div className={styles.linhaAssinatura}>Assinatura: ______________________________</div>
           </div>
         </div>
 
         <div className={styles.acoes}>
           <span className={styles.statusGeral}>Status: {statusCarta(carta)}</span>
           <div className={styles.acoesBotoes}>
-            {podeAssinarGestor && <Button variant="primary" onClick={() => darCienciaCartaMovimentacao(m.id, "gestor")}>Dar ciência (Gestor)</Button>}
-            {podeAssinarRH && <Button variant="primary" onClick={() => darCienciaCartaMovimentacao(m.id, "rh")}>Dar ciência (RH)</Button>}
+            {podeAssinarGestor && <Button variant="primary" onClick={() => darCienciaCartaMovimentacao(m.id)}>Dar ciência (Gestor)</Button>}
             {podeEntregar && (
               <Button variant="secondary" onClick={() => marcarCartaMovimentacaoEntregue(m.id)}>
                 Marcar como entregue ao colaborador

@@ -163,9 +163,10 @@ export interface EventoHistoricoMovimentacao {
   detalhe?: string;
 }
 
-/** Ciência (não aprovação — essa já aconteceu no fluxo de Etapas) de um dos
- * dois signatários da Carta de Movimentação. `data` só é preenchida quando
- * `status` vira "Assinado". */
+/** Ciência (não aprovação — essa já aconteceu no fluxo de Etapas) do gestor
+ * responsável pela Carta de Movimentação — só um registro de nome/cargo/data,
+ * sem linha de assinatura física. `data` só é preenchida quando `status` vira
+ * "Assinado". */
 export interface AssinaturaCarta {
   nome: string;
   cargo: string;
@@ -177,16 +178,15 @@ export interface AssinaturaCarta {
  * (ver podeEmitirCarta() em domain/cartaMovimentacao.ts), gerada a partir dos
  * dados já registrados na própria movimentação (nunca redigitados).
  * `descricaoAlteracao` é um snapshot congelado no momento da emissão — não é
- * recalculado se a movimentação for editada depois. As assinaturas são
- * ciência digital (nome/cargo/data/status), nunca aprovação — a aprovação já
- * aconteceu no fluxo de Etapas antes da carta existir. */
+ * recalculado se a movimentação for editada depois. A única ciência
+ * registrada é a do gestor responsável (`assinaturaGestor`) — nunca
+ * aprovação, essa já aconteceu no fluxo de Etapas antes da carta existir. */
 export interface CartaMovimentacao {
   emitidaEm: string;
   emitidaPor: string;
   descricaoAlteracao: string;
   assinaturaGestor: AssinaturaCarta;
-  assinaturaRH: AssinaturaCarta;
-  /** Preenchida só quando as duas assinaturas viram "Assinado". */
+  /** Preenchida quando o gestor dá ciência. */
   finalizadaEm: string | null;
   entregueAoColaborador: boolean;
   entregueEm: string | null;
