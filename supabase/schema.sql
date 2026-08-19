@@ -980,3 +980,29 @@ alter table public.peopleflow_ciclos_avaliacao_desempenho add column if not exis
 
 comment on column public.peopleflow_ciclos_avaliacao_desempenho.data_corte_admissao is
   'Data de corte de admissão deste ciclo — colaborador com admissão em ou antes desta data é elegível, depois dela não é. Substitui o cálculo de "6 meses completos de empresa", que dependia de quando o ciclo fechava.';
+
+-- =====================================================================
+-- 20) Descrição de Cargo — edição por Gestor (escopo) + bloco "Aprovações".
+-- Gestor passa a poder editar, nos cargos sob sua liderança (ver
+-- cargoSobLiderancaDe() em src/domain/hierarquia.ts), os grupos "Sumário do
+-- cargo", "Principais responsabilidades", "Requisitos do cargo" e
+-- "Competências e requisitos desejáveis" — "Dados do formulário
+-- (auditoria)", "Informações do cargo" e "EPIs" continuam RH-only. O
+-- histórico de edições (peopleflow_descricoes_cargo_historico, já existente)
+-- é reaproveitado sem mudança de estrutura. Estas 4 colunas novas guardam o
+-- registro de quem elaborou/revisou e quem aprovou o documento, cada um com
+-- sua data — nunca texto livre, sempre gravado ao clicar em "Marcar"/
+-- "Aprovar" (ver marcarElaboracaoDescricaoCargo/marcarAprovacaoDescricaoCargo
+-- em src/repositories/descricoesCargoRepository.ts).
+-- =====================================================================
+
+alter table public.peopleflow_descricoes_cargo
+  add column if not exists elaborado_por text,
+  add column if not exists elaborado_em timestamptz,
+  add column if not exists aprovado_por text,
+  add column if not exists aprovado_em timestamptz;
+
+comment on column public.peopleflow_descricoes_cargo.elaborado_por is
+  'Nome de quem elaborou/revisou o conteúdo (gestor ou analista de RH) — gravado ao clicar em "Marcar elaboração/revisão", nunca texto livre.';
+comment on column public.peopleflow_descricoes_cargo.aprovado_por is
+  'Nome de quem aprovou o documento (RH ou Diretoria) — gravado ao clicar em "Aprovar", nunca texto livre.';

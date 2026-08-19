@@ -13,18 +13,28 @@ import styles from "./CargosPage.module.css";
 
 export function CargosPage() {
   const { state } = usePortalStore();
-  const { colaboradoresVisiveis, podeVerCadastros, toggleDescricaoCargo, descricoesCargo, podeEditarDescricaoCargo } = usePortalData();
+  const { conta, perfil, colaboradoresVisiveis, podeVerCargos, toggleDescricaoCargo, descricoesCargo } = usePortalData();
   const [cargoAberto, setCargoAberto] = useState<string | null>(null);
+
+  /** Gestor só vê os próprios cargos-novos-pendentes (CargoCustom.gestor),
+   * senão veria pedidos de "Novo Cargo" de departamentos inteiros que não
+   * lidera — colaboradoresVisiveis já resolve esse escopo para os cargos já
+   * ocupados (ver agregarCargos), mas cargosCustom (0 ocupantes) precisa de
+   * filtro próprio. */
+  const cargosCustomVisiveis = useMemo(
+    () => (perfil === "Gestor" ? state.cargosCustom.filter((c) => c.gestor === conta.nome) : state.cargosCustom),
+    [perfil, conta.nome, state.cargosCustom],
+  );
 
   const cargos = useMemo(
     () =>
-      agregarCargos(colaboradoresVisiveis, state.cargosCustom).sort((a, b) =>
+      agregarCargos(colaboradoresVisiveis, cargosCustomVisiveis).sort((a, b) =>
         formatarNomeCargo(a.nome).localeCompare(formatarNomeCargo(b.nome), "pt-BR"),
       ),
-    [colaboradoresVisiveis, state.cargosCustom],
+    [colaboradoresVisiveis, cargosCustomVisiveis],
   );
 
-  if (!podeVerCadastros) return <Navigate to="/dashboard" replace />;
+  if (!podeVerCargos) return <Navigate to="/dashboard" replace />;
 
   return (
     <>
@@ -80,12 +90,11 @@ export function CargosPage() {
                           {c.descricao === "OK" ? "OK" : "Pendente"}
                         </Badge>
                       </button>
-                    ) : podeEditarDescricaoCargo ? (
+                    ) : (
+                      // Chegou aqui = já passou pelo guard de podeVerCargos no topo do componente.
                       <button type="button" className={styles.descricaoLink} onClick={() => setCargoAberto(c.nome)}>
                         + Adicionar descrição
                       </button>
-                    ) : (
-                      "—"
                     )}
                   </td>
                   <td className={tableStyles.right}>

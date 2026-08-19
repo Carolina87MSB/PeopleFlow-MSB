@@ -307,6 +307,15 @@ export interface DescricaoCargo {
   epis: string;
   updatedAt: string;
   updatedBy: string;
+  /** Bloco "Aprovações" — quem elaborou/revisou o conteúdo (gestor ou
+   * analista de RH) e quem aprovou (RH ou Diretoria), cada um com sua data.
+   * Registrado ao clicar em "Marcar"/"Aprovar" (ver
+   * marcarElaboracaoDescricaoCargo/marcarAprovacaoDescricaoCargo em
+   * usePortalData.ts) — nunca digitado livremente. */
+  elaboradoPor: string;
+  elaboradoEm: string;
+  aprovadoPor: string;
+  aprovadoEm: string;
 }
 
 export interface HistoricoDescricaoCargo {

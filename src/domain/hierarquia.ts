@@ -147,6 +147,17 @@ export function gestorDoDepartamento(colaboradores: Colaborador[], depto: string
   return melhor;
 }
 
+/** true se pelo menos um colaborador que hoje ocupa `cargoNome` está dentro
+ * do `scopeSet` de um Gestor (toda a árvore de reportes, não só reporte
+ * direto) — usado para decidir se ele pode editar a Descrição de Cargo
+ * (POP-RH-001) desse cargo. `scopeSet === null` (perfil não é Gestor)
+ * sempre retorna false; RH/Diretoria têm acesso irrestrito e são checados
+ * antes de chamar isto (ver podeEditarSecaoDescricaoCargo em usePortalData.ts). */
+export function cargoSobLiderancaDe(colaboradores: Colaborador[], cargoNome: string, scopeSet: Set<string> | null): boolean {
+  if (!scopeSet) return false;
+  return colaboradores.some((c) => c.cargo === cargoNome && scopeSet.has(c.nome));
+}
+
 /** Walks the manager tree to find every employee reporting up to `nome`, directly or transitively. */
 export function descendants(colaboradores: Colaborador[], nome: string): Set<string> {
   const children = new Map<string, string[]>();

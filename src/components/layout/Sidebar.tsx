@@ -46,16 +46,20 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const { state } = usePortalStore();
   const {
     conta,
+    perfil,
     colaboradoresVisiveis,
     movimentacoesVisiveis,
     podeVerColaboradores,
     podeVerCadastros,
+    podeVerCargos,
     pendenciasFinanceirasCount,
     pendenciasAvaliacaoExperiencia,
   } = usePortalData();
 
   const totalDeptos = agregarDepartamentos(colaboradoresVisiveis).length;
-  const totalCargos = agregarCargos(colaboradoresVisiveis, state.cargosCustom).length;
+  // Mesmo escopo de CargosPage.tsx — Gestor só conta os próprios cargos-novos-pendentes.
+  const cargosCustomVisiveis = perfil === "Gestor" ? state.cargosCustom.filter((c) => c.gestor === conta?.nome) : state.cargosCustom;
+  const totalCargos = agregarCargos(colaboradoresVisiveis, cargosCustomVisiveis).length;
   const pendentesCount = movimentacoesVisiveis.filter((m) => m.status === "Em Aprovação").length;
   const aprovadasCount = movimentacoesVisiveis.filter((m) => m.status === "Aprovado" || m.status === "Concluído").length;
 
@@ -125,10 +129,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <NavItem to="/colaboradores" icon={<Users size={18} strokeWidth={1.9} />} label="Colaboradores" badge={colaboradoresVisiveis.length} badgeTone="neutral" />
         )}
         {podeVerCadastros && (
-          <>
-            <NavItem to="/departamentos" icon={<Building2 size={18} strokeWidth={1.9} />} label="Departamentos" badge={totalDeptos} badgeTone="neutral" />
-            <NavItem to="/cargos" icon={<Briefcase size={18} strokeWidth={1.9} />} label="Cargos" badge={totalCargos} badgeTone="neutral" />
-          </>
+          <NavItem to="/departamentos" icon={<Building2 size={18} strokeWidth={1.9} />} label="Departamentos" badge={totalDeptos} badgeTone="neutral" />
+        )}
+        {podeVerCargos && (
+          <NavItem to="/cargos" icon={<Briefcase size={18} strokeWidth={1.9} />} label="Cargos" badge={totalCargos} badgeTone="neutral" />
         )}
         {/* Visível pra todo mundo (não só RH) desde a Etapa 2.1 — Gestor/Diretoria
             precisam chegar lá pra preencher avaliações dos liderados/próprias. */}

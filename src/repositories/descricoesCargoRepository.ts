@@ -28,6 +28,10 @@ interface DescricaoCargoRow {
   epis: string | null;
   updated_at: string;
   updated_by: string | null;
+  elaborado_por: string | null;
+  elaborado_em: string | null;
+  aprovado_por: string | null;
+  aprovado_em: string | null;
 }
 
 interface HistoricoRow {
@@ -59,6 +63,10 @@ function fromRow(row: DescricaoCargoRow): DescricaoCargo {
     epis: row.epis ?? "",
     updatedAt: row.updated_at,
     updatedBy: row.updated_by ?? "",
+    elaboradoPor: row.elaborado_por ?? "",
+    elaboradoEm: row.elaborado_em ?? "",
+    aprovadoPor: row.aprovado_por ?? "",
+    aprovadoEm: row.aprovado_em ?? "",
   };
 }
 
@@ -137,4 +145,49 @@ export async function atualizarCampoDescricaoCargo(
     editado_por: editadoPor,
   });
   if (histError) throw new Error(`Falha ao registrar histórico de alteração: ${histError.message}`);
+}
+
+/** Bloco "Aprovações" — registra quem elaborou/revisou o conteúdo (gestor ou
+ * analista de RH). Upsert (cria a linha se o cargo ainda não tiver
+ * descrição) + histórico, mesmo padrão de atualizarCampoDescricaoCargo(). */
+export async function marcarElaboracaoDescricaoCargo(cargoNome: string, nome: string): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const agora = new Date().toISOString();
+  const { error: updateError } = await supabase.from("peopleflow_descricoes_cargo").upsert(
+    { cargo_nome: cargoNome, elaborado_por: nome, elaborado_em: agora, updated_at: agora, updated_by: nome },
+    { onConflict: "cargo_nome" },
+  );
+  if (updateError) throw new Error(`Falha ao registrar elaboração/revisão: ${updateError.message}`);
+
+  const { error: histError } = await supabase.from("peopleflow_descricoes_cargo_historico").insert({
+    cargo_nome: cargoNome,
+    campo: "elaboradoPor",
+    valor_anterior: null,
+    valor_novo: nome,
+    editado_por: nome,
+  });
+  if (histError) throw new Error(`Falha ao registrar histórico de elaboração: ${histError.message}`);
+}
+
+/** Bloco "Aprovações" — registra quem aprovou o documento (RH ou
+ * Diretoria). Mesmo padrão de marcarElaboracaoDescricaoCargo(). */
+export async function marcarAprovacaoDescricaoCargo(cargoNome: string, nome: string): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const agora = new Date().toISOString();
+  const { error: updateError } = await supabase.from("peopleflow_descricoes_cargo").upsert(
+    { cargo_nome: cargoNome, aprovado_por: nome, aprovado_em: agora, updated_at: agora, updated_by: nome },
+    { onConflict: "cargo_nome" },
+  );
+  if (updateError) throw new Error(`Falha ao registrar aprovação: ${updateError.message}`);
+
+  const { error: histError } = await supabase.from("peopleflow_descricoes_cargo_historico").insert({
+    cargo_nome: cargoNome,
+    campo: "aprovadoPor",
+    valor_anterior: null,
+    valor_novo: nome,
+    editado_por: nome,
+  });
+  if (histError) throw new Error(`Falha ao registrar histórico de aprovação: ${histError.message}`);
 }

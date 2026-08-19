@@ -10,6 +10,15 @@ export function navRegistro(perfil: Perfil): boolean {
   return perfil === "RH";
 }
 
+/** Cargos (`/cargos`) é RH-only pra Departamentos/Acessos/Desligados/Gestão
+ * de Desempenho (ver navRegistro), mas Gestor também precisa entrar pra
+ * editar a Descrição de Cargo dos cargos sob sua liderança — a lista em si
+ * já vem escopada (agregarCargos sobre colaboradoresVisiveis), então liberar
+ * a rota não expõe cargos fora da árvore de reportes do Gestor. */
+export function navCargos(perfil: Perfil): boolean {
+  return perfil === "RH" || perfil === "Gestor";
+}
+
 /**
  * RH, Gestor e Diretoria podem solicitar movimentações — Diretor Industrial e
  * CEO também têm reportes diretos (aparecem na coluna `gestor` de algum

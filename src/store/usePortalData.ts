@@ -10,6 +10,8 @@ import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../rep
 import {
   atualizarCampoDescricaoCargo as atualizarCampoDescricaoCargoNoSupabase,
   getHistoricoDescricaoCargo,
+  marcarAprovacaoDescricaoCargo as marcarAprovacaoDescricaoCargoNoSupabase,
+  marcarElaboracaoDescricaoCargo as marcarElaboracaoDescricaoCargoNoSupabase,
 } from "../repositories/descricoesCargoRepository";
 import {
   atualizarMovimentacao,
@@ -46,7 +48,7 @@ import {
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
-import { descricaoCargoVazia, type CampoDescricaoCargo } from "../domain/descricaoCargo";
+import { descricaoCargoVazia, podeGestorEditarGrupo, type CampoDescricaoCargo } from "../domain/descricaoCargo";
 import {
   arredondar,
   calcularNotasAvaliacao,
@@ -69,7 +71,7 @@ import {
   gerarIdAvaliacaoExperiencia,
   pendenciasAvaliacaoExperiencia as pendenciasAvaliacaoExperienciaDomain,
 } from "../domain/avaliacaoExperiencia";
-import { descendants, ehDiretorIndustrial } from "../domain/hierarquia";
+import { cargoSobLiderancaDe, descendants, ehDiretorIndustrial } from "../domain/hierarquia";
 import {
   darCienciaGestor as darCienciaGestorCartaDomain,
   emitirCarta as emitirCartaDomain,
@@ -79,7 +81,7 @@ import {
   podeMarcarEntregue as podeMarcarEntregueDomain,
 } from "../domain/cartaMovimentacao";
 import { notificacaoConcluida, notificacaoNovaEtapa, notificacaoReprovada } from "../domain/notificacoes";
-import { canCreate, canSeeMov, navColab, navRegistro, showEquipes } from "../domain/permissoes";
+import { canCreate, canSeeMov, navCargos, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
 import {
   aprovarEtapa as aprovarEtapaDomain,
@@ -138,12 +140,30 @@ export interface PortalData {
   desligamentosFinanceiros: DesligamentoFinanceiro[];
   pendenciasFinanceirasCount: number;
   descricoesCargo: DescricaoCargo[];
-  podeEditarDescricaoCargo: boolean;
+  /** true quando `conta` pode editar o grupo `grupo` (ver
+   * CAMPOS_DESCRICAO_CARGO) da Descrição de Cargo de `cargoNome` — RH
+   * sempre, Gestor só nos 4 grupos de conteúdo liberados e só nos cargos sob
+   * sua liderança (ver cargoSobLiderancaDe em domain/hierarquia.ts). */
+  podeEditarSecaoDescricaoCargo: (cargoNome: string, grupo: string) => boolean;
+  /** Bloco "Aprovações" — quem pode marcar "Elaborado/Revisado por": RH
+   * sempre, Gestor só nos cargos sob sua liderança. */
+  podeElaborarDescricaoCargo: (cargoNome: string) => boolean;
+  marcarElaboracaoDescricaoCargo: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
+  /** Bloco "Aprovações" — quem pode marcar "Aprovado por": RH ou Diretoria,
+   * pra qualquer cargo (papel de auditoria/governança do documento, não de
+   * liderança direta). */
+  podeAprovarDescricaoCargo: boolean;
+  marcarAprovacaoDescricaoCargo: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
   podeEditarAdmissao: boolean;
   scopeSet: Set<string> | null;
   podeCriar: boolean;
   podeVerColaboradores: boolean;
   podeVerCadastros: boolean;
+  /** `/cargos` — RH sempre; Gestor também, pra editar a Descrição de Cargo
+   * dos cargos sob sua liderança (a lista já vem escopada, ver navCargos em
+   * domain/permissoes.ts). Diferente de `podeVerCadastros`, que continua
+   * RH-only pra Departamentos/Acessos/etc. */
+  podeVerCargos: boolean;
   mostrarEquipes: boolean;
   loading: boolean;
   aprovarEtapa: (id: string) => void;
@@ -796,6 +816,68 @@ export function usePortalData(): PortalData {
   const carregarHistoricoDescricaoCargoFn = useCallback(
     (cargoNome: string) => getHistoricoDescricaoCargo(cargoNome),
     [],
+  );
+
+  /** RH sempre; Gestor só nos grupos liberados (ver podeGestorEditarGrupo)
+   * e só nos cargos sob sua liderança (ver cargoSobLiderancaDe). */
+  const podeEditarSecaoDescricaoCargoFn = useCallback(
+    (cargoNome: string, grupo: string) => {
+      if (perfil === "RH") return true;
+      if (perfil !== "Gestor") return false;
+      if (!podeGestorEditarGrupo(grupo)) return false;
+      return cargoSobLiderancaDe(state.colaboradores, cargoNome, scopeSet);
+    },
+    [perfil, scopeSet, state.colaboradores],
+  );
+
+  /** Quem pode marcar "Elaborado/Revisado por" no bloco Aprovações — mesma
+   * regra de liderança do cargo que já vale pra edição de conteúdo, mas sem
+   * restrição de grupo (elaborar/revisar é sobre o documento como um todo). */
+  const podeElaborarDescricaoCargoFn = useCallback(
+    (cargoNome: string) => {
+      if (perfil === "RH") return true;
+      if (perfil !== "Gestor") return false;
+      return cargoSobLiderancaDe(state.colaboradores, cargoNome, scopeSet);
+    },
+    [perfil, scopeSet, state.colaboradores],
+  );
+
+  const marcarElaboracaoDescricaoCargoFn = useCallback(
+    async (cargoNome: string) => {
+      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome) ?? descricaoCargoVazia(cargoNome);
+      try {
+        await marcarElaboracaoDescricaoCargoNoSupabase(cargoNome, me);
+        dispatch({
+          type: "ATUALIZAR_DESCRICAO_CARGO",
+          descricao: { ...atual, elaboradoPor: me, elaboradoEm: new Date().toISOString(), updatedAt: new Date().toISOString(), updatedBy: me },
+        });
+        flash("Elaboração/revisão registrada.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao registrar elaboração/revisão.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, state.descricoesCargo, flash],
+  );
+
+  const marcarAprovacaoDescricaoCargoFn = useCallback(
+    async (cargoNome: string) => {
+      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome) ?? descricaoCargoVazia(cargoNome);
+      try {
+        await marcarAprovacaoDescricaoCargoNoSupabase(cargoNome, me);
+        dispatch({
+          type: "ATUALIZAR_DESCRICAO_CARGO",
+          descricao: { ...atual, aprovadoPor: me, aprovadoEm: new Date().toISOString(), updatedAt: new Date().toISOString(), updatedBy: me },
+        });
+        flash("Aprovação registrada.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao registrar aprovação.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, state.descricoesCargo, flash],
   );
 
   const atualizarAdmissaoFn = useCallback(
@@ -1824,12 +1906,17 @@ export function usePortalData(): PortalData {
     desligamentosFinanceiros: state.desligamentosFinanceiros,
     pendenciasFinanceirasCount,
     descricoesCargo: state.descricoesCargo,
-    podeEditarDescricaoCargo: perfil === "RH",
+    podeEditarSecaoDescricaoCargo: podeEditarSecaoDescricaoCargoFn,
+    podeElaborarDescricaoCargo: podeElaborarDescricaoCargoFn,
+    marcarElaboracaoDescricaoCargo: marcarElaboracaoDescricaoCargoFn,
+    podeAprovarDescricaoCargo: perfil === "RH" || perfil === "Diretoria",
+    marcarAprovacaoDescricaoCargo: marcarAprovacaoDescricaoCargoFn,
     podeEditarAdmissao: perfil === "RH",
     scopeSet,
     podeCriar: canCreate(perfil),
     podeVerColaboradores: navColab(perfil),
     podeVerCadastros: navRegistro(perfil),
+    podeVerCargos: navCargos(perfil),
     mostrarEquipes: showEquipes(perfil),
     loading,
     aprovarEtapa: aprovarEtapaFn,

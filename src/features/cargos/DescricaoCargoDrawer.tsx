@@ -14,11 +14,25 @@ interface DescricaoCargoDrawerProps {
 }
 
 /** Ficha do formulário de descrição de cargo (POP-RH-001): todos os campos do
- * documento oficial, editáveis campo a campo (só RH), com histórico de
- * atualizações — dados de controle (código/revisão/data) ficam em destaque
- * no topo por serem usados em auditorias. */
+ * documento oficial, editáveis campo a campo — RH em todos os grupos,
+ * Gestor só em "Sumário do cargo", "Principais responsabilidades",
+ * "Requisitos do cargo" e "Competências e requisitos desejáveis", e só nos
+ * cargos sob sua liderança (ver podeEditarSecaoDescricaoCargo em
+ * usePortalData.ts) — com histórico de atualizações e um bloco final de
+ * "Aprovações" (elaborado/revisado por + aprovado por, cada um com data).
+ * Dados de controle (código/revisão/data) ficam em destaque no topo por
+ * serem usados em auditorias. */
 export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawerProps) {
-  const { descricoesCargo, podeEditarDescricaoCargo, atualizarCampoDescricaoCargo, carregarHistoricoDescricaoCargo } = usePortalData();
+  const {
+    descricoesCargo,
+    podeEditarSecaoDescricaoCargo,
+    podeElaborarDescricaoCargo,
+    marcarElaboracaoDescricaoCargo,
+    podeAprovarDescricaoCargo,
+    marcarAprovacaoDescricaoCargo,
+    atualizarCampoDescricaoCargo,
+    carregarHistoricoDescricaoCargo,
+  } = usePortalData();
 
   const descricao = useMemo(
     () => descricoesCargo.find((d) => d.cargoNome === cargoNome) ?? descricaoCargoVazia(cargoNome),
@@ -27,6 +41,8 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
 
   const [historico, setHistorico] = useState<HistoricoDescricaoCargo[]>([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(true);
+  const [marcandoElaboracao, setMarcandoElaboracao] = useState(false);
+  const [marcandoAprovacao, setMarcandoAprovacao] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -62,6 +78,22 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
     return result;
   }
 
+  async function handleMarcarElaboracao() {
+    setMarcandoElaboracao(true);
+    const result = await marcarElaboracaoDescricaoCargo(cargoNome);
+    setMarcandoElaboracao(false);
+    if (result.ok) setHistorico(await carregarHistoricoDescricaoCargo(cargoNome));
+  }
+
+  async function handleMarcarAprovacao() {
+    setMarcandoAprovacao(true);
+    const result = await marcarAprovacaoDescricaoCargo(cargoNome);
+    setMarcandoAprovacao(false);
+    if (result.ok) setHistorico(await carregarHistoricoDescricaoCargo(cargoNome));
+  }
+
+  const podeElaborar = podeElaborarDescricaoCargo(cargoNome);
+
   return (
     <Drawer
       onClose={onClose}
@@ -81,13 +113,51 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
                 key={campo.key}
                 meta={campo}
                 valor={descricao[campo.key]}
-                podeEditar={podeEditarDescricaoCargo}
+                podeEditar={podeEditarSecaoDescricaoCargo(cargoNome, campo.grupo)}
                 onSalvar={(novo) => handleSalvarCampo(campo.key, novo)}
               />
             ))}
           </div>
         </div>
       ))}
+
+      <h4 className={styles.sectionTitle}>Aprovações</h4>
+      <div className={styles.aprovacoesBloco}>
+        <div className={styles.aprovacaoLinha}>
+          <span className={styles.aprovacaoLabel}>Elaborador/Revisado por</span>
+          <span className={styles.aprovacaoValor}>
+            {descricao.elaboradoPor ? (
+              <>
+                {descricao.elaboradoPor} <span className={styles.aprovacaoData}>· {formatarDataHora(descricao.elaboradoEm)}</span>
+              </>
+            ) : (
+              <span className={styles.vazio}>Ainda não registrado</span>
+            )}
+          </span>
+          {podeElaborar && (
+            <Button variant="ghost" onClick={handleMarcarElaboracao} disabled={marcandoElaboracao}>
+              {marcandoElaboracao ? "Salvando..." : descricao.elaboradoPor ? "Atualizar" : "Marcar"}
+            </Button>
+          )}
+        </div>
+        <div className={styles.aprovacaoLinha}>
+          <span className={styles.aprovacaoLabel}>Aprovado por</span>
+          <span className={styles.aprovacaoValor}>
+            {descricao.aprovadoPor ? (
+              <>
+                {descricao.aprovadoPor} <span className={styles.aprovacaoData}>· {formatarDataHora(descricao.aprovadoEm)}</span>
+              </>
+            ) : (
+              <span className={styles.vazio}>Ainda não registrado</span>
+            )}
+          </span>
+          {podeAprovarDescricaoCargo && (
+            <Button variant="ghost" onClick={handleMarcarAprovacao} disabled={marcandoAprovacao}>
+              {marcandoAprovacao ? "Salvando..." : descricao.aprovadoPor ? "Atualizar" : "Aprovar"}
+            </Button>
+          )}
+        </div>
+      </div>
 
       <h4 className={styles.sectionTitle}>Histórico de atualizações{historico.length > 0 ? ` (${historico.length})` : ""}</h4>
       {carregandoHistorico ? (

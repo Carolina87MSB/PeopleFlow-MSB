@@ -1,6 +1,9 @@
 import type { DescricaoCargo } from "../types/domain";
 
-export type CampoDescricaoCargo = Exclude<keyof DescricaoCargo, "cargoNome" | "updatedAt" | "updatedBy">;
+export type CampoDescricaoCargo = Exclude<
+  keyof DescricaoCargo,
+  "cargoNome" | "updatedAt" | "updatedBy" | "elaboradoPor" | "elaboradoEm" | "aprovadoPor" | "aprovadoEm"
+>;
 
 export interface CampoMeta {
   key: CampoDescricaoCargo;
@@ -27,8 +30,29 @@ export const CAMPOS_DESCRICAO_CARGO: CampoMeta[] = [
   { key: "epis", label: "EPIs (Equipamentos de Proteção Individual)", grupo: "EPIs", multiline: true },
 ];
 
+/** Grupos que um Gestor pode editar nos cargos sob sua liderança (ver
+ * cargoSobLiderancaDe() em domain/hierarquia.ts e
+ * podeEditarSecaoDescricaoCargo() em usePortalData.ts) — "Dados do
+ * formulário (auditoria)", "Informações do cargo" e "EPIs" continuam
+ * RH-only, por serem dados de controle/segurança do documento, não conteúdo
+ * do dia a dia da liderança. */
+const GRUPOS_EDITAVEIS_GESTOR = new Set(["Sumário do cargo", "Principais responsabilidades", "Requisitos do cargo", "Competências e requisitos desejáveis"]);
+
+export function podeGestorEditarGrupo(grupo: string): boolean {
+  return GRUPOS_EDITAVEIS_GESTOR.has(grupo);
+}
+
+/** Labels de "campo" que não fazem parte do formulário em si (não estão em
+ * CAMPOS_DESCRICAO_CARGO) mas ainda passam pelo mesmo histórico
+ * append-only — ver marcarElaboracaoDescricaoCargo/marcarAprovacaoDescricaoCargo
+ * em repositories/descricoesCargoRepository.ts. */
+const LABELS_HISTORICO_EXTRA: Record<string, string> = {
+  elaboradoPor: "Elaborado/Revisado por",
+  aprovadoPor: "Aprovado por",
+};
+
 export function labelForCampoDescricaoCargo(campo: string): string {
-  return CAMPOS_DESCRICAO_CARGO.find((c) => c.key === campo)?.label ?? campo;
+  return CAMPOS_DESCRICAO_CARGO.find((c) => c.key === campo)?.label ?? LABELS_HISTORICO_EXTRA[campo] ?? campo;
 }
 
 export function descricaoCargoVazia(cargoNome: string): DescricaoCargo {
@@ -50,5 +74,9 @@ export function descricaoCargoVazia(cargoNome: string): DescricaoCargo {
     epis: "",
     updatedAt: "",
     updatedBy: "",
+    elaboradoPor: "",
+    elaboradoEm: "",
+    aprovadoPor: "",
+    aprovadoEm: "",
   };
 }
