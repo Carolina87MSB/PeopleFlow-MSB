@@ -132,9 +132,21 @@ Isso significa: entre a aprovação no PeopleFlow e a confirmação no SST, o co
 
 Diferente das demais escritas do PeopleFlow (que vão para tabelas próprias, prefixadas `peopleflow_`), esta é a **primeira gravação direta na tabela `colaboradores`** vinda do próprio app — e como a RLS dela só libera `select` para `authenticated`, a escrita passa por uma Vercel Serverless Function RH-only (`api/atualizar-admissao.ts`, mesmo padrão do `api/desligar-colaborador.ts` do SST): confirma que quem chamou é RH e então usa a `SUPABASE_SERVICE_ROLE_KEY` para atualizar só a coluna `admissao`. **Só funciona em produção (Vercel) ou com `vercel dev`** — em `npm run dev` (Vite puro) a chamada falha, o que é esperado localmente.
 
-### Histórico do colaborador (`/colaboradores`)
+### Timeline da trajetória profissional (`/colaboradores`)
 
-A ficha de um colaborador (clique numa linha da tabela) tem uma seção **"Histórico"** ao final, listando toda movimentação já solicitada para ele — admissão, promoção, transferência, alteração salarial, desligamento — mais recente primeiro, com tipo, resumo, status e data. Filtra `movimentacoes` por `colaborador === nome` (mesma fonte usada em Workflow/Aprovadas, sem tabela nova); clicar num item abre a mesma ficha completa (`MovimentacaoDetalhe.tsx`) num Drawer por cima do Drawer do colaborador.
+A ficha de um colaborador (clique numa linha da tabela) tem, ao final, uma **Timeline da trajetória profissional** (`TimelineCarreira.tsx`, lógica em `domain/timelineCarreira.ts`) — substituiu o antigo "Histórico", que listava toda movimentação como um ticket de workflow genérico (Tipo/Solicitação/Aprovação/Conclusão). A Timeline só mostra eventos de carreira de fato, mais recente primeiro, cada um expansível:
+
+- **Admissão** — cargo/área/gestor de entrada, do snapshot gravado na própria movimentação de Admissão (`admissaoInfo`) no momento em que ela foi concluída — nunca reconstruído a partir do cadastro atual.
+- **Alteração de gestor** — só quando uma Promoção (com mudança de departamento) ou Transferência de fato mudou o gestor (`atualizacaoInfo.novoGestor`); a cadeia de "gestor antes/depois" é reconstruída andando pelas movimentações em ordem cronológica a partir do gestor de admissão — nunca lida do cadastro atual (`colaboradores.gestor` só tem o valor de hoje). Gestores diferentes ao longo do tempo geram eventos separados, nenhum é sobrescrito.
+- **Transferência** — setor anterior → novo setor (e cargo, se também mudou), das próprias `dados` da movimentação de Transferência ou de uma Promoção com mudança de departamento.
+- **Promoção** — cargo anterior → novo cargo + gestor responsável.
+- **Alteração salarial** — salário anterior → novo, de SAL ou de uma Promoção com reajuste. **RH/Diretoria veem o valor; qualquer outro perfil vê só que o evento aconteceu, sem o valor** (`podeVerSalario()` em `domain/permissoes.ts` — não é uma regra de permissão nova, é o mesmo padrão RH/Diretoria já usado em Descrição de Cargo/Carta de Movimentação, aplicado a este campo específico).
+- **Avaliação de Experiência** — etapa (45/90 dias), resultado e data, direto de `avaliacoesExperiencia` (sem duplicar cadastro).
+- **Avaliação de Desempenho + Potencial** — **um único evento por ciclo**, nunca dois separados; reaproveita `montarHistoricoColaborador()` (o mesmo join AVD+Potencial+Matriz 9 Box já usado na aba Histórico da Gestão de Desempenho) e `classificarFaixaMatriz9Box()`/`posicionarMatriz9Box()` pra Alto/Médio/Baixo e o quadrante — nenhuma lógica de cálculo nova. Se só uma das duas fichas foi homologada naquele ciclo, o evento mostra só o que existe.
+- **PDI** — objetivos, prazo, status e conclusão, direto de `state.pdi` (sem PDI paralelo).
+- **Desligamento** — data e motivo, só quando `colaborador.desligado`.
+
+Documentos, treinamentos, Descrição de Cargo, o "Movimentação de Pessoal" genérico e o `historico` de edições técnicas de uma movimentação (correções de RH tipo "Salário atual editado de X para Y") propositalmente **não aparecem** — isso é auditoria de sistema, não trajetória profissional. Só entra na Timeline uma movimentação já efetivada (`status === "Aprovado"`/`"Concluído"` e data efetiva já passada) — uma promoção agendada pro mês que vem ainda não é um evento.
 
 ### Ver detalhes e reprovação com justificativa (`/workflow`, `/dashboard`)
 

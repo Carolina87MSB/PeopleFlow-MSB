@@ -60,6 +60,15 @@ export function canSeeMov(
   return (scopeSet !== null && scopeSet.has(m.colaborador)) || m.solicitante === me || m.etapas.some((e) => e.aprovador === me);
 }
 
+/** Valor salarial é informação sensível — só RH/Diretoria veem o valor em
+ * qualquer tela que precise exibi-lo fora do fluxo de aprovação da própria
+ * movimentação (ex.: evento "Alteração salarial" na Timeline de carreira do
+ * colaborador, ver domain/timelineCarreira.ts). Gestor/Colaborador veem que
+ * o evento existiu, sem o valor. */
+export function podeVerSalario(perfil: Perfil): boolean {
+  return perfil === "RH" || perfil === "Diretoria";
+}
+
 export function filtrarColaboradoresPorEscopo<T extends { nome: string }>(
   colaboradores: T[],
   perfil: Perfil,
