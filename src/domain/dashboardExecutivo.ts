@@ -9,7 +9,8 @@
 
 import { dataBrParaIso, mesIsoFromDataBr, mesLabel } from "./dates";
 import { mesesCompletos } from "./dates";
-import type { Colaborador } from "../types/domain";
+import { filtrarFichasGestor, mediaNotasOficiais } from "./dashboardDesempenho";
+import type { AvaliacaoDesempenho, CicloAvaliacaoDesempenho, Colaborador } from "../types/domain";
 
 export interface FiltrosAtributosDashboard {
   setor: string;
@@ -142,4 +143,45 @@ export function tempoMedioDeEmpresa(colaboradoresAtivos: Colaborador[], dataRefe
   const somaMeses = colaboradoresAtivos.reduce((acc, c) => acc + mesesCompletos(c.admissaoIso, dataReferenciaIso), 0);
   const totalMeses = Math.round(somaMeses / colaboradoresAtivos.length);
   return { anos: Math.floor(totalMeses / 12), meses: totalMeses % 12 };
+}
+
+/** Ciclo "vigente" pro indicador Performance Média da MSB = o ciclo `"Aberto"`
+ * mais recente (`dataInicio`). Não há garantia estrutural de um único ciclo
+ * `"Aberto"` por vez neste app (ver `StatusCicloAvaliacaoDesempenho` em
+ * types/domain.ts) — em caso de mais de um, usa o mais recente; `null` se
+ * nenhum ciclo estiver aberto (nenhum "vigente" pra mostrar). */
+export function cicloVigenteAvaliacaoDesempenho(ciclos: CicloAvaliacaoDesempenho[]): CicloAvaliacaoDesempenho | null {
+  const abertos = ciclos.filter((c) => c.status === "Aberto").sort((a, b) => b.dataInicio.localeCompare(a.dataInicio));
+  return abertos[0] ?? null;
+}
+
+export interface PerformanceMediaMSB {
+  media: number | null;
+  quantidadeAvaliados: number;
+  ciclo: CicloAvaliacaoDesempenho | null;
+}
+
+/** Indicador "Performance Média da MSB" — reaproveita 100% a lógica já usada
+ * nos dashboards de Gestão de Desempenho (`filtrarFichasGestor()` +
+ * `mediaNotasOficiais()`, domain/dashboardDesempenho.ts): nunca recalcula
+ * nem duplica a AVD. Só entram fichas tipo GESTOR (única fonte de Nota
+ * Oficial) já `statusCalibracao === "Homologada"` do ciclo vigente — como
+ * uma ficha só existe pra quem era elegível quando o ciclo abriu (ver
+ * elegivelParaCicloAvaliacaoDesempenho() em domain/avaliacaoDesempenho.ts),
+ * "Homologada" já garante sozinho "elegível e efetivamente avaliado", sem
+ * precisar checar elegibilidade de novo aqui. Sempre empresa toda, nunca
+ * recortado por Setor/Gestor/Cargo — o card se chama "da MSB", não "da minha
+ * equipe" (mesmo princípio de Headcount Planejado/Aderência). */
+export function performanceMediaMSB(avaliacoesDesempenho: AvaliacaoDesempenho[], ciclos: CicloAvaliacaoDesempenho[]): PerformanceMediaMSB {
+  const ciclo = cicloVigenteAvaliacaoDesempenho(ciclos);
+  if (!ciclo) return { media: null, quantidadeAvaliados: 0, ciclo: null };
+  const fichas = filtrarFichasGestor(avaliacoesDesempenho, {
+    cicloId: ciclo.id,
+    departamento: "Todos",
+    gestor: "Todos",
+    cargo: "Todos",
+    statusAvaliacao: "Todos",
+  });
+  const homologadas = fichas.filter((f) => f.statusCalibracao === "Homologada");
+  return { media: mediaNotasOficiais(homologadas), quantidadeAvaliados: homologadas.length, ciclo };
 }

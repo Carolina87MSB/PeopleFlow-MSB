@@ -15,6 +15,7 @@ import {
   desligamentosNoPeriodo,
   filtrarPorAtributos,
   headcountEmData,
+  performanceMediaMSB,
   tempoMedioDeEmpresa,
   turnoverPorSetor,
   type FiltrosAtributosDashboard,
@@ -50,6 +51,8 @@ export function DashboardPage() {
     atualizarConfigDashboard,
     aprovarEtapa,
     reprovarEtapa,
+    avaliacoesDesempenho,
+    ciclosAvaliacaoDesempenho,
   } = usePortalData();
   const [modalAberto, setModalAberto] = useState(false);
   const [busca, setBusca] = useState("");
@@ -123,6 +126,13 @@ export function DashboardPage() {
   const tempoMedio = useMemo(
     () => tempoMedioDeEmpresa(colaboradoresAtivosNoFimDoPeriodo, periodoFim),
     [colaboradoresAtivosNoFimDoPeriodo, periodoFim],
+  );
+  // Sempre empresa toda (ver comentário em performanceMediaMSB) — não usa
+  // colaboradoresExecutivoFiltrados nem o Período selecionado, só o ciclo
+  // de AVD vigente.
+  const performanceMedia = useMemo(
+    () => performanceMediaMSB(avaliacoesDesempenho, ciclosAvaliacaoDesempenho),
+    [avaliacoesDesempenho, ciclosAvaliacaoDesempenho],
   );
 
   const departamentos = useMemo(() => agregarDepartamentos(colaboradoresAtivosNoFimDoPeriodo), [colaboradoresAtivosNoFimDoPeriodo]);
@@ -302,6 +312,15 @@ export function DashboardPage() {
         <KpiCard label="Admissões" value={resultadoTurnover.admissoes} hint="no período selecionado" />
         <KpiCard label="Desligamentos" value={resultadoTurnover.desligamentos} hint="no período selecionado" />
         <KpiCard label="Tempo Médio de Empresa" value={tempoMedio ? `${tempoMedio.anos}a ${tempoMedio.meses}m` : "—"} />
+        <KpiCard
+          label="Performance Média da MSB"
+          value={performanceMedia.media !== null ? `${performanceMedia.media.toFixed(1).replace(".", ",")} / 5,0` : "—"}
+          hint={
+            performanceMedia.ciclo
+              ? `${performanceMedia.quantidadeAvaliados} avaliados · ${performanceMedia.ciclo.nome}`
+              : "Nenhum ciclo de avaliação em aberto"
+          }
+        />
       </div>
 
       <h2 className={styles.secaoTitulo}>Alertas Operacionais</h2>
@@ -377,7 +396,9 @@ export function DashboardPage() {
           <div className={styles.deptList}>
             {departamentos.map((d) => (
               <div key={d.nome} className={styles.deptRow}>
-                <span className={styles.deptName}>{d.nome}</span>
+                <span className={styles.deptName} title={d.nome}>
+                  {d.nome}
+                </span>
                 <ProgressBar value={d.count} max={maxDepto} />
                 <span className={styles.deptCount}>{d.count}</span>
               </div>
@@ -390,7 +411,7 @@ export function DashboardPage() {
             <h3 className={styles.cardTitle}>Equipes por Gestor</h3>
             <div className={styles.gestorGrid}>
               {gestores.map(([nome, count]) => (
-                <Link key={nome} to={`/colaboradores?gestor=${encodeURIComponent(nome)}`} className={styles.gestorCard}>
+                <Link key={nome} to={`/colaboradores?gestor=${encodeURIComponent(nome)}`} className={styles.gestorCard} title={nome}>
                   <Avatar nome={nome} size={32} />
                   <div className={styles.gestorInfo}>
                     <div className={styles.gestorNome}>{nome}</div>
