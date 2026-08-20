@@ -18,7 +18,7 @@ const ICONE_POR_TIPO: Record<EventoTimelineCarreira["tipo"], { Icon: typeof LogI
   transferencia: { Icon: ArrowLeftRight, cor: "#56A4BB" },
   promocao: { Icon: TrendingUp, cor: "#2c6679" },
   alteracaoSalarial: { Icon: Wallet, cor: "#c08a2e" },
-  avaliacaoExperiencia: { Icon: ClipboardCheck, cor: "#3d8499" },
+  avaliacaoExperiencia: { Icon: ClipboardCheck, cor: "#5f89a1" },
   cicloAvaliacao: { Icon: BarChart3, cor: "#1f4e5e" },
   pdi: { Icon: Target, cor: "#56A4BB" },
   desligamento: { Icon: LogOut, cor: "#c0584e" },

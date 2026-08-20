@@ -91,8 +91,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <div className={styles.profile}>
             <Avatar nome={conta.nome} size={34} />
             <div className={styles.profileInfo}>
-              <div className={styles.profileName}>{conta.nome}</div>
-              <div className={styles.profileRole}>{conta.cargo}</div>
+              <div className={styles.profileName} title={conta.nome}>
+                {conta.nome}
+              </div>
+              <div className={styles.profileRole} title={conta.cargo}>
+                {conta.cargo}
+              </div>
             </div>
           </div>
           <button type="button" className={styles.logout} onClick={logout}>
@@ -166,8 +170,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className={styles.profile}>
           <Avatar nome={conta?.nome ?? ""} size={34} />
           <div className={styles.profileInfo}>
-            <div className={styles.profileName}>{conta?.nome}</div>
-            <div className={styles.profileRole}>{conta?.cargo}</div>
+            <div className={styles.profileName} title={conta?.nome}>
+              {conta?.nome}
+            </div>
+            <div className={styles.profileRole} title={conta?.cargo}>
+              {conta?.cargo}
+            </div>
           </div>
         </div>
         <button type="button" className={styles.logout} onClick={logout}>

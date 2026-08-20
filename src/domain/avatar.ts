@@ -1,4 +1,4 @@
-const AVATARS = ["#56A4BB", "#5F88A1", "#2c6679", "#3d8499", "#4E7A8C", "#6b9aa8"];
+const AVATARS = ["#56A4BB", "#5f89a1", "#2c6679", "#3d8499", "#4E7A8C", "#6b9aa8"];
 
 export function initials(nome: string): string {
   const parts = nome.replace(/\(.*?\)/g, "").trim().split(/\s+/);

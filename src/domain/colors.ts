@@ -3,9 +3,9 @@ import type { MovStatus, Nivel, Prioridade, StatusDescricaoCargo, TipoCod } from
 const TIPO_COLOR: Record<string, string> = {
   ADM: "#2f8f6b",
   PRO: "#56A4BB",
-  SAL: "#5F88A1",
+  SAL: "#5f89a1",
   TRF: "#2c6679",
-  FUN: "#3d8499",
+  FUN: "#5f89a1",
   DES: "#c0584e",
   NOV: "#1f4e5e",
   AFA: "#c08a2e",

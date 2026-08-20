@@ -401,6 +401,10 @@ Os dois portais MSB usam o **mesmo projeto Supabase**, mas cada um só lê/escre
 
 Isso significa: **qualquer pessoa cadastrada no SST também aparece automaticamente no PeopleFlow** (mesmo nome/cargo/departamento), mas só consegue **entrar** no PeopleFlow se tiver uma conta Supabase Auth provisionada (passo 2 acima) — ter conta no SST não dá acesso automático ao PeopleFlow, e vice-versa.
 
+## Identidade visual (design tokens, `src/index.css`)
+
+Todas as cores do portal são `var(--color-*)` definidas em `:root` (`src/index.css`) — nenhum componente deveria hardcodar hex fora dali (exceção documentada: e-mails em `domain/notificacoes.ts`/`domain/emailTemplate.ts`, renderizados fora do DOM do app, onde `var()` não resolveria). `--color-brand: #56a4bb` já era, desde o início, a cor "Azul #1" oficial da paleta MSB (Ref. Identidade Visual) — confirmado batendo com o PDF de referência oficial. Já `--color-brand-dark`/`--color-navy-medium` usavam um azul ad-hoc (`#3d8499`) em vez do "Azul #2" oficial (`#5f89a1`) — corrigido, junto com duas variações quase-certas mas com dígito trocado (`#5F88A1` em `domain/avatar.ts`/`domain/colors.ts`). Também acrescentados (não usados ainda em nenhum lugar, disponíveis pra quando fizerem sentido) `--color-cinza-1: #818286` e `--color-cinza-2: #d9e4e8`, os dois neutros da paleta oficial. As cores de status (sucesso/alerta/perigo) não fazem parte da paleta institucional (ela só define tons de azul/cinza/branco) — continuam com a própria família de tons, sem relação com essa correção.
+
 ## Responsividade
 
 Passe completo de otimização mobile/tablet — só CSS/layout, nenhuma regra de negócio, cálculo, schema ou fluxo mudou. Dois breakpoints usados em todo o portal (consistentes com o que já existia antes deste passe, ex.: `DepartamentosPage.module.css`):

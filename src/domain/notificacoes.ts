@@ -11,7 +11,7 @@ export interface EmailNotificacao {
 
 // Mesmos tons de src/index.css — --color-brand-dark / --color-success /
 // --color-danger — usados como faixa de destaque de cada tipo de e-mail.
-const ACCENT_PENDENTE = { cor: "#3d8499", bg: "#e3f0f4" };
+const ACCENT_PENDENTE = { cor: "#5f89a1", bg: "#e3f0f4" };
 const ACCENT_CONCLUIDA = { cor: "#2f8f6b", bg: "#e4f3ed" };
 const ACCENT_REPROVADA = { cor: "#c0584e", bg: "#f8e7e4" };
 

@@ -7,7 +7,7 @@
 }
 
 .detalheHeader {
-  background: linear-gradient(160deg, #2c6679, #3d8499);
+  background: linear-gradient(160deg, var(--color-navy-soft), var(--color-brand-dark));
   color: #fff;
   padding: 20px 24px;
 }

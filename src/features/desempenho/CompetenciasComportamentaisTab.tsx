@@ -72,7 +72,9 @@ export function CompetenciasComportamentaisTab() {
                   <td>
                     <span className={styles.nomeCell}>{c.nome}</span>
                   </td>
-                  <td className={styles.descricaoCell}>{c.descricao || "—"}</td>
+                  <td className={styles.descricaoCell} title={c.descricao || undefined}>
+                    {c.descricao || "—"}
+                  </td>
                   <td className={tableStyles.right}>{c.afirmacoes.length}</td>
                 </tr>
               ))}

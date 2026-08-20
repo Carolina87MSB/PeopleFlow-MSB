@@ -3,16 +3,21 @@
 
   --color-navy: #33485a;
   --color-navy-soft: #2c6679;
-  --color-navy-medium: #3d8499;
+  --color-navy-medium: #5f89a1;
   --color-text: #51606b;
   --color-muted: #7d8c93;
   --color-muted-light: #9aa9af;
   --color-muted-lighter: #a8b4ba;
 
+  /* Paleta oficial MSB (Ref. Identidade Visual): Azul #1 #56a4bb (brand),
+     Azul #2 #5f89a1 (brand-dark — hover/estados secundários), Cinza #1
+     #818286, Cinza #2 #d9e4e8. */
   --color-brand: #56a4bb;
-  --color-brand-dark: #3d8499;
+  --color-brand-dark: #5f89a1;
   --color-brand-pale: #e3f0f4;
   --color-cyan: #9ce5ee;
+  --color-cinza-1: #818286;
+  --color-cinza-2: #d9e4e8;
 
   --color-bg: #eef5f7;
   --color-surface: #ffffff;

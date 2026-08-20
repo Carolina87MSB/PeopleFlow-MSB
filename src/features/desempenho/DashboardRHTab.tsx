@@ -246,7 +246,9 @@ export function DashboardRHTab() {
             <div className={styles.setorLista}>
               {porSetor.map((s) => (
                 <div key={s.setor} className={styles.setorLinha}>
-                  <span className={styles.setorNome}>{s.setor}</span>
+                  <span className={styles.setorNome} title={s.setor}>
+                    {s.setor}
+                  </span>
                   <span className={styles.setorMedia}>{s.media ?? "—"}</span>
                 </div>
               ))}
