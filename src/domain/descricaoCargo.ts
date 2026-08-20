@@ -2,7 +2,7 @@ import type { DescricaoCargo } from "../types/domain";
 
 export type CampoDescricaoCargo = Exclude<
   keyof DescricaoCargo,
-  "cargoNome" | "updatedAt" | "updatedBy" | "elaboradoPor" | "elaboradoEm" | "aprovadoPor" | "aprovadoEm"
+  "cargoNome" | "updatedAt" | "updatedBy" | "elaboradoPor" | "elaboradoEm" | "aprovadoPor" | "aprovadoEm" | "status" | "pendente"
 >;
 
 export interface CampoMeta {
@@ -44,15 +44,24 @@ export function podeGestorEditarGrupo(grupo: string): boolean {
 
 /** Labels de "campo" que não fazem parte do formulário em si (não estão em
  * CAMPOS_DESCRICAO_CARGO) mas ainda passam pelo mesmo histórico
- * append-only — ver marcarElaboracaoDescricaoCargo/marcarAprovacaoDescricaoCargo
- * em repositories/descricoesCargoRepository.ts. */
+ * append-only — eventos de aprovação/rejeição são logados com
+ * `campo = "status"` (ver aprovarDescricaoCargo/rejeitarDescricaoCargo em
+ * usePortalData.ts). */
 const LABELS_HISTORICO_EXTRA: Record<string, string> = {
-  elaboradoPor: "Elaborado/Revisado por",
-  aprovadoPor: "Aprovado por",
+  status: "Status da descrição",
 };
 
 export function labelForCampoDescricaoCargo(campo: string): string {
   return CAMPOS_DESCRICAO_CARGO.find((c) => c.key === campo)?.label ?? LABELS_HISTORICO_EXTRA[campo] ?? campo;
+}
+
+/** Valor "efetivo" de um campo pra exibição/edição: a proposta pendente do
+ * Gestor, se houver uma diferente do oficial; senão o próprio valor oficial.
+ * NUNCA usado fora desta tela — o resto do sistema só lê os campos oficiais
+ * (ver comentário em `pendente` no types/domain.ts). */
+export function valorEfetivoDescricaoCargo(descricao: DescricaoCargo, campo: CampoDescricaoCargo): string {
+  const pendente = descricao.pendente?.[campo];
+  return pendente !== undefined ? pendente : (descricao[campo] as string) ?? "";
 }
 
 export function descricaoCargoVazia(cargoNome: string): DescricaoCargo {
@@ -74,6 +83,8 @@ export function descricaoCargoVazia(cargoNome: string): DescricaoCargo {
     epis: "",
     updatedAt: "",
     updatedBy: "",
+    status: "Aprovada",
+    pendente: null,
     elaboradoPor: "",
     elaboradoEm: "",
     aprovadoPor: "",

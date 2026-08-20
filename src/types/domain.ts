@@ -289,6 +289,13 @@ export interface HistoricoEvento {
   autor: string;
 }
 
+/** Aprovada = versão oficial (colunas de conteúdo abaixo) já aprovada pelo
+ * RH/Diretoria; Em revisão = existe uma proposta do Gestor em `pendente`
+ * aguardando aprovação (o conteúdo oficial ainda é o último aprovado, não a
+ * proposta); Rejeitada = a última proposta foi recusada — o conteúdo oficial
+ * continua sendo o último aprovado, e o Gestor pode propor de novo. */
+export type StatusDescricaoCargo = "Aprovada" | "Em revisão" | "Rejeitada";
+
 export interface DescricaoCargo {
   cargoNome: string;
   codigoFormulario: string;
@@ -298,6 +305,8 @@ export interface DescricaoCargo {
   subordinacao: string;
   localidade: string;
   nivelDocumento: string;
+  /** Conteúdo OFICIAL/aprovado — nunca escrito diretamente por um Gestor (ver
+   * `pendente`); só passa a valer estes campos depois de aprovado. */
   sumario: string;
   responsabilidades: string;
   escolaridade: string;
@@ -307,11 +316,17 @@ export interface DescricaoCargo {
   epis: string;
   updatedAt: string;
   updatedBy: string;
-  /** Bloco "Aprovações" — quem elaborou/revisou o conteúdo (gestor ou
-   * analista de RH) e quem aprovou (RH ou Diretoria), cada um com sua data.
-   * Registrado ao clicar em "Marcar"/"Aprovar" (ver
-   * marcarElaboracaoDescricaoCargo/marcarAprovacaoDescricaoCargo em
-   * usePortalData.ts) — nunca digitado livremente. */
+  status: StatusDescricaoCargo;
+  /** Proposta de alteração do Gestor, aguardando aprovação — só contém os
+   * campos de conteúdo dos 4 grupos liberados (ver podeGestorEditarGrupo em
+   * domain/descricaoCargo.ts), nunca os de controle/auditoria. `null` quando
+   * não há revisão em aberto. Nunca é o valor lido pelo resto do sistema —
+   * só existe pra exibição/revisão nesta tela (ver valorEfetivo()). */
+  pendente: Record<string, string> | null;
+  /** Bloco "Aprovações" — quem elaborou/revisou o conteúdo (preenchido
+   * automaticamente a cada edição, seja proposta de Gestor ou edição direta
+   * de RH/Diretoria) e quem aprovou a versão oficial atual (RH ou
+   * Diretoria), cada um com sua data. Nunca digitado livremente. */
   elaboradoPor: string;
   elaboradoEm: string;
   aprovadoPor: string;
@@ -326,6 +341,8 @@ export interface HistoricoDescricaoCargo {
   valorAnterior: string;
   valorNovo: string;
   editadoPor: string;
+  /** Perfil de quem editou no momento da ação (Gestor/RH/Diretoria) — snapshot, não recalculado. */
+  perfil: string;
   editadoEm: string;
 }
 

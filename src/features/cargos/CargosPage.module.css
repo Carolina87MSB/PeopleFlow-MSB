@@ -6,6 +6,13 @@
   color: var(--color-navy);
 }
 
+.descricaoCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .descricaoToggle {
   border: 0;
   background: transparent;

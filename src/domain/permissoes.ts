@@ -11,12 +11,14 @@ export function navRegistro(perfil: Perfil): boolean {
 }
 
 /** Cargos (`/cargos`) é RH-only pra Departamentos/Acessos/Desligados/Gestão
- * de Desempenho (ver navRegistro), mas Gestor também precisa entrar pra
- * editar a Descrição de Cargo dos cargos sob sua liderança — a lista em si
- * já vem escopada (agregarCargos sobre colaboradoresVisiveis), então liberar
- * a rota não expõe cargos fora da árvore de reportes do Gestor. */
+ * de Desempenho (ver navRegistro), mas Gestor e Diretoria também precisam
+ * entrar: Gestor pra editar a Descrição de Cargo dos cargos sob sua
+ * liderança (a lista em si já vem escopada, ver colaboradoresVisiveis em
+ * usePortalData.ts, então liberar a rota não expõe cargos fora da árvore de
+ * reportes do Gestor); Diretoria pra revisar/aprovar/rejeitar alterações
+ * propostas por qualquer Gestor (vê a lista inteira, sem escopo, igual RH). */
 export function navCargos(perfil: Perfil): boolean {
-  return perfil === "RH" || perfil === "Gestor";
+  return perfil === "RH" || perfil === "Gestor" || perfil === "Diretoria";
 }
 
 /**

@@ -4,7 +4,7 @@ import { Navigate } from "react-router-dom";
 import { Header } from "../../components/layout/Header";
 import { Badge, tableStyles } from "../../components/ui";
 import { agregarCargos } from "../../domain/agregados";
-import { nivelMeta } from "../../domain/colors";
+import { nivelMeta, statusDescricaoCargoMeta } from "../../domain/colors";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
@@ -34,6 +34,8 @@ export function CargosPage() {
     [colaboradoresVisiveis, cargosCustomVisiveis],
   );
 
+  const descricaoPorCargo = useMemo(() => new Map(descricoesCargo.map((d) => [d.cargoNome, d])), [descricoesCargo]);
+
   if (!podeVerCargos) return <Navigate to="/dashboard" replace />;
 
   return (
@@ -54,6 +56,7 @@ export function CargosPage() {
           <tbody>
             {cargos.map((c) => {
               const nivel = nivelMeta(c.nivel);
+              const descricao = descricaoPorCargo.get(c.nome);
               return (
                 <tr key={c.nome}>
                   <td>
@@ -73,10 +76,15 @@ export function CargosPage() {
                   </td>
                   <td>{[...c.deptos].join(", ")}</td>
                   <td>
-                    {descricoesCargo.some((d) => d.cargoNome === c.nome) ? (
-                      <button type="button" className={styles.descricaoLink} onClick={() => setCargoAberto(c.nome)}>
-                        <FileText size={13} /> Ver descrição
-                      </button>
+                    {descricao ? (
+                      <div className={styles.descricaoCell}>
+                        <button type="button" className={styles.descricaoLink} onClick={() => setCargoAberto(c.nome)}>
+                          <FileText size={13} /> Ver descrição
+                        </button>
+                        <Badge bg={statusDescricaoCargoMeta(descricao.status).bg} fg={statusDescricaoCargoMeta(descricao.status).fg}>
+                          {descricao.status}
+                        </Badge>
+                      </div>
                     ) : c.novo ? (
                       <button
                         type="button"

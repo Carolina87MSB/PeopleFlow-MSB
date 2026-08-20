@@ -1,14 +1,15 @@
 // Camada de acesso às tabelas `peopleflow_descricoes_cargo` e
 // `peopleflow_descricoes_cargo_historico` — formulário de descrição de
-// cargo (POP-RH-001) e seu histórico de edições campo a campo. Exclusiva
-// deste portal; cargo_nome referencia o mesmo texto usado em
+// cargo (POP-RH-001), seu fluxo de revisão/aprovação (colunas `status` e
+// `pendente`, ver types/domain.ts) e o histórico de edições campo a campo.
+// Exclusiva deste portal; cargo_nome referencia o mesmo texto usado em
 // colaboradores.cargo / peopleflow_cargos_custom.nome.
 
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { SupabaseNotConfiguredError } from "./colaboradoresRepository";
 import { labelForCampoDescricaoCargo } from "../domain/descricaoCargo";
 import type { CampoDescricaoCargo } from "../domain/descricaoCargo";
-import type { DescricaoCargo, HistoricoDescricaoCargo } from "../types/domain";
+import type { DescricaoCargo, HistoricoDescricaoCargo, StatusDescricaoCargo } from "../types/domain";
 
 interface DescricaoCargoRow {
   cargo_nome: string;
@@ -28,6 +29,8 @@ interface DescricaoCargoRow {
   epis: string | null;
   updated_at: string;
   updated_by: string | null;
+  status: string | null;
+  pendente: Record<string, string> | null;
   elaborado_por: string | null;
   elaborado_em: string | null;
   aprovado_por: string | null;
@@ -41,6 +44,7 @@ interface HistoricoRow {
   valor_anterior: string | null;
   valor_novo: string | null;
   editado_por: string;
+  perfil: string | null;
   editado_em: string;
 }
 
@@ -63,6 +67,8 @@ function fromRow(row: DescricaoCargoRow): DescricaoCargo {
     epis: row.epis ?? "",
     updatedAt: row.updated_at,
     updatedBy: row.updated_by ?? "",
+    status: (row.status as StatusDescricaoCargo) ?? "Aprovada",
+    pendente: row.pendente ?? null,
     elaboradoPor: row.elaborado_por ?? "",
     elaboradoEm: row.elaborado_em ?? "",
     aprovadoPor: row.aprovado_por ?? "",
@@ -79,6 +85,7 @@ function historicoFromRow(row: HistoricoRow): HistoricoDescricaoCargo {
     valorAnterior: row.valor_anterior ?? "",
     valorNovo: row.valor_novo ?? "",
     editadoPor: row.editado_por,
+    perfil: row.perfil ?? "",
     editadoEm: row.editado_em,
   };
 }
@@ -103,7 +110,10 @@ export async function getHistoricoDescricaoCargo(cargoNome: string): Promise<His
   return (data as HistoricoRow[]).map(historicoFromRow);
 }
 
-const COLUNA_POR_CAMPO: Record<CampoDescricaoCargo, string> = {
+/** Nome da coluna oficial de cada campo de conteúdo — usado tanto pra
+ * edição direta (RH/Diretoria) quanto pra aplicar uma proposta de Gestor
+ * aprovada (ver aprovarDescricaoCargo em usePortalData.ts). */
+export const COLUNA_POR_CAMPO: Record<CampoDescricaoCargo, string> = {
   codigoFormulario: "codigo_formulario",
   revisaoFormulario: "revisao_formulario",
   dataFormulario: "data_formulario",
@@ -120,74 +130,39 @@ const COLUNA_POR_CAMPO: Record<CampoDescricaoCargo, string> = {
   epis: "epis",
 };
 
-/** Atualiza um único campo do formulário (upsert — cria a linha se o cargo ainda não tiver descrição) e registra a alteração no histórico. */
-export async function atualizarCampoDescricaoCargo(
+export interface HistoricoDescricaoCargoInput {
+  campo: string;
+  valorAnterior: string;
+  valorNovo: string;
+  editadoPor: string;
+  perfil: string;
+}
+
+/** Ponto único de gravação pra todo o fluxo de revisão/aprovação da
+ * Descrição de Cargo: upsert (cria a linha se o cargo ainda não tiver
+ * descrição) com as colunas de `patch` (nomes de coluna já em snake_case —
+ * quem chama decide se grava direto nas colunas oficiais, em `pendente`, ou
+ * ambos, ver usePortalData.ts) + opcionalmente 1 linha de histórico. */
+export async function salvarRevisaoDescricaoCargo(
   cargoNome: string,
-  campo: CampoDescricaoCargo,
-  valorAnterior: string,
-  valorNovo: string,
-  editadoPor: string,
+  patch: Record<string, unknown>,
+  historico: HistoricoDescricaoCargoInput | null,
 ): Promise<void> {
   if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
 
-  const coluna = COLUNA_POR_CAMPO[campo];
-  const { error: updateError } = await supabase.from("peopleflow_descricoes_cargo").upsert(
-    { cargo_nome: cargoNome, [coluna]: valorNovo, updated_at: new Date().toISOString(), updated_by: editadoPor },
-    { onConflict: "cargo_nome" },
-  );
-  if (updateError) throw new Error(`Falha ao atualizar descrição de cargo no Supabase: ${updateError.message}`);
+  const { error: updateError } = await supabase
+    .from("peopleflow_descricoes_cargo")
+    .upsert({ cargo_nome: cargoNome, ...patch }, { onConflict: "cargo_nome" });
+  if (updateError) throw new Error(`Falha ao salvar descrição de cargo no Supabase: ${updateError.message}`);
 
+  if (!historico) return;
   const { error: histError } = await supabase.from("peopleflow_descricoes_cargo_historico").insert({
     cargo_nome: cargoNome,
-    campo,
-    valor_anterior: valorAnterior,
-    valor_novo: valorNovo,
-    editado_por: editadoPor,
+    campo: historico.campo,
+    valor_anterior: historico.valorAnterior,
+    valor_novo: historico.valorNovo,
+    editado_por: historico.editadoPor,
+    perfil: historico.perfil,
   });
   if (histError) throw new Error(`Falha ao registrar histórico de alteração: ${histError.message}`);
-}
-
-/** Bloco "Aprovações" — registra quem elaborou/revisou o conteúdo (gestor ou
- * analista de RH). Upsert (cria a linha se o cargo ainda não tiver
- * descrição) + histórico, mesmo padrão de atualizarCampoDescricaoCargo(). */
-export async function marcarElaboracaoDescricaoCargo(cargoNome: string, nome: string): Promise<void> {
-  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
-
-  const agora = new Date().toISOString();
-  const { error: updateError } = await supabase.from("peopleflow_descricoes_cargo").upsert(
-    { cargo_nome: cargoNome, elaborado_por: nome, elaborado_em: agora, updated_at: agora, updated_by: nome },
-    { onConflict: "cargo_nome" },
-  );
-  if (updateError) throw new Error(`Falha ao registrar elaboração/revisão: ${updateError.message}`);
-
-  const { error: histError } = await supabase.from("peopleflow_descricoes_cargo_historico").insert({
-    cargo_nome: cargoNome,
-    campo: "elaboradoPor",
-    valor_anterior: null,
-    valor_novo: nome,
-    editado_por: nome,
-  });
-  if (histError) throw new Error(`Falha ao registrar histórico de elaboração: ${histError.message}`);
-}
-
-/** Bloco "Aprovações" — registra quem aprovou o documento (RH ou
- * Diretoria). Mesmo padrão de marcarElaboracaoDescricaoCargo(). */
-export async function marcarAprovacaoDescricaoCargo(cargoNome: string, nome: string): Promise<void> {
-  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
-
-  const agora = new Date().toISOString();
-  const { error: updateError } = await supabase.from("peopleflow_descricoes_cargo").upsert(
-    { cargo_nome: cargoNome, aprovado_por: nome, aprovado_em: agora, updated_at: agora, updated_by: nome },
-    { onConflict: "cargo_nome" },
-  );
-  if (updateError) throw new Error(`Falha ao registrar aprovação: ${updateError.message}`);
-
-  const { error: histError } = await supabase.from("peopleflow_descricoes_cargo_historico").insert({
-    cargo_nome: cargoNome,
-    campo: "aprovadoPor",
-    valor_anterior: null,
-    valor_novo: nome,
-    editado_por: nome,
-  });
-  if (histError) throw new Error(`Falha ao registrar histórico de aprovação: ${histError.message}`);
 }

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
-import { Button, Drawer } from "../../components/ui";
+import { Badge, Button, Drawer } from "../../components/ui";
 import { CAMPOS_DESCRICAO_CARGO, descricaoCargoVazia } from "../../domain/descricaoCargo";
 import type { CampoDescricaoCargo, CampoMeta } from "../../domain/descricaoCargo";
+import { statusDescricaoCargoMeta } from "../../domain/colors";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalData } from "../../store/usePortalData";
 import type { HistoricoDescricaoCargo } from "../../types/domain";
@@ -14,22 +15,28 @@ interface DescricaoCargoDrawerProps {
 }
 
 /** Ficha do formulário de descrição de cargo (POP-RH-001): todos os campos do
- * documento oficial, editáveis campo a campo — RH em todos os grupos,
- * Gestor só em "Sumário do cargo", "Principais responsabilidades",
+ * documento oficial, editáveis campo a campo — RH e Diretoria em todos os
+ * grupos, Gestor só em "Sumário do cargo", "Principais responsabilidades",
  * "Requisitos do cargo" e "Competências e requisitos desejáveis", e só nos
  * cargos sob sua liderança (ver podeEditarSecaoDescricaoCargo em
- * usePortalData.ts) — com histórico de atualizações e um bloco final de
- * "Aprovações" (elaborado/revisado por + aprovado por, cada um com data).
- * Dados de controle (código/revisão/data) ficam em destaque no topo por
- * serem usados em auditorias. */
+ * usePortalData.ts).
+ *
+ * A edição do Gestor NUNCA vira conteúdo oficial direto: fica como proposta
+ * em `descricao.pendente`, com `status` "Em revisão", até o RH/Diretoria
+ * aprovar (aplica a proposta no oficial) ou rejeitar (descarta a proposta).
+ * RH/Diretoria editando grava direto no oficial e já fica "Aprovada" — são a
+ * própria autoridade de aprovação. Histórico de atualizações (com perfil de
+ * quem editou) e o bloco final "Aprovações" (elaborado/revisado por +
+ * aprovado por, cada um com data) documentam esse fluxo. Dados de controle
+ * (código/revisão/data) ficam em destaque no topo por serem usados em
+ * auditorias. */
 export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawerProps) {
   const {
     descricoesCargo,
     podeEditarSecaoDescricaoCargo,
-    podeElaborarDescricaoCargo,
-    marcarElaboracaoDescricaoCargo,
     podeAprovarDescricaoCargo,
-    marcarAprovacaoDescricaoCargo,
+    aprovarDescricaoCargo,
+    rejeitarDescricaoCargo,
     atualizarCampoDescricaoCargo,
     carregarHistoricoDescricaoCargo,
   } = usePortalData();
@@ -41,8 +48,7 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
 
   const [historico, setHistorico] = useState<HistoricoDescricaoCargo[]>([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(true);
-  const [marcandoElaboracao, setMarcandoElaboracao] = useState(false);
-  const [marcandoAprovacao, setMarcandoAprovacao] = useState(false);
+  const [processandoDecisao, setProcessandoDecisao] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -78,32 +84,52 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
     return result;
   }
 
-  async function handleMarcarElaboracao() {
-    setMarcandoElaboracao(true);
-    const result = await marcarElaboracaoDescricaoCargo(cargoNome);
-    setMarcandoElaboracao(false);
+  async function handleAprovar() {
+    setProcessandoDecisao(true);
+    const result = await aprovarDescricaoCargo(cargoNome);
+    setProcessandoDecisao(false);
     if (result.ok) setHistorico(await carregarHistoricoDescricaoCargo(cargoNome));
   }
 
-  async function handleMarcarAprovacao() {
-    setMarcandoAprovacao(true);
-    const result = await marcarAprovacaoDescricaoCargo(cargoNome);
-    setMarcandoAprovacao(false);
+  async function handleRejeitar() {
+    setProcessandoDecisao(true);
+    const result = await rejeitarDescricaoCargo(cargoNome);
+    setProcessandoDecisao(false);
     if (result.ok) setHistorico(await carregarHistoricoDescricaoCargo(cargoNome));
   }
 
-  const podeElaborar = podeElaborarDescricaoCargo(cargoNome);
+  const statusMeta = statusDescricaoCargoMeta(descricao.status);
+  const emRevisao = descricao.status === "Em revisão";
+  const podeDecidir = podeAprovarDescricaoCargo && emRevisao;
 
   return (
     <Drawer
       onClose={onClose}
       header={
         <div className={styles.drawerHeader}>
-          <div className={styles.drawerNome}>{formatarNomeCargo(cargoNome)}</div>
+          <div className={styles.drawerHeaderTopo}>
+            <div className={styles.drawerNome}>{formatarNomeCargo(cargoNome)}</div>
+            <Badge bg={statusMeta.bg} fg={statusMeta.fg}>
+              {descricao.status}
+            </Badge>
+          </div>
           <div className={styles.drawerSub}>Descrição de cargo · POP-RH-001</div>
         </div>
       }
     >
+      {emRevisao && (
+        <div className={styles.bannerRevisao}>
+          Existe uma alteração em revisão, enviada por {descricao.elaboradoPor || "—"} em{" "}
+          {formatarDataHora(descricao.elaboradoEm)} — aguardando aprovação do RH/Diretoria. Os campos abaixo mostram o
+          conteúdo oficial atual e, quando houver, a proposta pendente.
+        </div>
+      )}
+      {descricao.status === "Rejeitada" && (
+        <div className={styles.bannerRejeitada}>
+          A última alteração proposta foi rejeitada pelo RH/Diretoria. O conteúdo abaixo é o último aprovado.
+        </div>
+      )}
+
       {grupos.map(([grupo, campos]) => (
         <div key={grupo} className={grupo === "Dados do formulário (auditoria)" ? styles.grupoAuditoria : styles.grupo}>
           <h4 className={styles.sectionTitle}>{grupo}</h4>
@@ -112,7 +138,8 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
               <CampoEditavel
                 key={campo.key}
                 meta={campo}
-                valor={descricao[campo.key]}
+                valorOficial={descricao[campo.key]}
+                valorPendente={descricao.pendente?.[campo.key]}
                 podeEditar={podeEditarSecaoDescricaoCargo(cargoNome, campo.grupo)}
                 onSalvar={(novo) => handleSalvarCampo(campo.key, novo)}
               />
@@ -134,11 +161,6 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
               <span className={styles.vazio}>Ainda não registrado</span>
             )}
           </span>
-          {podeElaborar && (
-            <Button variant="ghost" onClick={handleMarcarElaboracao} disabled={marcandoElaboracao}>
-              {marcandoElaboracao ? "Salvando..." : descricao.elaboradoPor ? "Atualizar" : "Marcar"}
-            </Button>
-          )}
         </div>
         <div className={styles.aprovacaoLinha}>
           <span className={styles.aprovacaoLabel}>Aprovado por</span>
@@ -151,10 +173,15 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
               <span className={styles.vazio}>Ainda não registrado</span>
             )}
           </span>
-          {podeAprovarDescricaoCargo && (
-            <Button variant="ghost" onClick={handleMarcarAprovacao} disabled={marcandoAprovacao}>
-              {marcandoAprovacao ? "Salvando..." : descricao.aprovadoPor ? "Atualizar" : "Aprovar"}
-            </Button>
+          {podeDecidir && (
+            <div className={styles.aprovacaoAcoes}>
+              <Button variant="danger" onClick={handleRejeitar} disabled={processandoDecisao}>
+                Rejeitar alteração
+              </Button>
+              <Button variant="primary" onClick={handleAprovar} disabled={processandoDecisao}>
+                Aprovar alteração
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -182,7 +209,10 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
                   ) : null}
                   {truncar(h.valorNovo) || "(vazio)"}
                 </p>
-                <p className={styles.itemAutor}>por {h.editadoPor}</p>
+                <p className={styles.itemAutor}>
+                  por {h.editadoPor}
+                  {h.perfil ? ` · ${h.perfil}` : ""}
+                </p>
               </div>
             </div>
           ))}
@@ -205,18 +235,23 @@ function formatarDataHora(iso: string): string {
 
 interface CampoEditavelProps {
   meta: CampoMeta;
-  valor: string;
+  valorOficial: string;
+  /** Proposta pendente (Gestor) pra este campo, se houver — `undefined` quando não há revisão em aberto tocando este campo. */
+  valorPendente: string | undefined;
   podeEditar: boolean;
   onSalvar: (valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
 }
 
-function CampoEditavel({ meta, valor, podeEditar, onSalvar }: CampoEditavelProps) {
+function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar }: CampoEditavelProps) {
+  const temProposta = valorPendente !== undefined && valorPendente !== valorOficial;
+  const valorEfetivo = temProposta ? (valorPendente as string) : valorOficial;
+
   const [editando, setEditando] = useState(false);
-  const [rascunho, setRascunho] = useState(valor);
+  const [rascunho, setRascunho] = useState(valorEfetivo);
   const [salvando, setSalvando] = useState(false);
 
   function iniciarEdicao() {
-    setRascunho(valor);
+    setRascunho(valorEfetivo);
     setEditando(true);
   }
 
@@ -254,7 +289,15 @@ function CampoEditavel({ meta, valor, podeEditar, onSalvar }: CampoEditavelProps
           </div>
         </div>
       ) : (
-        <div className={styles.campoValor}>{valor || <span className={styles.vazio}>Não preenchido</span>}</div>
+        <>
+          <div className={styles.campoValor}>{valorOficial || <span className={styles.vazio}>Não preenchido</span>}</div>
+          {temProposta && (
+            <div className={styles.propostaPendente}>
+              <span className={styles.propostaTag}>Proposta pendente de aprovação</span>
+              <div className={styles.propostaValor}>{valorPendente}</div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

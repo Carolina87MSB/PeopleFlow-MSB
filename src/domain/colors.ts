@@ -1,4 +1,4 @@
-import type { MovStatus, Nivel, Prioridade, TipoCod } from "../types/domain";
+import type { MovStatus, Nivel, Prioridade, StatusDescricaoCargo, TipoCod } from "../types/domain";
 
 const TIPO_COLOR: Record<string, string> = {
   ADM: "#2f8f6b",
@@ -33,6 +33,12 @@ export function statusMeta(status: MovStatus | string): StatusMeta {
 export interface PrioMeta {
   bg: string;
   fg: string;
+}
+
+export function statusDescricaoCargoMeta(status: StatusDescricaoCargo | string): PrioMeta {
+  if (status === "Aprovada") return { bg: "#e4f3ed", fg: "#1f6b4f" };
+  if (status === "Rejeitada") return { bg: "#f8e7e4", fg: "#99413a" };
+  return { bg: "#f8efdc", fg: "#8a5e18" }; // "Em revisão"
 }
 
 export function prioMeta(p: Prioridade | string): PrioMeta {

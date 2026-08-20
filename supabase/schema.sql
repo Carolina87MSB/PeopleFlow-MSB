@@ -991,9 +991,10 @@ comment on column public.peopleflow_ciclos_avaliacao_desempenho.data_corte_admis
 -- histórico de edições (peopleflow_descricoes_cargo_historico, já existente)
 -- é reaproveitado sem mudança de estrutura. Estas 4 colunas novas guardam o
 -- registro de quem elaborou/revisou e quem aprovou o documento, cada um com
--- sua data — nunca texto livre, sempre gravado ao clicar em "Marcar"/
--- "Aprovar" (ver marcarElaboracaoDescricaoCargo/marcarAprovacaoDescricaoCargo
--- em src/repositories/descricoesCargoRepository.ts).
+-- sua data — nunca texto livre. (O mecanismo de gravação foi corrigido na
+-- seção 21 abaixo: a princípio estas colunas eram preenchidas por botões
+-- "Marcar"/"Aprovar" soltos, sem relação com a edição em si — agora são
+-- preenchidas automaticamente pelo próprio fluxo de edição/aprovação.)
 -- =====================================================================
 
 alter table public.peopleflow_descricoes_cargo
@@ -1006,3 +1007,41 @@ comment on column public.peopleflow_descricoes_cargo.elaborado_por is
   'Nome de quem elaborou/revisou o conteúdo (gestor ou analista de RH) — gravado ao clicar em "Marcar elaboração/revisão", nunca texto livre.';
 comment on column public.peopleflow_descricoes_cargo.aprovado_por is
   'Nome de quem aprovou o documento (RH ou Diretoria) — gravado ao clicar em "Aprovar", nunca texto livre.';
+
+-- =====================================================================
+-- 21) Descrição de Cargo — corrige o fluxo pra revisão/aprovação de fato.
+-- Correção da seção 20: até aqui, a edição de um Gestor gravava direto nas
+-- colunas oficiais (sumario/responsabilidades/etc.) — na prática, "aprovado
+-- automaticamente" só por ele editar, o que não é o esperado pelo RH/
+-- Diretoria. Agora:
+--   • Gestor edita um dos 4 grupos liberados → grava em `pendente` (jsonb,
+--     só com os campos propostos), `status` vira 'Em revisão' — as colunas
+--     oficiais NÃO mudam até alguém aprovar.
+--   • RH/Diretoria edita → grava direto nas colunas oficiais (like antes),
+--     `status` vira 'Aprovada', `aprovado_por/em` = o próprio editor (RH/
+--     Diretoria é a autoridade de aprovação, não precisa de uma segunda
+--     aprovação pra sua própria edição).
+--   • RH/Diretoria aprova uma proposta pendente → aplica `pendente` nas
+--     colunas oficiais, `status` vira 'Aprovada', limpa `pendente`.
+--   • RH/Diretoria rejeita → descarta `pendente` (nunca chega a virar
+--     oficial), `status` vira 'Rejeitada'; o Gestor pode propor de novo.
+-- `elaborado_por/em` seguem preenchidos automaticamente a cada edição
+-- (proposta ou direta) — nunca mais por um botão solto. Ver
+-- src/domain/descricaoCargo.ts e src/store/usePortalData.ts.
+-- `perfil` na tabela de histórico registra quem editou como Gestor/RH/
+-- Diretoria no momento da ação (pedido explícito de rastreabilidade).
+-- =====================================================================
+
+alter table public.peopleflow_descricoes_cargo
+  add column if not exists status text not null default 'Aprovada',
+  add column if not exists pendente jsonb;
+
+alter table public.peopleflow_descricoes_cargo_historico
+  add column if not exists perfil text;
+
+comment on column public.peopleflow_descricoes_cargo.status is
+  '''Aprovada'' | ''Em revisão'' | ''Rejeitada'' — controla se o conteúdo oficial (sumario/responsabilidades/etc.) reflete a última proposta ou se há uma em `pendente` aguardando decisão do RH/Diretoria.';
+comment on column public.peopleflow_descricoes_cargo.pendente is
+  'Proposta de alteração de um Gestor, aguardando aprovação — objeto {campo: novoValor} só com os campos de conteúdo dos 4 grupos liberados (nunca os de auditoria/EPIs). Nunca é o valor lido fora da tela de revisão; null quando não há revisão em aberto.';
+comment on column public.peopleflow_descricoes_cargo_historico.perfil is
+  'Perfil de quem editou (Gestor/RH/Diretoria) no momento da ação — snapshot, não recalculado.';

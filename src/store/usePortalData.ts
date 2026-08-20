@@ -8,10 +8,9 @@ import {
 } from "../repositories/colaboradoresRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import {
-  atualizarCampoDescricaoCargo as atualizarCampoDescricaoCargoNoSupabase,
+  COLUNA_POR_CAMPO,
   getHistoricoDescricaoCargo,
-  marcarAprovacaoDescricaoCargo as marcarAprovacaoDescricaoCargoNoSupabase,
-  marcarElaboracaoDescricaoCargo as marcarElaboracaoDescricaoCargoNoSupabase,
+  salvarRevisaoDescricaoCargo as salvarRevisaoDescricaoCargoNoSupabase,
 } from "../repositories/descricoesCargoRepository";
 import {
   atualizarMovimentacao,
@@ -48,7 +47,13 @@ import {
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
-import { descricaoCargoVazia, podeGestorEditarGrupo, type CampoDescricaoCargo } from "../domain/descricaoCargo";
+import {
+  CAMPOS_DESCRICAO_CARGO,
+  descricaoCargoVazia,
+  podeGestorEditarGrupo,
+  valorEfetivoDescricaoCargo,
+  type CampoDescricaoCargo,
+} from "../domain/descricaoCargo";
 import {
   arredondar,
   calcularNotasAvaliacao,
@@ -141,19 +146,27 @@ export interface PortalData {
   pendenciasFinanceirasCount: number;
   descricoesCargo: DescricaoCargo[];
   /** true quando `conta` pode editar o grupo `grupo` (ver
-   * CAMPOS_DESCRICAO_CARGO) da Descrição de Cargo de `cargoNome` — RH
-   * sempre, Gestor só nos 4 grupos de conteúdo liberados e só nos cargos sob
-   * sua liderança (ver cargoSobLiderancaDe em domain/hierarquia.ts). */
+   * CAMPOS_DESCRICAO_CARGO) da Descrição de Cargo de `cargoNome` — RH e
+   * Diretoria sempre, Gestor só nos 4 grupos de conteúdo liberados e só nos
+   * cargos sob sua liderança (ver cargoSobLiderancaDe em domain/hierarquia.ts).
+   * A edição do Gestor nunca grava direto no conteúdo oficial — vira uma
+   * proposta em `DescricaoCargo.pendente`, com `status` "Em revisão", até o
+   * RH/Diretoria aprovar ou rejeitar (ver aprovarDescricaoCargo/
+   * rejeitarDescricaoCargo abaixo). RH/Diretoria editando grava direto no
+   * oficial e já fica "Aprovada" (são a própria autoridade de aprovação). */
   podeEditarSecaoDescricaoCargo: (cargoNome: string, grupo: string) => boolean;
-  /** Bloco "Aprovações" — quem pode marcar "Elaborado/Revisado por": RH
-   * sempre, Gestor só nos cargos sob sua liderança. */
-  podeElaborarDescricaoCargo: (cargoNome: string) => boolean;
-  marcarElaboracaoDescricaoCargo: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
-  /** Bloco "Aprovações" — quem pode marcar "Aprovado por": RH ou Diretoria,
-   * pra qualquer cargo (papel de auditoria/governança do documento, não de
-   * liderança direta). */
+  /** Bloco "Aprovações" — quem pode aprovar/rejeitar uma proposta pendente:
+   * RH ou Diretoria, pra qualquer cargo (papel de auditoria/governança do
+   * documento, não de liderança direta) — nunca o próprio Gestor que
+   * propôs. */
   podeAprovarDescricaoCargo: boolean;
-  marcarAprovacaoDescricaoCargo: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
+  /** Só tem efeito quando `status === "Em revisão"`; aplica `pendente` nas
+   * colunas oficiais, limpa `pendente` e marca `status` "Aprovada". */
+  aprovarDescricaoCargo: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
+  /** Só tem efeito quando `status === "Em revisão"`; descarta `pendente`
+   * (nunca chega a virar oficial) e marca `status` "Rejeitada" — o Gestor
+   * pode propor de novo depois. */
+  rejeitarDescricaoCargo: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
   podeEditarAdmissao: boolean;
   scopeSet: Set<string> | null;
   podeCriar: boolean;
@@ -793,36 +806,12 @@ export function usePortalData(): PortalData {
     [dispatch, me, state.tipos, state.colaboradores, state.movimentacoes, flash],
   );
 
-  const atualizarCampoDescricaoCargoFn = useCallback(
-    async (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => {
-      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome) ?? descricaoCargoVazia(cargoNome);
-      const valorAnterior = atual[campo];
-      try {
-        await atualizarCampoDescricaoCargoNoSupabase(cargoNome, campo, valorAnterior, valorNovo, me);
-        dispatch({
-          type: "ATUALIZAR_DESCRICAO_CARGO",
-          descricao: { ...atual, [campo]: valorNovo, updatedAt: new Date().toISOString(), updatedBy: me },
-        });
-        flash("Descrição de cargo atualizada.");
-        return { ok: true as const };
-      } catch (err) {
-        flash(err instanceof Error ? err.message : "Falha ao atualizar descrição de cargo.");
-        return { ok: false as const };
-      }
-    },
-    [dispatch, me, state.descricoesCargo, flash],
-  );
-
-  const carregarHistoricoDescricaoCargoFn = useCallback(
-    (cargoNome: string) => getHistoricoDescricaoCargo(cargoNome),
-    [],
-  );
-
-  /** RH sempre; Gestor só nos grupos liberados (ver podeGestorEditarGrupo)
-   * e só nos cargos sob sua liderança (ver cargoSobLiderancaDe). */
+  /** RH e Diretoria sempre; Gestor só nos grupos liberados (ver
+   * podeGestorEditarGrupo) e só nos cargos sob sua liderança (ver
+   * cargoSobLiderancaDe). */
   const podeEditarSecaoDescricaoCargoFn = useCallback(
     (cargoNome: string, grupo: string) => {
-      if (perfil === "RH") return true;
+      if (perfil === "RH" || perfil === "Diretoria") return true;
       if (perfil !== "Gestor") return false;
       if (!podeGestorEditarGrupo(grupo)) return false;
       return cargoSobLiderancaDe(state.colaboradores, cargoNome, scopeSet);
@@ -830,54 +819,180 @@ export function usePortalData(): PortalData {
     [perfil, scopeSet, state.colaboradores],
   );
 
-  /** Quem pode marcar "Elaborado/Revisado por" no bloco Aprovações — mesma
-   * regra de liderança do cargo que já vale pra edição de conteúdo, mas sem
-   * restrição de grupo (elaborar/revisar é sobre o documento como um todo). */
-  const podeElaborarDescricaoCargoFn = useCallback(
-    (cargoNome: string) => {
-      if (perfil === "RH") return true;
-      if (perfil !== "Gestor") return false;
-      return cargoSobLiderancaDe(state.colaboradores, cargoNome, scopeSet);
-    },
-    [perfil, scopeSet, state.colaboradores],
-  );
+  /** Gestor: grava a edição como PROPOSTA em `pendente` (nunca no conteúdo
+   * oficial) e marca `status` "Em revisão" — precisa da aprovação do RH/
+   * Diretoria pra virar oficial. RH/Diretoria: grava direto no conteúdo
+   * oficial e já fica "Aprovada", com `aprovado_por/em` = o próprio editor
+   * (são a autoridade de aprovação, não precisam de uma segunda aprovação
+   * pra sua própria edição). Em ambos os casos, `elaborado_por/em` é
+   * atualizado automaticamente pra refletir quem fez esta edição. */
+  const atualizarCampoDescricaoCargoFn = useCallback(
+    async (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => {
+      const meta = CAMPOS_DESCRICAO_CARGO.find((c) => c.key === campo);
+      if (!meta || !podeEditarSecaoDescricaoCargoFn(cargoNome, meta.grupo)) {
+        flash("Você não pode editar este campo.");
+        return { ok: false as const };
+      }
 
-  const marcarElaboracaoDescricaoCargoFn = useCallback(
-    async (cargoNome: string) => {
       const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome) ?? descricaoCargoVazia(cargoNome);
+      const valorAnterior = valorEfetivoDescricaoCargo(atual, campo);
+      const agora = new Date().toISOString();
+      const ehRevisor = perfil === "RH" || perfil === "Diretoria";
+      const coluna = COLUNA_POR_CAMPO[campo];
+
+      const patch: Record<string, unknown> = ehRevisor
+        ? {
+            [coluna]: valorNovo,
+            pendente: null,
+            status: "Aprovada",
+            elaborado_por: me,
+            elaborado_em: agora,
+            aprovado_por: me,
+            aprovado_em: agora,
+            updated_at: agora,
+            updated_by: me,
+          }
+        : {
+            pendente: { ...(atual.pendente ?? {}), [campo]: valorNovo },
+            status: "Em revisão",
+            elaborado_por: me,
+            elaborado_em: agora,
+            updated_at: agora,
+            updated_by: me,
+          };
+
       try {
-        await marcarElaboracaoDescricaoCargoNoSupabase(cargoNome, me);
+        await salvarRevisaoDescricaoCargoNoSupabase(cargoNome, patch, {
+          campo,
+          valorAnterior,
+          valorNovo,
+          editadoPor: me,
+          perfil,
+        });
         dispatch({
           type: "ATUALIZAR_DESCRICAO_CARGO",
-          descricao: { ...atual, elaboradoPor: me, elaboradoEm: new Date().toISOString(), updatedAt: new Date().toISOString(), updatedBy: me },
+          descricao: ehRevisor
+            ? {
+                ...atual,
+                [campo]: valorNovo,
+                pendente: null,
+                status: "Aprovada",
+                elaboradoPor: me,
+                elaboradoEm: agora,
+                aprovadoPor: me,
+                aprovadoEm: agora,
+                updatedAt: agora,
+                updatedBy: me,
+              }
+            : {
+                ...atual,
+                pendente: { ...(atual.pendente ?? {}), [campo]: valorNovo },
+                status: "Em revisão",
+                elaboradoPor: me,
+                elaboradoEm: agora,
+                updatedAt: agora,
+                updatedBy: me,
+              },
         });
-        flash("Elaboração/revisão registrada.");
+        flash(ehRevisor ? "Descrição de cargo atualizada." : "Alteração enviada para aprovação do RH/Diretoria.");
         return { ok: true as const };
       } catch (err) {
-        flash(err instanceof Error ? err.message : "Falha ao registrar elaboração/revisão.");
+        flash(err instanceof Error ? err.message : "Falha ao atualizar descrição de cargo.");
         return { ok: false as const };
       }
     },
-    [dispatch, me, state.descricoesCargo, flash],
+    [dispatch, me, perfil, state.descricoesCargo, podeEditarSecaoDescricaoCargoFn, flash],
   );
 
-  const marcarAprovacaoDescricaoCargoFn = useCallback(
+  const carregarHistoricoDescricaoCargoFn = useCallback(
+    (cargoNome: string) => getHistoricoDescricaoCargo(cargoNome),
+    [],
+  );
+
+  /** RH/Diretoria-only, e só quando há uma proposta pendente — aplica cada
+   * campo de `pendente` na coluna oficial correspondente, limpa `pendente`
+   * e marca `status` "Aprovada". */
+  const aprovarDescricaoCargoFn = useCallback(
     async (cargoNome: string) => {
-      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome) ?? descricaoCargoVazia(cargoNome);
+      if (perfil !== "RH" && perfil !== "Diretoria") {
+        flash("Só RH ou Diretoria podem aprovar.");
+        return { ok: false as const };
+      }
+      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome);
+      if (!atual || atual.status !== "Em revisão" || !atual.pendente) {
+        flash("Não há alteração pendente para aprovar.");
+        return { ok: false as const };
+      }
+
+      const agora = new Date().toISOString();
+      const patch: Record<string, unknown> = {
+        pendente: null,
+        status: "Aprovada",
+        aprovado_por: me,
+        aprovado_em: agora,
+        updated_at: agora,
+        updated_by: me,
+      };
+      Object.entries(atual.pendente).forEach(([campo, valor]) => {
+        const coluna = COLUNA_POR_CAMPO[campo as CampoDescricaoCargo];
+        if (coluna) patch[coluna] = valor;
+      });
+
       try {
-        await marcarAprovacaoDescricaoCargoNoSupabase(cargoNome, me);
+        await salvarRevisaoDescricaoCargoNoSupabase(cargoNome, patch, {
+          campo: "status",
+          valorAnterior: "Em revisão",
+          valorNovo: "Aprovada",
+          editadoPor: me,
+          perfil,
+        });
         dispatch({
           type: "ATUALIZAR_DESCRICAO_CARGO",
-          descricao: { ...atual, aprovadoPor: me, aprovadoEm: new Date().toISOString(), updatedAt: new Date().toISOString(), updatedBy: me },
+          descricao: { ...atual, ...atual.pendente, pendente: null, status: "Aprovada", aprovadoPor: me, aprovadoEm: agora, updatedAt: agora, updatedBy: me },
         });
-        flash("Aprovação registrada.");
+        flash("Alteração aprovada.");
         return { ok: true as const };
       } catch (err) {
-        flash(err instanceof Error ? err.message : "Falha ao registrar aprovação.");
+        flash(err instanceof Error ? err.message : "Falha ao aprovar alteração.");
         return { ok: false as const };
       }
     },
-    [dispatch, me, state.descricoesCargo, flash],
+    [dispatch, me, perfil, state.descricoesCargo, flash],
+  );
+
+  /** RH/Diretoria-only, e só quando há uma proposta pendente — descarta
+   * `pendente` (nunca chega a virar oficial) e marca `status` "Rejeitada". */
+  const rejeitarDescricaoCargoFn = useCallback(
+    async (cargoNome: string) => {
+      if (perfil !== "RH" && perfil !== "Diretoria") {
+        flash("Só RH ou Diretoria podem rejeitar.");
+        return { ok: false as const };
+      }
+      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome);
+      if (!atual || atual.status !== "Em revisão") {
+        flash("Não há alteração pendente para rejeitar.");
+        return { ok: false as const };
+      }
+
+      const agora = new Date().toISOString();
+      try {
+        await salvarRevisaoDescricaoCargoNoSupabase(
+          cargoNome,
+          { pendente: null, status: "Rejeitada", updated_at: agora, updated_by: me },
+          { campo: "status", valorAnterior: "Em revisão", valorNovo: "Rejeitada", editadoPor: me, perfil },
+        );
+        dispatch({
+          type: "ATUALIZAR_DESCRICAO_CARGO",
+          descricao: { ...atual, pendente: null, status: "Rejeitada", updatedAt: agora, updatedBy: me },
+        });
+        flash("Alteração rejeitada.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao rejeitar alteração.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, perfil, state.descricoesCargo, flash],
   );
 
   const atualizarAdmissaoFn = useCallback(
@@ -1907,10 +2022,9 @@ export function usePortalData(): PortalData {
     pendenciasFinanceirasCount,
     descricoesCargo: state.descricoesCargo,
     podeEditarSecaoDescricaoCargo: podeEditarSecaoDescricaoCargoFn,
-    podeElaborarDescricaoCargo: podeElaborarDescricaoCargoFn,
-    marcarElaboracaoDescricaoCargo: marcarElaboracaoDescricaoCargoFn,
     podeAprovarDescricaoCargo: perfil === "RH" || perfil === "Diretoria",
-    marcarAprovacaoDescricaoCargo: marcarAprovacaoDescricaoCargoFn,
+    aprovarDescricaoCargo: aprovarDescricaoCargoFn,
+    rejeitarDescricaoCargo: rejeitarDescricaoCargoFn,
     podeEditarAdmissao: perfil === "RH",
     scopeSet,
     podeCriar: canCreate(perfil),
