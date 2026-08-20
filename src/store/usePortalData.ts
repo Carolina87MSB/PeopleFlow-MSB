@@ -1542,12 +1542,22 @@ export function usePortalData(): PortalData {
         // GESTOR (nota oficial da AVD) — nunca por AUTOAVALIACAO/LIDERANCA.
         if (concluindoAgora && atualizado.tipo === "GESTOR") {
           void gerarPdiSeNecessario(atualizado);
-          // Comitê de Calibração (Etapa 6) — verifica se a ficha de
-          // Potencial irmã (mesmo colaborador/ciclo) também já foi
-          // concluída pelo gestor; se sim, as duas viram "Aguardando
-          // Calibração" juntas. Passa `atualizado` direto (não relê de
-          // `state`, que ainda reflete o valor pré-dispatch nesta mesma
-          // execução — só o lado da Potencial é lido de `state`).
+        }
+        // Comitê de Calibração (Etapa 6) — verifica se a ficha de Potencial
+        // irmã (mesmo colaborador/ciclo) também já foi concluída; se sim, as
+        // duas viram "Aguardando Calibração" juntas. Corrigido pra rodar
+        // sempre que esta ficha estiver "Concluída" e ainda "Não iniciada"
+        // em calibração — não só na transição exata pra "Concluída"
+        // (`concluindoAgora`). Antes, se a ficha de Potencial irmã só fosse
+        // concluída depois — ou se esta ficha chegasse a "Concluída" por um
+        // caminho que não passasse por `concluindoAgora` nesta mesma
+        // chamada (ex.: correção manual/RH direto no banco) — o par nunca
+        // era reavaliado de novo e ficava preso em "Não iniciada" pra
+        // sempre, mesmo com as duas fichas já concluídas (bug real
+        // reportado pelo RH). Passa `atualizado` direto (não relê de
+        // `state`, que ainda reflete o valor pré-dispatch nesta mesma
+        // execução — só o lado da Potencial é lido de `state`).
+        if (atualizado.tipo === "GESTOR" && atualizado.status === "Concluída" && atualizado.statusCalibracao === "Não iniciada") {
           void verificarEIniciarCalibracaoFn(atualizado, null, atualizado.colaboradorNome, atualizado.cicloId);
         }
 
@@ -1832,8 +1842,11 @@ export function usePortalData(): PortalData {
         const acao = concluindoAgora ? "POTENCIAL_CONCLUIDA" : iniciandoAgora ? "POTENCIAL_INICIADA" : "POTENCIAL_SALVA";
         void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: atualizado.cicloId, avaliacaoId: atualizado.id, acao, usuario: me });
 
-        // Comitê de Calibração (Etapa 6) — ver comentário em verificarEIniciarCalibracaoFn.
-        if (concluindoAgora) {
+        // Comitê de Calibração (Etapa 6) — ver comentário em salvarAvaliacaoDesempenhoFn
+        // (mesma correção: roda sempre que "Concluída" + "Não iniciada" em
+        // calibração, não só na transição exata, pra não ficar presa se a
+        // ficha AVD irmã só completar depois ou por outro caminho).
+        if (atualizado.status === "Concluída" && atualizado.statusCalibracao === "Não iniciada") {
           void verificarEIniciarCalibracaoFn(null, atualizado, atualizado.colaboradorNome, atualizado.cicloId);
         }
 
