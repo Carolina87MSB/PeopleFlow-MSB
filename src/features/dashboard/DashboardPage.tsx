@@ -27,6 +27,7 @@ import { podeAgir } from "../../domain/workflow";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { AdmissoesDesligamentosChart } from "./AdmissoesDesligamentosChart";
+import { TurnoverPorSetorList } from "./TurnoverPorSetorList";
 import styles from "./DashboardPage.module.css";
 
 function mesesAtras(n: number): string {
@@ -429,7 +430,7 @@ export function DashboardPage() {
           {turnoverSetor.length === 0 ? (
             <EmptyState message="Sem dados suficientes no período selecionado." />
           ) : (
-            <BarChart data={turnoverSetor.map((s) => ({ label: s.setor, value: s.turnover, annotation: `${Math.round(s.turnover)}%` }))} />
+            <TurnoverPorSetorList data={turnoverSetor} />
           )}
         </Card>
 
