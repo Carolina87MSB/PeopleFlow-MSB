@@ -10,13 +10,22 @@
  * Aqui, só para este botão específico, deixamos quebrar em várias linhas
  * dentro de uma largura máxima, em vez de depender só do scroll horizontal do
  * container da tabela (`Table.module.css` já tem `overflow-x: auto` como
- * reforço em telas bem estreitas). */
+ * reforço em telas bem estreitas).
+ *
+ * `min-width` é essencial aqui: sem um piso, `word-break: break-word` (que
+ * permite quebrar até no meio de uma palavra, não só num espaço) deixava o
+ * navegador tratar "1 caractere por linha" como opção válida quando a
+ * tabela precisava espremer espaço — o texto virava uma coluna vertical de
+ * letras soltas. Como o texto sempre tem um espaço natural ("Carta" /
+ * "(status)"), a quebra normal de linha já resolve sozinha; por isso
+ * `word-break: break-word` foi removido — nunca foi necessário pra este
+ * texto e era exatamente o que abria a brecha pro bug. */
 .botaoCarta {
+  min-width: 140px;
   max-width: 230px;
   white-space: normal;
   text-align: left;
   line-height: 1.35;
-  word-break: break-word;
 }
 
 @media (max-width: 700px) {
