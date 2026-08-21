@@ -1,3 +1,11 @@
+.wrap {
+  overflow-x: auto;
+}
+
+.svg {
+  display: block;
+}
+
 .legenda {
   display: flex;
   gap: 16px;

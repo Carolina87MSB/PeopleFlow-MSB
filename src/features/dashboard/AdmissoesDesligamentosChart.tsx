@@ -1,7 +1,10 @@
 import type { AdmissoesDesligamentosMes } from "../../domain/dashboardExecutivo";
 import styles from "./AdmissoesDesligamentosChart.module.css";
 
-const COR_ADMISSOES = "var(--color-success-fg, #2f8f4e)";
+/** Verde claro pra Admissões, vermelho institucional pra Desligamentos —
+ * `--color-success` (não `--color-success-fg`, mais escuro, usado pra texto
+ * em fundo claro) e `--color-danger`, ambos já existentes no portal. */
+const COR_ADMISSOES = "var(--color-success)";
 const COR_DESLIGAMENTOS = "var(--color-danger)";
 
 interface AdmissoesDesligamentosChartProps {
@@ -13,7 +16,16 @@ interface AdmissoesDesligamentosChartProps {
  * `BarChart` compartilhado (`components/ui/BarChart.tsx`) é só 1 série; este
  * componente é um sibling isolado, mesmo estilo SVG cru zero-dependência, só
  * pra este gráfico de 2 barras por mês (evita mexer no BarChart compartilhado
- * e arriscar os ~6 usos existentes dele). */
+ * e arriscar os ~6 usos existentes dele).
+ *
+ * Particularidade deste card: é uma série temporal (2 métricas por mês, em
+ * ordem cronológica) — diferente de "Turnover por Setor" (uma lista rankeada
+ * de categorias), aqui faz sentido manter o formato de barras agrupadas por
+ * mês, não uma lista. Mesmo assim, o SVG sempre renderiza em tamanho de
+ * pixel natural (nunca `width="100%"` + `preserveAspectRatio` encolhendo
+ * tudo, inclusive a fonte, pra caber no container) com scroll horizontal
+ * quando o período selecionado tiver muitos meses — mesmo princípio já
+ * corrigido no `BarChart` compartilhado. */
 export function AdmissoesDesligamentosChart({ data, height = 170 }: AdmissoesDesligamentosChartProps) {
   const max = Math.max(1, ...data.flatMap((d) => [d.admissoes, d.desligamentos]));
   const barWidth = 16;
@@ -31,40 +43,50 @@ export function AdmissoesDesligamentosChart({ data, height = 170 }: AdmissoesDes
 
   return (
     <div>
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="xMinYMid meet">
-        {data.map((d, i) => {
-          const groupX = groupGap + i * (groupWidth + groupGap);
-          const hAdmissoes = alturaBarra(d.admissoes);
-          const hDesligamentos = alturaBarra(d.desligamentos);
-          return (
-            <g key={d.mes}>
-              <text
-                x={groupX + groupWidth / 2}
-                y={topPad - 6}
-                fontSize="10"
-                fontWeight="700"
-                fontFamily="Montserrat"
-                fill="var(--color-navy)"
-                textAnchor="middle"
-              >
-                {d.admissoes}/{d.desligamentos}
-              </text>
-              <rect x={groupX} y={topPad + (barArea - hAdmissoes)} width={barWidth} height={hAdmissoes} rx={3} fill={COR_ADMISSOES} />
-              <rect
-                x={groupX + barWidth + barGap}
-                y={topPad + (barArea - hDesligamentos)}
-                width={barWidth}
-                height={hDesligamentos}
-                rx={3}
-                fill={COR_DESLIGAMENTOS}
-              />
-              <text x={groupX + groupWidth / 2} y={height - 4} fontSize="10" fontFamily="Montserrat" fill="var(--color-muted-light)" textAnchor="middle">
-                {d.mesLabel}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+      <div className={styles.wrap}>
+        <svg className={styles.svg} viewBox={`0 0 ${width} ${height}`} width={width} height={height}>
+          {data.map((d, i) => {
+            const groupX = groupGap + i * (groupWidth + groupGap);
+            const hAdmissoes = alturaBarra(d.admissoes);
+            const hDesligamentos = alturaBarra(d.desligamentos);
+            return (
+              <g key={d.mes}>
+                <text
+                  x={groupX + groupWidth / 2}
+                  y={topPad - 6}
+                  fontSize="10"
+                  fontWeight="700"
+                  fontFamily="Montserrat"
+                  fill="var(--color-navy)"
+                  textAnchor="middle"
+                >
+                  {d.admissoes}/{d.desligamentos}
+                </text>
+                <rect x={groupX} y={topPad + (barArea - hAdmissoes)} width={barWidth} height={hAdmissoes} rx={3} fill={COR_ADMISSOES}>
+                  <title>
+                    {d.mesLabel} — {d.admissoes} admissõe{d.admissoes === 1 ? "" : "s"}
+                  </title>
+                </rect>
+                <rect
+                  x={groupX + barWidth + barGap}
+                  y={topPad + (barArea - hDesligamentos)}
+                  width={barWidth}
+                  height={hDesligamentos}
+                  rx={3}
+                  fill={COR_DESLIGAMENTOS}
+                >
+                  <title>
+                    {d.mesLabel} — {d.desligamentos} desligamento{d.desligamentos === 1 ? "" : "s"}
+                  </title>
+                </rect>
+                <text x={groupX + groupWidth / 2} y={height - 4} fontSize="10" fontFamily="Montserrat" fill="var(--color-muted-light)" textAnchor="middle">
+                  {d.mesLabel}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
       <div className={styles.legenda}>
         <span className={styles.legendaItem}>
           <span className={styles.legendaCor} style={{ background: COR_ADMISSOES }} />
