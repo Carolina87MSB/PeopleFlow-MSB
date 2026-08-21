@@ -195,14 +195,16 @@ export function AvaliacoesTab() {
 
   const filtradas = useMemo(
     () =>
-      avaliacoesDesempenhoVisiveis.filter(
-        (a) =>
-          (cicloFiltro === "Todos" || a.ciclo === cicloFiltro) &&
-          (statusFiltro === "Todos" || a.status === statusFiltro) &&
-          (tipoFiltro === "Todos" || a.tipo === tipoFiltro) &&
-          (departamentoFiltro === "Todos" || a.departamento === departamentoFiltro) &&
-          (!somenteSemGestor || !a.gestorAvaliador),
-      ),
+      avaliacoesDesempenhoVisiveis
+        .filter(
+          (a) =>
+            (cicloFiltro === "Todos" || a.ciclo === cicloFiltro) &&
+            (statusFiltro === "Todos" || a.status === statusFiltro) &&
+            (tipoFiltro === "Todos" || a.tipo === tipoFiltro) &&
+            (departamentoFiltro === "Todos" || a.departamento === departamentoFiltro) &&
+            (!somenteSemGestor || !a.gestorAvaliador),
+        )
+        .sort((a, b) => a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR")),
     [avaliacoesDesempenhoVisiveis, cicloFiltro, statusFiltro, tipoFiltro, departamentoFiltro, somenteSemGestor],
   );
 

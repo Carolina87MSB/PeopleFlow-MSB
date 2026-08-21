@@ -40,12 +40,14 @@ export function AvaliacoesPotencialTab() {
 
   const filtradas = useMemo(
     () =>
-      avaliacoesPotencialVisiveis.filter(
-        (a) =>
-          (cicloFiltro === "Todos" || a.ciclo === cicloFiltro) &&
-          (statusFiltro === "Todos" || a.status === statusFiltro) &&
-          (departamentoFiltro === "Todos" || a.departamento === departamentoFiltro),
-      ),
+      avaliacoesPotencialVisiveis
+        .filter(
+          (a) =>
+            (cicloFiltro === "Todos" || a.ciclo === cicloFiltro) &&
+            (statusFiltro === "Todos" || a.status === statusFiltro) &&
+            (departamentoFiltro === "Todos" || a.departamento === departamentoFiltro),
+        )
+        .sort((a, b) => a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR")),
     [avaliacoesPotencialVisiveis, cicloFiltro, statusFiltro, departamentoFiltro],
   );
 
