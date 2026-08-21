@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { FileText } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { Header } from "../../components/layout/Header";
-import { Badge, tableStyles } from "../../components/ui";
+import { Badge, EmptyState, tableStyles } from "../../components/ui";
 import { agregarCargos } from "../../domain/agregados";
 import { nivelMeta, statusDescricaoCargoMeta } from "../../domain/colors";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
@@ -11,10 +11,16 @@ import { usePortalData } from "../../store/usePortalData";
 import { DescricaoCargoDrawer } from "./DescricaoCargoDrawer";
 import styles from "./CargosPage.module.css";
 
+const STATUS_SEM_DESCRICAO = "Sem descrição";
+
 export function CargosPage() {
   const { state } = usePortalStore();
   const { conta, perfil, colaboradoresVisiveis, podeVerCargos, toggleDescricaoCargo, descricoesCargo } = usePortalData();
   const [cargoAberto, setCargoAberto] = useState<string | null>(null);
+  const [filtroCargo, setFiltroCargo] = useState("Todos");
+  const [filtroNivel, setFiltroNivel] = useState("Todos");
+  const [filtroDepto, setFiltroDepto] = useState("Todos");
+  const [filtroStatus, setFiltroStatus] = useState("Todos");
 
   /** Gestor só vê os próprios cargos-novos-pendentes (CargoCustom.gestor),
    * senão veria pedidos de "Novo Cargo" de departamentos inteiros que não
@@ -36,6 +42,28 @@ export function CargosPage() {
 
   const descricaoPorCargo = useMemo(() => new Map(descricoesCargo.map((d) => [d.cargoNome, d])), [descricoesCargo]);
 
+  const opcoesCargo = useMemo(() => ["Todos", ...cargos.map((c) => c.nome)], [cargos]);
+  const opcoesNivel = useMemo(() => ["Todos", ...[...new Set(cargos.map((c) => c.nivel))].sort()], [cargos]);
+  const opcoesDepto = useMemo(() => ["Todos", ...[...new Set(cargos.flatMap((c) => [...c.deptos]))].sort()], [cargos]);
+  const opcoesStatus = [STATUS_SEM_DESCRICAO, "Em revisão", "Aprovada", "Rejeitada"] as const;
+
+  const cargosFiltrados = useMemo(
+    () =>
+      cargos.filter((c) => {
+        // Cargo sem `descricao` nenhuma (nunca preenchida, ou só o toggle
+        // OK/Pendente de cargo novo) conta como "Sem descrição", já que
+        // nenhum dos dois é de fato o formulário POP-RH-001.
+        const status = descricaoPorCargo.get(c.nome)?.status ?? STATUS_SEM_DESCRICAO;
+        return (
+          (filtroCargo === "Todos" || c.nome === filtroCargo) &&
+          (filtroNivel === "Todos" || c.nivel === filtroNivel) &&
+          (filtroDepto === "Todos" || c.deptos.has(filtroDepto)) &&
+          (filtroStatus === "Todos" || status === filtroStatus)
+        );
+      }),
+    [cargos, filtroCargo, filtroNivel, filtroDepto, filtroStatus, descricaoPorCargo],
+  );
+
   if (!podeVerCargos) return <Navigate to="/dashboard" replace />;
 
   return (
@@ -44,17 +72,76 @@ export function CargosPage() {
 
       <div className={tableStyles.wrap}>
         <table className={tableStyles.table}>
+          <colgroup>
+            <col style={{ width: "24%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "19%" }} />
+            <col style={{ width: "28%" }} />
+            <col style={{ width: "16%" }} />
+          </colgroup>
           <thead>
             <tr>
-              <th>Cargo</th>
-              <th>Nível</th>
-              <th>Departamentos</th>
-              <th>Descrição de cargo</th>
+              <th>
+                <div className={styles.thFiltro}>
+                  <span>Cargo</span>
+                  <select className={styles.thSelect} value={filtroCargo} onChange={(e) => setFiltroCargo(e.target.value)}>
+                    {opcoesCargo.map((o) => (
+                      <option key={o} value={o}>
+                        {o === "Todos" ? "Todos os cargos" : formatarNomeCargo(o)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </th>
+              <th>
+                <div className={styles.thFiltro}>
+                  <span>Nível</span>
+                  <select className={styles.thSelect} value={filtroNivel} onChange={(e) => setFiltroNivel(e.target.value)}>
+                    {opcoesNivel.map((o) => (
+                      <option key={o} value={o}>
+                        {o === "Todos" ? "Todos os níveis" : o}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </th>
+              <th>
+                <div className={styles.thFiltro}>
+                  <span>Departamentos</span>
+                  <select className={styles.thSelect} value={filtroDepto} onChange={(e) => setFiltroDepto(e.target.value)}>
+                    {opcoesDepto.map((o) => (
+                      <option key={o} value={o}>
+                        {o === "Todos" ? "Todos os departamentos" : o}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </th>
+              <th>
+                <div className={styles.thFiltro}>
+                  <span>Descrição de cargo</span>
+                  <select className={styles.thSelect} value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
+                    <option value="Todos">Todos os status</option>
+                    {opcoesStatus.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </th>
               <th className={tableStyles.right}>Ocupantes</th>
             </tr>
           </thead>
           <tbody>
-            {cargos.map((c) => {
+            {cargosFiltrados.length === 0 ? (
+              <tr>
+                <td colSpan={5}>
+                  <EmptyState message="Nenhum cargo encontrado para os filtros selecionados." />
+                </td>
+              </tr>
+            ) : (
+            cargosFiltrados.map((c) => {
               const nivel = nivelMeta(c.nivel);
               const descricao = descricaoPorCargo.get(c.nome);
               return (
@@ -110,7 +197,8 @@ export function CargosPage() {
                   </td>
                 </tr>
               );
-            })}
+            })
+            )}
           </tbody>
         </table>
       </div>

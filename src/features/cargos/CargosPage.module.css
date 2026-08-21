@@ -1,3 +1,30 @@
+/* Cabeçalho com filtro embutido — o rótulo herda o estilo (maiúsculas,
+ * cinza) já definido em `.table th` (Table.module.css, compartilhado);
+ * só o `<select>` precisa das próprias regras, já que mostra o texto das
+ * opções tal como é (misto de maiúsculas/minúsculas). */
+.thFiltro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.thSelect {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 5px 7px;
+  font: 600 11px var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text);
+  max-width: 100%;
+}
+
+.thSelect:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
 .cargoCell {
   display: flex;
   align-items: center;
