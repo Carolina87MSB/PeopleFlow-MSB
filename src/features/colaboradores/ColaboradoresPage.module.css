@@ -62,6 +62,14 @@
   gap: 8px;
 }
 
+/* Data de admissão é dado auxiliar, não a informação principal da linha
+ * (que é o nome, já em destaque via .pessoa) — um pouco mais leve cria
+ * hierarquia sem precisar de nenhuma cor nova. */
+.dataSecundaria {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
 .drawerHeader {
   display: flex;
   align-items: center;

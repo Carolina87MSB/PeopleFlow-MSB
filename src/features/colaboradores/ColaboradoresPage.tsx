@@ -126,13 +126,16 @@ export function ColaboradoresPage() {
                 <th>Gestor imediato</th>
                 <th>Data de admissão</th>
                 <th>Tempo de empresa</th>
-                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {filtrados.map((c) => (
                 <tr key={c.nome} className={tableStyles.clickable} onClick={() => abrirDrawer(c.nome)}>
-                  <td>{c.vinculo}</td>
+                  <td>
+                    <Badge bg="var(--color-neutral-bg)" fg="var(--color-neutral-fg)">
+                      {c.vinculo}
+                    </Badge>
+                  </td>
                   <td>
                     <div className={styles.pessoa}>
                       <Avatar nome={c.nome} size={30} />
@@ -149,11 +152,12 @@ export function ColaboradoresPage() {
                     </span>
                   </td>
                   <td>{c.gestor}</td>
-                  <td>{c.admissao}</td>
-                  <td>{c.tempoDeEmpresa}</td>
                   <td>
-                    <Badge bg="var(--color-success-bg)" fg="var(--color-success-fg)" dot="var(--color-success)">
-                      Ativo
+                    <span className={styles.dataSecundaria}>{c.admissao}</span>
+                  </td>
+                  <td>
+                    <Badge bg="var(--color-brand-pale)" fg="var(--color-navy-soft)">
+                      {c.tempoDeEmpresa}
                     </Badge>
                   </td>
                 </tr>
