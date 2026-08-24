@@ -31,13 +31,14 @@ export function CalibracaoDrawer({ par, onClose }: CalibracaoDrawerProps) {
   const { configAvaliacaoDesempenho, avaliacoesDesempenho, podeCalibrarAvaliacaoDesempenho, homologarCalibracao } = usePortalData();
   const { avaliacaoDesempenho: avd, avaliacaoPotencial: potencial } = par;
 
-  // Fichas irmãs (mesmo colaborador/ciclo) — a Média Comportamental do
-  // gestor acima já é a consolidada (ver mediaComportamentalConsolidada em
-  // domain/avaliacaoDesempenho.ts); aqui só exibimos a composição, pro
-  // Comitê ver de onde veio o número antes de calibrar/homologar.
+  // Ficha de Autoavaliação irmã (mesmo colaborador/ciclo) — a Média
+  // Comportamental do gestor acima já é a consolidada entre GESTOR e
+  // AUTOAVALIACAO (ver mediaComportamentalConsolidada em
+  // domain/avaliacaoDesempenho.ts — LIDERANCA nunca entra nessa conta);
+  // aqui só exibimos a composição, pro Comitê ver de onde veio o número
+  // antes de calibrar/homologar.
   const irmas = useMemo(() => fichasIrmasDe(avaliacoesDesempenho, avd), [avaliacoesDesempenho, avd]);
   const autoavaliacao = irmas.find((a) => a.tipo === "AUTOAVALIACAO");
-  const lideranca = irmas.find((a) => a.tipo === "LIDERANCA");
 
   const podeCalibrar = podeCalibrarAvaliacaoDesempenho(avd);
   const [mediaComportamentalInput, setMediaComportamentalInput] = useState("");
@@ -96,14 +97,8 @@ export function CalibracaoDrawer({ par, onClose }: CalibracaoDrawerProps) {
             <strong>{autoavaliacao.mediaComportamental ?? "—"}</strong>
           </div>
         )}
-        {lideranca && (
-          <div className={styles.resumoLinha}>
-            <span>Avaliação da Liderança (comportamental){lideranca.status !== "Concluída" ? " — não concluída, não entra na média" : ""}</span>
-            <strong>{lideranca.mediaComportamental ?? "—"}</strong>
-          </div>
-        )}
         <div className={styles.resumoLinha}>
-          <span>Média Comportamental{autoavaliacao || lideranca ? " (consolidada)" : ""}</span>
+          <span>Média Comportamental{autoavaliacao ? " (consolidada)" : ""}</span>
           <strong>{avd.mediaComportamental ?? "—"}</strong>
         </div>
         <div className={styles.resumoLinhaFinal}>

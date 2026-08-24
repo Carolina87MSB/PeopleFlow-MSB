@@ -74,13 +74,14 @@ export function fichasIrmasDe<T extends Pick<AvaliacaoDesempenho, "id" | "colabo
 
 /** Média comportamental "oficial" de uma ficha GESTOR — deixou de ser só a
  * média das competências respondidas pelo próprio gestor: passa a ser a
- * média simples (peso igual) entre a própria ficha GESTOR, a ficha
- * AUTOAVALIACAO do mesmo colaborador/ciclo e a ficha LIDERANCA do mesmo
- * colaborador/ciclo — cada uma entra só quando existir E já estiver
- * "Concluída" (evita que a nota fique variando enquanto alguém ainda está
- * preenchendo a própria ficha). Fichas AUTOAVALIACAO/LIDERANCA continuam
- * usando só a própria média (sem consolidação) — a nota oficial da AVD é
- * sempre a da ficha GESTOR, então só ela precisa dessa regra. */
+ * média simples (peso igual) entre a própria ficha GESTOR e a ficha
+ * AUTOAVALIACAO do mesmo colaborador/ciclo, quando ela existir e já estiver
+ * "Concluída" (evita que a nota fique variando enquanto o colaborador ainda
+ * está preenchendo a própria autoavaliação). A ficha LIDERANCA NUNCA entra
+ * nessa conta — é uma avaliação à parte, sem relação com a nota do
+ * colaborador. Fichas AUTOAVALIACAO/LIDERANCA continuam usando só a própria
+ * média (sem consolidação) — a nota oficial da AVD é sempre a da ficha
+ * GESTOR, então só ela precisa dessa regra. */
 export function mediaComportamentalConsolidada(
   avaliacao: Pick<AvaliacaoDesempenho, "tipo" | "resultadosComportamentais">,
   irmas: Pick<AvaliacaoDesempenho, "tipo" | "status" | "resultadosComportamentais">[],
@@ -91,7 +92,7 @@ export function mediaComportamentalConsolidada(
   const valores: number[] = [];
   if (propria !== null) valores.push(propria);
   for (const irma of irmas) {
-    if (irma.tipo !== "AUTOAVALIACAO" && irma.tipo !== "LIDERANCA") continue;
+    if (irma.tipo !== "AUTOAVALIACAO") continue;
     if (irma.status !== "Concluída") continue;
     const mediaIrma = mediaComportamental(irma.resultadosComportamentais);
     if (mediaIrma !== null) valores.push(mediaIrma);
@@ -228,9 +229,9 @@ export interface ResultadoCalculoAvaliacao {
  *
  * `irmas` (opcional) são as demais fichas do mesmo colaborador/ciclo (ver
  * fichasIrmasDe) — só usadas quando `avaliacao.tipo === "GESTOR"`, para
- * consolidar a média comportamental entre GESTOR/AUTOAVALIACAO/LIDERANCA
- * (ver mediaComportamentalConsolidada). Omitir `irmas` equivale a calcular
- * só com a própria ficha.
+ * consolidar a média comportamental entre GESTOR e AUTOAVALIACAO (ver
+ * mediaComportamentalConsolidada — LIDERANCA nunca entra nessa conta).
+ * Omitir `irmas` equivale a calcular só com a própria ficha.
  *
  * Regra de arredondamento: cada um dos 3 valores é calculado a partir dos
  * dados brutos em precisão total e só arredondado (1 casa decimal) no

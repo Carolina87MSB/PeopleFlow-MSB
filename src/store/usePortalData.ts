@@ -1511,15 +1511,15 @@ export function usePortalData(): PortalData {
     [perfil],
   );
 
-  /** A média comportamental oficial de uma ficha GESTOR consolida também as
-   * fichas irmãs (AUTOAVALIACAO/LIDERANCA) já concluídas do mesmo
-   * colaborador/ciclo (ver mediaComportamentalConsolidada em
-   * domain/avaliacaoDesempenho.ts). Se a GESTOR já estava "Concluída"
-   * quando uma dessas fichas irmãs conclui DEPOIS, nada recalcularia a
-   * GESTOR de novo sozinho — mesma classe de bug (edge-triggered) já
-   * corrigida nesta sessão para o disparo da calibração. Aqui, sempre que
-   * uma ficha não-GESTOR conclui, a GESTOR irmã é recalculada com os dados
-   * mais atuais. Só mexe enquanto a GESTOR ainda não foi "Homologada" —
+  /** A média comportamental oficial de uma ficha GESTOR consolida também a
+   * ficha AUTOAVALIACAO já concluída do mesmo colaborador/ciclo (ver
+   * mediaComportamentalConsolidada em domain/avaliacaoDesempenho.ts — a
+   * LIDERANCA nunca entra nessa conta). Se a GESTOR já estava "Concluída"
+   * quando a Autoavaliação conclui DEPOIS, nada recalcularia a GESTOR de
+   * novo sozinho — mesma classe de bug (edge-triggered) já corrigida nesta
+   * sessão para o disparo da calibração. Aqui, sempre que a Autoavaliação
+   * conclui, a GESTOR irmã é recalculada com os dados mais atuais. Só mexe
+   * enquanto a GESTOR ainda não foi "Homologada" —
    * "Aguardando Calibração" é só uma fila de revisão do Comitê (RH ainda
    * não decidiu nada sobre esse número), então recalcular aí é seguro e
    * esperado; só depois de Homologada existe uma decisão registrada
@@ -1607,10 +1607,11 @@ export function usePortalData(): PortalData {
         if (atualizado.tipo === "GESTOR" && atualizado.status === "Concluída" && atualizado.statusCalibracao === "Não iniciada") {
           void verificarEIniciarCalibracaoFn(atualizado, null, atualizado.colaboradorNome, atualizado.cicloId);
         }
-        // A GESTOR já pode ter sido concluída antes desta ficha irmã — a
-        // média comportamental oficial da AVD agora depende também da
-        // AUTOAVALIACAO/LIDERANCA (ver comentário de recalcularGestorSeNecessarioFn).
-        if (concluindoAgora && atualizado.tipo !== "GESTOR") {
+        // A GESTOR já pode ter sido concluída antes da Autoavaliação — a
+        // média comportamental oficial da AVD agora depende também dela
+        // (ver comentário de recalcularGestorSeNecessarioFn; LIDERANCA nunca
+        // entra nessa conta, então concluir uma LIDERANCA não precisa disparar nada aqui).
+        if (concluindoAgora && atualizado.tipo === "AUTOAVALIACAO") {
           void recalcularGestorSeNecessarioFn(atualizado.colaboradorNome, atualizado.cicloId);
         }
 
