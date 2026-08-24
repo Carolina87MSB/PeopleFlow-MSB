@@ -58,6 +58,7 @@ import {
   arredondar,
   calcularNotasAvaliacao,
   elegivelParaCicloAvaliacaoDesempenho,
+  fichasIrmasDe,
   gerarIdAvaliacaoDesempenho,
   gerarIdCicloAvaliacaoDesempenho,
   mediaAfirmacoes,
@@ -1510,6 +1511,51 @@ export function usePortalData(): PortalData {
     [perfil],
   );
 
+  /** A média comportamental oficial de uma ficha GESTOR consolida também as
+   * fichas irmãs (AUTOAVALIACAO/LIDERANCA) já concluídas do mesmo
+   * colaborador/ciclo (ver mediaComportamentalConsolidada em
+   * domain/avaliacaoDesempenho.ts). Se a GESTOR já estava "Concluída"
+   * quando uma dessas fichas irmãs conclui DEPOIS, nada recalcularia a
+   * GESTOR de novo sozinho — mesma classe de bug (edge-triggered) já
+   * corrigida nesta sessão para o disparo da calibração. Aqui, sempre que
+   * uma ficha não-GESTOR conclui, a GESTOR irmã é recalculada com os dados
+   * mais atuais. Só mexe enquanto a GESTOR ainda não entrou no fluxo de
+   * calibração (statusCalibracao === "Não iniciada") — depois disso o
+   * comitê já pode ter deliberado sobre aquele número, e uma correção
+   * automática silenciosa seria arriscada; nesse caso fica pra uma correção
+   * manual/RH pontual. Best-effort — falha aqui não desfaz o salvamento que
+   * disparou a checagem. */
+  const recalcularGestorSeNecessarioFn = useCallback(
+    async (colaboradorNome: string, cicloId: string) => {
+      const gestor = state.avaliacoesDesempenho.find(
+        (a) => a.tipo === "GESTOR" && a.colaboradorNome === colaboradorNome && a.cicloId === cicloId,
+      );
+      if (!gestor || gestor.status !== "Concluída" || gestor.statusCalibracao !== "Não iniciada") return;
+
+      const irmas = fichasIrmasDe(state.avaliacoesDesempenho, gestor);
+      const { mediaComportamental: novaMedia, notaFinal: novaNota } = calcularNotasAvaliacao(
+        gestor,
+        state.kpisCargo,
+        state.configAvaliacaoDesempenho,
+        irmas,
+      );
+      if (novaMedia === gestor.mediaComportamental && novaNota === gestor.notaFinal) return;
+
+      const atualizado: AvaliacaoDesempenho = { ...gestor, mediaComportamental: novaMedia, notaFinal: novaNota };
+      try {
+        await atualizarAvaliacaoDesempenhoNoSupabase(atualizado);
+        dispatch({ type: "ATUALIZAR_AVALIACAO_DESEMPENHO", avaliacao: atualizado });
+      } catch (err) {
+        flash(
+          err instanceof Error
+            ? `Falha ao atualizar a nota comportamental de ${colaboradorNome}: ${err.message}`
+            : `Falha ao atualizar a nota comportamental de ${colaboradorNome}.`,
+        );
+      }
+    },
+    [dispatch, flash, state.avaliacoesDesempenho, state.kpisCargo, state.configAvaliacaoDesempenho],
+  );
+
   const salvarAvaliacaoDesempenhoFn = useCallback(
     async (avaliacao: AvaliacaoDesempenho) => {
       const anterior = state.avaliacoesDesempenho.find((a) => a.id === avaliacao.id);
@@ -1517,7 +1563,7 @@ export function usePortalData(): PortalData {
       // lista de Avaliações, pra nota exibida e nota gravada serem sempre
       // idênticas (ver calcularNotasAvaliacao() em domain/avaliacaoDesempenho.ts).
       const { mediaTecnica: mediaTecnicaValor, mediaComportamental: mediaComportamentalValor, notaFinal: notaFinalValor } =
-        calcularNotasAvaliacao(avaliacao, state.kpisCargo, state.configAvaliacaoDesempenho);
+        calcularNotasAvaliacao(avaliacao, state.kpisCargo, state.configAvaliacaoDesempenho, fichasIrmasDe(state.avaliacoesDesempenho, avaliacao));
       // "Concluída" trava — concluidoPor/Em só são gravados na transição, nunca
       // recalculados depois (preserva quem/quando concluiu de fato).
       const concluindoAgora = avaliacao.status === "Concluída" && anterior?.status !== "Concluída";
@@ -1559,6 +1605,12 @@ export function usePortalData(): PortalData {
         // execução — só o lado da Potencial é lido de `state`).
         if (atualizado.tipo === "GESTOR" && atualizado.status === "Concluída" && atualizado.statusCalibracao === "Não iniciada") {
           void verificarEIniciarCalibracaoFn(atualizado, null, atualizado.colaboradorNome, atualizado.cicloId);
+        }
+        // A GESTOR já pode ter sido concluída antes desta ficha irmã — a
+        // média comportamental oficial da AVD agora depende também da
+        // AUTOAVALIACAO/LIDERANCA (ver comentário de recalcularGestorSeNecessarioFn).
+        if (concluindoAgora && atualizado.tipo !== "GESTOR") {
+          void recalcularGestorSeNecessarioFn(atualizado.colaboradorNome, atualizado.cicloId);
         }
 
         return { ok: true as const };
@@ -1691,7 +1743,17 @@ export function usePortalData(): PortalData {
         }
       }
     },
-    [dispatch, me, flash, state.avaliacoesDesempenho, state.kpisCargo, state.configAvaliacaoDesempenho, state.pdiBiblioteca, verificarEIniciarCalibracaoFn],
+    [
+      dispatch,
+      me,
+      flash,
+      state.avaliacoesDesempenho,
+      state.kpisCargo,
+      state.configAvaliacaoDesempenho,
+      state.pdiBiblioteca,
+      verificarEIniciarCalibracaoFn,
+      recalcularGestorSeNecessarioFn,
+    ],
   );
 
   const podeReabrirAvaliacaoDesempenhoFn = useCallback(

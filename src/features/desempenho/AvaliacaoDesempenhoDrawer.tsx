@@ -6,6 +6,7 @@ import {
   calcularNotasAvaliacao,
   classificarSentidoMeta,
   ESCALA_COMPORTAMENTAL,
+  fichasIrmasDe,
   formatarResultadoKpi,
   itensPendentes,
   mediaAfirmacoes,
@@ -45,6 +46,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
     kpisCargo,
     configAvaliacaoDesempenho,
     ciclosAvaliacaoDesempenho,
+    avaliacoesDesempenho,
     salvarAvaliacaoDesempenho,
     podeEditarAvaliacaoDesempenho,
     podeReabrirAvaliacaoDesempenho,
@@ -85,6 +87,15 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
   const kpisPorId = useMemo(() => new Map(kpisCargo.map((k) => [k.id, k])), [kpisCargo]);
   const competenciasPorId = useMemo(() => new Map(competenciasComportamentais.map((c) => [c.id, c])), [competenciasComportamentais]);
 
+  // Fichas irmãs (mesmo colaborador/ciclo) — usadas quando esta for a
+  // ficha GESTOR, pra consolidar a média comportamental entre
+  // GESTOR/AUTOAVALIACAO/LIDERANCA (ver mediaComportamentalConsolidada em
+  // domain/avaliacaoDesempenho.ts).
+  const fichasIrmas = useMemo(
+    () => fichasIrmasDe(avaliacoesDesempenho, avaliacao),
+    [avaliacoesDesempenho, avaliacao],
+  );
+
   // Ponto único de cálculo — o mesmo usado ao salvar e na lista de
   // Avaliações, pra este preview nunca divergir do valor efetivamente
   // gravado (ver calcularNotasAvaliacao() em domain/avaliacaoDesempenho.ts).
@@ -93,6 +104,7 @@ export function AvaliacaoDesempenhoDrawer({ avaliacao, onClose }: AvaliacaoDesem
     rascunho,
     kpisCargo,
     configAvaliacaoDesempenho,
+    fichasIrmas,
   );
   const completa = avaliacaoCompleta(rascunho);
   const pendencias = useMemo(

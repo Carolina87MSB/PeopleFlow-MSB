@@ -60,6 +60,45 @@ export function mediaComportamental(resultados: ResultadoComportamental[]): numb
   return media(completas);
 }
 
+/** Fichas irmãs de uma avaliação — mesmo colaborador/ciclo, ficha diferente
+ * (GESTOR/AUTOAVALIACAO/LIDERANCA são registros separados por tipo, não
+ * variações da mesma linha). Usado para consolidar a média comportamental
+ * (ver mediaComportamentalConsolidada) e para recalcular a ficha GESTOR
+ * quando uma ficha irmã conclui depois dela (ver usePortalData.ts). */
+export function fichasIrmasDe<T extends Pick<AvaliacaoDesempenho, "id" | "colaboradorNome" | "cicloId">>(
+  todas: T[],
+  avaliacao: Pick<AvaliacaoDesempenho, "id" | "colaboradorNome" | "cicloId">,
+): T[] {
+  return todas.filter((a) => a.id !== avaliacao.id && a.colaboradorNome === avaliacao.colaboradorNome && a.cicloId === avaliacao.cicloId);
+}
+
+/** Média comportamental "oficial" de uma ficha GESTOR — deixou de ser só a
+ * média das competências respondidas pelo próprio gestor: passa a ser a
+ * média simples (peso igual) entre a própria ficha GESTOR, a ficha
+ * AUTOAVALIACAO do mesmo colaborador/ciclo e a ficha LIDERANCA do mesmo
+ * colaborador/ciclo — cada uma entra só quando existir E já estiver
+ * "Concluída" (evita que a nota fique variando enquanto alguém ainda está
+ * preenchendo a própria ficha). Fichas AUTOAVALIACAO/LIDERANCA continuam
+ * usando só a própria média (sem consolidação) — a nota oficial da AVD é
+ * sempre a da ficha GESTOR, então só ela precisa dessa regra. */
+export function mediaComportamentalConsolidada(
+  avaliacao: Pick<AvaliacaoDesempenho, "tipo" | "resultadosComportamentais">,
+  irmas: Pick<AvaliacaoDesempenho, "tipo" | "status" | "resultadosComportamentais">[],
+): number | null {
+  const propria = mediaComportamental(avaliacao.resultadosComportamentais);
+  if (avaliacao.tipo !== "GESTOR") return propria;
+
+  const valores: number[] = [];
+  if (propria !== null) valores.push(propria);
+  for (const irma of irmas) {
+    if (irma.tipo !== "AUTOAVALIACAO" && irma.tipo !== "LIDERANCA") continue;
+    if (irma.status !== "Concluída") continue;
+    const mediaIrma = mediaComportamental(irma.resultadosComportamentais);
+    if (mediaIrma !== null) valores.push(mediaIrma);
+  }
+  return media(valores);
+}
+
 /** Classifica o texto de `sentidoMeta` por PREFIXO normalizado (sem acento,
  * minúsculo) — não por igualdade estrita com o literal exato "Maior é
  * Melhor"/"Menor é Melhor". Existe por causa de um bug real: KPIs cadastrados
@@ -187,6 +226,12 @@ export interface ResultadoCalculoAvaliacao {
  * preview (antes de salvar) e o valor persistido devem ser sempre
  * idênticos.
  *
+ * `irmas` (opcional) são as demais fichas do mesmo colaborador/ciclo (ver
+ * fichasIrmasDe) — só usadas quando `avaliacao.tipo === "GESTOR"`, para
+ * consolidar a média comportamental entre GESTOR/AUTOAVALIACAO/LIDERANCA
+ * (ver mediaComportamentalConsolidada). Omitir `irmas` equivale a calcular
+ * só com a própria ficha.
+ *
  * Regra de arredondamento: cada um dos 3 valores é calculado a partir dos
  * dados brutos em precisão total e só arredondado (1 casa decimal) no
  * final, individualmente — a nota final NUNCA é calculada a partir de
@@ -196,9 +241,10 @@ export function calcularNotasAvaliacao(
   avaliacao: Pick<AvaliacaoDesempenho, "tipo" | "resultadosComportamentais" | "resultadosKpis">,
   kpisCargo: KpiCargo[],
   config: ConfigAvaliacaoDesempenho | null,
+  irmas: Pick<AvaliacaoDesempenho, "tipo" | "status" | "resultadosComportamentais">[] = [],
 ): ResultadoCalculoAvaliacao {
   const mediaTecnicaValor = mediaTecnica(avaliacao.resultadosKpis, kpisCargo);
-  const mediaComportamentalValor = mediaComportamental(avaliacao.resultadosComportamentais);
+  const mediaComportamentalValor = mediaComportamentalConsolidada(avaliacao, irmas);
   const notaFinalValor = notaFinalPorTipo(avaliacao.tipo, mediaTecnicaValor, mediaComportamentalValor, config);
   return {
     mediaTecnica: arredondar(mediaTecnicaValor),
