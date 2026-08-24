@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge, Button, Drawer } from "../../components/ui";
 import { calcularNotaOficialAvd, calcularNotaOficialPotencial, validarCalibracao } from "../../domain/calibracao";
+import { fichasIrmasDe } from "../../domain/avaliacaoDesempenho";
 import { posicionarMatriz9Box } from "../../domain/matriz9Box";
 import { formatarDataHora } from "../../domain/dates";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
@@ -27,8 +28,16 @@ function paraNumeroOuNulo(valor: string): number | null {
  * parte. Depois de "Homologada", tudo vira histórico travado: sem edição,
  * sem reabertura (o spec não pede uma para este fluxo). */
 export function CalibracaoDrawer({ par, onClose }: CalibracaoDrawerProps) {
-  const { configAvaliacaoDesempenho, podeCalibrarAvaliacaoDesempenho, homologarCalibracao } = usePortalData();
+  const { configAvaliacaoDesempenho, avaliacoesDesempenho, podeCalibrarAvaliacaoDesempenho, homologarCalibracao } = usePortalData();
   const { avaliacaoDesempenho: avd, avaliacaoPotencial: potencial } = par;
+
+  // Fichas irmãs (mesmo colaborador/ciclo) — a Média Comportamental do
+  // gestor acima já é a consolidada (ver mediaComportamentalConsolidada em
+  // domain/avaliacaoDesempenho.ts); aqui só exibimos a composição, pro
+  // Comitê ver de onde veio o número antes de calibrar/homologar.
+  const irmas = useMemo(() => fichasIrmasDe(avaliacoesDesempenho, avd), [avaliacoesDesempenho, avd]);
+  const autoavaliacao = irmas.find((a) => a.tipo === "AUTOAVALIACAO");
+  const lideranca = irmas.find((a) => a.tipo === "LIDERANCA");
 
   const podeCalibrar = podeCalibrarAvaliacaoDesempenho(avd);
   const [mediaComportamentalInput, setMediaComportamentalInput] = useState("");
@@ -81,8 +90,20 @@ export function CalibracaoDrawer({ par, onClose }: CalibracaoDrawerProps) {
           <span>Média Técnica (KPIs)</span>
           <strong>{avd.mediaTecnica ?? "—"}</strong>
         </div>
+        {autoavaliacao && (
+          <div className={styles.resumoLinha}>
+            <span>Autoavaliação (comportamental){autoavaliacao.status !== "Concluída" ? " — não concluída, não entra na média" : ""}</span>
+            <strong>{autoavaliacao.mediaComportamental ?? "—"}</strong>
+          </div>
+        )}
+        {lideranca && (
+          <div className={styles.resumoLinha}>
+            <span>Avaliação da Liderança (comportamental){lideranca.status !== "Concluída" ? " — não concluída, não entra na média" : ""}</span>
+            <strong>{lideranca.mediaComportamental ?? "—"}</strong>
+          </div>
+        )}
         <div className={styles.resumoLinha}>
-          <span>Média Comportamental</span>
+          <span>Média Comportamental{autoavaliacao || lideranca ? " (consolidada)" : ""}</span>
           <strong>{avd.mediaComportamental ?? "—"}</strong>
         </div>
         <div className={styles.resumoLinhaFinal}>
