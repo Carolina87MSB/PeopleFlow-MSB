@@ -1519,18 +1519,19 @@ export function usePortalData(): PortalData {
    * GESTOR de novo sozinho — mesma classe de bug (edge-triggered) já
    * corrigida nesta sessão para o disparo da calibração. Aqui, sempre que
    * uma ficha não-GESTOR conclui, a GESTOR irmã é recalculada com os dados
-   * mais atuais. Só mexe enquanto a GESTOR ainda não entrou no fluxo de
-   * calibração (statusCalibracao === "Não iniciada") — depois disso o
-   * comitê já pode ter deliberado sobre aquele número, e uma correção
-   * automática silenciosa seria arriscada; nesse caso fica pra uma correção
-   * manual/RH pontual. Best-effort — falha aqui não desfaz o salvamento que
-   * disparou a checagem. */
+   * mais atuais. Só mexe enquanto a GESTOR ainda não foi "Homologada" —
+   * "Aguardando Calibração" é só uma fila de revisão do Comitê (RH ainda
+   * não decidiu nada sobre esse número), então recalcular aí é seguro e
+   * esperado; só depois de Homologada existe uma decisão registrada
+   * (nota_final_oficial/homologado_por/homologado_em) que não deve ser
+   * mexida em silêncio — aí a correção é manual/RH pontual. Best-effort —
+   * falha aqui não desfaz o salvamento que disparou a checagem. */
   const recalcularGestorSeNecessarioFn = useCallback(
     async (colaboradorNome: string, cicloId: string) => {
       const gestor = state.avaliacoesDesempenho.find(
         (a) => a.tipo === "GESTOR" && a.colaboradorNome === colaboradorNome && a.cicloId === cicloId,
       );
-      if (!gestor || gestor.status !== "Concluída" || gestor.statusCalibracao !== "Não iniciada") return;
+      if (!gestor || gestor.status !== "Concluída" || gestor.statusCalibracao === "Homologada") return;
 
       const irmas = fichasIrmasDe(state.avaliacoesDesempenho, gestor);
       const { mediaComportamental: novaMedia, notaFinal: novaNota } = calcularNotasAvaliacao(
