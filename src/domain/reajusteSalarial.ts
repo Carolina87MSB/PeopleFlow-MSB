@@ -8,6 +8,17 @@ import type { Colaborador, Movimentacao, ReajusteSalarial, SalarioBase } from ".
 import { norm } from "./hierarquia";
 import { formatarValorMonetario, salarioVigente } from "./salario";
 
+/** Casos pontuais em que o nome na planilha de reajuste não bate
+ * exatamente com `colaboradores.nome` (sobrenomes em ordem diferente,
+ * sobrenome faltando etc.) — mapeados pelo nome normalizado da planilha
+ * pro nome exato do cadastro. Mesmo espírito de EMAIL_OVERRIDES em
+ * domain/hierarquia.ts: exceção documentada, não um fuzzy-match
+ * automático (que arriscaria casar duas pessoas diferentes por engano). */
+const NOME_OVERRIDES: Record<string, string> = {
+  [norm("Rebeca Souza Santos Oliveira")]: "Rebeca Santos Souza Oliveira",
+  [norm("Tais Batista Santos")]: "Tais Batista Santos Araújo",
+};
+
 export function gerarIdReajusteSalarial(): string {
   return `REAJ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -197,7 +208,8 @@ export function validarLinhaReajuste(
     return { ...vazio, status: "pj", motivo: "Colaborador PJ — reajuste coletivo não se aplica." };
   }
 
-  const colaborador = colaboradores.find((c) => norm(c.nome) === norm(linha.colaborador));
+  const nomeAlvo = NOME_OVERRIDES[norm(linha.colaborador)] ?? linha.colaborador;
+  const colaborador = colaboradores.find((c) => norm(c.nome) === norm(nomeAlvo));
   if (!colaborador) {
     return { ...vazio, status: "naoEncontrado", motivo: "Nome não encontrado no cadastro de colaboradores." };
   }
