@@ -67,10 +67,17 @@ export interface LinhaReajusteBruta {
  * 1-2: os valores exportados de planilha (ex.: "Novo Salário" calculado sem
  * arredondar, "3947.2492") legitimamente têm mais de 2 casas, e não são
  * texto digitado livremente por humano — não há motivo pra ser tão
- * conservador quanto o parser de valor monetário digitado. */
+ * conservador quanto o parser de valor monetário digitado.
+ *
+ * Ao colar do Excel (Ctrl+C → Ctrl+V), o clipboard traz o texto **exibido
+ * na célula**, não o valor bruto — uma célula de moeda formatada mostra
+ * "R$ 1.621,00" (nunca "1621") e uma célula com separador de milhar por
+ * espaço mostra "1 621,00"; por isso remove "R$" e qualquer espaço (incl.
+ * espaço não separável, comum em exportações do Excel) antes de tentar
+ * casar os formatos numéricos. */
 function parseNumero(texto: string | undefined): number | null {
   if (!texto) return null;
-  const limpo = texto.trim();
+  const limpo = texto.replace(/r\$/i, "").replace(/[\s ]/g, "").trim();
   if (!limpo) return null;
 
   // Formato brasileiro: milhar "." + decimal "," (qualquer nº de casas).
@@ -82,6 +89,22 @@ function parseNumero(texto: string | undefined): number | null {
     return Number(limpo.replace(",", "."));
   }
   return null;
+}
+
+/** Percentual em pontos (6 = 6%) a partir de uma célula colada do Excel —
+ * aceita tanto a forma bruta ("0,06", fração) quanto a forma já exibida
+ * como percentual quando a célula tem formato de porcentagem ("6%",
+ * "125%") — nesse caso o número antes do "%" JÁ é o valor em pontos, não
+ * multiplica por 100 de novo (senão "6%" viraria 600). REAJUSTE BASE e
+ * FATORIAL são tipicamente formatados como porcentagem na planilha de
+ * origem, então este é o caminho mais comum na prática, não uma exceção. */
+function parsePercentual(texto: string | undefined): number | null {
+  if (!texto) return null;
+  const semEspacos = texto.trim();
+  const comSinalPercentual = semEspacos.endsWith("%");
+  const numero = parseNumero(comSinalPercentual ? semEspacos.slice(0, -1) : semEspacos);
+  if (numero === null) return null;
+  return comSinalPercentual ? numero : numero * 100;
 }
 
 /** Aceita o texto colado direto do Excel (tab-separated) ou CSV (`;`/`,`),
@@ -111,14 +134,12 @@ export function parseTabelaReajuste(texto: string): LinhaReajusteBruta[] {
 
   return linhas.slice(1).map((linha) => {
     const campos = linha.split(separador);
-    const base = idx.reajusteBase >= 0 ? parseNumero(campos[idx.reajusteBase]) : null;
-    const fatorial = idx.fatorial >= 0 ? parseNumero(campos[idx.fatorial]) : null;
     return {
       vinculo: (idx.vinculo >= 0 ? campos[idx.vinculo] : "")?.trim() ?? "",
       colaborador: (idx.colaborador >= 0 ? campos[idx.colaborador] : "")?.trim() ?? "",
       salario: idx.salario >= 0 ? parseNumero(campos[idx.salario]) : null,
-      reajusteBase: base !== null ? base * 100 : null,
-      fatorial: fatorial !== null ? fatorial * 100 : null,
+      reajusteBase: idx.reajusteBase >= 0 ? parsePercentual(campos[idx.reajusteBase]) : null,
+      fatorial: idx.fatorial >= 0 ? parsePercentual(campos[idx.fatorial]) : null,
       novoSalario: idx.novoSalario >= 0 ? parseNumero(campos[idx.novoSalario]) : null,
     };
   });
