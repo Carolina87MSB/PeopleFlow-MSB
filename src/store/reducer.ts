@@ -21,6 +21,7 @@ export const initialPortalState: PortalState = {
   pdiBiblioteca: [],
   avaliacoesPotencial: [],
   configDashboard: null,
+  configEncargosFolha: null,
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -46,6 +47,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         pdiBiblioteca: action.pdiBiblioteca,
         avaliacoesPotencial: action.avaliacoesPotencial,
         configDashboard: action.configDashboard,
+        configEncargosFolha: action.configEncargosFolha,
       };
 
     case "CRIAR_AVALIACAO_EXPERIENCIA":

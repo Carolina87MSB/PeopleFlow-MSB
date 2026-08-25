@@ -6,12 +6,15 @@ import { Avatar, Badge, Button, Drawer, EmptyState, FilterChips, tableStyles } f
 import { contarPorGestor } from "../../domain/agregados";
 import { nivelMeta } from "../../domain/colors";
 import { norm } from "../../domain/hierarquia";
+import { podeVerSalario } from "../../domain/permissoes";
+import { custoMensalFolha, formatarValorMonetario, salarioVigente } from "../../domain/salario";
 import { usePortalData } from "../../store/usePortalData";
 import { TimelineCarreira } from "./TimelineCarreira";
 import styles from "./ColaboradoresPage.module.css";
 
 export function ColaboradoresPage() {
-  const { colaboradoresListagem, podeVerColaboradores, podeEditarAdmissao, atualizarAdmissao } = usePortalData();
+  const { colaboradoresListagem, podeVerColaboradores, podeEditarAdmissao, atualizarAdmissao, movimentacoes, configEncargosFolha, perfil } =
+    usePortalData();
   const [searchParams, setSearchParams] = useSearchParams();
   const [depto, setDepto] = useState("Todos");
   const [busca, setBusca] = useState("");
@@ -47,6 +50,20 @@ export function ColaboradoresPage() {
   const colaboradorSelecionado = useMemo(
     () => colaboradoresListagem.find((c) => c.nome === selecionado) || null,
     [colaboradoresListagem, selecionado],
+  );
+
+  // Salário/Custo Mensal Folha nunca vêm do cadastro do colaborador — ver
+  // domain/salario.ts (a única fonte é o campo "Novo salário" das
+  // movimentações PRO/SAL já aprovadas). Visibilidade restrita a RH/
+  // Diretoria, mesma regra já usada na Timeline (podeVerSalario).
+  const verSalario = podeVerSalario(perfil);
+  const salario = useMemo(
+    () => (colaboradorSelecionado ? salarioVigente(colaboradorSelecionado.nome, movimentacoes) : null),
+    [colaboradorSelecionado, movimentacoes],
+  );
+  const custoFolha = useMemo(
+    () => custoMensalFolha(salario?.valor ?? null, configEncargosFolha),
+    [salario, configEncargosFolha],
   );
 
   if (!podeVerColaboradores) return <Navigate to="/dashboard" replace />;
@@ -239,6 +256,20 @@ export function ColaboradoresPage() {
               <span className={styles.detalheLabel}>Tempo de empresa</span>
               <span className={styles.detalheValor}>{colaboradorSelecionado.tempoDeEmpresa}</span>
             </div>
+            {verSalario && (
+              <>
+                <div className={styles.detalheItem}>
+                  <span className={styles.detalheLabel}>Salário</span>
+                  <span className={styles.detalheValor} title={salario?.origem}>
+                    {salario ? formatarValorMonetario(salario.valor) : "—"}
+                  </span>
+                </div>
+                <div className={styles.detalheItem}>
+                  <span className={styles.detalheLabel}>Custo Mensal Folha</span>
+                  <span className={styles.detalheValor}>{custoFolha !== null ? formatarValorMonetario(custoFolha) : "—"}</span>
+                </div>
+              </>
+            )}
           </div>
 
           <TimelineCarreira colaborador={colaboradorSelecionado} />

@@ -148,6 +148,15 @@ A ficha de um colaborador (clique numa linha da tabela) tem, ao final, uma **Tim
 
 Documentos, treinamentos, Descrição de Cargo, o "Movimentação de Pessoal" genérico e o `historico` de edições técnicas de uma movimentação (correções de RH tipo "Salário atual editado de X para Y") propositalmente **não aparecem** — isso é auditoria de sistema, não trajetória profissional. Só entra na Timeline uma movimentação já efetivada (`status === "Aprovado"`/`"Concluído"` e data efetiva já passada) — uma promoção agendada pro mês que vem ainda não é um evento.
 
+### Salário e Custo Mensal Folha (`/colaboradores`)
+
+Na ficha do colaborador, entre "Tempo de empresa" e a Timeline, dois campos **derivados, sem coluna própria em `colaboradores`** (`domain/salario.ts`):
+
+- **Salário** — o valor mais recente do campo "Novo salário" entre as movimentações de Promoção/Reajuste Salarial já **Aprovadas/Concluídas** do colaborador (`salarioVigente()`) — nunca uma movimentação ainda em análise. Esse campo é texto livre desde sempre (`NovaMovimentacaoModal.tsx`, sem máscara), então `parseValorMonetario()` só aceita o que reconhece como número (formato brasileiro "5.500,00" ou simples "5500") — qualquer outra coisa ("A definir", "—", texto livre) é ignorada, nunca vira 0 ou estimativa. Sem nenhuma movimentação com um "Novo salário" reconhecível, o campo fica em branco ("—"). "Mais recente" = maior data de aprovação final (ou de solicitação, na ausência dela). Um `title` no valor mostra a movimentação de origem, pra dar transparência sobre um dado que é texto livre.
+- **Custo Mensal Folha** — Salário × (1 + soma dos percentuais de `ConfigEncargosFolha`), configuração nova (`peopleflow_config_encargos_folha`, linha única, mesmo padrão de `peopleflow_config_dashboard`) com um array `componentes: [{nome, percentual}]` **parametrizável pelo RH via SQL** (sem tela própria nesta etapa) — nenhum percentual de encargo/imposto patronal existia no sistema antes desta funcionalidade, e nenhum foi assumido/inventado aqui. Enquanto `componentes` estiver vazio (estado inicial), o campo fica em branco — nunca mostra o salário bruto disfarçado de custo, nem aplica uma taxa arbitrária.
+
+Os dois campos são visíveis só pra RH/Diretoria (`podeVerSalario()`, mesma regra já usada no evento "Alteração salarial" da Timeline) — outros perfis simplesmente não veem as duas linhas na ficha.
+
 ### Ver detalhes e reprovação com justificativa (`/workflow`, `/dashboard`)
 
 Cada card de movimentação (Workflow de aprovação e o widget "Aprovações pendentes" do Dashboard) tem um botão **"Ver detalhes"** que abre a mesma ficha completa usada em Movimentações aprovadas (`src/components/shared/MovimentacaoDetalhe.tsx`, extraído para ser reaproveitado nos dois lugares) dentro de um Drawer — todos os campos do formulário, justificativa da solicitação, trilha de aprovações e documentos gerados, sem sair da lista.

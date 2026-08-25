@@ -10,6 +10,7 @@ import { getAvaliacoesExperiencia, getDispensasAvaliacaoExperiencia } from "../r
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
 import { getConfigAvaliacaoDesempenho } from "../repositories/configAvaliacaoDesempenhoRepository";
 import { getConfigDashboard } from "../repositories/configDashboardRepository";
+import { getConfigEncargosFolha } from "../repositories/configEncargosFolhaRepository";
 import { getCompetenciasComportamentais } from "../repositories/competenciasComportamentaisRepository";
 import { getKpisCargo } from "../repositories/kpisCargoRepository";
 import { getAvaliacoesDesempenho } from "../repositories/avaliacoesDesempenhoRepository";
@@ -71,6 +72,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getPdiBiblioteca(),
       getAvaliacoesPotencial(),
       getConfigDashboard(),
+      getConfigEncargosFolha(),
     ])
       .then(
         async ([
@@ -92,6 +94,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           pdiBiblioteca,
           avaliacoesPotencial,
           configDashboard,
+          configEncargosFolha,
         ]) => {
           if (cancelado) return;
           // Efetiva promoções/transferências aprovadas cuja "Data prevista" já
@@ -121,6 +124,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             pdiBiblioteca,
             avaliacoesPotencial,
             configDashboard,
+            configEncargosFolha,
           });
         },
       )

@@ -72,6 +72,26 @@ export interface ConfigDashboard {
   updatedBy: string;
 }
 
+/** Um encargo/imposto patronal que compõe o Custo Mensal Folha — ex.: {nome:
+ * "INSS Patronal", percentual: 20}. `percentual` é um número puro (20 = 20%),
+ * somado aos demais componentes antes de aplicar sobre o salário (ver
+ * custoMensalFolha() em domain/salario.ts). */
+export interface ComponenteEncargoFolha {
+  nome: string;
+  percentual: number;
+}
+
+/** Configuração dos encargos/impostos patronais usados no Custo Mensal
+ * Folha — linha única, RH define quais componentes entram e o percentual de
+ * cada um. `componentes: []` (estado inicial, antes do RH definir) significa
+ * "ainda não parametrizado" — custoMensalFolha() retorna `null` nesse caso,
+ * nunca uma taxa inventada. */
+export interface ConfigEncargosFolha {
+  componentes: ComponenteEncargoFolha[];
+  updatedAt: string;
+  updatedBy: string;
+}
+
 export type TipoCod = "ADM" | "PRO" | "SAL" | "TRF" | "DES" | "AFA";
 
 export interface TipoMovimentacao {

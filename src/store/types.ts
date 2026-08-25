@@ -8,6 +8,7 @@ import type {
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
   ConfigDashboard,
+  ConfigEncargosFolha,
   DescricaoCargo,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
@@ -38,4 +39,5 @@ export interface PortalState {
   pdiBiblioteca: PdiBibliotecaItem[];
   avaliacoesPotencial: AvaliacaoPotencial[];
   configDashboard: ConfigDashboard | null;
+  configEncargosFolha: ConfigEncargosFolha | null;
 }

@@ -108,6 +108,7 @@ import type {
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
   ConfigDashboard,
+  ConfigEncargosFolha,
   Conta,
   DescricaoCargo,
   DesligamentoFinanceiro,
@@ -313,6 +314,9 @@ export interface PortalData {
   configDashboard: ConfigDashboard | null;
   /** RH-only — único indicador manual do Dashboard Executivo. */
   atualizarConfigDashboard: (headcountPlanejado: number) => Promise<{ ok: true } | { ok: false }>;
+  /** Componentes/percentuais de encargos usados no Custo Mensal Folha (ver
+   * domain/salario.ts) — `null`/`componentes: []` = RH ainda não parametrizou. */
+  configEncargosFolha: ConfigEncargosFolha | null;
 }
 
 /**
@@ -2175,5 +2179,6 @@ export function usePortalData(): PortalData {
     colaboradoresParaDashboardExecutivo,
     configDashboard: state.configDashboard,
     atualizarConfigDashboard: atualizarConfigDashboardFn,
+    configEncargosFolha: state.configEncargosFolha,
   };
 }

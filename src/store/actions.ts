@@ -9,6 +9,7 @@ import type {
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
   ConfigDashboard,
+  ConfigEncargosFolha,
   DescricaoCargo,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
@@ -41,6 +42,7 @@ export type PortalAction =
       pdiBiblioteca: PdiBibliotecaItem[];
       avaliacoesPotencial: AvaliacaoPotencial[];
       configDashboard: ConfigDashboard | null;
+      configEncargosFolha: ConfigEncargosFolha | null;
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }

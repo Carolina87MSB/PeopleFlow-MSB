@@ -1062,3 +1062,36 @@ alter table public.colaboradores
 
 comment on column public.colaboradores.matriz9box_visao_completa is
   'PeopleFlow: true libera a um Gestor ver a Matriz 9 Box da empresa inteira, não só quem tem gestor = seu nome. Sem efeito pra perfil RH/Diretoria (que já veem tudo) nem Colaborador (que nunca vê a aba). Ligado manualmente pelo RH via SQL.';
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 23) Custo Mensal Folha — configuração dos encargos/impostos patronais.
+-- Linha única (id='default'), mesmo padrão de peopleflow_config_dashboard.
+-- `componentes` é um array [{nome, percentual}] — nenhum percentual fixo é
+-- assumido pelo código (ver custoMensalFolha() em domain/salario.ts):
+-- enquanto esta tabela estiver vazia (`componentes = '[]'`, estado inicial),
+-- o Custo Mensal Folha fica em branco na tela de Colaboradores, nunca com
+-- uma taxa inventada. O RH define os componentes e percentuais aplicáveis
+-- (ex.: INSS Patronal, FGTS, RAT, Terceiros, provisão de 13º/férias) via SQL
+-- quando definidos — sem tela própria nesta etapa.
+-- ─────────────────────────────────────────────────────────────────────────
+create table if not exists public.peopleflow_config_encargos_folha (
+  id text primary key default 'default',
+  componentes jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+
+comment on table public.peopleflow_config_encargos_folha is
+  'Configuração dos encargos/impostos patronais usados no Custo Mensal Folha (tela de Colaboradores) — linha única. Ver ConfigEncargosFolha em src/types/domain.ts.';
+comment on column public.peopleflow_config_encargos_folha.componentes is
+  'Array de {nome, percentual} — cada componente somado antes de aplicar sobre o salário. Vazio ("[]", estado inicial) = ainda não parametrizado pelo RH; custoMensalFolha() retorna null nesse caso.';
+
+alter table public.peopleflow_config_encargos_folha enable row level security;
+
+drop policy if exists "authenticated_rw_config_encargos_folha" on public.peopleflow_config_encargos_folha;
+create policy "authenticated_rw_config_encargos_folha"
+  on public.peopleflow_config_encargos_folha
+  for all
+  to authenticated
+  using (true)
+  with check (true);
