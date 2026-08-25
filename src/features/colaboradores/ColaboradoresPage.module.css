@@ -147,6 +147,50 @@
   color: var(--color-brand);
 }
 
+.detalheCalculo {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detalheCalculoLinha,
+.detalheCalculoLinhaSub,
+.detalheCalculoLinhaFinal {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.detalheCalculoLinha {
+  color: var(--color-muted);
+}
+
+.detalheCalculoLinhaSub {
+  color: var(--color-text);
+  padding-top: 6px;
+  border-top: 1px dashed var(--color-divider);
+}
+
+.detalheCalculoLinhaFinal {
+  color: var(--color-text);
+  font-weight: 700;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.detalheCalculoNota {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--color-muted-light);
+}
+
 .edicao {
   margin-top: 4px;
   display: flex;

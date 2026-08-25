@@ -41,6 +41,11 @@ export function formatarValorMonetario(valor: number | null): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+/** "8,3333%" — usado no detalhamento do Custo Mensal Folha (até 4 casas, sem zeros à direita desnecessários). */
+export function formatarPercentual(valor: number): string {
+  return `${valor.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`;
+}
+
 export interface SalarioVigente {
   valor: number;
   /** De onde veio o número — ex.: "Reajuste Salarial — 12/mar/2025" ou "Planilha de salários (importação)" — pra dar transparência (tooltip) sobre a origem do dado, nunca exibido como valor. */
@@ -93,27 +98,70 @@ export function ehAprendiz(colaborador: Pick<Colaborador, "vinculo">): boolean {
   return norm(colaborador.vinculo) === norm("Aprendiz");
 }
 
-/** Custo Mensal Folha = Salário + Encargos Patronais Diretos + Provisões +
- * Encargos sobre as Provisões — nunca salário líquido, nunca descontos do
- * empregado (IRRF/INSS descontado não entram aqui, só a parte patronal).
- * Fórmula (percentuais de `ConfigEncargosFolha`, todos em pontos, ex. 20 =
- * 20%):
+export interface DetalheCustoMensalFolha {
+  salario: number;
+  ehAprendiz: boolean;
+  inssPatronal: number;
+  rat: number;
+  ratObservacao: string;
+  terceiros: number;
+  /** Já resolvido pelo vínculo — fgtsCeletista ou fgtsAprendiz, conforme `ehAprendiz`. */
+  fgts: number;
+  provisaoDecimoTerceiro: number;
+  provisaoFerias: number;
+  provisaoTercoFerias: number;
+  /** Percentuais agregados (pontos, ex. 34.8 = 34,8%), pra exibição do detalhamento. */
+  encargosDiretosPct: number;
+  provisoesPct: number;
+  encargosSobreProvisoesPct: number;
+  /** custoMensalFolha = salario × multiplicador. */
+  multiplicador: number;
+  custoMensalFolha: number;
+}
+
+/** Ponto ÚNICO de cálculo do Custo Mensal Folha — `custoMensalFolha()`
+ * abaixo só chama esta função e devolve o total, pro preview detalhado (o
+ * "?" ao lado do campo, em ColaboradoresPage.tsx) nunca divergir do valor
+ * exibido. Custo Mensal Folha = Salário + Encargos Patronais Diretos +
+ * Provisões + Encargos sobre as Provisões — nunca salário líquido, nunca
+ * descontos do empregado (IRRF/INSS descontado não entram aqui, só a parte
+ * patronal). Fórmula (percentuais de `ConfigEncargosFolha`, todos em
+ * pontos, ex. 20 = 20%):
  *   encargosDiretos = (INSS Patronal + RAT + Terceiros + FGTS[vínculo]) / 100
  *   provisoes = (13º + Férias + 1/3 Férias) / 100
  *   encargosSobreProvisoes = provisoes × encargosDiretos
  *   multiplicador = 1 + encargosDiretos + provisoes + encargosSobreProvisoes
  *   custoMensalFolha = salario × multiplicador
  * Sem arredondamento intermediário — só o resultado final é arredondado,
- * na formatação de exibição (formatarValorMonetario). Sem salário, ou sem
- * config carregada, retorna `null`. */
-export function custoMensalFolha(salario: number | null, ehAprendizColaborador: boolean, config: ConfigEncargosFolha | null): number | null {
-  if (salario === null || !config) return null;
-
+ * na formatação de exibição (formatarValorMonetario). */
+export function detalharCustoMensalFolha(salario: number, ehAprendizColaborador: boolean, config: ConfigEncargosFolha): DetalheCustoMensalFolha {
   const fgts = ehAprendizColaborador ? config.fgtsAprendiz : config.fgtsCeletista;
   const encargosDiretos = (config.inssPatronal + config.rat + config.terceiros + fgts) / 100;
   const provisoes = (config.provisaoDecimoTerceiro + config.provisaoFerias + config.provisaoTercoFerias) / 100;
   const encargosSobreProvisoes = provisoes * encargosDiretos;
   const multiplicador = 1 + encargosDiretos + provisoes + encargosSobreProvisoes;
 
-  return salario * multiplicador;
+  return {
+    salario,
+    ehAprendiz: ehAprendizColaborador,
+    inssPatronal: config.inssPatronal,
+    rat: config.rat,
+    ratObservacao: config.ratObservacao,
+    terceiros: config.terceiros,
+    fgts,
+    provisaoDecimoTerceiro: config.provisaoDecimoTerceiro,
+    provisaoFerias: config.provisaoFerias,
+    provisaoTercoFerias: config.provisaoTercoFerias,
+    encargosDiretosPct: encargosDiretos * 100,
+    provisoesPct: provisoes * 100,
+    encargosSobreProvisoesPct: encargosSobreProvisoes * 100,
+    multiplicador,
+    custoMensalFolha: salario * multiplicador,
+  };
+}
+
+/** Sem salário, ou sem config carregada, retorna `null` (nunca uma taxa inventada). */
+export function custoMensalFolha(salario: number | null, ehAprendizColaborador: boolean, config: ConfigEncargosFolha | null): number | null {
+  if (salario === null || !config) return null;
+  return detalharCustoMensalFolha(salario, ehAprendizColaborador, config).custoMensalFolha;
 }

@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { Pencil, Search } from "lucide-react";
+import { HelpCircle, Pencil, Search } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { Avatar, Badge, Button, Drawer, EmptyState, FilterChips, tableStyles } from "../../components/ui";
 import { contarPorGestor } from "../../domain/agregados";
 import { nivelMeta } from "../../domain/colors";
 import { norm } from "../../domain/hierarquia";
 import { podeVerSalario } from "../../domain/permissoes";
-import { custoMensalFolha, ehAprendiz, formatarValorMonetario, salarioVigente } from "../../domain/salario";
+import { detalharCustoMensalFolha, ehAprendiz, formatarPercentual, formatarValorMonetario, salarioVigente } from "../../domain/salario";
 import { usePortalData } from "../../store/usePortalData";
 import { TimelineCarreira } from "./TimelineCarreira";
 import styles from "./ColaboradoresPage.module.css";
@@ -31,6 +31,7 @@ export function ColaboradoresPage() {
   const [editandoAdmissao, setEditandoAdmissao] = useState(false);
   const [admissaoRascunho, setAdmissaoRascunho] = useState("");
   const [salvandoAdmissao, setSalvandoAdmissao] = useState(false);
+  const [mostrarDetalheCusto, setMostrarDetalheCusto] = useState(false);
 
   const deptos = useMemo(
     () => ["Todos", ...new Set(colaboradoresListagem.map((c) => c.depto))],
@@ -70,8 +71,11 @@ export function ColaboradoresPage() {
     () => (colaboradorSelecionado ? salarioVigente(colaboradorSelecionado.nome, movimentacoes, salariosBase) : null),
     [colaboradorSelecionado, movimentacoes, salariosBase],
   );
-  const custoFolha = useMemo(
-    () => (colaboradorSelecionado ? custoMensalFolha(salario?.valor ?? null, ehAprendiz(colaboradorSelecionado), configEncargosFolha) : null),
+  const detalheCusto = useMemo(
+    () =>
+      colaboradorSelecionado && salario && configEncargosFolha
+        ? detalharCustoMensalFolha(salario.valor, ehAprendiz(colaboradorSelecionado), configEncargosFolha)
+        : null,
     [salario, colaboradorSelecionado, configEncargosFolha],
   );
 
@@ -88,11 +92,13 @@ export function ColaboradoresPage() {
   function abrirDrawer(nome: string) {
     setSelecionado(nome);
     setEditandoAdmissao(false);
+    setMostrarDetalheCusto(false);
   }
 
   function fecharDrawer() {
     setSelecionado(null);
     setEditandoAdmissao(false);
+    setMostrarDetalheCusto(false);
   }
 
   function iniciarEdicaoAdmissao() {
@@ -274,8 +280,75 @@ export function ColaboradoresPage() {
                   </span>
                 </div>
                 <div className={styles.detalheItem}>
-                  <span className={styles.detalheLabel}>Custo Mensal Folha</span>
-                  <span className={styles.detalheValor}>{custoFolha !== null ? formatarValorMonetario(custoFolha) : "—"}</span>
+                  <div className={styles.detalheTopo}>
+                    <span className={styles.detalheLabel}>Custo Mensal Folha</span>
+                    {detalheCusto && (
+                      <button
+                        type="button"
+                        className={styles.editarBtn}
+                        onClick={() => setMostrarDetalheCusto((v) => !v)}
+                        title="Ver detalhes do cálculo"
+                      >
+                        <HelpCircle size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <span className={styles.detalheValor}>
+                    {detalheCusto ? formatarValorMonetario(detalheCusto.custoMensalFolha) : "—"}
+                  </span>
+                  {mostrarDetalheCusto && detalheCusto && (
+                    <div className={styles.detalheCalculo}>
+                      <div className={styles.detalheCalculoLinha}>
+                        <span>Salário</span>
+                        <strong>{formatarValorMonetario(detalheCusto.salario)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinha}>
+                        <span>INSS Patronal</span>
+                        <strong>{formatarPercentual(detalheCusto.inssPatronal)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinha}>
+                        <span title={detalheCusto.ratObservacao}>RAT (GIILRAT efetivo)</span>
+                        <strong>{formatarPercentual(detalheCusto.rat)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinha}>
+                        <span>Terceiros</span>
+                        <strong>{formatarPercentual(detalheCusto.terceiros)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinha}>
+                        <span>FGTS ({detalheCusto.ehAprendiz ? "Aprendiz" : "Celetista"})</span>
+                        <strong>{formatarPercentual(detalheCusto.fgts)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinha}>
+                        <span>Provisão 13º</span>
+                        <strong>{formatarPercentual(detalheCusto.provisaoDecimoTerceiro)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinha}>
+                        <span>Provisão Férias</span>
+                        <strong>{formatarPercentual(detalheCusto.provisaoFerias)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinha}>
+                        <span>Provisão 1/3 Férias</span>
+                        <strong>{formatarPercentual(detalheCusto.provisaoTercoFerias)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinhaSub}>
+                        <span>Encargos diretos</span>
+                        <strong>{formatarPercentual(detalheCusto.encargosDiretosPct)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinhaSub}>
+                        <span>Provisões</span>
+                        <strong>{formatarPercentual(detalheCusto.provisoesPct)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinhaSub}>
+                        <span>Encargos sobre as provisões</span>
+                        <strong>{formatarPercentual(detalheCusto.encargosSobreProvisoesPct)}</strong>
+                      </div>
+                      <div className={styles.detalheCalculoLinhaFinal}>
+                        <span>Custo Mensal Folha</span>
+                        <strong>{formatarValorMonetario(detalheCusto.custoMensalFolha)}</strong>
+                      </div>
+                      <p className={styles.detalheCalculoNota}>{detalheCusto.ratObservacao}</p>
+                    </div>
+                  )}
                 </div>
               </>
             )}
