@@ -1045,3 +1045,20 @@ comment on column public.peopleflow_descricoes_cargo.pendente is
   'Proposta de alteração de um Gestor, aguardando aprovação — objeto {campo: novoValor} só com os campos de conteúdo dos 4 grupos liberados (nunca os de auditoria/EPIs). Nunca é o valor lido fora da tela de revisão; null quando não há revisão em aberto.';
 comment on column public.peopleflow_descricoes_cargo_historico.perfil is
   'Perfil de quem editou (Gestor/RH/Diretoria) no momento da ação — snapshot, não recalculado.';
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 22) Matriz 9 Box — exceção pontual de escopo pra Gestor. Por padrão, um
+-- Gestor só vê na Matriz 9 Box quem tem `colaboradores.gestor = seu nome`
+-- (reporte direto no organograma) — ver colaboradoresParaMatriz9Box em
+-- usePortalData.ts. Alguns Gestores avaliam pessoas fora da própria árvore
+-- (ex.: reassumiram fichas de Avaliação de Potencial de outro gestor) e
+-- precisam ver a matriz da empresa inteira, sem virar RH/Diretoria (que
+-- ganhariam acesso a cadastros/configuração/calibração também). Coluna
+-- booleana pontual, ligada manualmente pelo RH via SQL quando necessário —
+-- não tem tela própria por ser uma exceção rara, não um fluxo recorrente.
+-- ─────────────────────────────────────────────────────────────────────────
+alter table public.colaboradores
+  add column if not exists matriz9box_visao_completa boolean not null default false;
+
+comment on column public.colaboradores.matriz9box_visao_completa is
+  'PeopleFlow: true libera a um Gestor ver a Matriz 9 Box da empresa inteira, não só quem tem gestor = seu nome. Sem efeito pra perfil RH/Diretoria (que já veem tudo) nem Colaborador (que nunca vê a aba). Ligado manualmente pelo RH via SQL.';

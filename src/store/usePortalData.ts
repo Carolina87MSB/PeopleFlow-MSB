@@ -362,10 +362,16 @@ export function usePortalData(): PortalData {
    * status Ativo/Inativo é da própria tela); Gestor/Diretoria só quem tem
    * `gestor === me` (mesma regra da AVD/Potencial, não a de
    * `colaboradoresListagem`, que dá visão total à Diretoria); Colaborador,
-   * nunca (defesa em profundidade — a aba já é bloqueada em GestaoDesempenhoPage.tsx). */
+   * nunca (defesa em profundidade — a aba já é bloqueada em GestaoDesempenhoPage.tsx).
+   * Exceção pontual: `colaboradores.matriz9box_visao_completa` (ligada
+   * manualmente pelo RH via SQL) libera a empresa inteira pra um Gestor
+   * específico que avalia gente fora da própria árvore no organograma — ver
+   * seção 22 do schema.sql. */
   const colaboradoresParaMatriz9Box = useMemo(() => {
     if (perfil === "RH") return state.colaboradores;
     if (perfil === "Colaborador") return [];
+    const proprio = state.colaboradores.find((c) => c.nome === me);
+    if (proprio?.matriz9BoxVisaoCompleta) return state.colaboradores;
     return state.colaboradores.filter((c) => c.gestor === me);
   }, [state.colaboradores, perfil, me]);
 

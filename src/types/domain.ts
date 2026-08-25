@@ -30,6 +30,11 @@ export interface Colaborador {
   dataDesligamento: string; // "dd/mmm/aaaa" ou "" se não desligado
   motivoDesligamento: string;
   desligadoBy: string;
+  /** Exceção pontual: libera a um Gestor ver a Matriz 9 Box da empresa
+   * inteira, não só quem tem `gestor === seu nome` — ver
+   * colaboradoresParaMatriz9Box em usePortalData.ts. Sem efeito fora do
+   * perfil Gestor. */
+  matriz9BoxVisaoCompleta: boolean;
 }
 
 export interface DesligamentoFinanceiro {

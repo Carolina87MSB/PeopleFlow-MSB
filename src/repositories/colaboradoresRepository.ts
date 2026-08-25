@@ -30,6 +30,7 @@ interface ColaboradorRow {
   data_desligamento: string | null;
   motivo_desligamento: string | null;
   desligado_by: string | null;
+  matriz9box_visao_completa: boolean | null;
 }
 
 const NIVEIS_VALIDOS: Nivel[] = [
@@ -60,6 +61,7 @@ function fromRow(row: ColaboradorRow): Colaborador {
     dataDesligamento: formatarDataIso(row.data_desligamento),
     motivoDesligamento: row.motivo_desligamento ?? "",
     desligadoBy: row.desligado_by ?? "",
+    matriz9BoxVisaoCompleta: row.matriz9box_visao_completa ?? false,
   };
 }
 
@@ -78,7 +80,9 @@ export async function getColaboradores(): Promise<Colaborador[]> {
 
   const { data, error } = await supabase
     .from("colaboradores")
-    .select("nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by")
+    .select(
+      "nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by, matriz9box_visao_completa",
+    )
     .order("nome", { ascending: true });
 
   if (error) {
