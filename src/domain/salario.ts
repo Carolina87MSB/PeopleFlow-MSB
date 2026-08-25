@@ -1,15 +1,17 @@
 // Salário do colaborador e Custo Mensal Folha — módulo novo, funções puras.
 //
 // O cadastro de colaborador (tabela `colaboradores`) NUNCA guarda salário —
-// o único lugar onde um valor de salário é registrado no PeopleFlow é dentro
-// de `Movimentacao.dados` (campo "Novo salário" das movimentações PRO/SAL),
-// digitado livremente pelo gestor no assistente de Nova Movimentação (ver
-// NovaMovimentacaoModal.tsx — sem máscara/validação de formato). `salarioVigente()`
-// varre as movimentações do colaborador e escolhe o valor mais recente já
-// aprovado, sem duplicar essa informação em nenhum outro lugar.
+// as duas únicas fontes são: (1) o campo "Novo salário" das movimentações de
+// Promoção/Reajuste Salarial já aprovadas (`Movimentacao.dados`, digitado
+// livremente, ver NovaMovimentacaoModal.tsx), fonte PRINCIPAL; e (2) um
+// snapshot importado de planilha (`peopleflow_salarios_base`), usado só como
+// FALLBACK pra quem nunca teve uma movimentação salarial registrada no
+// portal. `salarioVigente()` decide entre as duas sem duplicar nada em
+// `colaboradores`.
 
-import type { ConfigEncargosFolha, Movimentacao } from "../types/domain";
+import type { Colaborador, ConfigEncargosFolha, Movimentacao, SalarioBase } from "../types/domain";
 import { dataBrParaIso } from "./dates";
+import { norm } from "./hierarquia";
 
 /** Extrai um número de um valor de salário digitado livremente (ver
  * NovaMovimentacaoModal.tsx — sem máscara, pode vir como "R$ 5.500,00",
@@ -41,20 +43,21 @@ export function formatarValorMonetario(valor: number | null): string {
 
 export interface SalarioVigente {
   valor: number;
-  /** De onde veio o número — ex.: "Reajuste Salarial — 12/mar/2025" — pra dar transparência (tooltip) sobre a origem do dado, nunca exibido como valor. */
+  /** De onde veio o número — ex.: "Reajuste Salarial — 12/mar/2025" ou "Planilha de salários (importação)" — pra dar transparência (tooltip) sobre a origem do dado, nunca exibido como valor. */
   origem: string;
 }
 
-/** Salário vigente de um colaborador = o valor mais recente do campo "Novo
- * salário" entre as movimentações de Promoção/Reajuste Salarial JÁ
- * APROVADAS (Aprovado/Concluído — nunca uma que ainda pode ser reprovada).
- * "Mais recente" = maior data de aprovação final (ou de solicitação, quando
- * a movimentação não tem aprovação final registrada). Sem nenhuma
- * movimentação com um "Novo salário" reconhecível, retorna `null` — nunca
- * uma estimativa. Se amanhã o salário passar a vir de outra fonte (ex.:
- * importação de planilha), só esta função precisa mudar — a tela que a
- * consome (ColaboradoresPage.tsx) não muda. */
-export function salarioVigente(colaboradorNome: string, movimentacoes: Movimentacao[]): SalarioVigente | null {
+/** Salário vigente de um colaborador:
+ * 1. PRIORIDADE: o valor mais recente do campo "Novo salário" entre as
+ *    movimentações de Promoção/Reajuste Salarial JÁ APROVADAS (Aprovado/
+ *    Concluído — nunca uma que ainda pode ser reprovada). "Mais recente" =
+ *    maior data de aprovação final (ou de solicitação, na ausência dela).
+ * 2. FALLBACK: se nenhuma movimentação tiver um salário reconhecível, usa o
+ *    snapshot de `salariosBase` (importação de planilha) pro mesmo nome,
+ *    comparado por norm() (sem acento/case — a planilha vem em CAIXA ALTA,
+ *    o cadastro em Title Case).
+ * Sem nenhuma das duas fontes, retorna `null` — nunca uma estimativa. */
+export function salarioVigente(colaboradorNome: string, movimentacoes: Movimentacao[], salariosBase: SalarioBase[]): SalarioVigente | null {
   let melhor: { valor: number; dataOrdenacao: string; origem: string } | null = null;
 
   for (const m of movimentacoes) {
@@ -73,19 +76,44 @@ export function salarioVigente(colaboradorNome: string, movimentacoes: Movimenta
       melhor = { valor, dataOrdenacao, origem: `${m.tipo} — ${dataBr}` };
     }
   }
+  if (melhor) return { valor: melhor.valor, origem: melhor.origem };
 
-  return melhor ? { valor: melhor.valor, origem: melhor.origem } : null;
+  const normNome = norm(colaboradorNome);
+  const base = salariosBase.find((s) => norm(s.colaboradorNome) === normNome);
+  return base ? { valor: base.salario, origem: "Planilha de salários (importação)" } : null;
 }
 
-/** Custo Mensal Folha = Salário Bruto + Encargos/Impostos Patronais
- * aplicáveis, configurados em `ConfigEncargosFolha` (RH define quais
- * componentes entram e o percentual de cada um — nunca uma taxa fixa
- * hardcoded aqui). Sem salário, ou sem nenhum componente de encargo ainda
- * configurado, retorna `null` (nunca o próprio salário bruto disfarçado de
- * custo, nem uma taxa inventada). */
-export function custoMensalFolha(salario: number | null, config: ConfigEncargosFolha | null): number | null {
-  if (salario === null) return null;
-  if (!config || config.componentes.length === 0) return null;
-  const percentualTotal = config.componentes.reduce((soma, c) => soma + c.percentual, 0);
-  return salario * (1 + percentualTotal / 100);
+/** Aprendiz identificado pelo campo `vinculo` (nunca pelo valor do salário)
+ * — hoje o assistente de Admissão só oferece "CLT"/"PJ"/"Estágio" como
+ * opção (ver NovaMovimentacaoModal.tsx), então nenhum colaborador cadastrado
+ * por ele terá `vinculo === "Aprendiz"`; isso só cobre quem já tem esse
+ * valor vindo de cadastro anterior/legado. Se a MSB identifica Aprendiz por
+ * outro campo/valor, ajustar aqui — nunca inferir por faixa salarial. */
+export function ehAprendiz(colaborador: Pick<Colaborador, "vinculo">): boolean {
+  return norm(colaborador.vinculo) === norm("Aprendiz");
+}
+
+/** Custo Mensal Folha = Salário + Encargos Patronais Diretos + Provisões +
+ * Encargos sobre as Provisões — nunca salário líquido, nunca descontos do
+ * empregado (IRRF/INSS descontado não entram aqui, só a parte patronal).
+ * Fórmula (percentuais de `ConfigEncargosFolha`, todos em pontos, ex. 20 =
+ * 20%):
+ *   encargosDiretos = (INSS Patronal + RAT + Terceiros + FGTS[vínculo]) / 100
+ *   provisoes = (13º + Férias + 1/3 Férias) / 100
+ *   encargosSobreProvisoes = provisoes × encargosDiretos
+ *   multiplicador = 1 + encargosDiretos + provisoes + encargosSobreProvisoes
+ *   custoMensalFolha = salario × multiplicador
+ * Sem arredondamento intermediário — só o resultado final é arredondado,
+ * na formatação de exibição (formatarValorMonetario). Sem salário, ou sem
+ * config carregada, retorna `null`. */
+export function custoMensalFolha(salario: number | null, ehAprendizColaborador: boolean, config: ConfigEncargosFolha | null): number | null {
+  if (salario === null || !config) return null;
+
+  const fgts = ehAprendizColaborador ? config.fgtsAprendiz : config.fgtsCeletista;
+  const encargosDiretos = (config.inssPatronal + config.rat + config.terceiros + fgts) / 100;
+  const provisoes = (config.provisaoDecimoTerceiro + config.provisaoFerias + config.provisaoTercoFerias) / 100;
+  const encargosSobreProvisoes = provisoes * encargosDiretos;
+  const multiplicador = 1 + encargosDiretos + provisoes + encargosSobreProvisoes;
+
+  return salario * multiplicador;
 }

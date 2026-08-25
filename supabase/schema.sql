@@ -1064,33 +1064,92 @@ comment on column public.colaboradores.matriz9box_visao_completa is
   'PeopleFlow: true libera a um Gestor ver a Matriz 9 Box da empresa inteira, não só quem tem gestor = seu nome. Sem efeito pra perfil RH/Diretoria (que já veem tudo) nem Colaborador (que nunca vê a aba). Ligado manualmente pelo RH via SQL.';
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 23) Custo Mensal Folha — configuração dos encargos/impostos patronais.
--- Linha única (id='default'), mesmo padrão de peopleflow_config_dashboard.
--- `componentes` é um array [{nome, percentual}] — nenhum percentual fixo é
--- assumido pelo código (ver custoMensalFolha() em domain/salario.ts):
--- enquanto esta tabela estiver vazia (`componentes = '[]'`, estado inicial),
--- o Custo Mensal Folha fica em branco na tela de Colaboradores, nunca com
--- uma taxa inventada. O RH define os componentes e percentuais aplicáveis
--- (ex.: INSS Patronal, FGTS, RAT, Terceiros, provisão de 13º/férias) via SQL
--- quando definidos — sem tela própria nesta etapa.
+-- 23) Custo Mensal Folha — parâmetros de encargos patronais. Linha única
+-- (id='default'), mesmo padrão de peopleflow_config_dashboard. Revisão desta
+-- seção: a versão original (array genérico `componentes`) foi substituída
+-- por colunas nomeadas antes de qualquer ambiente rodar o script — os
+-- percentuais abaixo vieram da análise da Folha de Pagamento 07/2026 +
+-- DARF eSocial/Previdenciário da MSB (fornecidos pelo RH), nunca inventados
+-- pelo código. `rat` é o GIILRAT efetivamente recolhido identificado no
+-- documento — o FAP real da MSB não foi comprovado, `rat_observacao`
+-- registra essa ressalva (nunca entra no cálculo). `fgts_celetista`/
+-- `fgts_aprendiz` distintos porque o percentual de FGTS depende do vínculo
+-- (ver ehAprendiz() em domain/salario.ts). Ver custoMensalFolha() em
+-- domain/salario.ts pra fórmula exata (encargos diretos + provisões +
+-- encargos sobre as provisões).
 -- ─────────────────────────────────────────────────────────────────────────
 create table if not exists public.peopleflow_config_encargos_folha (
   id text primary key default 'default',
-  componentes jsonb not null default '[]'::jsonb,
+  inss_patronal numeric not null default 20.00,
+  rat numeric not null default 1.00,
+  rat_observacao text not null default 'Parâmetro provisório — confirmar FAP vigente da MSB com Financeiro/DP.',
+  terceiros numeric not null default 5.80,
+  fgts_celetista numeric not null default 8.00,
+  fgts_aprendiz numeric not null default 2.00,
+  provisao_decimo_terceiro numeric not null default 8.3333,
+  provisao_ferias numeric not null default 8.3333,
+  provisao_terco_ferias numeric not null default 2.7778,
   updated_at timestamptz not null default now(),
   updated_by text
 );
 
+alter table public.peopleflow_config_encargos_folha
+  add column if not exists inss_patronal numeric not null default 20.00,
+  add column if not exists rat numeric not null default 1.00,
+  add column if not exists rat_observacao text not null default 'Parâmetro provisório — confirmar FAP vigente da MSB com Financeiro/DP.',
+  add column if not exists terceiros numeric not null default 5.80,
+  add column if not exists fgts_celetista numeric not null default 8.00,
+  add column if not exists fgts_aprendiz numeric not null default 2.00,
+  add column if not exists provisao_decimo_terceiro numeric not null default 8.3333,
+  add column if not exists provisao_ferias numeric not null default 8.3333,
+  add column if not exists provisao_terco_ferias numeric not null default 2.7778;
+
 comment on table public.peopleflow_config_encargos_folha is
-  'Configuração dos encargos/impostos patronais usados no Custo Mensal Folha (tela de Colaboradores) — linha única. Ver ConfigEncargosFolha em src/types/domain.ts.';
-comment on column public.peopleflow_config_encargos_folha.componentes is
-  'Array de {nome, percentual} — cada componente somado antes de aplicar sobre o salário. Vazio ("[]", estado inicial) = ainda não parametrizado pelo RH; custoMensalFolha() retorna null nesse caso.';
+  'Parâmetros de encargos patronais do Custo Mensal Folha (tela de Colaboradores) — linha única. Ver ConfigEncargosFolha em src/types/domain.ts.';
+comment on column public.peopleflow_config_encargos_folha.rat is
+  'GIILRAT efetivo identificado na documentação da MSB (1,00%) — NÃO confirmado como o FAP real (ver rat_observacao). Nunca multiplicar por um FAP adicional sem confirmação do Financeiro/DP.';
 
 alter table public.peopleflow_config_encargos_folha enable row level security;
 
 drop policy if exists "authenticated_rw_config_encargos_folha" on public.peopleflow_config_encargos_folha;
 create policy "authenticated_rw_config_encargos_folha"
   on public.peopleflow_config_encargos_folha
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+insert into public.peopleflow_config_encargos_folha (id)
+values ('default')
+on conflict (id) do nothing;
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 24) Salário base — fallback de planilha. `salarioVigente()` (domain/
+-- salario.ts) prioriza o salário derivado de movimentação de pessoal
+-- (PRO/SAL aprovada); só usa esta tabela quando o colaborador não tem
+-- nenhuma movimentação com salário reconhecível. Snapshot pontual importado
+-- de planilha fornecida pelo RH (Colaborador x Salário.xlsx) — não é uma
+-- segunda fonte "oficial" nem substitui a Movimentação de Pessoal como
+-- mecanismo de reajuste; existe só pra preencher a lacuna dos colaboradores
+-- que nunca tiveram uma Promoção/Reajuste Salarial registrada no portal.
+-- ─────────────────────────────────────────────────────────────────────────
+create table if not exists public.peopleflow_salarios_base (
+  colaborador_nome text primary key,
+  salario numeric not null,
+  importado_em timestamptz not null default now(),
+  importado_por text
+);
+
+comment on table public.peopleflow_salarios_base is
+  'Fallback de salário importado de planilha (RH) — só usado quando o colaborador não tem salário derivável de movimentação de pessoal. Ver SalarioBase em src/types/domain.ts e salarioVigente() em src/domain/salario.ts.';
+comment on column public.peopleflow_salarios_base.colaborador_nome is
+  'Nome exatamente como veio da planilha de origem — comparado por norm() (sem acento/case) no momento do lookup, nunca recasado nesta tabela.';
+
+alter table public.peopleflow_salarios_base enable row level security;
+
+drop policy if exists "authenticated_rw_salarios_base" on public.peopleflow_salarios_base;
+create policy "authenticated_rw_salarios_base"
+  on public.peopleflow_salarios_base
   for all
   to authenticated
   using (true)

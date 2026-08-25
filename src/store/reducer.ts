@@ -22,6 +22,7 @@ export const initialPortalState: PortalState = {
   avaliacoesPotencial: [],
   configDashboard: null,
   configEncargosFolha: null,
+  salariosBase: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -48,6 +49,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         avaliacoesPotencial: action.avaliacoesPotencial,
         configDashboard: action.configDashboard,
         configEncargosFolha: action.configEncargosFolha,
+        salariosBase: action.salariosBase,
       };
 
     case "CRIAR_AVALIACAO_EXPERIENCIA":

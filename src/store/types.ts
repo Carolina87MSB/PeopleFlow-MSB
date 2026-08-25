@@ -17,6 +17,7 @@ import type {
   Pdi,
   PdiBibliotecaItem,
   Perfil2Info,
+  SalarioBase,
   TipoMovimentacao,
 } from "../types/domain";
 
@@ -40,4 +41,5 @@ export interface PortalState {
   avaliacoesPotencial: AvaliacaoPotencial[];
   configDashboard: ConfigDashboard | null;
   configEncargosFolha: ConfigEncargosFolha | null;
+  salariosBase: SalarioBase[];
 }

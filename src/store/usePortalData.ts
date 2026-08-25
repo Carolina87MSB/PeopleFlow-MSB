@@ -125,6 +125,7 @@ import type {
   Perfil,
   RespostaAvaliacaoExperiencia,
   ResultadoAvaliacaoExperiencia,
+  SalarioBase,
   TipoCompetenciaPdi,
 } from "../types/domain";
 
@@ -317,6 +318,9 @@ export interface PortalData {
   /** Componentes/percentuais de encargos usados no Custo Mensal Folha (ver
    * domain/salario.ts) — `null`/`componentes: []` = RH ainda não parametrizou. */
   configEncargosFolha: ConfigEncargosFolha | null;
+  /** Fallback de salário importado de planilha — só usado por salarioVigente()
+   * quando o colaborador não tem salário derivável de movimentação. */
+  salariosBase: SalarioBase[];
 }
 
 /**
@@ -2180,5 +2184,6 @@ export function usePortalData(): PortalData {
     configDashboard: state.configDashboard,
     atualizarConfigDashboard: atualizarConfigDashboardFn,
     configEncargosFolha: state.configEncargosFolha,
+    salariosBase: state.salariosBase,
   };
 }

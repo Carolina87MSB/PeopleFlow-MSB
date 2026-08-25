@@ -72,24 +72,38 @@ export interface ConfigDashboard {
   updatedBy: string;
 }
 
-/** Um encargo/imposto patronal que compõe o Custo Mensal Folha — ex.: {nome:
- * "INSS Patronal", percentual: 20}. `percentual` é um número puro (20 = 20%),
- * somado aos demais componentes antes de aplicar sobre o salário (ver
- * custoMensalFolha() em domain/salario.ts). */
-export interface ComponenteEncargoFolha {
-  nome: string;
-  percentual: number;
-}
-
-/** Configuração dos encargos/impostos patronais usados no Custo Mensal
- * Folha — linha única, RH define quais componentes entram e o percentual de
- * cada um. `componentes: []` (estado inicial, antes do RH definir) significa
- * "ainda não parametrizado" — custoMensalFolha() retorna `null` nesse caso,
- * nunca uma taxa inventada. */
+/** Parâmetros do Custo Mensal Folha — linha única, todos em percentual puro
+ * (20 = 20%), levantados pelo RH junto à Folha de Pagamento/DARF eSocial da
+ * MSB (ver custoMensalFolha() em domain/salario.ts pra fórmula exata). `rat`
+ * é o GIILRAT efetivamente recolhido identificado na documentação — o FAP
+ * real da MSB não foi comprovado, então `ratObservacao` registra essa
+ * ressalva (nunca usada no cálculo, só exibida como nota). `fgtsCeletista`/
+ * `fgtsAprendiz` são valores distintos porque o percentual de FGTS depende
+ * do vínculo do colaborador (ver ehAprendiz() em domain/salario.ts). */
 export interface ConfigEncargosFolha {
-  componentes: ComponenteEncargoFolha[];
+  inssPatronal: number;
+  rat: number;
+  ratObservacao: string;
+  terceiros: number;
+  fgtsCeletista: number;
+  fgtsAprendiz: number;
+  provisaoDecimoTerceiro: number;
+  provisaoFerias: number;
+  provisaoTercoFerias: number;
   updatedAt: string;
   updatedBy: string;
+}
+
+/** Salário base importado de planilha (ver domain/salario.ts) — usado só
+ * como fallback quando o colaborador não tem nenhum salário derivável de
+ * movimentação de pessoal (PRO/SAL aprovada). `colaboradorNome` é o nome
+ * exatamente como veio da planilha (comparado por norm() no momento do
+ * lookup, não recasado aqui) — mantém rastreabilidade fiel à fonte. */
+export interface SalarioBase {
+  colaboradorNome: string;
+  salario: number;
+  importadoEm: string;
+  importadoPor: string;
 }
 
 export type TipoCod = "ADM" | "PRO" | "SAL" | "TRF" | "DES" | "AFA";

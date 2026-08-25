@@ -11,6 +11,7 @@ import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepositor
 import { getConfigAvaliacaoDesempenho } from "../repositories/configAvaliacaoDesempenhoRepository";
 import { getConfigDashboard } from "../repositories/configDashboardRepository";
 import { getConfigEncargosFolha } from "../repositories/configEncargosFolhaRepository";
+import { getSalariosBase } from "../repositories/salariosBaseRepository";
 import { getCompetenciasComportamentais } from "../repositories/competenciasComportamentaisRepository";
 import { getKpisCargo } from "../repositories/kpisCargoRepository";
 import { getAvaliacoesDesempenho } from "../repositories/avaliacoesDesempenhoRepository";
@@ -73,6 +74,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getAvaliacoesPotencial(),
       getConfigDashboard(),
       getConfigEncargosFolha(),
+      getSalariosBase(),
     ])
       .then(
         async ([
@@ -95,6 +97,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           avaliacoesPotencial,
           configDashboard,
           configEncargosFolha,
+          salariosBase,
         ]) => {
           if (cancelado) return;
           // Efetiva promoções/transferências aprovadas cuja "Data prevista" já
@@ -125,6 +128,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             avaliacoesPotencial,
             configDashboard,
             configEncargosFolha,
+            salariosBase,
           });
         },
       )

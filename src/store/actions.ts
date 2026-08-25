@@ -18,6 +18,7 @@ import type {
   Pdi,
   PdiBibliotecaItem,
   Perfil2Info,
+  SalarioBase,
   TipoMovimentacao,
 } from "../types/domain";
 
@@ -43,6 +44,7 @@ export type PortalAction =
       avaliacoesPotencial: AvaliacaoPotencial[];
       configDashboard: ConfigDashboard | null;
       configEncargosFolha: ConfigEncargosFolha | null;
+      salariosBase: SalarioBase[];
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }

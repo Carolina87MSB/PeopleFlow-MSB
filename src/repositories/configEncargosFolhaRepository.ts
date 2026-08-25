@@ -1,29 +1,45 @@
 // Camada de acesso à tabela `peopleflow_config_encargos_folha` — linha única
 // (id sempre "default"). RLS libera qualquer autenticado, mesmo padrão de
 // configDashboardRepository.ts. Só leitura por ora — sem tela de edição
-// ainda (RH define os componentes/percentuais via SQL, ver schema.sql seção 23).
+// ainda (RH define os percentuais via SQL, ver schema.sql seção 23).
 
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { SupabaseNotConfiguredError } from "./colaboradoresRepository";
-import type { ComponenteEncargoFolha, ConfigEncargosFolha } from "../types/domain";
+import type { ConfigEncargosFolha } from "../types/domain";
 
 const ID_CONFIG = "default";
 
 interface ConfigEncargosFolhaRow {
-  componentes: ComponenteEncargoFolha[] | null;
+  inss_patronal: number;
+  rat: number;
+  rat_observacao: string | null;
+  terceiros: number;
+  fgts_celetista: number;
+  fgts_aprendiz: number;
+  provisao_decimo_terceiro: number;
+  provisao_ferias: number;
+  provisao_terco_ferias: number;
   updated_at: string;
   updated_by: string | null;
 }
 
 function fromRow(row: ConfigEncargosFolhaRow): ConfigEncargosFolha {
   return {
-    componentes: row.componentes ?? [],
+    inssPatronal: row.inss_patronal,
+    rat: row.rat,
+    ratObservacao: row.rat_observacao ?? "",
+    terceiros: row.terceiros,
+    fgtsCeletista: row.fgts_celetista,
+    fgtsAprendiz: row.fgts_aprendiz,
+    provisaoDecimoTerceiro: row.provisao_decimo_terceiro,
+    provisaoFerias: row.provisao_ferias,
+    provisaoTercoFerias: row.provisao_terco_ferias,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by ?? "",
   };
 }
 
-/** `null` quando a linha ainda não foi criada — tratado igual a "componentes: []" (ainda não parametrizado) pelo call site. */
+/** `null` quando a linha ainda não foi criada — custoMensalFolha() trata isso como "ainda não parametrizado". */
 export async function getConfigEncargosFolha(): Promise<ConfigEncargosFolha | null> {
   if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
 

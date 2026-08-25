@@ -7,14 +7,22 @@ import { contarPorGestor } from "../../domain/agregados";
 import { nivelMeta } from "../../domain/colors";
 import { norm } from "../../domain/hierarquia";
 import { podeVerSalario } from "../../domain/permissoes";
-import { custoMensalFolha, formatarValorMonetario, salarioVigente } from "../../domain/salario";
+import { custoMensalFolha, ehAprendiz, formatarValorMonetario, salarioVigente } from "../../domain/salario";
 import { usePortalData } from "../../store/usePortalData";
 import { TimelineCarreira } from "./TimelineCarreira";
 import styles from "./ColaboradoresPage.module.css";
 
 export function ColaboradoresPage() {
-  const { colaboradoresListagem, podeVerColaboradores, podeEditarAdmissao, atualizarAdmissao, movimentacoes, configEncargosFolha, perfil } =
-    usePortalData();
+  const {
+    colaboradoresListagem,
+    podeVerColaboradores,
+    podeEditarAdmissao,
+    atualizarAdmissao,
+    movimentacoes,
+    configEncargosFolha,
+    salariosBase,
+    perfil,
+  } = usePortalData();
   const [searchParams, setSearchParams] = useSearchParams();
   const [depto, setDepto] = useState("Todos");
   const [busca, setBusca] = useState("");
@@ -53,17 +61,18 @@ export function ColaboradoresPage() {
   );
 
   // Salário/Custo Mensal Folha nunca vêm do cadastro do colaborador — ver
-  // domain/salario.ts (a única fonte é o campo "Novo salário" das
-  // movimentações PRO/SAL já aprovadas). Visibilidade restrita a RH/
-  // Diretoria, mesma regra já usada na Timeline (podeVerSalario).
+  // domain/salario.ts (fonte principal: campo "Novo salário" das
+  // movimentações PRO/SAL já aprovadas; fallback: planilha importada em
+  // salariosBase). Visibilidade restrita a RH/Diretoria, mesma regra já
+  // usada na Timeline (podeVerSalario).
   const verSalario = podeVerSalario(perfil);
   const salario = useMemo(
-    () => (colaboradorSelecionado ? salarioVigente(colaboradorSelecionado.nome, movimentacoes) : null),
-    [colaboradorSelecionado, movimentacoes],
+    () => (colaboradorSelecionado ? salarioVigente(colaboradorSelecionado.nome, movimentacoes, salariosBase) : null),
+    [colaboradorSelecionado, movimentacoes, salariosBase],
   );
   const custoFolha = useMemo(
-    () => custoMensalFolha(salario?.valor ?? null, configEncargosFolha),
-    [salario, configEncargosFolha],
+    () => (colaboradorSelecionado ? custoMensalFolha(salario?.valor ?? null, ehAprendiz(colaboradorSelecionado), configEncargosFolha) : null),
+    [salario, colaboradorSelecionado, configEncargosFolha],
   );
 
   if (!podeVerColaboradores) return <Navigate to="/dashboard" replace />;
