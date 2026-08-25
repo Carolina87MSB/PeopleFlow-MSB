@@ -17,6 +17,7 @@ import type {
   Pdi,
   PdiBibliotecaItem,
   Perfil2Info,
+  ReajusteSalarial,
   SalarioBase,
   TipoMovimentacao,
 } from "../types/domain";
@@ -42,4 +43,5 @@ export interface PortalState {
   configDashboard: ConfigDashboard | null;
   configEncargosFolha: ConfigEncargosFolha | null;
   salariosBase: SalarioBase[];
+  reajustesSalariais: ReajusteSalarial[];
 }

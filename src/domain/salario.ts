@@ -1,15 +1,17 @@
 // Salário do colaborador e Custo Mensal Folha — módulo novo, funções puras.
 //
 // O cadastro de colaborador (tabela `colaboradores`) NUNCA guarda salário —
-// as duas únicas fontes são: (1) o campo "Novo salário" das movimentações de
-// Promoção/Reajuste Salarial já aprovadas (`Movimentacao.dados`, digitado
-// livremente, ver NovaMovimentacaoModal.tsx), fonte PRINCIPAL; e (2) um
-// snapshot importado de planilha (`peopleflow_salarios_base`), usado só como
-// FALLBACK pra quem nunca teve uma movimentação salarial registrada no
-// portal. `salarioVigente()` decide entre as duas sem duplicar nada em
-// `colaboradores`.
+// três fontes possíveis, sempre "a mais recente por data vence": (1) o campo
+// "Novo salário" das movimentações de Promoção/Reajuste Salarial já
+// aprovadas (`Movimentacao.dados`, digitado livremente, ver
+// NovaMovimentacaoModal.tsx); (2) reajustes estruturados registrados fora do
+// fluxo de Movimentação (ex.: resultado da AVD — `peopleflow_reajustes_salariais`,
+// ver domain/reajusteSalarial.ts); (3) um snapshot importado de planilha
+// (`peopleflow_salarios_base`), usado só como FALLBACK quando nenhuma das
+// duas primeiras existir. `salarioVigente()` decide entre as três sem
+// duplicar nada em `colaboradores`.
 
-import type { Colaborador, ConfigEncargosFolha, Movimentacao, SalarioBase } from "../types/domain";
+import type { Colaborador, ConfigEncargosFolha, Movimentacao, ReajusteSalarial, SalarioBase } from "../types/domain";
 import { dataBrParaIso } from "./dates";
 import { norm } from "./hierarquia";
 
@@ -52,17 +54,29 @@ export interface SalarioVigente {
   origem: string;
 }
 
-/** Salário vigente de um colaborador:
- * 1. PRIORIDADE: o valor mais recente do campo "Novo salário" entre as
- *    movimentações de Promoção/Reajuste Salarial JÁ APROVADAS (Aprovado/
- *    Concluído — nunca uma que ainda pode ser reprovada). "Mais recente" =
- *    maior data de aprovação final (ou de solicitação, na ausência dela).
- * 2. FALLBACK: se nenhuma movimentação tiver um salário reconhecível, usa o
- *    snapshot de `salariosBase` (importação de planilha) pro mesmo nome,
- *    comparado por norm() (sem acento/case — a planilha vem em CAIXA ALTA,
- *    o cadastro em Title Case).
- * Sem nenhuma das duas fontes, retorna `null` — nunca uma estimativa. */
-export function salarioVigente(colaboradorNome: string, movimentacoes: Movimentacao[], salariosBase: SalarioBase[]): SalarioVigente | null {
+/** Salário vigente de um colaborador — três fontes, "mais recente por data
+ * vence" entre as duas primeiras, fallback só na ausência de ambas:
+ * 1. O valor mais recente do campo "Novo salário" entre as movimentações de
+ *    Promoção/Reajuste Salarial JÁ APROVADAS (Aprovado/Concluído — nunca uma
+ *    que ainda pode ser reprovada). "Mais recente" = maior data de aprovação
+ *    final (ou de solicitação, na ausência dela).
+ * 2. O reajuste estruturado mais recente (`reajustesSalariais` — ex.:
+ *    resultado da AVD), comparado pela mesma régua de data
+ *    (`competenciaIso`) — é assim que "aplicar o reajuste" passa a valer
+ *    como salário vigente sem tocar em `colaboradores` nem duplicar a
+ *    estrutura de salário: um reajuste de competência mais recente que
+ *    qualquer movimentação já vence a comparação naturalmente.
+ * 3. FALLBACK: sem nenhuma das duas anteriores, usa o snapshot de
+ *    `salariosBase` (importação de planilha) pro mesmo nome, comparado por
+ *    norm() (sem acento/case — a planilha vem em CAIXA ALTA, o cadastro em
+ *    Title Case).
+ * Sem nenhuma das três fontes, retorna `null` — nunca uma estimativa. */
+export function salarioVigente(
+  colaboradorNome: string,
+  movimentacoes: Movimentacao[],
+  reajustesSalariais: ReajusteSalarial[],
+  salariosBase: SalarioBase[],
+): SalarioVigente | null {
   let melhor: { valor: number; dataOrdenacao: string; origem: string } | null = null;
 
   for (const m of movimentacoes) {
@@ -81,9 +95,17 @@ export function salarioVigente(colaboradorNome: string, movimentacoes: Movimenta
       melhor = { valor, dataOrdenacao, origem: `${m.tipo} — ${dataBr}` };
     }
   }
-  if (melhor) return { valor: melhor.valor, origem: melhor.origem };
 
   const normNome = norm(colaboradorNome);
+  for (const r of reajustesSalariais) {
+    if (norm(r.colaboradorNome) !== normNome) continue;
+    if (!melhor || r.competenciaIso > melhor.dataOrdenacao) {
+      melhor = { valor: r.novoSalario, dataOrdenacao: r.competenciaIso, origem: `${r.origem} — ${r.competencia}` };
+    }
+  }
+
+  if (melhor) return { valor: melhor.valor, origem: melhor.origem };
+
   const base = salariosBase.find((s) => norm(s.colaboradorNome) === normNome);
   return base ? { valor: base.salario, origem: "Planilha de salários (importação)" } : null;
 }

@@ -1154,3 +1154,53 @@ create policy "authenticated_rw_salarios_base"
   to authenticated
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 25) Reajuste Salarial — resultado do 2º Ciclo da Avaliação de Desempenho
+-- (AVD). Registro estruturado e imutável de cada reajuste aplicado — nunca
+-- sobrescreve nem duplica o mecanismo de salário já existente
+-- (salarioVigente() em domain/salario.ts passa a considerar esta tabela
+-- como mais uma fonte, comparada por data junto com a Movimentação de
+-- Pessoal; "mais recente vence"). `origem` fica separado de "Movimentação
+-- de Pessoal" de propósito — este reajuste é um resultado da AVD, não do
+-- fluxo de aprovação de Etapas. `unique(colaborador_nome, competencia_iso,
+-- origem)` garante no banco que a mesma competência não pode ser aplicada
+-- duas vezes ao mesmo colaborador pela mesma origem (ver
+-- criarReajustesSalariais() em src/repositories/reajustesSalariaisRepository.ts,
+-- que já filtra duplicidade antes de inserir — a constraint é o reforço
+-- final, não a única defesa).
+-- ─────────────────────────────────────────────────────────────────────────
+create table if not exists public.peopleflow_reajustes_salariais (
+  id text primary key,
+  colaborador_nome text not null,
+  competencia text not null,
+  competencia_iso date not null,
+  origem text not null default 'AVD 2º Ciclo',
+  salario_anterior numeric not null,
+  reajuste_base numeric not null,
+  fatorial numeric not null,
+  reajuste_efetivo numeric not null,
+  novo_salario numeric not null,
+  aplicado_em timestamptz not null default now(),
+  aplicado_por text not null,
+  unique (colaborador_nome, competencia_iso, origem)
+);
+
+comment on table public.peopleflow_reajustes_salariais is
+  'Reajustes salariais aplicados (ex.: resultado da AVD 2º Ciclo) — cada linha é um registro imutável de salário anterior → novo salário. Ver ReajusteSalarial em src/types/domain.ts. Consumida por salarioVigente()/domain/salario.ts (fonte adicional, por data) e por montarTimelineCarreira()/domain/timelineCarreira.ts (evento "reajusteAvd").';
+comment on column public.peopleflow_reajustes_salariais.competencia is 'Texto de exibição, ex.: "Agosto/2026" — a competência do reajuste, nunca a data de importação/aplicação.';
+comment on column public.peopleflow_reajustes_salariais.competencia_iso is 'Mesma competência em formato "aaaa-mm-dd" (dia 01) — usada pra ordenar/comparar com outras fontes de salário e pra unicidade.';
+comment on column public.peopleflow_reajustes_salariais.origem is 'De onde veio o reajuste — ex.: "AVD 2º Ciclo". Nunca "Movimentação de Pessoal": este registro não passa pelo fluxo de Etapas.';
+comment on column public.peopleflow_reajustes_salariais.reajuste_base is 'Percentual em pontos (6 = 6%) — o reajuste coletivo/base, antes do fatorial individual.';
+comment on column public.peopleflow_reajustes_salariais.fatorial is 'Percentual em pontos (125 = 125%) — multiplicador individual de mérito. NÃO é o percentual final do reajuste.';
+comment on column public.peopleflow_reajustes_salariais.reajuste_efetivo is 'Percentual em pontos (7,5 = 7,5%) = reajuste_base × fatorial / 100 — o percentual de fato aplicado sobre o salário.';
+
+alter table public.peopleflow_reajustes_salariais enable row level security;
+
+drop policy if exists "authenticated_rw_reajustes_salariais" on public.peopleflow_reajustes_salariais;
+create policy "authenticated_rw_reajustes_salariais"
+  on public.peopleflow_reajustes_salariais
+  for all
+  to authenticated
+  using (true)
+  with check (true);

@@ -23,6 +23,7 @@ import {
 } from "../repositories/avaliacoesExperienciaRepository";
 import { atualizarConfigAvaliacaoDesempenho as atualizarConfigAvaliacaoDesempenhoNoSupabase } from "../repositories/configAvaliacaoDesempenhoRepository";
 import { atualizarConfigDashboard as atualizarConfigDashboardNoSupabase } from "../repositories/configDashboardRepository";
+import { criarReajustesSalariais as criarReajustesSalariaisNoSupabase } from "../repositories/reajustesSalariaisRepository";
 import { salvarCompetenciaComportamental as salvarCompetenciaComportamentalNoSupabase } from "../repositories/competenciasComportamentaisRepository";
 import {
   atualizarKpiCargo as atualizarKpiCargoNoSupabase,
@@ -123,6 +124,7 @@ import type {
   PdiBibliotecaItem,
   PdiItem,
   Perfil,
+  ReajusteSalarial,
   RespostaAvaliacaoExperiencia,
   ResultadoAvaliacaoExperiencia,
   SalarioBase,
@@ -321,6 +323,14 @@ export interface PortalData {
   /** Fallback de salário importado de planilha — só usado por salarioVigente()
    * quando o colaborador não tem salário derivável de movimentação. */
   salariosBase: SalarioBase[];
+  /** Reajustes salariais estruturados já aplicados (ex.: resultado da AVD) —
+   * ver ReajusteSalarialTab.tsx e domain/reajusteSalarial.ts. */
+  reajustesSalariais: ReajusteSalarial[];
+  /** RH-only. Registra os reajustes já validados pela tela; ignora
+   * silenciosamente (no repositório) quem já tiver sido aplicado antes. */
+  aplicarReajustesSalariais: (
+    reajustes: ReajusteSalarial[],
+  ) => Promise<{ ok: true; criados: number; duplicados: number } | { ok: false }>;
 }
 
 /**
@@ -1174,6 +1184,35 @@ export function usePortalData(): PortalData {
       }
     },
     [dispatch, me, flash, perfil],
+  );
+
+  /** RH-only. Registra os reajustes já validados (ver ReajusteSalarialTab.tsx
+   * — só linhas "elegivel" chegam aqui) — a checagem de duplicidade final é
+   * feita de novo no repositório (contra o Supabase, não o estado local),
+   * mesmo padrão de criarAvaliacoesPotencial(). */
+  const aplicarReajustesSalariaisFn = useCallback(
+    async (reajustes: ReajusteSalarial[]) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode aplicar reajustes salariais.");
+        return { ok: false as const };
+      }
+      if (reajustes.length === 0) return { ok: false as const };
+      try {
+        const criados = await criarReajustesSalariaisNoSupabase(reajustes);
+        if (criados.length > 0) dispatch({ type: "ADICIONAR_REAJUSTES_SALARIAIS", reajustes: criados });
+        const duplicados = reajustes.length - criados.length;
+        flash(
+          duplicados > 0
+            ? `${criados.length} reajuste(s) aplicado(s) — ${duplicados} já existiam e foram ignorados.`
+            : `${criados.length} reajuste(s) aplicado(s).`,
+        );
+        return { ok: true as const, criados: criados.length, duplicados };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao aplicar reajustes salariais.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, flash, perfil],
   );
 
   const salvarCompetenciaComportamentalFn = useCallback(
@@ -2185,5 +2224,7 @@ export function usePortalData(): PortalData {
     atualizarConfigDashboard: atualizarConfigDashboardFn,
     configEncargosFolha: state.configEncargosFolha,
     salariosBase: state.salariosBase,
+    reajustesSalariais: state.reajustesSalariais,
+    aplicarReajustesSalariais: aplicarReajustesSalariaisFn,
   };
 }

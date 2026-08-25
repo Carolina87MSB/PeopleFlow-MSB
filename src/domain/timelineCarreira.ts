@@ -3,8 +3,9 @@
 // (lista genérica de movimentações) na ficha de /colaboradores por uma
 // linha do tempo de eventos de carreira: só o que aconteceu de fato
 // (admissão, mudança de gestor, transferência, promoção, alteração
-// salarial, avaliação de experiência, ciclo de AVD+Potencial, PDI,
-// desligamento) — nunca um log técnico de "quem editou o quê".
+// salarial, avaliação de experiência, ciclo de AVD+Potencial, PDI, reajuste
+// salarial estruturado, desligamento) — nunca um log técnico de "quem
+// editou o quê".
 //
 // Reaproveita 100% dos dados já existentes: nenhuma tabela nova, nenhum
 // cadastro paralelo. "Antes"/"depois" de cargo/depto/gestor/salário vêm
@@ -26,6 +27,7 @@ import type {
   FaixaMatriz9Box,
   Movimentacao,
   Pdi,
+  ReajusteSalarial,
 } from "../types/domain";
 
 function valorDado(m: Movimentacao, label: string): string | null {
@@ -72,6 +74,16 @@ export type EventoTimelineCarreira =
       concluidoEm: string | null;
     }
   | { id: string; tipo: "pdi"; data: string; objetivos: string[]; prazo: string | null; status: string; concluidoEm: string | null }
+  | {
+      id: string;
+      tipo: "reajusteAvd";
+      data: string;
+      competencia: string;
+      origem: string;
+      salarioAnterior: number;
+      reajusteEfetivo: number;
+      novoSalario: number;
+    }
   | { id: string; tipo: "desligamento"; data: string; motivo: string | null };
 
 /** Monta a timeline de carreira de 1 colaborador, mais recente primeiro.
@@ -89,6 +101,7 @@ export function montarTimelineCarreira(
   avaliacoesPotencial: AvaliacaoPotencial[],
   pdis: Pdi[],
   config: ConfigAvaliacaoDesempenho | null,
+  reajustesSalariais: ReajusteSalarial[] = [],
 ): EventoTimelineCarreira[] {
   const hoje = hojeIso();
   const doColaborador = movimentacoes.filter((m) => m.colaborador === colaborador.nome);
@@ -237,6 +250,25 @@ export function montarTimelineCarreira(
         prazo,
         status: p.status,
         concluidoEm: p.concluidoEm ? soData(p.concluidoEm) : null,
+      });
+    });
+
+  // ── Reajuste Salarial (AVD ou outra origem futura) ─────────────────────
+  // `competenciaIso` já é "aaaa-mm-01" (ver competenciaParaIso() em
+  // domain/reajusteSalarial.ts) — usada direto como data do evento, nunca a
+  // data de importação/aplicação (aplicadoEm existe só pra auditoria).
+  reajustesSalariais
+    .filter((r) => r.colaboradorNome === colaborador.nome)
+    .forEach((r) => {
+      eventos.push({
+        id: `reajuste:${r.id}`,
+        tipo: "reajusteAvd",
+        data: r.competenciaIso,
+        competencia: r.competencia,
+        origem: r.origem,
+        salarioAnterior: r.salarioAnterior,
+        reajusteEfetivo: r.reajusteEfetivo,
+        novoSalario: r.novoSalario,
       });
     });
 

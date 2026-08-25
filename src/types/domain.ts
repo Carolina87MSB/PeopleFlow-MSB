@@ -106,6 +106,31 @@ export interface SalarioBase {
   importadoPor: string;
 }
 
+/** Reajuste salarial estruturado — resultado da AVD (ou de outra origem
+ * futura, ver `origem`), consumido por salarioVigente() (domain/salario.ts,
+ * mais uma fonte de salário, nunca uma segunda estrutura paralela) e por
+ * montarTimelineCarreira() (evento "reajusteAvd"). `reajusteBase`/`fatorial`/
+ * `reajusteEfetivo` em pontos percentuais (6 = 6%), mesma convenção de
+ * `ConfigEncargosFolha`. Registro imutável — nunca editado depois de
+ * aplicado, só consultado. */
+export interface ReajusteSalarial {
+  id: string;
+  colaboradorNome: string;
+  /** Texto de exibição, ex.: "Agosto/2026" — nunca a data de importação. */
+  competencia: string;
+  /** Mesma competência em "aaaa-mm-dd" (dia 01) — ordenação/unicidade. */
+  competenciaIso: string;
+  /** Ex.: "AVD 2º Ciclo" — nunca "Movimentação de Pessoal". */
+  origem: string;
+  salarioAnterior: number;
+  reajusteBase: number;
+  fatorial: number;
+  reajusteEfetivo: number;
+  novoSalario: number;
+  aplicadoEm: string;
+  aplicadoPor: string;
+}
+
 export type TipoCod = "ADM" | "PRO" | "SAL" | "TRF" | "DES" | "AFA";
 
 export interface TipoMovimentacao {

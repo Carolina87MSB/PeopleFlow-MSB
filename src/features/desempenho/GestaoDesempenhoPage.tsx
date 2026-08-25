@@ -13,6 +13,7 @@ import { Matriz9BoxTab } from "./Matriz9BoxTab";
 import { CalibracaoTab } from "./CalibracaoTab";
 import { DashboardDesempenhoTab } from "./DashboardDesempenhoTab";
 import { HistoricoTab } from "./HistoricoTab";
+import { ReajusteSalarialTab } from "./ReajusteSalarialTab";
 import styles from "./GestaoDesempenhoPage.module.css";
 
 type Aba =
@@ -27,7 +28,8 @@ type Aba =
   | "matriz9box"
   | "calibracao"
   | "dashboard"
-  | "historico";
+  | "historico"
+  | "reajusteSalarial";
 
 const ABAS_RH: { id: Aba; label: string }[] = [
   { id: "configuracao", label: "Configuração" },
@@ -37,6 +39,7 @@ const ABAS_RH: { id: Aba; label: string }[] = [
   { id: "potencial", label: "Potencial" },
   { id: "matriz9box", label: "Matriz 9 Box" },
   { id: "calibracao", label: "Calibração" },
+  { id: "reajusteSalarial", label: "Reajuste Salarial" },
   { id: "dashboard", label: "Dashboard" },
   { id: "historico", label: "Histórico" },
   { id: "acessos", label: "Acessos AVD" },
@@ -56,7 +59,9 @@ const ABAS_GESTAO: Aba[] = ["potencial", "matriz9box", "dashboard"];
  * `colaboradoresListagem`); hoje Gestor e Diretoria enxergam exatamente as
  * mesmas abas que o Colaborador ("Avaliações"/"PDI"/"Histórico"), mais
  * "Potencial"/"Matriz 9 Box"/"Dashboard". "Configuração"/"Competências"/
- * "Acessos AVD"/"Biblioteca de PDI"/"Calibração" são RH-only (o Comitê de
+ * "Acessos AVD"/"Biblioteca de PDI"/"Calibração"/"Reajuste Salarial" são
+ * RH-only — "Reajuste Salarial" lida com dado sensível (salário) e efetiva
+ * escrita em massa, mesmo nível de restrição de "Calibração". (o Comitê de
  * Calibração é sempre o RH, não um perfil novo — spec da Etapa 6 não
  * menciona Gestor/Diretoria em nenhum momento pra esta aba); "Avaliações",
  * "PDI" e "Histórico" são abertas a todo perfil (RH gerencia ciclos/PDIs e
@@ -112,6 +117,7 @@ export function GestaoDesempenhoPage() {
       {perfil !== "Colaborador" && aba === "potencial" && <AvaliacoesPotencialTab />}
       {perfil !== "Colaborador" && aba === "matriz9box" && <Matriz9BoxTab />}
       {podeVerCadastros && aba === "calibracao" && <CalibracaoTab />}
+      {podeVerCadastros && aba === "reajusteSalarial" && <ReajusteSalarialTab />}
       {perfil !== "Colaborador" && aba === "dashboard" && <DashboardDesempenhoTab />}
       {aba === "historico" && <HistoricoTab />}
       {podeVerCadastros && aba === "acessos" && <AcessosAvdTab />}

@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { ArrowLeftRight, BarChart3, ClipboardCheck, LogIn, LogOut, Target, TrendingUp, UserCog, Wallet } from "lucide-react";
+import { ArrowLeftRight, BarChart3, ClipboardCheck, LogIn, LogOut, PiggyBank, Target, TrendingUp, UserCog, Wallet } from "lucide-react";
 import { formatarDataIso } from "../../domain/dates";
 import { podeVerSalario } from "../../domain/permissoes";
+import { formatarPercentual, formatarValorMonetario } from "../../domain/salario";
 import { montarTimelineCarreira } from "../../domain/timelineCarreira";
 import type { EventoTimelineCarreira } from "../../domain/timelineCarreira";
 import { usePortalData } from "../../store/usePortalData";
@@ -21,6 +22,7 @@ const ICONE_POR_TIPO: Record<EventoTimelineCarreira["tipo"], { Icon: typeof LogI
   avaliacaoExperiencia: { Icon: ClipboardCheck, cor: "#5f89a1" },
   cicloAvaliacao: { Icon: BarChart3, cor: "#1f4e5e" },
   pdi: { Icon: Target, cor: "#56A4BB" },
+  reajusteAvd: { Icon: PiggyBank, cor: "#2f8f4e" },
   desligamento: { Icon: LogOut, cor: "#c0584e" },
 };
 
@@ -42,6 +44,8 @@ function tituloDoEvento(e: EventoTimelineCarreira): string {
       return e.cicloNome || "Avaliação de Desempenho + Potencial";
     case "pdi":
       return "Plano de Desenvolvimento Individual — PDI";
+    case "reajusteAvd":
+      return `Reajuste Salarial — ${e.origem}`;
     case "desligamento":
       return "Desligamento";
   }
@@ -69,6 +73,10 @@ function resumoDoEvento(e: EventoTimelineCarreira, verSalario: boolean): string 
     }
     case "pdi":
       return e.objetivos.length ? e.objetivos.join(", ") : "Sem objetivos registrados";
+    case "reajusteAvd":
+      return verSalario
+        ? `${formatarValorMonetario(e.salarioAnterior)} → ${formatarValorMonetario(e.novoSalario)} (${formatarPercentual(e.reajusteEfetivo)})`
+        : "Valores visíveis apenas para RH/Diretoria";
     case "desligamento":
       return "Encerrado";
   }
@@ -141,6 +149,22 @@ function detalhesDoEvento(e: EventoTimelineCarreira, verSalario: boolean): { lab
       if (e.concluidoEm) det.push({ label: "Concluído em", valor: formatarDataIso(e.concluidoEm) });
       return det;
     }
+    case "reajusteAvd": {
+      const det = [
+        { label: "Competência", valor: e.competencia },
+        { label: "Origem", valor: e.origem },
+      ];
+      if (verSalario) {
+        det.push(
+          { label: "Salário anterior", valor: formatarValorMonetario(e.salarioAnterior) },
+          { label: "Reajuste efetivo", valor: formatarPercentual(e.reajusteEfetivo) },
+          { label: "Novo salário", valor: formatarValorMonetario(e.novoSalario) },
+        );
+      } else {
+        det.push({ label: "Valores", valor: "Restrito a RH/Diretoria" });
+      }
+      return det;
+    }
     case "desligamento": {
       const det = [
         { label: "Data do desligamento", valor: formatarDataIso(e.data) },
@@ -160,8 +184,17 @@ function detalhesDoEvento(e: EventoTimelineCarreira, verSalario: boolean): { lab
  * domain/timelineCarreira.ts). Mais recente primeiro; cada evento é
  * expansível pra não poluir a tela com todo o detalhe de uma vez. */
 export function TimelineCarreira({ colaborador }: TimelineCarreiraProps) {
-  const { movimentacoes, avaliacoesExperiencia, ciclosAvaliacaoDesempenho, avaliacoesDesempenho, avaliacoesPotencial, pdi, configAvaliacaoDesempenho, perfil } =
-    usePortalData();
+  const {
+    movimentacoes,
+    avaliacoesExperiencia,
+    ciclosAvaliacaoDesempenho,
+    avaliacoesDesempenho,
+    avaliacoesPotencial,
+    pdi,
+    configAvaliacaoDesempenho,
+    reajustesSalariais,
+    perfil,
+  } = usePortalData();
   const [expandido, setExpandido] = useState<string | null>(null);
 
   const verSalario = podeVerSalario(perfil);
@@ -177,8 +210,19 @@ export function TimelineCarreira({ colaborador }: TimelineCarreiraProps) {
         avaliacoesPotencial,
         pdi,
         configAvaliacaoDesempenho,
+        reajustesSalariais,
       ),
-    [colaborador, movimentacoes, avaliacoesExperiencia, ciclosAvaliacaoDesempenho, avaliacoesDesempenho, avaliacoesPotencial, pdi, configAvaliacaoDesempenho],
+    [
+      colaborador,
+      movimentacoes,
+      avaliacoesExperiencia,
+      ciclosAvaliacaoDesempenho,
+      avaliacoesDesempenho,
+      avaliacoesPotencial,
+      pdi,
+      configAvaliacaoDesempenho,
+      reajustesSalariais,
+    ],
   );
 
   return (

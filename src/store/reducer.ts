@@ -23,6 +23,7 @@ export const initialPortalState: PortalState = {
   configDashboard: null,
   configEncargosFolha: null,
   salariosBase: [],
+  reajustesSalariais: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -50,7 +51,11 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         configDashboard: action.configDashboard,
         configEncargosFolha: action.configEncargosFolha,
         salariosBase: action.salariosBase,
+        reajustesSalariais: action.reajustesSalariais,
       };
+
+    case "ADICIONAR_REAJUSTES_SALARIAIS":
+      return { ...state, reajustesSalariais: [...action.reajustes, ...state.reajustesSalariais] };
 
     case "CRIAR_AVALIACAO_EXPERIENCIA":
       return { ...state, avaliacoesExperiencia: [action.avaliacao, ...state.avaliacoesExperiencia] };

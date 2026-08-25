@@ -21,6 +21,7 @@ export function ColaboradoresPage() {
     movimentacoes,
     configEncargosFolha,
     salariosBase,
+    reajustesSalariais,
     perfil,
   } = usePortalData();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,13 +64,16 @@ export function ColaboradoresPage() {
 
   // Salário/Custo Mensal Folha nunca vêm do cadastro do colaborador — ver
   // domain/salario.ts (fonte principal: campo "Novo salário" das
-  // movimentações PRO/SAL já aprovadas; fallback: planilha importada em
-  // salariosBase). Visibilidade restrita a RH/Diretoria, mesma regra já
-  // usada na Timeline (podeVerSalario).
+  // movimentações PRO/SAL já aprovadas; depois, reajustes estruturados como
+  // o da AVD; fallback: planilha importada em salariosBase). Visibilidade
+  // restrita a RH/Diretoria, mesma regra já usada na Timeline (podeVerSalario).
   const verSalario = podeVerSalario(perfil);
   const salario = useMemo(
-    () => (colaboradorSelecionado ? salarioVigente(colaboradorSelecionado.nome, movimentacoes, salariosBase) : null),
-    [colaboradorSelecionado, movimentacoes, salariosBase],
+    () =>
+      colaboradorSelecionado
+        ? salarioVigente(colaboradorSelecionado.nome, movimentacoes, reajustesSalariais, salariosBase)
+        : null,
+    [colaboradorSelecionado, movimentacoes, reajustesSalariais, salariosBase],
   );
   const detalheCusto = useMemo(
     () =>

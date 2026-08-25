@@ -18,6 +18,7 @@ import type {
   Pdi,
   PdiBibliotecaItem,
   Perfil2Info,
+  ReajusteSalarial,
   SalarioBase,
   TipoMovimentacao,
 } from "../types/domain";
@@ -45,6 +46,7 @@ export type PortalAction =
       configDashboard: ConfigDashboard | null;
       configEncargosFolha: ConfigEncargosFolha | null;
       salariosBase: SalarioBase[];
+      reajustesSalariais: ReajusteSalarial[];
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
@@ -80,4 +82,5 @@ export type PortalAction =
   | { type: "CRIAR_AVALIACOES_POTENCIAL"; avaliacoes: AvaliacaoPotencial[] }
   | { type: "ATUALIZAR_AVALIACAO_POTENCIAL"; avaliacao: AvaliacaoPotencial }
   | { type: "ATUALIZAR_CONFIG_DASHBOARD"; config: ConfigDashboard }
+  | { type: "ADICIONAR_REAJUSTES_SALARIAIS"; reajustes: ReajusteSalarial[] }
   | { type: "RESET" };
