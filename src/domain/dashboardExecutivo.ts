@@ -150,15 +150,25 @@ export function tempoMedioDeEmpresa(colaboradoresAtivos: Colaborador[], dataRefe
  * `"Aberto"` por vez neste app (ver `StatusCicloAvaliacaoDesempenho` em
  * types/domain.ts) — em caso de mais de um, usa o mais recente; `null` se
  * nenhum ciclo estiver aberto (nenhum "vigente" pra mostrar). */
+/** Ciclo usado pro indicador "Performance Média da MSB": o ciclo Aberto mais
+ * recente; sem nenhum ciclo Aberto (RH já encerrou o mais recente), cai pro
+ * ciclo Encerrado mais recente — assim o indicador continua mostrando a
+ * última performance conhecida em vez de ficar vazio assim que um ciclo
+ * fecha. `PerformanceMediaMSB.cicloEncerrado` avisa a UI quando esse
+ * fallback foi usado, pra rotular o card de forma diferente. */
 export function cicloVigenteAvaliacaoDesempenho(ciclos: CicloAvaliacaoDesempenho[]): CicloAvaliacaoDesempenho | null {
   const abertos = ciclos.filter((c) => c.status === "Aberto").sort((a, b) => b.dataInicio.localeCompare(a.dataInicio));
-  return abertos[0] ?? null;
+  if (abertos[0]) return abertos[0];
+  const encerrados = ciclos.filter((c) => c.status === "Encerrado").sort((a, b) => b.dataInicio.localeCompare(a.dataInicio));
+  return encerrados[0] ?? null;
 }
 
 export interface PerformanceMediaMSB {
   media: number | null;
   quantidadeAvaliados: number;
   ciclo: CicloAvaliacaoDesempenho | null;
+  /** true quando `ciclo` veio do fallback pro ciclo Encerrado mais recente (nenhum Aberto no momento). */
+  cicloEncerrado: boolean;
 }
 
 /** Indicador "Performance Média da MSB" — reaproveita 100% a lógica já usada
@@ -174,7 +184,7 @@ export interface PerformanceMediaMSB {
  * equipe" (mesmo princípio de Headcount Planejado/Aderência). */
 export function performanceMediaMSB(avaliacoesDesempenho: AvaliacaoDesempenho[], ciclos: CicloAvaliacaoDesempenho[]): PerformanceMediaMSB {
   const ciclo = cicloVigenteAvaliacaoDesempenho(ciclos);
-  if (!ciclo) return { media: null, quantidadeAvaliados: 0, ciclo: null };
+  if (!ciclo) return { media: null, quantidadeAvaliados: 0, ciclo: null, cicloEncerrado: false };
   const fichas = filtrarFichasGestor(avaliacoesDesempenho, {
     cicloId: ciclo.id,
     departamento: "Todos",
@@ -183,5 +193,10 @@ export function performanceMediaMSB(avaliacoesDesempenho: AvaliacaoDesempenho[],
     statusAvaliacao: "Todos",
   });
   const homologadas = fichas.filter((f) => f.statusCalibracao === "Homologada");
-  return { media: mediaNotasOficiais(homologadas), quantidadeAvaliados: homologadas.length, ciclo };
+  return {
+    media: mediaNotasOficiais(homologadas),
+    quantidadeAvaliados: homologadas.length,
+    ciclo,
+    cicloEncerrado: ciclo.status === "Encerrado",
+  };
 }

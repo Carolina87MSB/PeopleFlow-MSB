@@ -318,8 +318,8 @@ export function DashboardPage() {
           value={performanceMedia.media !== null ? `${performanceMedia.media.toFixed(1).replace(".", ",")} / 5,0` : "—"}
           hint={
             performanceMedia.ciclo
-              ? `${performanceMedia.quantidadeAvaliados} avaliados · ${performanceMedia.ciclo.nome}`
-              : "Nenhum ciclo de avaliação em aberto"
+              ? `${performanceMedia.quantidadeAvaliados} avaliados · ${performanceMedia.ciclo.nome}${performanceMedia.cicloEncerrado ? " (encerrado)" : ""}`
+              : "Nenhum ciclo de avaliação em aberto ou encerrado ainda"
           }
         />
       </div>
