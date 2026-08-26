@@ -308,43 +308,71 @@ export function ColaboradoresPage() {
                       </div>
                       <div className={styles.detalheCalculoLinha}>
                         <span>INSS Patronal</span>
-                        <strong>{formatarPercentual(detalheCusto.inssPatronal)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.inssPatronal)} ·{" "}
+                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.inssPatronal) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinha}>
                         <span title={detalheCusto.ratObservacao}>RAT (GIILRAT efetivo)</span>
-                        <strong>{formatarPercentual(detalheCusto.rat)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.rat)} · {formatarValorMonetario((detalheCusto.salario * detalheCusto.rat) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinha}>
                         <span>Terceiros</span>
-                        <strong>{formatarPercentual(detalheCusto.terceiros)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.terceiros)} ·{" "}
+                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.terceiros) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinha}>
                         <span>FGTS ({detalheCusto.ehAprendiz ? "Aprendiz" : "Celetista"})</span>
-                        <strong>{formatarPercentual(detalheCusto.fgts)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.fgts)} · {formatarValorMonetario((detalheCusto.salario * detalheCusto.fgts) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinha}>
                         <span>Provisão 13º</span>
-                        <strong>{formatarPercentual(detalheCusto.provisaoDecimoTerceiro)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.provisaoDecimoTerceiro)} ·{" "}
+                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoDecimoTerceiro) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinha}>
                         <span>Provisão Férias</span>
-                        <strong>{formatarPercentual(detalheCusto.provisaoFerias)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.provisaoFerias)} ·{" "}
+                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoFerias) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinha}>
                         <span>Provisão 1/3 Férias</span>
-                        <strong>{formatarPercentual(detalheCusto.provisaoTercoFerias)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.provisaoTercoFerias)} ·{" "}
+                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoTercoFerias) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinhaSub}>
                         <span>Encargos diretos</span>
-                        <strong>{formatarPercentual(detalheCusto.encargosDiretosPct)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.encargosDiretosPct)} ·{" "}
+                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.encargosDiretosPct) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinhaSub}>
                         <span>Provisões</span>
-                        <strong>{formatarPercentual(detalheCusto.provisoesPct)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.provisoesPct)} ·{" "}
+                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisoesPct) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinhaSub}>
                         <span>Encargos sobre as provisões</span>
-                        <strong>{formatarPercentual(detalheCusto.encargosSobreProvisoesPct)}</strong>
+                        <strong>
+                          {formatarPercentual(detalheCusto.encargosSobreProvisoesPct)} ·{" "}
+                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.encargosSobreProvisoesPct) / 100)}
+                        </strong>
                       </div>
                       <div className={styles.detalheCalculoLinhaFinal}>
                         <span>Custo Mensal Folha</span>
