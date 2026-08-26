@@ -75,10 +75,11 @@ export interface ConfigDashboard {
 /** Parâmetros do Custo Mensal Folha — linha única, todos em percentual puro
  * (20 = 20%), levantados pelo RH junto à Folha de Pagamento/DARF eSocial da
  * MSB (ver custoMensalFolha() em domain/salario.ts pra fórmula exata). `rat`
- * é o GIILRAT efetivamente recolhido identificado na documentação — o FAP
- * real da MSB não foi comprovado, então `ratObservacao` registra essa
- * ressalva (nunca usada no cálculo, só exibida como nota). `fgtsCeletista`/
- * `fgtsAprendiz` são valores distintos porque o percentual de FGTS depende
+ * é o GIILRAT efetivo (RAT nominal × FAP) — o FAP da MSB foi confirmado em
+ * 0,5000 via consulta oficial (gov.br/fap-mps, CNPJ 06.167.295/0001-71),
+ * `ratObservacao` registra a fonte (nunca usada no cálculo, só exibida como
+ * nota). `fgtsCeletista`/`fgtsAprendiz` são valores distintos porque o
+ * percentual de FGTS depende
  * do vínculo do colaborador (ver ehAprendiz() em domain/salario.ts). */
 export interface ConfigEncargosFolha {
   inssPatronal: number;

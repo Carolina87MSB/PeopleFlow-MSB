@@ -1107,7 +1107,7 @@ alter table public.peopleflow_config_encargos_folha
 comment on table public.peopleflow_config_encargos_folha is
   'Parâmetros de encargos patronais do Custo Mensal Folha (tela de Colaboradores) — linha única. Ver ConfigEncargosFolha em src/types/domain.ts.';
 comment on column public.peopleflow_config_encargos_folha.rat is
-  'GIILRAT efetivo identificado na documentação da MSB (1,00%) — NÃO confirmado como o FAP real (ver rat_observacao). Nunca multiplicar por um FAP adicional sem confirmação do Financeiro/DP.';
+  'GIILRAT efetivo (1,00%) = RAT nominal (2%, grau de risco) × FAP confirmado (0,5000, CNPJ 06.167.295/0001-71 — ver rat_observacao e seção 26). Já é o valor final, efetivo — nunca multiplicar por FAP de novo.';
 
 alter table public.peopleflow_config_encargos_folha enable row level security;
 
@@ -1118,6 +1118,24 @@ create policy "authenticated_rw_config_encargos_folha"
   to authenticated
   using (true)
   with check (true);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 26) Custo Mensal Folha — FAP confirmado. O RH trouxe as consultas oficiais
+-- do FAP 2026 (gov.br/fap-mps) dos dois CNPJ da MSB: 06.167.295/0001-71 (o
+-- estabelecimento operacional de fato — Massa Salarial R$ 2.442.022,19,
+-- ~39 vínculos, CNAE de fabricação de instrumentos médicos), FAP = 0,5000;
+-- e 06.167.295/0002-52 (sem massa salarial/vínculo nenhum — Motivo Neutro),
+-- FAP = 1,0000, não relevante pra folha. RAT nominal (grau de risco) × FAP
+-- = RAT efetivo → 2% × 0,5 = 1% — bate exatamente com o `rat = 1.00` já
+-- configurado (seção 23), então o percentual não muda, só a observação sai
+-- de "provisório" pra "confirmado".
+-- ─────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_config_encargos_folha
+  alter column rat_observacao set default 'FAP confirmado: 0,5000 (CNPJ 06.167.295/0001-71, consulta FAP 2026, gov.br/fap-mps) — RAT nominal 2% × FAP 0,5 = RAT efetivo 1%.';
+
+update public.peopleflow_config_encargos_folha
+set rat_observacao = 'FAP confirmado: 0,5000 (CNPJ 06.167.295/0001-71, consulta FAP 2026, gov.br/fap-mps) — RAT nominal 2% × FAP 0,5 = RAT efetivo 1%.'
+where id = 'default';
 
 insert into public.peopleflow_config_encargos_folha (id)
 values ('default')
