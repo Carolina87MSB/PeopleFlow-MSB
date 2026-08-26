@@ -43,9 +43,9 @@ export function formatarValorMonetario(valor: number | null): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-/** "8,3333%" — usado no detalhamento do Custo Mensal Folha (até 4 casas, sem zeros à direita desnecessários). */
+/** "8,33%" — sempre 2 casas decimais (usado no detalhamento do Custo Mensal Folha, no Reajuste Salarial e na Timeline). */
 export function formatarPercentual(valor: number): string {
-  return `${valor.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`;
+  return `${valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
 export interface SalarioVigente {
