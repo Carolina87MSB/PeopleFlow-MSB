@@ -30,9 +30,9 @@ import { AdmissoesDesligamentosChart } from "./AdmissoesDesligamentosChart";
 import { TurnoverPorSetorList } from "./TurnoverPorSetorList";
 import styles from "./DashboardPage.module.css";
 
-function mesesAtras(n: number): string {
+function diasAtras(n: number): string {
   const d = new Date();
-  d.setMonth(d.getMonth() - n);
+  d.setDate(d.getDate() - n);
   return hojeIso(d);
 }
 
@@ -62,7 +62,7 @@ export function DashboardPage() {
   const [setorFiltro, setSetorFiltro] = useState("Todos");
   const [gestorFiltro, setGestorFiltro] = useState("Todos");
   const [cargoFiltro, setCargoFiltro] = useState("Todos");
-  const [periodoInicio, setPeriodoInicio] = useState(() => mesesAtras(12));
+  const [periodoInicio, setPeriodoInicio] = useState(() => diasAtras(30));
   const [periodoFim, setPeriodoFim] = useState(() => hojeIso());
 
   const [editandoHeadcountPlanejado, setEditandoHeadcountPlanejado] = useState(false);
