@@ -15,9 +15,22 @@
 
 .filtros {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 14px;
   margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.filtroCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+}
+
+@media (max-width: 480px) {
+  .filtros {
+    flex-wrap: wrap;
+  }
 }
 
 .select {
@@ -158,15 +171,99 @@
 
 .acaoItem {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.acaoItemLinha {
+  display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.acaoItem .input {
+.acaoItemLinha .input {
   flex: 2;
 }
-.acaoItem .select {
+.acaoItemLinha .select {
   flex: 1;
+}
+
+.acaoItemEvidencia {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 2px;
+}
+
+.arquivoOculto {
+  display: none;
+}
+
+.evidenciaBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px dashed var(--color-border-strong);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.evidenciaBtn:hover:not(:disabled) {
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+
+.evidenciaBtn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.evidenciaAnexada {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-muted);
+}
+
+.evidenciaLink {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-brand);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.evidenciaLink:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.evidenciaMeta {
+  font-size: 11px;
+  color: var(--color-muted-light);
+}
+
+.evidenciaErro {
+  font-size: 11px;
+  color: var(--color-danger-fg, #c0392b);
+}
+
+.spin {
+  animation: pdi-spin 0.8s linear infinite;
+}
+
+@keyframes pdi-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .iconBtnPequeno {

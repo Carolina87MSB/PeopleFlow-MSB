@@ -1222,3 +1222,43 @@ create policy "authenticated_rw_reajustes_salariais"
   to authenticated
   using (true)
   with check (true);
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 27) PDI — evidência de conclusão por ação. Botão "Anexar evidência" em
+--    cada ação de desenvolvimento (ver PdiDrawer.tsx/pdiRepository.ts). Só
+--    a referência mora na tabela; o arquivo em si vive no bucket privado
+--    pdi-evidencias. Uma evidência por ação — anexar de novo substitui a
+--    anterior (upsert no Storage, ver uploadEvidenciaPdiAcao()).
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_pdi_acoes
+  add column if not exists evidencia_storage_path text,
+  add column if not exists evidencia_file_name text,
+  add column if not exists evidencia_uploaded_em timestamptz,
+  add column if not exists evidencia_uploaded_por text;
+
+comment on column public.peopleflow_pdi_acoes.evidencia_storage_path is 'Caminho no bucket pdi-evidencias ({acao_id}/{timestamp}-{nome do arquivo}) — null quando a ação não tem evidência anexada.';
+
+insert into storage.buckets (id, name, public)
+values ('pdi-evidencias', 'pdi-evidencias', false)
+on conflict (id) do nothing;
+
+drop policy if exists "pdi_evidencias_upload" on storage.objects;
+create policy "pdi_evidencias_upload"
+  on storage.objects
+  for insert
+  to authenticated
+  with check (bucket_id = 'pdi-evidencias');
+
+drop policy if exists "pdi_evidencias_leitura" on storage.objects;
+create policy "pdi_evidencias_leitura"
+  on storage.objects
+  for select
+  to authenticated
+  using (bucket_id = 'pdi-evidencias');
+
+drop policy if exists "pdi_evidencias_remocao" on storage.objects;
+create policy "pdi_evidencias_remocao"
+  on storage.objects
+  for delete
+  to authenticated
+  using (bucket_id = 'pdi-evidencias');

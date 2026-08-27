@@ -51,28 +51,37 @@ export function PdiTab() {
       </div>
 
       <div className={styles.filtros}>
-        <select className={styles.select} value={cicloFiltro} onChange={(e) => setCicloFiltro(e.target.value)}>
-          {opcoesCiclo.map((o) => (
-            <option key={o} value={o}>
-              {o === "Todos" ? "Todos os ciclos" : o}
-            </option>
-          ))}
-        </select>
-        <select className={styles.select} value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
-          {["Todos", "Não iniciado", "Em andamento", "Concluído"].map((o) => (
-            <option key={o} value={o}>
-              {o === "Todos" ? "Todos os status" : o}
-            </option>
-          ))}
-        </select>
-        {podeEditarGestaoDesempenho && opcoesDepartamento.length > 2 && (
-          <select className={styles.select} value={departamentoFiltro} onChange={(e) => setDepartamentoFiltro(e.target.value)}>
-            {opcoesDepartamento.map((o) => (
+        <div className={styles.filtroCampo}>
+          <span className={styles.label}>Ciclos</span>
+          <select className={styles.select} value={cicloFiltro} onChange={(e) => setCicloFiltro(e.target.value)}>
+            {opcoesCiclo.map((o) => (
               <option key={o} value={o}>
-                {o === "Todos" ? "Todos os departamentos" : o}
+                {o}
               </option>
             ))}
           </select>
+        </div>
+        <div className={styles.filtroCampo}>
+          <span className={styles.label}>Status</span>
+          <select className={styles.select} value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
+            {["Todos", "Não iniciado", "Em andamento", "Concluído"].map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </div>
+        {podeEditarGestaoDesempenho && opcoesDepartamento.length > 2 && (
+          <div className={styles.filtroCampo}>
+            <span className={styles.label}>Departamentos</span>
+            <select className={styles.select} value={departamentoFiltro} onChange={(e) => setDepartamentoFiltro(e.target.value)}>
+              {opcoesDepartamento.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
 

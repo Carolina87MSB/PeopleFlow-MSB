@@ -48,6 +48,10 @@ interface PdiAcaoRow {
   prazo: string | null;
   status: string;
   ordem: number;
+  evidencia_storage_path: string | null;
+  evidencia_file_name: string | null;
+  evidencia_uploaded_em: string | null;
+  evidencia_uploaded_por: string | null;
   criado_em: string;
   updated_at: string;
 }
@@ -101,6 +105,10 @@ function fromRowAcao(row: PdiAcaoRow): PdiAcao {
     prazo: row.prazo,
     status: row.status as StatusItemPdi,
     ordem: row.ordem,
+    evidenciaStoragePath: row.evidencia_storage_path,
+    evidenciaFileName: row.evidencia_file_name,
+    evidenciaUploadedEm: row.evidencia_uploaded_em,
+    evidenciaUploadedPor: row.evidencia_uploaded_por,
     criadoEm: row.criado_em,
     updatedAt: row.updated_at,
   };
@@ -148,7 +156,38 @@ function toRowAcao(acao: PdiAcao) {
     prazo: acao.prazo,
     status: acao.status,
     ordem: acao.ordem,
+    evidencia_storage_path: acao.evidenciaStoragePath,
+    evidencia_file_name: acao.evidenciaFileName,
+    evidencia_uploaded_em: acao.evidenciaUploadedEm,
+    evidencia_uploaded_por: acao.evidenciaUploadedPor,
   };
+}
+
+const EVIDENCIAS_BUCKET = "pdi-evidencias";
+
+/** Caminho sugerido: {acaoId}/{timestamp}-{nome do arquivo} — mesmo padrão
+ * já usado pra certificados no Treinamentos MSB. Sobrescreve qualquer
+ * evidência anterior daquela ação (upsert: true) — só existe uma evidência
+ * por ação de cada vez, anexar de novo substitui a anterior. */
+export async function uploadEvidenciaPdiAcao(acaoId: string, file: File): Promise<{ path: string }> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+  const path = `${acaoId}/${Date.now()}-${file.name}`;
+  const { error } = await supabase.storage.from(EVIDENCIAS_BUCKET).upload(path, file, { upsert: true });
+  if (error) throw new Error(`Falha ao enviar evidência: ${error.message}`);
+  return { path };
+}
+
+export async function getEvidenciaPdiAcaoSignedUrl(path: string, expiresInSeconds = 300): Promise<string> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+  const { data, error } = await supabase.storage.from(EVIDENCIAS_BUCKET).createSignedUrl(path, expiresInSeconds);
+  if (error || !data) throw new Error(`Falha ao gerar link da evidência: ${error?.message ?? "erro desconhecido"}`);
+  return data.signedUrl;
+}
+
+export async function removerEvidenciaPdiAcao(path: string): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+  const { error } = await supabase.storage.from(EVIDENCIAS_BUCKET).remove([path]);
+  if (error) throw new Error(`Falha ao remover evidência: ${error.message}`);
 }
 
 /** Carrega todos os PDIs com seus itens/ações já montados em árvore — 3

@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Loader2, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { Badge, Button, Drawer } from "../../components/ui";
 import { gerarIdPdiAcao, gerarIdPdiItem, pdiPodeSerConcluido, statusPdiAoSalvar, sugerirObjetivoEAcoes } from "../../domain/pdi";
 import { formatarDataHora } from "../../domain/dates";
+import { getEvidenciaPdiAcaoSignedUrl, removerEvidenciaPdiAcao, uploadEvidenciaPdiAcao } from "../../repositories/pdiRepository";
 import { usePortalData } from "../../store/usePortalData";
 import type { Pdi, PdiAcao, PdiItem, ResponsavelPdi, StatusItemPdi } from "../../types/domain";
 import styles from "./PdiTab.module.css";
@@ -17,7 +18,21 @@ const RESPONSAVEL_OPCOES: ResponsavelPdi[] = ["", "Colaborador", "Gestor", "Ambo
 
 function acaoVazia(itemId: string): PdiAcao {
   const agora = new Date().toISOString();
-  return { id: gerarIdPdiAcao(), itemId, descricao: "", responsavel: "", prazo: null, status: "Não iniciada", ordem: 0, criadoEm: agora, updatedAt: agora };
+  return {
+    id: gerarIdPdiAcao(),
+    itemId,
+    descricao: "",
+    responsavel: "",
+    prazo: null,
+    status: "Não iniciada",
+    ordem: 0,
+    evidenciaStoragePath: null,
+    evidenciaFileName: null,
+    evidenciaUploadedEm: null,
+    evidenciaUploadedPor: null,
+    criadoEm: agora,
+    updatedAt: agora,
+  };
 }
 
 /** Plano de Desenvolvimento Individual — itens automáticos (competências/KPIs
@@ -26,7 +41,7 @@ function acaoVazia(itemId: string): PdiAcao {
  * fica disponível quando há pelo menos 1 ação e todas estão
  * Concluída/Cancelada (ver pdiPodeSerConcluido em domain/pdi.ts). */
 export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
-  const { colaboradores, competenciasComportamentais, kpisCargo, pdiBiblioteca, perfil, podeEditarPdi, salvarPdi, reabrirPdi } = usePortalData();
+  const { colaboradores, competenciasComportamentais, kpisCargo, pdiBiblioteca, perfil, conta, podeEditarPdi, salvarPdi, reabrirPdi } = usePortalData();
 
   const podeEditar = podeEditarPdi(pdi);
   const [rascunho, setRascunho] = useState<Pdi>(() => ({ ...pdi, itens: pdi.itens.map((i) => ({ ...i, acoes: i.acoes.map((a) => ({ ...a })) })) }));
@@ -89,7 +104,21 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
       status: "Não iniciada",
       observacoes: "",
       ordem: rascunho.itens.length,
-      acoes: acoesSugeridas.map((descricao, i) => ({ id: gerarIdPdiAcao(), itemId, descricao, responsavel: "", prazo: null, status: "Não iniciada" as const, ordem: i, criadoEm: agora, updatedAt: agora })),
+      acoes: acoesSugeridas.map((descricao, i) => ({
+        id: gerarIdPdiAcao(),
+        itemId,
+        descricao,
+        responsavel: "" as ResponsavelPdi,
+        prazo: null,
+        status: "Não iniciada" as const,
+        ordem: i,
+        evidenciaStoragePath: null,
+        evidenciaFileName: null,
+        evidenciaUploadedEm: null,
+        evidenciaUploadedPor: null,
+        criadoEm: agora,
+        updatedAt: agora,
+      })),
       criadoEm: agora,
       updatedAt: agora,
     };
@@ -215,33 +244,37 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
             <div className={styles.acoesLista}>
               {item.acoes.map((acao) => (
                 <div key={acao.id} className={styles.acaoItem}>
-                  <input
-                    className={styles.input}
-                    placeholder="Descrição da ação"
-                    value={acao.descricao}
-                    onChange={(e) => atualizarAcao(item.id, acao.id, { descricao: e.target.value })}
-                    disabled={!podeEditar}
-                  />
-                  <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeEditar}>
-                    {RESPONSAVEL_OPCOES.map((r) => (
-                      <option key={r} value={r}>
-                        {r || "—"}
-                      </option>
-                    ))}
-                  </select>
-                  <input type="date" className={styles.input} value={acao.prazo ?? ""} onChange={(e) => atualizarAcao(item.id, acao.id, { prazo: e.target.value || null })} disabled={!podeEditar} />
-                  <select className={styles.select} value={acao.status} onChange={(e) => atualizarAcao(item.id, acao.id, { status: e.target.value as StatusItemPdi })} disabled={!podeEditar}>
-                    {STATUS_ITEM_OPCOES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                  {podeEditar && (
-                    <button type="button" className={styles.iconBtnPequeno} title="Remover ação" onClick={() => removerAcao(item.id, acao.id)}>
-                      <Trash2 size={13} />
-                    </button>
-                  )}
+                  <div className={styles.acaoItemLinha}>
+                    <input
+                      className={styles.input}
+                      placeholder="Descrição da ação"
+                      value={acao.descricao}
+                      onChange={(e) => atualizarAcao(item.id, acao.id, { descricao: e.target.value })}
+                      disabled={!podeEditar}
+                    />
+                    <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeEditar}>
+                      {RESPONSAVEL_OPCOES.map((r) => (
+                        <option key={r} value={r}>
+                          {r || "—"}
+                        </option>
+                      ))}
+                    </select>
+                    <input type="date" className={styles.input} value={acao.prazo ?? ""} onChange={(e) => atualizarAcao(item.id, acao.id, { prazo: e.target.value || null })} disabled={!podeEditar} />
+                    <select className={styles.select} value={acao.status} onChange={(e) => atualizarAcao(item.id, acao.id, { status: e.target.value as StatusItemPdi })} disabled={!podeEditar}>
+                      {STATUS_ITEM_OPCOES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                    {podeEditar && (
+                      <button type="button" className={styles.iconBtnPequeno} title="Remover ação" onClick={() => removerAcao(item.id, acao.id)}>
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  <EvidenciaAcao acao={acao} podeEditar={podeEditar} onAtualizar={(patch) => atualizarAcao(item.id, acao.id, patch)} autor={conta.nome} />
                 </div>
               ))}
             </div>
@@ -314,5 +347,113 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
         )}
       </div>
     </Drawer>
+  );
+}
+
+interface EvidenciaAcaoProps {
+  acao: PdiAcao;
+  podeEditar: boolean;
+  autor: string;
+  onAtualizar: (patch: Partial<PdiAcao>) => void;
+}
+
+/** Comprovação de que a ação foi de fato executada — arquivo único por
+ * ação (upload substitui o anterior), guardado no bucket privado
+ * `pdi-evidencias`. Envia direto pro Storage ao escolher o arquivo, mas só
+ * fica de fato vinculado à ação quando o PDI é salvo (mesmo princípio de
+ * rascunho-até-salvar do resto do formulário) — por isso, se a ficha for
+ * fechada sem salvar depois de anexar, o arquivo enviado fica órfão no
+ * bucket (aceitável: raro, e sem risco de dado sensível vazado, o bucket é
+ * privado). */
+function EvidenciaAcao({ acao, podeEditar, autor, onAtualizar }: EvidenciaAcaoProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [abrindo, setAbrindo] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function handleArquivoEscolhido(file: File) {
+    setEnviando(true);
+    setErro("");
+    try {
+      const { path } = await uploadEvidenciaPdiAcao(acao.id, file);
+      onAtualizar({
+        evidenciaStoragePath: path,
+        evidenciaFileName: file.name,
+        evidenciaUploadedEm: new Date().toISOString(),
+        evidenciaUploadedPor: autor,
+      });
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao enviar evidência.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function handleVerEvidencia() {
+    if (!acao.evidenciaStoragePath) return;
+    setAbrindo(true);
+    setErro("");
+    try {
+      const url = await getEvidenciaPdiAcaoSignedUrl(acao.evidenciaStoragePath);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao abrir evidência.");
+    } finally {
+      setAbrindo(false);
+    }
+  }
+
+  async function handleRemoverEvidencia() {
+    if (!acao.evidenciaStoragePath) return;
+    setErro("");
+    try {
+      await removerEvidenciaPdiAcao(acao.evidenciaStoragePath);
+      onAtualizar({ evidenciaStoragePath: null, evidenciaFileName: null, evidenciaUploadedEm: null, evidenciaUploadedPor: null });
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao remover evidência.");
+    }
+  }
+
+  return (
+    <div className={styles.acaoItemEvidencia}>
+      <input
+        ref={inputRef}
+        type="file"
+        className={styles.arquivoOculto}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void handleArquivoEscolhido(file);
+        }}
+      />
+
+      {acao.evidenciaStoragePath ? (
+        <div className={styles.evidenciaAnexada}>
+          <Paperclip size={12} />
+          <button type="button" className={styles.evidenciaLink} onClick={handleVerEvidencia} disabled={abrindo}>
+            {abrindo ? "Abrindo..." : acao.evidenciaFileName || "Evidência anexada"}
+          </button>
+          {acao.evidenciaUploadedEm && (
+            <span className={styles.evidenciaMeta}>
+              · {formatarDataHora(acao.evidenciaUploadedEm)}
+              {acao.evidenciaUploadedPor ? ` · ${acao.evidenciaUploadedPor}` : ""}
+            </span>
+          )}
+          {podeEditar && (
+            <button type="button" className={styles.iconBtnPequeno} title="Remover evidência" onClick={handleRemoverEvidencia}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      ) : (
+        podeEditar && (
+          <button type="button" className={styles.evidenciaBtn} onClick={() => inputRef.current?.click()} disabled={enviando}>
+            {enviando ? <Loader2 size={12} className={styles.spin} /> : <Paperclip size={12} />}
+            {enviando ? "Enviando..." : "Anexar evidência"}
+          </button>
+        )
+      )}
+      {erro && <span className={styles.evidenciaErro}>{erro}</span>}
+    </div>
   );
 }

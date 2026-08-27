@@ -771,7 +771,10 @@ export type TipoCompetenciaPdi = "Comportamental" | "Tecnica";
 export type ResponsavelPdi = "Colaborador" | "Gestor" | "Ambos" | "";
 
 /** Uma ação de desenvolvimento dentro de um PdiItem — sem limite de
- * quantidade, o gestor adiciona/edita/remove livremente. */
+ * quantidade, o gestor adiciona/edita/remove livremente. `evidencia*` é
+ * opcional (nem toda ação precisa de comprovação anexada) — arquivo vive
+ * no bucket privado `pdi-evidencias`, `evidenciaStoragePath` é só a
+ * referência (ver pdiRepository.ts). */
 export interface PdiAcao {
   id: string;
   itemId: string;
@@ -780,6 +783,10 @@ export interface PdiAcao {
   prazo: string | null;
   status: StatusItemPdi;
   ordem: number;
+  evidenciaStoragePath: string | null;
+  evidenciaFileName: string | null;
+  evidenciaUploadedEm: string | null;
+  evidenciaUploadedPor: string | null;
   criadoEm: string;
   updatedAt: string;
 }
