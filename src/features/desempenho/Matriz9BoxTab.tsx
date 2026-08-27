@@ -90,17 +90,29 @@ export function Matriz9BoxTab() {
     [gestorPorColaborador],
   );
 
-  const opcoesDepartamento = useMemo(
-    () => ["Todos", ...Array.from(new Set(colaboradoresParaMatriz9Box.map((c) => c.depto).filter(Boolean))).sort()],
+  // Base das opções de departamento/gestor/cargo — sempre só colaboradores
+  // ativos, independente do filtro Ativo/Inativo/Todos selecionado na tela:
+  // um gestor sem nenhum colaborador ativo ligado a ele (ex.: o próprio
+  // gestor está desligado e não sobrou ninguém ativo na equipe) não deve
+  // aparecer como opção. Não aplica os próprios filtros de departamento/
+  // gestor/cargo aqui, senão cada dropdown ficaria restrito pelas escolhas
+  // dos outros dois.
+  const colaboradoresParaOpcoes = useMemo(
+    () => colaboradoresParaMatriz9Box.filter((c) => !c.desligado),
     [colaboradoresParaMatriz9Box],
+  );
+
+  const opcoesDepartamento = useMemo(
+    () => ["Todos", ...Array.from(new Set(colaboradoresParaOpcoes.map((c) => c.depto).filter(Boolean))).sort()],
+    [colaboradoresParaOpcoes],
   );
   const opcoesGestor = useMemo(
-    () => ["Todos", ...Array.from(new Set(colaboradoresParaMatriz9Box.map(liderancaDoCiclo).filter(Boolean))).sort()],
-    [colaboradoresParaMatriz9Box, liderancaDoCiclo],
+    () => ["Todos", ...Array.from(new Set(colaboradoresParaOpcoes.map(liderancaDoCiclo).filter(Boolean))).sort()],
+    [colaboradoresParaOpcoes, liderancaDoCiclo],
   );
   const opcoesCargo = useMemo(
-    () => ["Todos", ...Array.from(new Set(colaboradoresParaMatriz9Box.map((c) => c.cargo).filter(Boolean))).sort()],
-    [colaboradoresParaMatriz9Box],
+    () => ["Todos", ...Array.from(new Set(colaboradoresParaOpcoes.map((c) => c.cargo).filter(Boolean))).sort()],
+    [colaboradoresParaOpcoes],
   );
 
   const colaboradoresFiltrados = useMemo(
