@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge, Button, Drawer } from "../../components/ui";
-import { gerarIdPdiAcao, gerarIdPdiItem, pdiPodeSerConcluido, sugerirObjetivoEAcoes } from "../../domain/pdi";
+import { gerarIdPdiAcao, gerarIdPdiItem, pdiPodeSerConcluido, statusPdiAoSalvar, sugerirObjetivoEAcoes } from "../../domain/pdi";
 import { formatarDataHora } from "../../domain/dates";
 import { usePortalData } from "../../store/usePortalData";
 import type { Pdi, PdiAcao, PdiItem, ResponsavelPdi, StatusItemPdi } from "../../types/domain";
@@ -99,7 +99,7 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
 
   async function handleSalvar(novoStatus?: "Concluído") {
     setSalvando(novoStatus === "Concluído" ? "concluir" : "salvar");
-    const result = await salvarPdi(novoStatus ? { ...rascunho, status: novoStatus } : rascunho);
+    const result = await salvarPdi({ ...rascunho, status: novoStatus ?? statusPdiAoSalvar(rascunho.status) });
     setSalvando(null);
     if (result.ok) {
       setRascunho({ ...result.pdi, itens: result.pdi.itens.map((i) => ({ ...i, acoes: i.acoes.map((a) => ({ ...a })) })) });

@@ -2,7 +2,7 @@
 // estado nem dependência de UI/Supabase. Ver README > "Gestão de Desempenho"
 // e domain/avaliacaoDesempenho.ts (mesmo espírito).
 
-import type { PdiBibliotecaItem, TipoCompetenciaPdi } from "../types/domain";
+import type { PdiBibliotecaItem, StatusPdi, TipoCompetenciaPdi } from "../types/domain";
 
 export function gerarIdPdiItem(): string {
   return `PDIITEM${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -20,6 +20,16 @@ export function gerarIdPdiAcao(): string {
 export function pdiPodeSerConcluido(pdi: { itens: { acoes: { status: string }[] }[] }): boolean {
   const todasAcoes = pdi.itens.flatMap((i) => i.acoes);
   return todasAcoes.length > 0 && todasAcoes.every((a) => a.status === "Concluída" || a.status === "Cancelada");
+}
+
+/** Status do plano ao salvar uma edição comum (não a conclusão, que já tem
+ * seu próprio botão/transição): um PDI "Não iniciado" que acabou de ser
+ * salvo já teve algum trabalho registrado nele, então deixa de fazer
+ * sentido continuar marcado como não iniciado — vira "Em andamento". Nunca
+ * mexe num PDI já "Em andamento" ou "Concluído" (conclusão/reabertura têm
+ * seus próprios fluxos, ver salvarPdiFn/reabrirPdiFn em usePortalData.ts). */
+export function statusPdiAoSalvar(statusAtual: StatusPdi): StatusPdi {
+  return statusAtual === "Não iniciado" ? "Em andamento" : statusAtual;
 }
 
 /** Procura na biblioteca do RH um modelo de objetivo/ações pra essa
