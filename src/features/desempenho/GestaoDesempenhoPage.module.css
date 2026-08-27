@@ -1,7 +1,13 @@
+.menuWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 20px;
+}
+
 .abas {
   display: flex;
   gap: 6px;
-  margin: 14px 0 20px;
   border-bottom: 1px solid var(--color-divider);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -13,6 +19,9 @@
 
 .aba,
 .abaAtiva {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 0;
   background: transparent;
   padding: 10px 14px;
@@ -31,4 +40,66 @@
 .abaAtiva {
   color: var(--color-brand);
   border-bottom-color: var(--color-brand);
+}
+
+.chevron,
+.chevronAberto {
+  flex: none;
+  color: var(--color-muted-light);
+  transition: transform 0.15s ease;
+}
+
+.abaAtiva .chevron,
+.abaAtiva .chevronAberto {
+  color: var(--color-brand);
+}
+
+.chevronAberto {
+  transform: rotate(180deg);
+}
+
+/* Segundo nível — itens do grupo aberto no momento, mesma linguagem visual
+ * das abas, num degrau abaixo pra deixar clara a hierarquia grupo > item. */
+.subAbas {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 10px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  /* Sem barra de rolagem visível — rolagem por toque/arraste continua
+   * funcionando como rede de segurança em telas muito estreitas, mas não
+   * aparece nenhuma barra (os rótulos foram encurtados pra caber numa
+   * linha só no caso comum). */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.subAbas::-webkit-scrollbar {
+  display: none;
+}
+
+.subAba,
+.subAbaAtiva {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--color-muted);
+}
+
+.subAba:hover {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.subAbaAtiva {
+  color: #fff;
+  background: var(--color-brand);
 }
