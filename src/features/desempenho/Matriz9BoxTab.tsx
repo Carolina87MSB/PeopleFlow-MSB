@@ -1,8 +1,10 @@
-import { Fragment, useMemo, useState } from "react";
-import { EmptyState } from "../../components/ui";
+import { Fragment, useCallback, useMemo, useState } from "react";
+import { HelpCircle } from "lucide-react";
+import { EmptyState, Modal } from "../../components/ui";
 import { posicionarMatriz9Box } from "../../domain/matriz9Box";
 import type { PosicaoMatriz9Box } from "../../domain/matriz9Box";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
+import { EXPLICACAO_DESEMPENHO, EXPLICACAO_POTENCIAL, ORIENTACAO_GERAL_9BOX, orientacaoDoQuadrante } from "../../domain/orientacaoMatriz9Box";
 import { usePortalData } from "../../store/usePortalData";
 import type { AvaliacaoDesempenho, AvaliacaoPotencial, Colaborador, FaixaMatriz9Box } from "../../types/domain";
 import { Matriz9BoxDrawer } from "./Matriz9BoxDrawer";
@@ -40,16 +42,61 @@ export function Matriz9BoxTab() {
   const [cargoFiltro, setCargoFiltro] = useState("Todos");
   const [statusFiltro, setStatusFiltro] = useState<"Ativo" | "Inativo" | "Todos">("Ativo");
   const [entradaAberta, setEntradaAberta] = useState<EntradaMatriz9Box | null>(null);
+  const [mostrarOrientacaoGeral, setMostrarOrientacaoGeral] = useState(false);
+  const [quadranteInfoAberto, setQuadranteInfoAberto] = useState<{ potencial: FaixaMatriz9Box; desempenho: FaixaMatriz9Box } | null>(
+    null,
+  );
 
   const cicloSelecionado = ciclosAvaliacaoDesempenho.find((c) => c.id === cicloId) ?? ciclosAvaliacaoDesempenho[0] ?? null;
+
+  // Fichas GESTOR Homologadas do ciclo selecionado, indexadas por
+  // colaborador — o filtro é por statusCalibracao === "Homologada"
+  // explicitamente (Etapa 6: Comitê de Calibração), nunca por
+  // status === "Concluída"/nota-não-nula: uma ficha só "Concluída" (nem
+  // sequer entrou em calibração ainda) ou uma "Aguardando Calibração" não é
+  // definitiva — só depois de homologada a Nota Oficial (notaFinalOficial/
+  // notaOficial) é o que a Matriz consome, nunca a nota bruta do gestor.
+  const gestorPorColaborador = useMemo(() => {
+    const mapa = new Map<string, AvaliacaoDesempenho>();
+    if (!cicloSelecionado) return mapa;
+    for (const a of avaliacoesDesempenho) {
+      if (a.tipo === "GESTOR" && a.statusCalibracao === "Homologada" && a.cicloId === cicloSelecionado.id) {
+        mapa.set(a.colaboradorNome, a);
+      }
+    }
+    return mapa;
+  }, [avaliacoesDesempenho, cicloSelecionado]);
+
+  const potencialPorColaborador = useMemo(() => {
+    const mapa = new Map<string, AvaliacaoPotencial>();
+    if (!cicloSelecionado) return mapa;
+    for (const a of avaliacoesPotencial) {
+      if (a.statusCalibracao === "Homologada" && a.cicloId === cicloSelecionado.id) {
+        mapa.set(a.colaboradorNome, a);
+      }
+    }
+    return mapa;
+  }, [avaliacoesPotencial, cicloSelecionado]);
+
+  /** Liderança pra agrupar/filtrar aqui é sempre `gestorAvaliador` (quem de
+   * fato avaliou o colaborador NESTE ciclo, congelado na própria ficha) —
+   * nunca `colaborador.gestor` (atual/ao vivo): uma promoção/transferência
+   * depois do ciclo não pode reatribuir retroativamente a quem avaliou.
+   * Cai pro gestor atual só quando ainda não existe ficha GESTOR homologada
+   * pra essa pessoa neste ciclo (senão ela não apareceria em filtro nenhum
+   * antes da calibração). */
+  const liderancaDoCiclo = useCallback(
+    (colaborador: Colaborador): string => gestorPorColaborador.get(colaborador.nome)?.gestorAvaliador || colaborador.gestor,
+    [gestorPorColaborador],
+  );
 
   const opcoesDepartamento = useMemo(
     () => ["Todos", ...Array.from(new Set(colaboradoresParaMatriz9Box.map((c) => c.depto).filter(Boolean))).sort()],
     [colaboradoresParaMatriz9Box],
   );
   const opcoesGestor = useMemo(
-    () => ["Todos", ...Array.from(new Set(colaboradoresParaMatriz9Box.map((c) => c.gestor).filter(Boolean))).sort()],
-    [colaboradoresParaMatriz9Box],
+    () => ["Todos", ...Array.from(new Set(colaboradoresParaMatriz9Box.map(liderancaDoCiclo).filter(Boolean))).sort()],
+    [colaboradoresParaMatriz9Box, liderancaDoCiclo],
   );
   const opcoesCargo = useMemo(
     () => ["Todos", ...Array.from(new Set(colaboradoresParaMatriz9Box.map((c) => c.cargo).filter(Boolean))).sort()],
@@ -61,35 +108,15 @@ export function Matriz9BoxTab() {
       colaboradoresParaMatriz9Box.filter(
         (c) =>
           (departamentoFiltro === "Todos" || c.depto === departamentoFiltro) &&
-          (gestorFiltro === "Todos" || c.gestor === gestorFiltro) &&
+          (gestorFiltro === "Todos" || liderancaDoCiclo(c) === gestorFiltro) &&
           (cargoFiltro === "Todos" || c.cargo === cargoFiltro) &&
           (statusFiltro === "Todos" || (statusFiltro === "Ativo" ? !c.desligado : c.desligado)),
       ),
-    [colaboradoresParaMatriz9Box, departamentoFiltro, gestorFiltro, cargoFiltro, statusFiltro],
+    [colaboradoresParaMatriz9Box, liderancaDoCiclo, departamentoFiltro, gestorFiltro, cargoFiltro, statusFiltro],
   );
 
-  // Fichas Homologadas do ciclo selecionado, indexadas por colaborador — o
-  // filtro é por statusCalibracao === "Homologada" explicitamente (Etapa 6:
-  // Comitê de Calibração), nunca por status === "Concluída"/nota-não-nula:
-  // uma ficha só "Concluída" (nem sequer entrou em calibração ainda) ou uma
-  // "Aguardando Calibração" não é definitiva — só depois de homologada a
-  // Nota Oficial (notaFinalOficial/notaOficial) é o que a Matriz consome,
-  // nunca a nota bruta do gestor.
   const { entradas, semPosicao } = useMemo(() => {
     if (!cicloSelecionado) return { entradas: [] as EntradaMatriz9Box[], semPosicao: 0 };
-
-    const gestorPorColaborador = new Map<string, AvaliacaoDesempenho>();
-    for (const a of avaliacoesDesempenho) {
-      if (a.tipo === "GESTOR" && a.statusCalibracao === "Homologada" && a.cicloId === cicloSelecionado.id) {
-        gestorPorColaborador.set(a.colaboradorNome, a);
-      }
-    }
-    const potencialPorColaborador = new Map<string, AvaliacaoPotencial>();
-    for (const a of avaliacoesPotencial) {
-      if (a.statusCalibracao === "Homologada" && a.cicloId === cicloSelecionado.id) {
-        potencialPorColaborador.set(a.colaboradorNome, a);
-      }
-    }
 
     const entradasResult: EntradaMatriz9Box[] = [];
     let semPosicaoResult = 0;
@@ -106,7 +133,7 @@ export function Matriz9BoxTab() {
       entradasResult.push({ colaborador, notaDesempenho, notaPotencial, posicao, ciclo: cicloSelecionado.nome });
     }
     return { entradas: entradasResult, semPosicao: semPosicaoResult };
-  }, [colaboradoresFiltrados, avaliacoesDesempenho, avaliacoesPotencial, cicloSelecionado, configAvaliacaoDesempenho]);
+  }, [colaboradoresFiltrados, gestorPorColaborador, potencialPorColaborador, cicloSelecionado, configAvaliacaoDesempenho]);
 
   if (ciclosAvaliacaoDesempenho.length === 0) {
     return <EmptyState message="Nenhum ciclo de Avaliação de Desempenho aberto ainda." />;
@@ -120,7 +147,30 @@ export function Matriz9BoxTab() {
           só depois que as duas avaliações são homologadas pelo RH (aba Calibração). Sem preenchimento manual: pra
           mudar a posição de alguém, calibre/atualize as avaliações de origem.
         </p>
+        <button
+          type="button"
+          className={styles.orientacaoBtn}
+          onClick={() => setMostrarOrientacaoGeral((v) => !v)}
+        >
+          <HelpCircle size={14} /> Como interpretar a 9 Box
+        </button>
       </div>
+
+      {mostrarOrientacaoGeral && (
+        <div className={styles.orientacaoGeral}>
+          <p>{ORIENTACAO_GERAL_9BOX}</p>
+          <div className={styles.orientacaoDimensoes}>
+            <div>
+              <strong>Desempenho</strong>
+              <p>{EXPLICACAO_DESEMPENHO}</p>
+            </div>
+            <div>
+              <strong>Potencial</strong>
+              <p>{EXPLICACAO_POTENCIAL}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={styles.filtros}>
         <select className={styles.select} value={cicloId} onChange={(e) => setCicloId(e.target.value)}>
@@ -181,7 +231,17 @@ export function Matriz9BoxTab() {
               const doQuadrante = entradas.filter((e) => e.posicao.faixaPotencial === linha && e.posicao.faixaDesempenho === coluna);
               return (
                 <div key={`${linha}-${coluna}`} className={styles.celula}>
-                  <span className={styles.celulaTitulo}>{doQuadrante[0]?.posicao.nomeQuadrante ?? ""}</span>
+                  <div className={styles.celulaHeader}>
+                    <span className={styles.celulaTitulo}>{orientacaoDoQuadrante(linha, coluna).nome}</span>
+                    <button
+                      type="button"
+                      className={styles.infoBtn}
+                      title="O que este quadrante significa"
+                      onClick={() => setQuadranteInfoAberto({ potencial: linha, desempenho: coluna })}
+                    >
+                      <HelpCircle size={13} />
+                    </button>
+                  </div>
                   {doQuadrante.length === 0 ? (
                     <span className={styles.celulaVazia}>Nenhum colaborador</span>
                   ) : (
@@ -209,6 +269,29 @@ export function Matriz9BoxTab() {
       </div>
 
       {entradaAberta && <Matriz9BoxDrawer entrada={entradaAberta} onClose={() => setEntradaAberta(null)} />}
+
+      {quadranteInfoAberto &&
+        (() => {
+          const orientacao = orientacaoDoQuadrante(quadranteInfoAberto.potencial, quadranteInfoAberto.desempenho);
+          return (
+            <Modal title={orientacao.nome} onClose={() => setQuadranteInfoAberto(null)} width={380}>
+              <div className={styles.infoRapida}>
+                <div>
+                  <span className={styles.infoRapidaLabel}>O que significa</span>
+                  <p>{orientacao.oQueSignifica}</p>
+                </div>
+                <div>
+                  <span className={styles.infoRapidaLabel}>Principal ponto de atenção</span>
+                  <p>{orientacao.principalPontoDeAtencao}</p>
+                </div>
+                <div>
+                  <span className={styles.infoRapidaLabel}>Próximo passo recomendado</span>
+                  <p>{orientacao.proximoPasso}</p>
+                </div>
+              </div>
+            </Modal>
+          );
+        })()}
     </>
   );
 }

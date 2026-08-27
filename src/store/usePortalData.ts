@@ -377,10 +377,14 @@ export function usePortalData(): PortalData {
   }, [perfil, me, ativosGlobal]);
 
   /** Matriz 9 Box (etapa 5) — RH vê todos, incl. desligados (o filtro de
-   * status Ativo/Inativo é da própria tela); Gestor/Diretoria só quem tem
-   * `gestor === me` (mesma regra da AVD/Potencial, não a de
-   * `colaboradoresListagem`, que dá visão total à Diretoria); Colaborador,
-   * nunca (defesa em profundidade — a aba já é bloqueada em GestaoDesempenhoPage.tsx).
+   * status Ativo/Inativo é da própria tela); Gestor/Diretoria vê quem tem
+   * `gestor === me` (gestor atual) OU quem `me` avaliou como GESTOR em
+   * algum ciclo (`gestorAvaliador`, congelado na ficha) — união dos dois,
+   * não só o atual: uma promoção/transferência depois do ciclo não pode
+   * fazer alguém que eu avaliei sumir da minha Matriz 9 Box (achado real:
+   * Ana Maria/Fabiana mudaram de gestor depois do 2º Ciclo e sumiam da
+   * visão de quem realmente as avaliou). Colaborador, nunca (defesa em
+   * profundidade — a aba já é bloqueada em GestaoDesempenhoPage.tsx).
    * Exceção pontual: `colaboradores.matriz9box_visao_completa` (ligada
    * manualmente pelo RH via SQL) libera a empresa inteira pra um Gestor
    * específico que avalia gente fora da própria árvore no organograma — ver
@@ -390,8 +394,12 @@ export function usePortalData(): PortalData {
     if (perfil === "Colaborador") return [];
     const proprio = state.colaboradores.find((c) => c.nome === me);
     if (proprio?.matriz9BoxVisaoCompleta) return state.colaboradores;
-    return state.colaboradores.filter((c) => c.gestor === me);
-  }, [state.colaboradores, perfil, me]);
+    const avaliadosPorMimComoGestor = new Set<string>();
+    for (const a of state.avaliacoesDesempenho) {
+      if (a.tipo === "GESTOR" && a.gestorAvaliador === me) avaliadosPorMimComoGestor.add(a.colaboradorNome);
+    }
+    return state.colaboradores.filter((c) => c.gestor === me || avaliadosPorMimComoGestor.has(c.nome));
+  }, [state.colaboradores, state.avaliacoesDesempenho, perfil, me]);
 
   /** Histórico (etapa 9) — inclui desligados, mesma ideia de
    * `colaboradoresParaMatriz9Box` (histórico é registro, não gestão do
