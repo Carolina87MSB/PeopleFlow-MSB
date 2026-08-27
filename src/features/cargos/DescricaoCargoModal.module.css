@@ -1,27 +1,3 @@
-.drawerHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.drawerHeaderTopo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.drawerNome {
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.drawerSub {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.82);
-}
-
 .bannerRevisao {
   margin-bottom: 20px;
   padding: 12px 14px;
@@ -45,43 +21,41 @@
 }
 
 .grupo {
-  margin-bottom: 20px;
-}
-
-.grupoAuditoria {
-  margin-bottom: 20px;
-  padding: 12px 14px;
-  background: var(--color-brand-pale, #eef7f9);
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(86, 164, 187, 0.25);
+  margin-bottom: 22px;
 }
 
 .sectionTitle {
-  margin: 0 0 10px;
-  font-size: 12px;
+  margin: 0 0 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--color-navy);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-brand-dark);
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--color-divider);
 }
 
-.grupoAuditoria .sectionTitle {
-  margin-top: 0;
+.camposGrid {
+  display: grid;
+  gap: 12px 20px;
 }
 
-.camposGrupo {
-  display: flex;
-  flex-direction: column;
+.camposGridFull {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
-.campo {
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-divider);
+@media (max-width: 560px) {
+  .camposGrid {
+    grid-template-columns: 1fr !important;
+  }
 }
 
-.campo:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .campoTopo {
@@ -94,7 +68,15 @@
 .campoLabel {
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-muted-light);
+}
+
+.campoLabelCompacto {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--color-muted-light);
 }
@@ -119,11 +101,17 @@
 }
 
 .campoValor {
-  margin-top: 4px;
   font-size: 13px;
   color: var(--color-text);
   white-space: pre-wrap;
   line-height: 1.5;
+}
+
+.campoValorCompacto {
+  font-size: 11.5px;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  line-height: 1.4;
 }
 
 .vazio {
@@ -193,11 +181,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 20px;
-  background: var(--color-brand-pale, #eef7f9);
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(86, 164, 187, 0.25);
+  padding: 14px 16px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
 }
 
 .aprovacaoLinha {
@@ -209,19 +195,17 @@
 }
 
 .aprovacaoLabel {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-muted-light);
+  font-size: 12.5px;
+  color: var(--color-muted);
   flex: none;
-  min-width: 160px;
 }
 
 .aprovacaoValor {
-  font-size: 13px;
-  color: var(--color-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-navy);
   flex: 1;
+  text-align: right;
 }
 
 .aprovacaoData {
@@ -244,13 +228,17 @@
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-bottom: 8px;
 }
 
 .item {
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.item:last-child {
+  border-bottom: none;
 }
 
 .dot {

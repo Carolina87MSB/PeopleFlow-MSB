@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
-import { Badge, Button, Drawer } from "../../components/ui";
+import { Badge, Button, Modal } from "../../components/ui";
 import { CAMPOS_DESCRICAO_CARGO, descricaoCargoVazia } from "../../domain/descricaoCargo";
 import type { CampoDescricaoCargo, CampoMeta } from "../../domain/descricaoCargo";
 import { statusDescricaoCargoMeta } from "../../domain/colors";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalData } from "../../store/usePortalData";
 import type { HistoricoDescricaoCargo } from "../../types/domain";
-import styles from "./DescricaoCargoDrawer.module.css";
+import styles from "./DescricaoCargoModal.module.css";
 
-interface DescricaoCargoDrawerProps {
+interface DescricaoCargoModalProps {
   cargoNome: string;
   onClose: () => void;
 }
@@ -30,7 +30,7 @@ interface DescricaoCargoDrawerProps {
  * aprovado por, cada um com data) documentam esse fluxo. Dados de controle
  * (código/revisão/data) ficam em destaque no topo por serem usados em
  * auditorias. */
-export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawerProps) {
+export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalProps) {
   const {
     descricoesCargo,
     podeEditarSecaoDescricaoCargo,
@@ -103,19 +103,16 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
   const podeDecidir = podeAprovarDescricaoCargo && emRevisao;
 
   return (
-    <Drawer
-      onClose={onClose}
-      header={
-        <div className={styles.drawerHeader}>
-          <div className={styles.drawerHeaderTopo}>
-            <div className={styles.drawerNome}>{formatarNomeCargo(cargoNome)}</div>
-            <Badge bg={statusMeta.bg} fg={statusMeta.fg}>
-              {descricao.status}
-            </Badge>
-          </div>
-          <div className={styles.drawerSub}>Descrição de cargo · POP-RH-001</div>
-        </div>
+    <Modal
+      title={formatarNomeCargo(cargoNome)}
+      titleExtra={
+        <Badge bg={statusMeta.bg} fg={statusMeta.fg}>
+          {descricao.status}
+        </Badge>
       }
+      subtitle="Descrição de cargo · POP-RH-001"
+      onClose={onClose}
+      width={640}
     >
       {emRevisao && (
         <div className={styles.bannerRevisao}>
@@ -130,95 +127,106 @@ export function DescricaoCargoDrawer({ cargoNome, onClose }: DescricaoCargoDrawe
         </div>
       )}
 
-      {grupos.map(([grupo, campos]) => (
-        <div key={grupo} className={grupo === "Dados do formulário (auditoria)" ? styles.grupoAuditoria : styles.grupo}>
-          <h4 className={styles.sectionTitle}>{grupo}</h4>
-          <div className={styles.camposGrupo}>
-            {campos.map((campo) => (
-              <CampoEditavel
-                key={campo.key}
-                meta={campo}
-                valorOficial={descricao[campo.key]}
-                valorPendente={descricao.pendente?.[campo.key]}
-                podeEditar={podeEditarSecaoDescricaoCargo(cargoNome, campo.grupo)}
-                onSalvar={(novo) => handleSalvarCampo(campo.key, novo)}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-
-      <h4 className={styles.sectionTitle}>Aprovações</h4>
-      <div className={styles.aprovacoesBloco}>
-        <div className={styles.aprovacaoLinha}>
-          <span className={styles.aprovacaoLabel}>Elaborador/Revisado por</span>
-          <span className={styles.aprovacaoValor}>
-            {descricao.elaboradoPor ? (
-              <>
-                {descricao.elaboradoPor} <span className={styles.aprovacaoData}>· {formatarDataHora(descricao.elaboradoEm)}</span>
-              </>
-            ) : (
-              <span className={styles.vazio}>Ainda não registrado</span>
-            )}
-          </span>
-        </div>
-        <div className={styles.aprovacaoLinha}>
-          <span className={styles.aprovacaoLabel}>Aprovado por</span>
-          <span className={styles.aprovacaoValor}>
-            {descricao.aprovadoPor ? (
-              <>
-                {descricao.aprovadoPor} <span className={styles.aprovacaoData}>· {formatarDataHora(descricao.aprovadoEm)}</span>
-              </>
-            ) : (
-              <span className={styles.vazio}>Ainda não registrado</span>
-            )}
-          </span>
-          {podeDecidir && (
-            <div className={styles.aprovacaoAcoes}>
-              <Button variant="danger" onClick={handleRejeitar} disabled={processandoDecisao}>
-                Rejeitar alteração
-              </Button>
-              <Button variant="primary" onClick={handleAprovar} disabled={processandoDecisao}>
-                Aprovar alteração
-              </Button>
+      {grupos.map(([grupo, campos]) => {
+        const compacto = grupo === "Dados do formulário (auditoria)";
+        return (
+          <div key={grupo} className={styles.grupo}>
+            <h4 className={styles.sectionTitle}>{grupo}</h4>
+            <div
+              className={campos.length === 1 ? styles.camposGridFull : styles.camposGrid}
+              style={campos.length === 1 ? undefined : { gridTemplateColumns: `repeat(${campos.length}, 1fr)` }}
+            >
+              {campos.map((campo) => (
+                <CampoEditavel
+                  key={campo.key}
+                  meta={campo}
+                  valorOficial={descricao[campo.key]}
+                  valorPendente={descricao.pendente?.[campo.key]}
+                  podeEditar={podeEditarSecaoDescricaoCargo(cargoNome, campo.grupo)}
+                  onSalvar={(novo) => handleSalvarCampo(campo.key, novo)}
+                  compacto={compacto}
+                />
+              ))}
             </div>
-          )}
+          </div>
+        );
+      })}
+
+      <div className={styles.grupo}>
+        <h4 className={styles.sectionTitle}>Aprovações</h4>
+        <div className={styles.aprovacoesBloco}>
+          <div className={styles.aprovacaoLinha}>
+            <span className={styles.aprovacaoLabel}>Elaborador/Revisado por</span>
+            <span className={styles.aprovacaoValor}>
+              {descricao.elaboradoPor ? (
+                <>
+                  {descricao.elaboradoPor} <span className={styles.aprovacaoData}>· {formatarDataHora(descricao.elaboradoEm)}</span>
+                </>
+              ) : (
+                <span className={styles.vazio}>Ainda não registrado</span>
+              )}
+            </span>
+          </div>
+          <div className={styles.aprovacaoLinha}>
+            <span className={styles.aprovacaoLabel}>Aprovado por</span>
+            <span className={styles.aprovacaoValor}>
+              {descricao.aprovadoPor ? (
+                <>
+                  {descricao.aprovadoPor} <span className={styles.aprovacaoData}>· {formatarDataHora(descricao.aprovadoEm)}</span>
+                </>
+              ) : (
+                <span className={styles.vazio}>Ainda não registrado</span>
+              )}
+            </span>
+            {podeDecidir && (
+              <div className={styles.aprovacaoAcoes}>
+                <Button variant="danger" onClick={handleRejeitar} disabled={processandoDecisao}>
+                  Rejeitar alteração
+                </Button>
+                <Button variant="primary" onClick={handleAprovar} disabled={processandoDecisao}>
+                  Aprovar alteração
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <h4 className={styles.sectionTitle}>Histórico de atualizações{historico.length > 0 ? ` (${historico.length})` : ""}</h4>
-      {carregandoHistorico ? (
-        <div className={styles.semHistorico}>Carregando histórico...</div>
-      ) : historico.length === 0 ? (
-        <div className={styles.semHistorico}>Nenhuma alteração registrada ainda para esta descrição de cargo.</div>
-      ) : (
-        <div className={styles.timeline}>
-          {historico.map((h) => (
-            <div key={h.id} className={styles.item}>
-              <span className={styles.dot} />
-              <div className={styles.itemContent}>
-                <div className={styles.itemTopo}>
-                  <span className={styles.itemTitulo}>{h.campoLabel}</span>
-                  <span className={styles.itemData}>{formatarDataHora(h.editadoEm)}</span>
+      <div className={styles.grupo}>
+        <h4 className={styles.sectionTitle}>Histórico de atualizações{historico.length > 0 ? ` (${historico.length})` : ""}</h4>
+        {carregandoHistorico ? (
+          <div className={styles.semHistorico}>Carregando histórico...</div>
+        ) : historico.length === 0 ? (
+          <div className={styles.semHistorico}>Nenhuma alteração registrada ainda para esta descrição de cargo.</div>
+        ) : (
+          <div className={styles.timeline}>
+            {historico.map((h) => (
+              <div key={h.id} className={styles.item}>
+                <span className={styles.dot} />
+                <div className={styles.itemContent}>
+                  <div className={styles.itemTopo}>
+                    <span className={styles.itemTitulo}>{h.campoLabel}</span>
+                    <span className={styles.itemData}>{formatarDataHora(h.editadoEm)}</span>
+                  </div>
+                  <p className={styles.itemDescricao}>
+                    {h.valorAnterior ? (
+                      <>
+                        <s className={styles.valorAnterior}>{truncar(h.valorAnterior)}</s>{" "}
+                      </>
+                    ) : null}
+                    {truncar(h.valorNovo) || "(vazio)"}
+                  </p>
+                  <p className={styles.itemAutor}>
+                    por {h.editadoPor}
+                    {h.perfil ? ` · ${h.perfil}` : ""}
+                  </p>
                 </div>
-                <p className={styles.itemDescricao}>
-                  {h.valorAnterior ? (
-                    <>
-                      <s className={styles.valorAnterior}>{truncar(h.valorAnterior)}</s>{" "}
-                    </>
-                  ) : null}
-                  {truncar(h.valorNovo) || "(vazio)"}
-                </p>
-                <p className={styles.itemAutor}>
-                  por {h.editadoPor}
-                  {h.perfil ? ` · ${h.perfil}` : ""}
-                </p>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Drawer>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -240,9 +248,11 @@ interface CampoEditavelProps {
   valorPendente: string | undefined;
   podeEditar: boolean;
   onSalvar: (valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
+  /** "Dados do formulário (auditoria)" é metadado, não conteúdo do cargo — rótulo/valor menores, mesmo espírito da versão aprovada da tela. */
+  compacto?: boolean;
 }
 
-function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar }: CampoEditavelProps) {
+function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar, compacto }: CampoEditavelProps) {
   const temProposta = valorPendente !== undefined && valorPendente !== valorOficial;
   const valorEfetivo = temProposta ? (valorPendente as string) : valorOficial;
 
@@ -265,7 +275,7 @@ function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar
   return (
     <div className={styles.campo}>
       <div className={styles.campoTopo}>
-        <span className={styles.campoLabel}>{meta.label}</span>
+        <span className={compacto ? styles.campoLabelCompacto : styles.campoLabel}>{meta.label}</span>
         {podeEditar && !editando ? (
           <button type="button" className={styles.editarBtn} onClick={iniciarEdicao} title={`Editar ${meta.label}`}>
             <Pencil size={12} />
@@ -290,7 +300,9 @@ function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar
         </div>
       ) : (
         <>
-          <div className={styles.campoValor}>{valorOficial || <span className={styles.vazio}>Não preenchido</span>}</div>
+          <div className={compacto ? styles.campoValorCompacto : styles.campoValor}>
+            {valorOficial || <span className={styles.vazio}>Não preenchido</span>}
+          </div>
           {temProposta && (
             <div className={styles.propostaPendente}>
               <span className={styles.propostaTag}>Proposta pendente de aprovação</span>

@@ -33,6 +33,13 @@
   z-index: 1;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .title {
   margin: 0;
   font-size: 17px;

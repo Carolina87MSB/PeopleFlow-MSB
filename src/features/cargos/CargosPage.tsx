@@ -8,7 +8,7 @@ import { nivelMeta, statusDescricaoCargoMeta } from "../../domain/colors";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
-import { DescricaoCargoDrawer } from "./DescricaoCargoDrawer";
+import { DescricaoCargoModal } from "./DescricaoCargoModal";
 import styles from "./CargosPage.module.css";
 
 const STATUS_SEM_DESCRICAO = "Sem descrição";
@@ -203,7 +203,7 @@ export function CargosPage() {
         </table>
       </div>
 
-      {cargoAberto ? <DescricaoCargoDrawer cargoNome={cargoAberto} onClose={() => setCargoAberto(null)} /> : null}
+      {cargoAberto ? <DescricaoCargoModal cargoNome={cargoAberto} onClose={() => setCargoAberto(null)} /> : null}
     </>
   );
 }
