@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Badge, EmptyState, tableStyles } from "../../components/ui";
 import { usePortalData } from "../../store/usePortalData";
-import { PdiDrawer } from "./PdiDrawer";
+import { PdiModal } from "./PdiModal";
 import styles from "./PdiTab.module.css";
 
 const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
@@ -121,7 +121,7 @@ export function PdiTab() {
         </div>
       )}
 
-      {pdiAberto && <PdiDrawer pdi={pdiAberto} onClose={() => setPdiAbertoId(null)} />}
+      {pdiAberto && <PdiModal pdi={pdiAberto} onClose={() => setPdiAbertoId(null)} />}
     </>
   );
 }

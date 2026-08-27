@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Loader2, Paperclip, Plus, Trash2, X } from "lucide-react";
-import { Badge, Button, Drawer } from "../../components/ui";
+import { Badge, Button, Modal } from "../../components/ui";
 import { gerarIdPdiAcao, gerarIdPdiItem, pdiPodeSerConcluido, statusPdiAoSalvar, sugerirObjetivoEAcoes } from "../../domain/pdi";
 import { formatarDataHora } from "../../domain/dates";
 import { getEvidenciaPdiAcaoSignedUrl, removerEvidenciaPdiAcao, uploadEvidenciaPdiAcao } from "../../repositories/pdiRepository";
@@ -8,7 +8,7 @@ import { usePortalData } from "../../store/usePortalData";
 import type { Pdi, PdiAcao, PdiItem, ResponsavelPdi, StatusItemPdi } from "../../types/domain";
 import styles from "./PdiTab.module.css";
 
-interface PdiDrawerProps {
+interface PdiModalProps {
   pdi: Pdi;
   onClose: () => void;
 }
@@ -40,7 +40,7 @@ function acaoVazia(itemId: string): PdiAcao {
  * gestor, cada um com uma lista de ações de desenvolvimento. "Concluir" só
  * fica disponível quando há pelo menos 1 ação e todas estão
  * Concluída/Cancelada (ver pdiPodeSerConcluido em domain/pdi.ts). */
-export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
+export function PdiModal({ pdi, onClose }: PdiModalProps) {
   const { colaboradores, competenciasComportamentais, kpisCargo, pdiBiblioteca, perfil, conta, podeEditarPdi, salvarPdi, reabrirPdi } = usePortalData();
 
   const podeEditar = podeEditarPdi(pdi);
@@ -146,26 +146,28 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
   const podeConcluir = podeEditar && rascunho.status !== "Concluído" && pdiPodeSerConcluido(rascunho);
 
   return (
-    <Drawer
-      onClose={onClose}
-      header={
-        <div className={styles.drawerHeader}>
-          <div className={styles.drawerNome}>{pdi.colaboradorNome}</div>
-          <div className={styles.drawerSub}>PDI · {pdi.ciclo}</div>
-        </div>
-      }
-    >
-      <div className={styles.statusRow}>
+    <Modal
+      title={pdi.colaboradorNome}
+      titleExtra={
         <Badge bg="var(--color-brand-pale, #eef7f9)" fg="var(--color-brand)">
           {rascunho.status}
         </Badge>
-        {rascunho.status === "Concluído" && (
-          <span className={styles.trancada}>
-            Concluído por {rascunho.concluidoPor || "—"} em {formatarDataHora(rascunho.concluidoEm)}.
-          </span>
-        )}
-        {!podeEditar && rascunho.status !== "Concluído" && <span className={styles.trancada}>Somente leitura.</span>}
-      </div>
+      }
+      subtitle={`PDI · ${pdi.ciclo}`}
+      onClose={onClose}
+      width={680}
+    >
+      {(rascunho.status === "Concluído" || !podeEditar) && (
+        <div className={styles.statusRow}>
+          {rascunho.status === "Concluído" ? (
+            <span className={styles.trancada}>
+              Concluído por {rascunho.concluidoPor || "—"} em {formatarDataHora(rascunho.concluidoEm)}.
+            </span>
+          ) : (
+            <span className={styles.trancada}>Somente leitura.</span>
+          )}
+        </div>
+      )}
 
       {rascunho.itens.length === 0 && (
         <p className={styles.explicacao}>Nenhuma competência/KPI abaixo da nota mínima nesta avaliação — adicione manualmente, se necessário.</p>
@@ -244,7 +246,7 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
             <div className={styles.acoesLista}>
               {item.acoes.map((acao) => (
                 <div key={acao.id} className={styles.acaoItem}>
-                  <div className={styles.acaoItemLinha}>
+                  <div className={styles.acaoItemTopo}>
                     <input
                       className={styles.input}
                       placeholder="Descrição da ação"
@@ -252,6 +254,14 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
                       onChange={(e) => atualizarAcao(item.id, acao.id, { descricao: e.target.value })}
                       disabled={!podeEditar}
                     />
+                    {podeEditar && (
+                      <button type="button" className={styles.iconBtnPequeno} title="Remover ação" onClick={() => removerAcao(item.id, acao.id)}>
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className={styles.acaoItemGrid}>
                     <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeEditar}>
                       {RESPONSAVEL_OPCOES.map((r) => (
                         <option key={r} value={r}>
@@ -267,11 +277,6 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
                         </option>
                       ))}
                     </select>
-                    {podeEditar && (
-                      <button type="button" className={styles.iconBtnPequeno} title="Remover ação" onClick={() => removerAcao(item.id, acao.id)}>
-                        <Trash2 size={13} />
-                      </button>
-                    )}
                   </div>
 
                   <EvidenciaAcao acao={acao} podeEditar={podeEditar} onAtualizar={(patch) => atualizarAcao(item.id, acao.id, patch)} autor={conta.nome} />
@@ -346,7 +351,7 @@ export function PdiDrawer({ pdi, onClose }: PdiDrawerProps) {
           </>
         )}
       </div>
-    </Drawer>
+    </Modal>
   );
 }
 

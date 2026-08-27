@@ -43,23 +43,6 @@
   min-width: 180px;
 }
 
-.drawerHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.drawerNome {
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.drawerSub {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.82);
-}
-
 .statusRow {
   display: flex;
   align-items: center;
@@ -175,17 +158,27 @@
   gap: 6px;
 }
 
-.acaoItemLinha {
+.acaoItemTopo {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.acaoItemLinha .input {
-  flex: 2;
-}
-.acaoItemLinha .select {
+.acaoItemTopo .input {
   flex: 1;
+}
+
+/* Responsável/Prazo/Status — grid que quebra linha quando não cabe, nunca
+ * rolagem horizontal (era um flex row rígido, cortava conteúdo em telas
+ * estreitas). */
+.acaoItemGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.acaoItemGrid .select {
+  min-width: 0;
 }
 
 .acaoItemEvidencia {
