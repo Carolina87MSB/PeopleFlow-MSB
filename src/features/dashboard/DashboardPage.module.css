@@ -1,11 +1,61 @@
+/* Dashboard gerencial — camada visual alinhada à especificação
+ * "Padrão Visual Portal DP" (28/08/2026).
+ *
+ * Geometria, tipografia e hierarquia seguem a referência; as cores usam os
+ * tokens do PeopleFlow (--color-*), cujo acento já é o teal da referência
+ * (ver index.css). Nada aqui toca componentes compartilhados: KpiCard, Card,
+ * ProgressBar, Header e Sidebar continuam como estão, para que nenhuma outra
+ * tela mude de aparência.
+ *
+ * Constantes da referência aplicadas aqui:
+ *   raio do card 10px · raio de controle 8px · gap 16px · gap de seção 28px
+ *   padding do card 20px · barra 4px · rótulo de seção 10px/600/+0.09em
+ *   número do indicador 30px/600 com numerais tabulares
+ */
+
+.page {
+  --dp-radius: 10px;
+  --dp-radius-control: 8px;
+  --dp-gap: 16px;
+  --dp-pad: 20px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ---------------------------------------------------------------- header */
+
+/* Azul #56a4bb fixo por decisão de 28/08/2026 — só nestes dois elementos do
+ * cabeçalho do Dashboard. O restante da tela (barras, links, avatares) segue
+ * o --color-brand teal, e Button.module.css / Header.module.css continuam
+ * intactos para todas as outras telas.
+ *
+ * Seletor duplicado de propósito: .botaoNovaMov sozinho empata em
+ * especificidade com o .primary do Button, e a ordem dos módulos CSS no
+ * bundle não é garantida. Dobrar a classe resolve sem !important. */
+.botaoNovaMov.botaoNovaMov {
+  background: #56a4bb;
+}
+.botaoNovaMov.botaoNovaMov:hover:not(:disabled) {
+  /* Par escuro do #56a4bb (Azul #2), para o hover não voltar ao teal. */
+  background: #5f89a1;
+}
+
+/* Mesma razão do seletor duplicado acima: empata com .eyebrow do Header. */
+.eyebrowAzul.eyebrowAzul {
+  color: #56a4bb;
+}
+
 .search {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 34px;
   background: #fff;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
+  border-radius: var(--dp-radius-control);
+  padding: 0 12px;
   color: var(--color-muted-light);
   min-width: 220px;
 }
@@ -14,17 +64,45 @@
   border: 0;
   outline: none;
   background: transparent;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--color-text);
   width: 100%;
+}
+
+/* Card de cabeçalho da página: resumo à esquerda, filtros e ações à direita,
+ * numa linha só — mesmo arranjo do card de topo da referência. O eyebrow e o
+ * título continuam vindo do <Header> compartilhado, logo acima. */
+.topoCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--dp-radius);
+  box-shadow: var(--shadow-card);
+  padding: 16px var(--dp-pad);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+}
+
+.topoResumo {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.topoResumo strong {
+  color: var(--color-navy);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .filtros {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 8px;
 }
 
 .periodoCampo {
@@ -35,8 +113,8 @@
 
 .periodoLabel {
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--color-muted-light);
 }
@@ -45,53 +123,229 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--color-muted);
 }
 
+/* Controles: 34px de altura, raio 8, peso 500 — padrão dos selects da
+ * referência. */
 .periodoInput {
+  height: 34px;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 9px 10px;
-  font: 600 12.5px var(--font-sans);
+  border-radius: var(--dp-radius-control);
+  padding: 0 10px;
+  font: 500 12.5px var(--font-sans);
   color: var(--color-text);
   background: #fff;
 }
 
 .select {
+  height: 34px;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
-  font: 600 12.5px var(--font-sans);
+  border-radius: var(--dp-radius-control);
+  padding: 0 12px;
+  font: 500 12.5px var(--font-sans);
   color: var(--color-text);
   background: #fff;
-  flex: 1 1 160px;
-  min-width: 160px;
+  flex: 0 1 170px;
+  min-width: 150px;
+}
+
+/* --------------------------------------------------------------- seções */
+
+.secao {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Rótulo de seção em caixa alta à esquerda + metadado alinhado à direita, na
+ * mesma baseline — o padrão que a referência usa no lugar de divisórias. */
+.secaoHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .secaoTitulo {
-  margin: 28px 0 12px;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-navy);
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-muted-light);
 }
-.secaoTitulo:first-of-type {
+
+.secaoContexto {
+  font-size: 10.5px;
+  color: var(--color-muted-lighter);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.secaoContexto strong {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------- indicadores */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--dp-gap);
+}
+
+/* height: 100% para o card dentro do link continuar acompanhando a altura da
+ * linha da grade (o <a> é o item de grid, não o card). */
+.kpiLink {
+  display: block;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+
+.kpiCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--dp-radius);
+  box-shadow: var(--shadow-card);
+  padding: var(--dp-pad);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+}
+
+/* Superfície escura — exatamente um card por tela, reservado ao indicador
+ * consolidado da seção (Headcount Real). */
+.kpiDark {
+  background: var(--color-navy);
+  border-color: var(--color-navy);
+}
+
+.kpiDanger {
+  background: var(--color-danger-bg);
+  border-color: #f0d5d1;
+}
+
+.kpiWarning {
+  background: var(--color-warning-bg);
+  border-color: #efe0c4;
+}
+
+.kpiLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 16px;
+}
+
+.kpiLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted-light);
+  line-height: 1.3;
+}
+.kpiLabel svg {
+  flex: none;
+}
+.kpiDark .kpiLabel {
+  color: rgba(255, 255, 255, 0.62);
+}
+.kpiDanger .kpiLabel {
+  color: var(--color-danger-fg);
+}
+.kpiWarning .kpiLabel {
+  color: var(--color-warning-fg);
+}
+
+.kpiValue {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  color: var(--color-navy);
+  font-variant-numeric: tabular-nums;
+}
+.kpiDark .kpiValue {
+  color: #fff;
+}
+
+/* Estado zero em cinza — comunica "sem ocorrência" em vez de parecer erro. */
+.kpiZero {
+  color: var(--color-muted-lighter);
+}
+
+.kpiHint {
+  font-size: 11px;
+  color: var(--color-muted-light);
+  line-height: 1.45;
+}
+.kpiDark .kpiHint {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* Sem `flex: 1` aqui: dentro do .kpiCard o container é uma coluna flex, e
+ * flex-grow esticaria a barra na vertical. Quem precisa crescer declara
+ * isso no próprio contexto (ver .deptRow .barTrack). */
+.barTrack {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-divider);
+  overflow: hidden;
+  flex: none;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.deptRow .barTrack {
+  flex: 1;
+  width: auto;
   margin-top: 0;
 }
 
-.cardSubtitulo {
-  margin: -6px 0 14px;
-  font-size: 11.5px;
-  color: var(--color-muted);
+.gestorInfo .barTrack {
+  margin-top: 0;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-brand);
+}
+
+.kpiDark .barTrack {
+  background: rgba(255, 255, 255, 0.18);
+}
+.kpiDark .barFill {
+  background: var(--color-cyan);
+}
+
+.kpiBarRotulo {
+  font-size: 10.5px;
+  color: var(--color-muted-light);
+}
+.kpiDark .kpiBarRotulo {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .headcountInput {
-  width: 90px;
+  width: 96px;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  padding: 4px 8px;
-  font: 800 20px var(--font-sans);
+  border-radius: var(--dp-radius-control);
+  padding: 2px 8px;
+  font: 600 26px var(--font-sans);
   color: var(--color-navy);
+  font-variant-numeric: tabular-nums;
 }
 
 .headcountAcoes {
@@ -106,7 +360,7 @@
   width: 22px;
   height: 22px;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   background: #fff;
   color: var(--color-muted);
   cursor: pointer;
@@ -117,41 +371,123 @@
   color: var(--color-brand);
 }
 
-.kpis {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 20px;
+/* --------------------------------------------------------------- cards */
+
+/* Painel local em vez do <Card> compartilhado: o Card usa --radius-lg (16px)
+ * e padding 20/22, e sobrescrevê-lo daqui dependeria da ordem dos módulos no
+ * bundle. Duplicar as quatro linhas é mais previsível do que disputar
+ * especificidade — e mantém Card.module.css intacto para as outras telas. */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--dp-radius);
+  box-shadow: var(--shadow-card);
+  padding: var(--dp-pad);
 }
 
-.kpiLink {
-  display: block;
+.cardHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-navy);
+}
+
+.cardSubtitulo {
+  margin: 0 0 14px;
+  font-size: 11px;
+  color: var(--color-muted-light);
+}
+
+.verTodas {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-brand-dark);
   text-decoration: none;
-  color: inherit;
+  white-space: nowrap;
 }
 
 .mainGrid {
   display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 16px;
+  grid-template-columns: 1fr;
+  gap: var(--dp-gap);
 }
 
 .distribuicoesGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 16px;
+  gap: var(--dp-gap);
 }
 
-.spanAll {
-  grid-column: 1 / -1;
+/* --------------------------------------------------- aprovações pendentes */
+
+.pendList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
 }
 
-.cardTitle {
-  margin: 0 0 14px;
-  font-size: 15px;
-  font-weight: 700;
+.pendItem {
+  border: 1px solid var(--color-divider);
+  border-radius: var(--dp-radius-control);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pendTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pendId {
+  font-size: 10px;
+  color: var(--color-muted-light);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pendNome {
+  font-size: 13px;
+  font-weight: 600;
   color: var(--color-navy);
 }
+
+.pendResumo {
+  font-size: 11px;
+  color: var(--color-muted);
+  margin: 2px 0 10px;
+  line-height: 1.45;
+}
+
+.pendActions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.pendActions button {
+  padding: 7px 12px;
+  font-size: 12px;
+  border-radius: var(--dp-radius-control);
+}
+
+.pendAguardando {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-muted-light);
+  margin-top: auto;
+}
+
+/* -------------------------------------------------------- distribuições */
 
 .deptList {
   display: flex;
@@ -171,7 +507,7 @@
 .deptName {
   width: 150px;
   flex: none;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-text);
   line-height: 1.35;
@@ -184,77 +520,13 @@
 }
 
 .deptCount {
-  width: 24px;
+  width: 26px;
   flex: none;
   text-align: right;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-navy);
-}
-
-.pendHeader {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.verTodas {
   font-size: 12px;
-  font-weight: 700;
-  color: var(--color-brand);
-  text-decoration: none;
-}
-
-.pendList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pendItem {
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-}
-
-.pendTop {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.pendId {
-  font-size: 10.5px;
-  color: var(--color-muted-light);
   font-weight: 600;
-}
-
-.pendNome {
-  font-size: 13px;
-  font-weight: 700;
   color: var(--color-navy);
-}
-
-.pendResumo {
-  font-size: 11.5px;
-  color: var(--color-muted);
-  margin: 2px 0 10px;
-}
-
-.pendActions {
-  display: flex;
-  gap: 8px;
-}
-.pendActions button {
-  padding: 7px 12px;
-  font-size: 12px;
-}
-
-.pendAguardando {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-muted-light);
+  font-variant-numeric: tabular-nums;
 }
 
 .gestorGrid {
@@ -269,7 +541,7 @@
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
+  border-radius: var(--dp-radius-control);
   text-decoration: none;
   color: inherit;
 }
@@ -290,7 +562,7 @@
  * no hover, caso ainda assim seja cortado por -webkit-line-clamp. */
 .gestorNome {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-navy);
   line-height: 1.35;
   overflow-wrap: break-word;
@@ -302,12 +574,15 @@
 }
 
 .gestorCount {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--color-navy);
   flex: none;
   margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
+
+/* --------------------------------------------------------------- custos */
 
 .custoTableWrap {
   margin-top: 16px;
@@ -315,7 +590,7 @@
 
 .integracoesDesc {
   margin: 0 0 16px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--color-muted);
   max-width: 720px;
   line-height: 1.6;
@@ -333,8 +608,8 @@
   gap: 8px;
   padding: 12px 14px;
   border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
-  font-size: 12.5px;
+  border-radius: var(--dp-radius-control);
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-text);
 }
@@ -346,11 +621,14 @@
   flex: 1;
 }
 
+/* -------------------------------------------------------- responsividade */
+
+/* As grades internas (tiles/pendências) quebram antes das externas — abaixo
+ * de ~90px de largura o número de 30px deixa de caber. */
 @media (max-width: 1024px) {
   .kpis {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .mainGrid,
   .distribuicoesGrid {
     grid-template-columns: 1fr;
   }
@@ -361,8 +639,16 @@
 }
 
 @media (max-width: 700px) {
+  .page {
+    gap: 22px;
+  }
+
   .kpis {
     grid-template-columns: 1fr;
+  }
+
+  .topoCard {
+    align-items: stretch;
   }
 
   .search,

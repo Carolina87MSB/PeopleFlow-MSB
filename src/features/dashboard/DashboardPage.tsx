@@ -1,15 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Check, CheckCircle2, Pencil, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Pencil, Plus, Search, X } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { NovaMovimentacaoModal } from "../../components/shared/NovaMovimentacaoModal";
 import { ReprovarModal } from "../../components/shared/ReprovarModal";
-import { Avatar, BarChart, Badge, Button, Card, EmptyState, KpiCard, ProgressBar, tableStyles } from "../../components/ui";
+import { Avatar, BarChart, Badge, Button, EmptyState, tableStyles } from "../../components/ui";
 import { agregarCargos, agregarDepartamentos, contarPorGestor } from "../../domain/agregados";
 import { tipoColor } from "../../domain/colors";
-import { hojeIso } from "../../domain/dates";
+import { formatarDataIso, hojeIso } from "../../domain/dates";
 import {
-  admissoesDesligamentosPorMes,
   calcularTurnover,
   colaboradoresAtivosEmData,
   desligamentosNoPeriodo,
@@ -26,7 +25,6 @@ import { pendenciasAvaliacaoExperiencia as pendenciasAvaliacaoExperienciaDomain 
 import { podeAgir } from "../../domain/workflow";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
-import { AdmissoesDesligamentosChart } from "./AdmissoesDesligamentosChart";
 import { TurnoverPorSetorList } from "./TurnoverPorSetorList";
 import styles from "./DashboardPage.module.css";
 
@@ -151,11 +149,6 @@ export function DashboardPage() {
     () => turnoverPorSetor(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
     [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
   );
-  const admissoesDesligamentosMensal = useMemo(
-    () => admissoesDesligamentosPorMes(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
-    [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
-  );
-
   const desligadosNoPeriodoFiltrado = useMemo(
     () => desligamentosNoPeriodo(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
     [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
@@ -216,9 +209,21 @@ export function DashboardPage() {
     if (result.ok) setEditandoHeadcountPlanejado(false);
   }
 
+  // Metadado da seção de indicadores — só reflete o recorte já escolhido nos
+  // filtros acima, não introduz nenhum dado novo.
+  const recorteAtual = [
+    setorFiltro === "Todos" ? "todos os setores" : setorFiltro,
+    gestorFiltro === "Todos" ? "todos os gestores" : gestorFiltro,
+    cargoFiltro === "Todos" ? "todos os cargos" : formatarNomeCargo(cargoFiltro),
+  ].join(" · ");
+
+  const totalPendencias =
+    pendenciasAprovacaoAlerta + avaliacoesExperienciaPendentes.length + desligamentosPendentesAlerta + cargosSemDescricaoAlerta.length;
+
   return (
     <>
       <Header
+        eyebrowClassName={styles.eyebrowAzul}
         actions={
           <>
             <div className={styles.search}>
@@ -226,7 +231,7 @@ export function DashboardPage() {
               <input placeholder="Buscar colaborador, cargo…" value={busca} onChange={(e) => setBusca(e.target.value)} />
             </div>
             {podeCriar && (
-              <Button variant="primary" icon={<Plus size={16} />} onClick={() => setModalAberto(true)}>
+              <Button variant="primary" className={styles.botaoNovaMov} icon={<Plus size={16} />} onClick={() => setModalAberto(true)}>
                 Nova movimentação
               </Button>
             )}
@@ -234,282 +239,329 @@ export function DashboardPage() {
         }
       />
 
-      <div className={styles.filtros}>
-        <div className={styles.periodoCampo}>
-          <label className={styles.periodoLabel}>Período</label>
-          <div className={styles.periodoInputs}>
-            <input type="date" className={styles.periodoInput} value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} />
-            <span>até</span>
-            <input type="date" className={styles.periodoInput} value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} />
+      <div className={styles.page}>
+        <div className={styles.topoCard}>
+          <p className={styles.topoResumo}>
+            <strong>{headcountReal}</strong> colaborador{headcountReal === 1 ? "" : "es"} ativo{headcountReal === 1 ? "" : "s"}
+            {resultadoTurnover.turnover !== null && (
+              <>
+                {" "}
+                · turnover <strong>{Math.round(resultadoTurnover.turnover)}%</strong> no período
+              </>
+            )}
+            {" "}
+            · {formatarDataIso(periodoInicio)} a {formatarDataIso(periodoFim)}
+          </p>
+
+          <div className={styles.filtros}>
+            <div className={styles.periodoCampo}>
+              <label className={styles.periodoLabel}>Período</label>
+              <div className={styles.periodoInputs}>
+                <input type="date" className={styles.periodoInput} value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} />
+                <span>até</span>
+                <input type="date" className={styles.periodoInput} value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} />
+              </div>
+            </div>
+            <select className={styles.select} value={setorFiltro} onChange={(e) => setSetorFiltro(e.target.value)}>
+              {opcoesSetor.map((o) => (
+                <option key={o} value={o}>
+                  {o === "Todos" ? "Todos os setores" : o}
+                </option>
+              ))}
+            </select>
+            <select className={styles.select} value={gestorFiltro} onChange={(e) => setGestorFiltro(e.target.value)}>
+              {opcoesGestor.map((o) => (
+                <option key={o} value={o}>
+                  {o === "Todos" ? "Todos os gestores" : o}
+                </option>
+              ))}
+            </select>
+            <select className={styles.select} value={cargoFiltro} onChange={(e) => setCargoFiltro(e.target.value)}>
+              {opcoesCargo.map((o) => (
+                <option key={o} value={o}>
+                  {o === "Todos" ? "Todos os cargos" : formatarNomeCargo(o)}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-        <select className={styles.select} value={setorFiltro} onChange={(e) => setSetorFiltro(e.target.value)}>
-          {opcoesSetor.map((o) => (
-            <option key={o} value={o}>
-              {o === "Todos" ? "Todos os setores" : o}
-            </option>
-          ))}
-        </select>
-        <select className={styles.select} value={gestorFiltro} onChange={(e) => setGestorFiltro(e.target.value)}>
-          {opcoesGestor.map((o) => (
-            <option key={o} value={o}>
-              {o === "Todos" ? "Todos os gestores" : o}
-            </option>
-          ))}
-        </select>
-        <select className={styles.select} value={cargoFiltro} onChange={(e) => setCargoFiltro(e.target.value)}>
-          {opcoesCargo.map((o) => (
-            <option key={o} value={o}>
-              {o === "Todos" ? "Todos os cargos" : formatarNomeCargo(o)}
-            </option>
-          ))}
-        </select>
-      </div>
 
-      <h2 className={styles.secaoTitulo}>Indicadores Estratégicos</h2>
-      <div className={styles.kpis}>
-        {(perfil === "RH" || perfil === "Diretoria") && (
-          <KpiCard
-            label="Headcount Planejado"
-            value={
-              editandoHeadcountPlanejado ? (
-                <input
-                  type="number"
-                  min={0}
-                  className={styles.headcountInput}
-                  value={headcountPlanejadoInput}
-                  onChange={(e) => setHeadcountPlanejadoInput(e.target.value)}
-                  autoFocus
-                />
-              ) : (
-                configDashboard?.headcountPlanejado ?? "—"
-              )
-            }
-            action={
-              perfil === "RH" ? (
-                editandoHeadcountPlanejado ? (
-                  <div className={styles.headcountAcoes}>
-                    <button type="button" className={styles.headcountBotao} onClick={handleSalvarHeadcountPlanejado} disabled={salvandoHeadcountPlanejado}>
-                      <Check size={13} />
-                    </button>
-                    <button type="button" className={styles.headcountBotao} onClick={() => setEditandoHeadcountPlanejado(false)}>
-                      <X size={13} />
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" className={styles.headcountBotao} onClick={iniciarEdicaoHeadcountPlanejado}>
-                    <Pencil size={13} />
-                  </button>
-                )
-              ) : undefined
-            }
-          />
-        )}
-        <KpiCard label="Headcount Real" value={headcountReal} />
-        {(perfil === "RH" || perfil === "Diretoria") && (
-          <KpiCard label="Aderência ao Planejamento" value={aderencia !== null ? `${Math.round(aderencia)}%` : "—"} />
-        )}
-        <KpiCard label="Turnover" value={resultadoTurnover.turnover !== null ? `${Math.round(resultadoTurnover.turnover)}%` : "—"} hint="no período selecionado" />
-        <KpiCard label="Admissões" value={resultadoTurnover.admissoes} hint="no período selecionado" />
-        <KpiCard label="Desligamentos" value={resultadoTurnover.desligamentos} hint="no período selecionado" />
-        <KpiCard label="Tempo Médio de Empresa" value={tempoMedio ? `${tempoMedio.anos}a ${tempoMedio.meses}m` : "—"} />
-        <KpiCard
-          label="Performance Média da MSB"
-          value={performanceMedia.media !== null ? `${performanceMedia.media.toFixed(1).replace(".", ",")} / 5,0` : "—"}
-          hint={
-            performanceMedia.ciclo
-              ? `${performanceMedia.quantidadeAvaliados} avaliados · ${performanceMedia.ciclo.nome}${performanceMedia.cicloEncerrado ? " (encerrado)" : ""}`
-              : "Nenhum ciclo de avaliação em aberto ou encerrado ainda"
-          }
-        />
-      </div>
+        <section className={styles.secao}>
+          <div className={styles.secaoHeader}>
+            <h2 className={styles.secaoTitulo}>Indicadores Estratégicos</h2>
+            <span className={styles.secaoContexto}>{recorteAtual}</span>
+          </div>
+          <div className={styles.kpis}>
+            {(perfil === "RH" || perfil === "Diretoria") && (
+              <Kpi
+                label="Headcount Planejado"
+                value={
+                  editandoHeadcountPlanejado ? (
+                    <input
+                      type="number"
+                      min={0}
+                      className={styles.headcountInput}
+                      value={headcountPlanejadoInput}
+                      onChange={(e) => setHeadcountPlanejadoInput(e.target.value)}
+                      autoFocus
+                    />
+                  ) : (
+                    configDashboard?.headcountPlanejado ?? "—"
+                  )
+                }
+                action={
+                  perfil === "RH" ? (
+                    editandoHeadcountPlanejado ? (
+                      <div className={styles.headcountAcoes}>
+                        <button type="button" className={styles.headcountBotao} onClick={handleSalvarHeadcountPlanejado} disabled={salvandoHeadcountPlanejado}>
+                          <Check size={13} />
+                        </button>
+                        <button type="button" className={styles.headcountBotao} onClick={() => setEditandoHeadcountPlanejado(false)}>
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" className={styles.headcountBotao} onClick={iniciarEdicaoHeadcountPlanejado}>
+                        <Pencil size={13} />
+                      </button>
+                    )
+                  ) : undefined
+                }
+              />
+            )}
+            {/* Único card escuro da tela — o indicador consolidado da seção,
+                conforme o padrão da referência. */}
+            <Kpi label="Headcount Real" value={headcountReal} tone="dark" />
+            {(perfil === "RH" || perfil === "Diretoria") && (
+              <Kpi
+                label="Aderência ao Planejamento"
+                value={aderencia !== null ? `${Math.round(aderencia)}%` : "—"}
+                barra={aderencia !== null ? { valor: aderencia, max: 100 } : undefined}
+              />
+            )}
+            <Kpi label="Turnover" value={resultadoTurnover.turnover !== null ? `${Math.round(resultadoTurnover.turnover)}%` : "—"} hint="no período selecionado" />
+            <Kpi label="Admissões" value={resultadoTurnover.admissoes} hint="no período selecionado" />
+            <Kpi label="Desligamentos" value={resultadoTurnover.desligamentos} hint="no período selecionado" />
+            <Kpi label="Tempo Médio de Empresa" value={tempoMedio ? `${tempoMedio.anos}a ${tempoMedio.meses}m` : "—"} />
+            <Kpi
+              label="Performance Média da MSB"
+              value={performanceMedia.media !== null ? `${performanceMedia.media.toFixed(1).replace(".", ",")} / 5,0` : "—"}
+              hint={
+                performanceMedia.ciclo
+                  ? `${performanceMedia.quantidadeAvaliados} avaliados · ${performanceMedia.ciclo.nome}${performanceMedia.cicloEncerrado ? " (encerrado)" : ""}`
+                  : "Nenhum ciclo de avaliação em aberto ou encerrado ainda"
+              }
+            />
+          </div>
+        </section>
 
-      <h2 className={styles.secaoTitulo}>Alertas Operacionais</h2>
-      <div className={styles.kpis}>
-        <KpiCard
-          label="Pendências de Aprovação"
-          value={pendenciasAprovacaoAlerta}
-          hint={meusPendCount > 0 ? `${meusPendCount} aguardando você` : undefined}
-          highlight={pendenciasAprovacaoAlerta > 0}
-        />
-        <KpiCard
-          label="Avaliações de Experiência Pendentes"
-          value={avaliacoesExperienciaPendentes.length}
-          highlight={avaliacoesExperienciaPendentes.length > 0}
-        />
-        <Link to="/desligados" className={styles.kpiLink}>
-          <KpiCard label="Desligamentos Pendentes" value={desligamentosPendentesAlerta} highlight={desligamentosPendentesAlerta > 0} />
-        </Link>
-        <Link to="/cargos" className={styles.kpiLink}>
-          <KpiCard label="Cargos sem Descrição" value={cargosSemDescricaoAlerta.length} highlight={cargosSemDescricaoAlerta.length > 0} />
-        </Link>
-      </div>
-
-      <div className={styles.mainGrid}>
-        <Card>
-          <div className={styles.pendHeader}>
-            <h3 className={styles.cardTitle}>Aprovações pendentes</h3>
-            <Link to="/workflow" className={styles.verTodas}>
-              Ver todas ›
+        <section className={styles.secao}>
+          <div className={styles.secaoHeader}>
+            <h2 className={styles.secaoTitulo}>Alertas Operacionais</h2>
+            <span className={styles.secaoContexto}>
+              <strong>{totalPendencias}</strong> pendência(s) no total
+            </span>
+          </div>
+          <div className={styles.kpis}>
+            <Kpi
+              label="Pendências de Aprovação"
+              value={pendenciasAprovacaoAlerta}
+              hint={meusPendCount > 0 ? `${meusPendCount} aguardando você` : undefined}
+              tone="danger"
+              icon={<AlertTriangle size={11} strokeWidth={2.2} />}
+            />
+            <Kpi label="Avaliações de Experiência Pendentes" value={avaliacoesExperienciaPendentes.length} tone="warning" />
+            <Link to="/desligados" className={styles.kpiLink}>
+              <Kpi label="Desligamentos Pendentes" value={desligamentosPendentesAlerta} tone="warning" />
+            </Link>
+            <Link to="/cargos" className={styles.kpiLink}>
+              <Kpi label="Cargos sem Descrição" value={cargosSemDescricaoAlerta.length} tone="warning" />
             </Link>
           </div>
-          <p className={styles.cardSubtitulo}>
-            {movimentacoesVisiveis.length} movimentações no mês · {aprovadasMes} aprovadas · {reprovadasMes} reprovadas
-          </p>
-          {pendentes.length === 0 ? (
-            <EmptyState message="Nenhuma pendência." />
-          ) : (
-            <div className={styles.pendList}>
-              {pendentes.slice(0, 4).map((m) => (
-                <div key={m.id} className={styles.pendItem}>
-                  <div className={styles.pendTop}>
-                    <Badge bg={`${tipoColor(m.tipoCod)}1a`} fg={tipoColor(m.tipoCod)} pill={false}>
-                      {m.tipoCod}
-                    </Badge>
-                    <span className={styles.pendId}>{m.id}</span>
-                  </div>
-                  <div className={styles.pendNome}>{m.colaborador}</div>
-                  <div className={styles.pendResumo}>{m.resumo}</div>
-                  {podeAgir(m, conta.nome) ? (
-                    <div className={styles.pendActions}>
-                      <Button variant="success" icon={<Check size={14} />} onClick={() => aprovarEtapa(m.id)}>
-                        Aprovar
-                      </Button>
-                      <Button variant="danger" icon={<X size={14} />} onClick={() => setReprovandoId(m.id)}>
-                        Reprovar
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className={styles.pendAguardando}>Aguardando outra etapa</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+        </section>
 
-      <h2 className={styles.secaoTitulo}>Distribuições</h2>
-      <div className={styles.distribuicoesGrid}>
-        <Card>
-          <h3 className={styles.cardTitle}>Headcount por Setor</h3>
-          <p className={styles.cardSubtitulo}>{cargos.length} cargos cadastrados</p>
-          <div className={styles.deptList}>
-            {departamentos.map((d) => (
-              <div key={d.nome} className={styles.deptRow}>
-                <span className={styles.deptName} title={d.nome}>
-                  {d.nome}
-                </span>
-                <ProgressBar value={d.count} max={maxDepto} />
-                <span className={styles.deptCount}>{d.count}</span>
-              </div>
-            ))}
+        <section className={styles.secao}>
+          <div className={styles.secaoHeader}>
+            <h2 className={styles.secaoTitulo}>Aprovações</h2>
+            <span className={styles.secaoContexto}>
+              {movimentacoesVisiveis.length} movimentações no mês · {aprovadasMes} aprovadas · {reprovadasMes} reprovadas
+            </span>
           </div>
-        </Card>
-
-        {mostrarEquipes && gestores.length > 0 && (
-          <Card>
-            <h3 className={styles.cardTitle}>Equipes por Gestor</h3>
-            <div className={styles.gestorGrid}>
-              {gestores.map(([nome, count]) => (
-                <Link key={nome} to={`/colaboradores?gestor=${encodeURIComponent(nome)}`} className={styles.gestorCard} title={nome}>
-                  <Avatar nome={nome} size={32} />
-                  <div className={styles.gestorInfo}>
-                    <div className={styles.gestorNome}>{nome}</div>
-                    <ProgressBar value={count} max={maxGestor} />
-                  </div>
-                  <span className={styles.gestorCount}>{count}</span>
-                </Link>
-              ))}
+          <div className={styles.panel}>
+            <div className={styles.cardHeader}>
+              <h3 className={styles.cardTitle}>Aprovações pendentes</h3>
+              <Link to="/workflow" className={styles.verTodas}>
+                Ver todas ›
+              </Link>
             </div>
-          </Card>
-        )}
+            {pendentes.length === 0 ? (
+              <EmptyState message="Nenhuma pendência." />
+            ) : (
+              <div className={styles.pendList}>
+                {pendentes.slice(0, 4).map((m) => (
+                  <div key={m.id} className={styles.pendItem}>
+                    <div className={styles.pendTop}>
+                      <Badge bg={`${tipoColor(m.tipoCod)}1a`} fg={tipoColor(m.tipoCod)} pill={false}>
+                        {m.tipoCod}
+                      </Badge>
+                      <span className={styles.pendId}>{m.id}</span>
+                    </div>
+                    <div className={styles.pendNome}>{m.colaborador}</div>
+                    <div className={styles.pendResumo}>{m.resumo}</div>
+                    {podeAgir(m, conta.nome) ? (
+                      <div className={styles.pendActions}>
+                        <Button variant="success" icon={<Check size={14} />} onClick={() => aprovarEtapa(m.id)}>
+                          Aprovar
+                        </Button>
+                        <Button variant="danger" icon={<X size={14} />} onClick={() => setReprovandoId(m.id)}>
+                          Reprovar
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className={styles.pendAguardando}>Aguardando outra etapa</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
-        <Card>
-          <h3 className={styles.cardTitle}>Turnover por Setor</h3>
-          {turnoverSetor.length === 0 ? (
-            <EmptyState message="Sem dados suficientes no período selecionado." />
-          ) : (
-            <TurnoverPorSetorList data={turnoverSetor} />
-          )}
-        </Card>
+        <section className={styles.secao}>
+          <div className={styles.secaoHeader}>
+            <h2 className={styles.secaoTitulo}>Distribuições</h2>
+            <span className={styles.secaoContexto}>
+              {departamentos.length} setor(es) · {cargos.length} cargos cadastrados
+            </span>
+          </div>
+          <div className={styles.distribuicoesGrid}>
+            <div className={styles.panel}>
+              <div className={styles.cardHeader}>
+                <h3 className={styles.cardTitle}>Headcount por Setor</h3>
+              </div>
+              <div className={styles.deptList}>
+                {departamentos.map((d) => (
+                  <div key={d.nome} className={styles.deptRow}>
+                    <span className={styles.deptName} title={d.nome}>
+                      {d.nome}
+                    </span>
+                    <Barra valor={d.count} max={maxDepto} />
+                    <span className={styles.deptCount}>{d.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-        <Card>
-          <h3 className={styles.cardTitle}>Admissões × Desligamentos</h3>
-          {admissoesDesligamentosMensal.length === 0 ? (
-            <EmptyState message="Sem movimentação no período selecionado." />
-          ) : (
-            <AdmissoesDesligamentosChart data={admissoesDesligamentosMensal} />
-          )}
-        </Card>
-      </div>
+            {mostrarEquipes && gestores.length > 0 && (
+              <div className={styles.panel}>
+                <div className={styles.cardHeader}>
+                  <h3 className={styles.cardTitle}>Equipes por Gestor</h3>
+                </div>
+                <div className={styles.gestorGrid}>
+                  {gestores.map(([nome, count]) => (
+                    <Link key={nome} to={`/colaboradores?gestor=${encodeURIComponent(nome)}`} className={styles.gestorCard} title={nome}>
+                      <Avatar nome={nome} size={32} />
+                      <div className={styles.gestorInfo}>
+                        <div className={styles.gestorNome}>{nome}</div>
+                        <Barra valor={count} max={maxGestor} />
+                      </div>
+                      <span className={styles.gestorCount}>{count}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
 
-      <h2 className={styles.secaoTitulo}>Custos</h2>
-      <div className={styles.mainGrid}>
-        {custosRescisao.length > 0 ? (
-          <Card className={styles.spanAll}>
-            <div className={styles.pendHeader}>
-              <h3 className={styles.cardTitle}>Custos de Rescisão por mês</h3>
-              <span className={styles.verTodas}>
+            <div className={styles.panel}>
+              <div className={styles.cardHeader}>
+                <h3 className={styles.cardTitle}>Turnover por Setor</h3>
+              </div>
+              {turnoverSetor.length === 0 ? (
+                <EmptyState message="Sem dados suficientes no período selecionado." />
+              ) : (
+                <TurnoverPorSetorList data={turnoverSetor} />
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.secao}>
+          <div className={styles.secaoHeader}>
+            <h2 className={styles.secaoTitulo}>Custos</h2>
+            {custosRescisao.length > 0 && (
+              <span className={styles.secaoContexto}>
                 {qtdDesligamentosTotal} desligamento{qtdDesligamentosTotal === 1 ? "" : "s"} · {money(custoRescisaoTotal)}
               </span>
-            </div>
-            <BarChart
-              data={custosRescisao.map((m) => ({ label: m.mesLabel, value: m.total, annotation: String(m.quantidade) }))}
-              color="var(--color-danger)"
-            />
-            <div className={`${tableStyles.wrap} ${styles.custoTableWrap}`}>
-              <table className={tableStyles.table}>
-                <thead>
-                  <tr>
-                    <th>Mês</th>
-                    <th>Desligamentos</th>
-                    <th>Rescisão</th>
-                    <th>GRRF</th>
-                    <th>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {custosRescisao.map((m) => (
-                    <tr key={m.mes}>
-                      <td>{m.mesLabel}</td>
-                      <td>{m.quantidade}</td>
-                      <td>{money(m.rescisao)}</td>
-                      <td>{money(m.grrf)}</td>
-                      <td>
-                        <strong>{money(m.total)}</strong>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        ) : (
-          <Card className={styles.spanAll}>
-            <h3 className={styles.cardTitle}>Custos de Rescisão por mês</h3>
-            <EmptyState message="Nenhum desligamento no período/recorte selecionado." />
-          </Card>
-        )}
-
-        <Card className={styles.spanAll}>
-          <h3 className={styles.cardTitle}>Integrações futuras</h3>
-          <p className={styles.integracoesDesc}>
-            Esta estrutura já contempla a conexão com os demais portais MSB, permitindo que dados de colaboradores e
-            movimentações alimentem outras iniciativas de RH.
-          </p>
-          <div className={styles.integracoesGrid}>
-            {["Academia MSB", "Radar de EPI", "Central RH"].map((nome) => (
-              <div key={nome} className={styles.integracaoItem}>
-                <CheckCircle2 size={16} strokeWidth={1.8} />
-                <span>{nome}</span>
-                <Badge bg="var(--color-neutral-bg)" fg="var(--color-neutral-fg)">
-                  EM BREVE
-                </Badge>
-              </div>
-            ))}
+            )}
           </div>
-        </Card>
+          <div className={styles.mainGrid}>
+            {custosRescisao.length > 0 ? (
+              <div className={styles.panel}>
+                <div className={styles.cardHeader}>
+                  <h3 className={styles.cardTitle}>Custos de Rescisão por mês</h3>
+                </div>
+                <BarChart
+                  data={custosRescisao.map((m) => ({ label: m.mesLabel, value: m.total, annotation: String(m.quantidade) }))}
+                  color="var(--color-danger)"
+                />
+                <div className={`${tableStyles.wrap} ${styles.custoTableWrap}`}>
+                  <table className={tableStyles.table}>
+                    <thead>
+                      <tr>
+                        <th>Mês</th>
+                        <th>Desligamentos</th>
+                        <th>Rescisão</th>
+                        <th>GRRF</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {custosRescisao.map((m) => (
+                        <tr key={m.mes}>
+                          <td>{m.mesLabel}</td>
+                          <td>{m.quantidade}</td>
+                          <td>{money(m.rescisao)}</td>
+                          <td>{money(m.grrf)}</td>
+                          <td>
+                            <strong>{money(m.total)}</strong>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.panel}>
+                <div className={styles.cardHeader}>
+                  <h3 className={styles.cardTitle}>Custos de Rescisão por mês</h3>
+                </div>
+                <EmptyState message="Nenhum desligamento no período/recorte selecionado." />
+              </div>
+            )}
+
+            <div className={styles.panel}>
+              <div className={styles.cardHeader}>
+                <h3 className={styles.cardTitle}>Integrações futuras</h3>
+              </div>
+              <p className={styles.integracoesDesc}>
+                Esta estrutura já contempla a conexão com os demais portais MSB, permitindo que dados de colaboradores e
+                movimentações alimentem outras iniciativas de RH.
+              </p>
+              <div className={styles.integracoesGrid}>
+                {["Academia MSB", "Radar de EPI", "Central RH"].map((nome) => (
+                  <div key={nome} className={styles.integracaoItem}>
+                    <CheckCircle2 size={16} strokeWidth={1.8} />
+                    <span>{nome}</span>
+                    <Badge bg="var(--color-neutral-bg)" fg="var(--color-neutral-fg)">
+                      EM BREVE
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
       {modalAberto && <NovaMovimentacaoModal onClose={() => setModalAberto(false)} />}
@@ -523,6 +575,71 @@ export function DashboardPage() {
         />
       )}
     </>
+  );
+}
+
+/** Barra linear de 4px do padrão de referência — trilho chapado, preenchimento
+ * no acento, sem gradiente. Local ao Dashboard para não alterar o
+ * <ProgressBar> compartilhado. */
+function Barra({ valor, max }: { valor: number; max: number }) {
+  const pct = max > 0 ? Math.max(2, Math.min(100, Math.round((valor / max) * 100))) : 0;
+  return (
+    <div className={styles.barTrack}>
+      <span className={styles.barFill} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+type KpiTone = "default" | "dark" | "danger" | "warning";
+
+/** Cartão de indicador no padrão da referência: rótulo em caixa alta (10px),
+ * número de 30px com numerais tabulares, legenda de 11px e barra opcional de
+ * 4px. Zero aparece em cinza — estado vazio, não erro.
+ *
+ * Local ao Dashboard de propósito: o <KpiCard> compartilhado é usado 15× nas
+ * abas de Gestão de Desempenho e alterá-lo mudaria aquelas telas. */
+function Kpi({
+  label,
+  value,
+  hint,
+  action,
+  icon,
+  tone = "default",
+  barra,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  action?: ReactNode;
+  icon?: ReactNode;
+  tone?: KpiTone;
+  barra?: { valor: number; max: number; rotulo?: ReactNode };
+}) {
+  const toneClass =
+    tone === "dark" ? styles.kpiDark : tone === "danger" ? styles.kpiDanger : tone === "warning" ? styles.kpiWarning : "";
+  const zero = typeof value === "number" && value === 0;
+  const pct = barra && barra.max > 0 ? Math.max(0, Math.min(100, (barra.valor / barra.max) * 100)) : null;
+
+  return (
+    <div className={[styles.kpiCard, toneClass].filter(Boolean).join(" ")}>
+      <div className={styles.kpiLabelRow}>
+        <div className={styles.kpiLabel}>
+          {icon}
+          {label}
+        </div>
+        {action}
+      </div>
+      <div className={[styles.kpiValue, zero ? styles.kpiZero : ""].filter(Boolean).join(" ")}>{value}</div>
+      {hint && <div className={styles.kpiHint}>{hint}</div>}
+      {pct !== null && (
+        <>
+          <div className={styles.barTrack}>
+            <span className={styles.barFill} style={{ width: `${pct}%` }} />
+          </div>
+          {barra?.rotulo && <div className={styles.kpiBarRotulo}>{barra.rotulo}</div>}
+        </>
+      )}
+    </div>
   );
 }
 
