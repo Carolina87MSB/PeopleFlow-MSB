@@ -13,6 +13,7 @@ import type {
   DescricaoCargo,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
+  Feedback,
   KpiCargo,
   Movimentacao,
   Pdi,
@@ -47,6 +48,7 @@ export type PortalAction =
       configEncargosFolha: ConfigEncargosFolha | null;
       salariosBase: SalarioBase[];
       reajustesSalariais: ReajusteSalarial[];
+      feedbacks: Feedback[];
     }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
@@ -83,4 +85,5 @@ export type PortalAction =
   | { type: "ATUALIZAR_AVALIACAO_POTENCIAL"; avaliacao: AvaliacaoPotencial }
   | { type: "ATUALIZAR_CONFIG_DASHBOARD"; config: ConfigDashboard }
   | { type: "ADICIONAR_REAJUSTES_SALARIAIS"; reajustes: ReajusteSalarial[] }
+  | { type: "CRIAR_FEEDBACK"; feedback: Feedback }
   | { type: "RESET" };

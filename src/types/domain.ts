@@ -845,6 +845,34 @@ export interface Pdi {
   updatedAt: string;
 }
 
+export type TemaFeedback =
+  | "Desempenho"
+  | "Comportamento"
+  | "Desenvolvimento"
+  | "Reconhecimento"
+  | "Alinhamento"
+  | "Entrega/Resultado"
+  | "Comunicação"
+  | "Trabalho em equipe"
+  | "Outro";
+
+/** Registro de feedback de gestão (Gestão de Desempenho → Desenvolvimento →
+ * Feedback) — histórico contínuo de conversas de gestão/desenvolvimento/
+ * alinhamento/reconhecimento, deliberadamente independente de ciclo de AVD/
+ * PDI: sem nota, sem aprovação, sem vínculo obrigatório com nenhum dos dois
+ * (ver domain/feedback.ts). `dataFeedback` é quando a conversa de fato
+ * aconteceu (editável, default hoje); `criadoEm` é o timestamp real de
+ * quando o registro foi salvo (auditoria, nunca editável). */
+export interface Feedback {
+  id: number;
+  colaboradorNome: string;
+  gestorNome: string;
+  dataFeedback: string; // ISO aaaa-mm-dd
+  tema: TemaFeedback;
+  comentarios: string;
+  criadoEm: string; // ISO timestamp
+}
+
 /** Modelo de objetivo/ações por competência, mantido pelo RH — consultado na
  * geração automática do PDI. `chave` é o id estável da competência
  * comportamental (tipoCompetencia="Comportamental") ou o nome do KPI

@@ -20,6 +20,7 @@ import { getCiclosAvaliacaoDesempenho } from "../repositories/ciclosAvaliacaoDes
 import { getPdi } from "../repositories/pdiRepository";
 import { getPdiBiblioteca } from "../repositories/pdiBibliotecaRepository";
 import { getAvaliacoesPotencial } from "../repositories/avaliacoesPotencialRepository";
+import { getFeedbacks } from "../repositories/feedbacksRepository";
 import type { PortalAction } from "./actions";
 import { initialPortalState, portalReducer } from "./reducer";
 import type { PortalState } from "./types";
@@ -77,6 +78,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getConfigEncargosFolha(),
       getSalariosBase(),
       getReajustesSalariais(),
+      getFeedbacks(),
     ])
       .then(
         async ([
@@ -101,6 +103,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           configEncargosFolha,
           salariosBase,
           reajustesSalariais,
+          feedbacks,
         ]) => {
           if (cancelado) return;
           // Efetiva promoções/transferências aprovadas cuja "Data prevista" já
@@ -133,6 +136,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             configEncargosFolha,
             salariosBase,
             reajustesSalariais,
+            feedbacks,
           });
         },
       )

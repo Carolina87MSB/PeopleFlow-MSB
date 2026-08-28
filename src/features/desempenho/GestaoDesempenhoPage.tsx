@@ -9,6 +9,7 @@ import { AvaliacoesTab } from "./AvaliacoesTab";
 import { AcessosAvdTab } from "./AcessosAvdTab";
 import { PdiTab } from "./PdiTab";
 import { PdiBibliotecaTab } from "./PdiBibliotecaTab";
+import { FeedbackTab } from "./FeedbackTab";
 import { AvaliacoesPotencialTab } from "./AvaliacoesPotencialTab";
 import { Matriz9BoxTab } from "./Matriz9BoxTab";
 import { CalibracaoTab } from "./CalibracaoTab";
@@ -26,6 +27,7 @@ type Aba =
   | "acessos"
   | "pdi"
   | "pdiBiblioteca"
+  | "feedback"
   | "matriz9box"
   | "calibracao"
   | "dashboard"
@@ -46,13 +48,16 @@ const ABAS_RH: { id: Aba; label: string }[] = [
   { id: "acessos", label: "Acessos AVD" },
   { id: "pdi", label: "PDI" },
   { id: "pdiBiblioteca", label: "Biblioteca de PDI" },
+  { id: "feedback", label: "Feedback" },
 ];
 
 /** Aberta a qualquer perfil autenticado, incl. "Colaborador". */
 const ABAS_ABERTAS: Aba[] = ["avaliacoes", "pdi", "historico"];
 
-/** Aberta a todo perfil MENOS "Colaborador" (RH/Gestor/Diretoria). */
-const ABAS_GESTAO: Aba[] = ["potencial", "matriz9box", "dashboard"];
+/** Aberta a todo perfil MENOS "Colaborador" (RH/Gestor/Diretoria) — Feedback
+ * é ferramenta de gestão do gestor sobre o liderado, sem visão própria do
+ * colaborador (spec da nova funcionalidade nunca menciona autovisualização). */
+const ABAS_GESTAO: Aba[] = ["potencial", "matriz9box", "dashboard", "feedback"];
 
 /** Agrupamento puramente visual do menu superior — mesmas abas, mesmas
  * permissões, mesmas rotas (não existem rotas por aba, é tudo troca de
@@ -65,7 +70,7 @@ const GRUPOS_ABAS: { titulo: string; abas: Aba[] }[] = [
   { titulo: "Configurações", abas: ["configuracao", "acessos", "comportamentais", "tecnicas"] },
   { titulo: "Ciclo de Avaliação", abas: ["avaliacoes", "potencial", "calibracao"] },
   { titulo: "Análise", abas: ["matriz9box", "reajusteSalarial"] },
-  { titulo: "Desenvolvimento", abas: ["pdi", "pdiBiblioteca"] },
+  { titulo: "Desenvolvimento", abas: ["pdi", "feedback", "pdiBiblioteca"] },
   { titulo: "Gestão", abas: ["dashboard", "historico"] },
 ];
 
@@ -98,7 +103,11 @@ const GRUPOS_ABAS: { titulo: string; abas: Aba[] }[] = [
  * o próprio registro pra esse perfil, ao contrário de `colaboradoresParaMatriz9Box`,
  * que retorna `[]`), e a Diretoria aqui é tratada igual RH (empresa toda),
  * não igual Gestor — outra exceção deliberada, decidida com o usuário, já
- * que o spec desta etapa nunca menciona Diretoria. */
+ * que o spec desta etapa nunca menciona Diretoria. "Feedback" segue o mesmo
+ * padrão de "Potencial"/"Matriz 9 Box"/"Dashboard" (aberta a todo perfil
+ * MENOS "Colaborador") — é ferramenta do gestor sobre o liderado, sem
+ * autovisualização, deliberadamente independente de AVD/PDI/ciclo (ver
+ * domain/feedback.ts). */
 export function GestaoDesempenhoPage() {
   const { podeVerCadastros, perfil } = usePortalData();
   const [aba, setAba] = useState<Aba>(() => (podeVerCadastros ? "configuracao" : "avaliacoes"));
@@ -188,6 +197,7 @@ export function GestaoDesempenhoPage() {
       {aba === "historico" && <HistoricoTab />}
       {podeVerCadastros && aba === "acessos" && <AcessosAvdTab />}
       {aba === "pdi" && <PdiTab />}
+      {perfil !== "Colaborador" && aba === "feedback" && <FeedbackTab />}
       {podeVerCadastros && aba === "pdiBiblioteca" && <PdiBibliotecaTab />}
     </>
   );

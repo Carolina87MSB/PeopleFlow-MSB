@@ -37,6 +37,7 @@ import {
 } from "../repositories/ciclosAvaliacaoDesempenhoRepository";
 import { registrarLogAvaliacaoDesempenho as registrarLogAvaliacaoDesempenhoNoSupabase } from "../repositories/logAvaliacaoDesempenhoRepository";
 import { criarPdi as criarPdiNoSupabase, salvarPdi as salvarPdiNoSupabase } from "../repositories/pdiRepository";
+import { registrarFeedback as registrarFeedbackNoSupabase } from "../repositories/feedbacksRepository";
 import {
   excluirItemBiblioteca as excluirItemBibliotecaNoSupabase,
   salvarItemBiblioteca as salvarItemBibliotecaNoSupabase,
@@ -115,6 +116,7 @@ import type {
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
   EtapaAvaliacaoExperiencia,
+  Feedback,
   HistoricoDescricaoCargo,
   KpiCargo,
   Movimentacao,
@@ -128,6 +130,7 @@ import type {
   RespostaAvaliacaoExperiencia,
   ResultadoAvaliacaoExperiencia,
   SalarioBase,
+  TemaFeedback,
   TipoCompetenciaPdi,
 } from "../types/domain";
 
@@ -273,6 +276,17 @@ export interface PortalData {
   pdiBiblioteca: PdiBibliotecaItem[];
   salvarItemBibliotecaPdi: (item: PdiBibliotecaItem) => Promise<{ ok: true } | { ok: false }>;
   excluirItemBibliotecaPdi: (chave: string, tipoCompetencia: TipoCompetenciaPdi) => Promise<{ ok: true } | { ok: false }>;
+  /** Mesma lista de liderados de `colaboradoresListagem` (RH/Diretoria: empresa
+   * toda; Gestor: quem tem `gestor === me` hoje) — Feedback nunca usa uma
+   * hierarquia própria. Colaborador nunca vê nada aqui. */
+  feedbacksVisiveis: Feedback[];
+  podeRegistrarFeedback: (colaboradorNome: string) => boolean;
+  registrarFeedback: (input: {
+    colaboradorNome: string;
+    dataFeedback: string;
+    tema: TemaFeedback;
+    comentarios: string;
+  }) => Promise<{ ok: true; feedback: Feedback } | { ok: false }>;
   podeEditarGestaoDesempenho: boolean;
   avaliacoesPotencial: AvaliacaoPotencial[];
   /** RH vê tudo; senão, só quem é gestor ATUAL do colaborador — o próprio
@@ -1972,6 +1986,45 @@ export function usePortalData(): PortalData {
     [dispatch, flash],
   );
 
+  /** Feedback (Gestão de Desempenho → Desenvolvimento → Feedback) — histórico
+   * contínuo de gestão, deliberadamente independente de AVD/PDI/ciclo (ver
+   * types/domain.ts > Feedback). Visibilidade e permissão pra registrar usam
+   * a MESMA lista de liderados de sempre (`colaboradoresListagem`: RH/
+   * Diretoria veem a empresa toda, Gestor só quem tem `gestor === me` hoje —
+   * reaproveitado, nenhuma estrutura paralela de hierarquia criada aqui).
+   * Colaborador nunca alcança esta função (a aba já é bloqueada em
+   * GestaoDesempenhoPage.tsx), mas a checagem explícita aqui é defesa em
+   * profundidade, mesmo padrão de colaboradoresParaMatriz9Box. */
+  const feedbacksVisiveis = useMemo(() => {
+    if (perfil === "Colaborador") return [];
+    const nomesPermitidos = new Set(colaboradoresListagem.map((c) => c.nome));
+    return state.feedbacks.filter((f) => nomesPermitidos.has(f.colaboradorNome));
+  }, [state.feedbacks, colaboradoresListagem, perfil]);
+
+  const podeRegistrarFeedbackFn = useCallback(
+    (colaboradorNome: string) => perfil !== "Colaborador" && colaboradoresListagem.some((c) => c.nome === colaboradorNome),
+    [perfil, colaboradoresListagem],
+  );
+
+  const registrarFeedbackFn = useCallback(
+    async (input: { colaboradorNome: string; dataFeedback: string; tema: TemaFeedback; comentarios: string }) => {
+      if (!podeRegistrarFeedbackFn(input.colaboradorNome)) {
+        flash("Você só pode registrar feedback para colaboradores da sua equipe.");
+        return { ok: false as const };
+      }
+      try {
+        const feedback = await registrarFeedbackNoSupabase({ ...input, gestorNome: me });
+        dispatch({ type: "CRIAR_FEEDBACK", feedback });
+        flash("Feedback registrado.");
+        return { ok: true as const, feedback };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao registrar feedback.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, podeRegistrarFeedbackFn],
+  );
+
   /** Salva uma Avaliação de Potencial (respostas/comentário, mudança de
    * status, conclusão) — um só ponto pra tudo, igual salvarAvaliacaoDesempenho.
    * Recalcula notaPotencial via calcularNotaPotencial() antes de gravar
@@ -2244,6 +2297,9 @@ export function usePortalData(): PortalData {
     pdiBiblioteca: state.pdiBiblioteca,
     salvarItemBibliotecaPdi: salvarItemBibliotecaPdiFn,
     excluirItemBibliotecaPdi: excluirItemBibliotecaPdiFn,
+    feedbacksVisiveis,
+    podeRegistrarFeedback: podeRegistrarFeedbackFn,
+    registrarFeedback: registrarFeedbackFn,
     podeEditarGestaoDesempenho: perfil === "RH",
     avaliacoesPotencial: state.avaliacoesPotencial,
     avaliacoesPotencialVisiveis,

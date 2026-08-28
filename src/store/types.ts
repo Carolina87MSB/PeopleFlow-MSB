@@ -12,6 +12,7 @@ import type {
   DescricaoCargo,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
+  Feedback,
   KpiCargo,
   Movimentacao,
   Pdi,
@@ -44,4 +45,5 @@ export interface PortalState {
   configEncargosFolha: ConfigEncargosFolha | null;
   salariosBase: SalarioBase[];
   reajustesSalariais: ReajusteSalarial[];
+  feedbacks: Feedback[];
 }

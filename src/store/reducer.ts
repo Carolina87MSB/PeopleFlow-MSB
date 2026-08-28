@@ -24,6 +24,7 @@ export const initialPortalState: PortalState = {
   configEncargosFolha: null,
   salariosBase: [],
   reajustesSalariais: [],
+  feedbacks: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -52,6 +53,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         configEncargosFolha: action.configEncargosFolha,
         salariosBase: action.salariosBase,
         reajustesSalariais: action.reajustesSalariais,
+        feedbacks: action.feedbacks,
       };
 
     case "ADICIONAR_REAJUSTES_SALARIAIS":
@@ -209,6 +211,9 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         ...state,
         avaliacoesPotencial: state.avaliacoesPotencial.map((a) => (a.id === action.avaliacao.id ? action.avaliacao : a)),
       };
+
+    case "CRIAR_FEEDBACK":
+      return { ...state, feedbacks: [action.feedback, ...state.feedbacks] };
 
     default:
       return state;

@@ -1262,3 +1262,33 @@ create policy "pdi_evidencias_remocao"
   for delete
   to authenticated
   using (bucket_id = 'pdi-evidencias');
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 28) Feedback — histórico contínuo de conversas de gestão (Gestão de
+--    Desempenho → Desenvolvimento → Feedback), deliberadamente independente
+--    de ciclo/AVD/PDI: sem nota, sem calibração, sem fluxo de aprovação. Um
+--    gestor pode registrar quantos quiser pra qualquer liderado, a qualquer
+--    momento (ver domain/feedback.ts / usePortalData.ts).
+-- ────────────────────────────────────────────────────────────────────────
+create table if not exists public.peopleflow_feedbacks (
+  id bigint generated always as identity primary key,
+  colaborador_nome text not null,
+  gestor_nome text not null,
+  data_feedback date not null,
+  tema text not null,
+  comentarios text not null,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_feedbacks is
+  'Histórico de feedbacks de gestão — independente de ciclo de AVD/PDI, sem nota/classificação/aprovação. gestor_nome é quem registrou; colaborador_nome é o liderado; data_feedback é quando a conversa aconteceu (editável); criado_em é o timestamp real do registro (auditoria).';
+
+alter table public.peopleflow_feedbacks enable row level security;
+
+drop policy if exists "authenticated_rw_feedbacks" on public.peopleflow_feedbacks;
+create policy "authenticated_rw_feedbacks"
+  on public.peopleflow_feedbacks
+  for all
+  to authenticated
+  using (true)
+  with check (true);
