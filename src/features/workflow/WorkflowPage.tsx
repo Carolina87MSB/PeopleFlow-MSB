@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Check, Eye, Info } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { NovaMovimentacaoModal } from "../../components/shared/NovaMovimentacaoModal";
@@ -78,6 +79,25 @@ export function WorkflowPage() {
   const [gestor, setGestor] = useState("");
   const [detalheId, setDetalheId] = useState<string | null>(null);
   const [reprovandoId, setReprovandoId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const [idDoLinkAberto, setIdDoLinkAberto] = useState(false);
+
+  // Abre direto o Drawer de detalhes da movimentação do link recebido por
+  // e-mail (?id=, ver domain/notificacoes.ts) — sem isso quem clica no botão
+  // "ACESSAR MOVIMENTAÇÃO" do e-mail cairia só na lista geral, tendo que
+  // procurar a movimentação certa entre as pendentes. `movimentacoesVisiveis`
+  // pode ainda estar carregando no primeiro render (fica vazia até a
+  // primeira carga do Supabase terminar) — só desiste de tentar depois de
+  // efetivamente abrir, nunca por não achar de primeira.
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (!id || idDoLinkAberto) return;
+    const m = movimentacoesVisiveis.find((mv) => mv.id === id);
+    if (!m) return;
+    setDetalheId(m.id);
+    if ((FILTROS as string[]).includes(m.status)) setFiltro(m.status);
+    setIdDoLinkAberto(true);
+  }, [searchParams, movimentacoesVisiveis, idDoLinkAberto]);
 
   const pendentes = useMemo(
     () => movimentacoesVisiveis.filter((m) => m.status === "Em Aprovação" || m.status === "Rascunho" || m.status === "Reprovado"),

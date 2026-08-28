@@ -692,7 +692,7 @@ export function usePortalData(): PortalData {
 
           const etapaReprovada = atualizada.etapas.find((e) => e.status === "Reprovado");
           if (etapaReprovada) {
-            const email = notificacaoReprovada(atualizada, etapaReprovada);
+            const email = notificacaoReprovada(atualizada, etapaReprovada, window.location.origin);
             void notificar(email);
           }
         } catch (err) {

@@ -15,40 +15,58 @@ const ACCENT_PENDENTE = { cor: "#5f89a1", bg: "#e3f0f4" };
 const ACCENT_CONCLUIDA = { cor: "#2f8f6b", bg: "#e4f3ed" };
 const ACCENT_REPROVADA = { cor: "#c0584e", bg: "#f8e7e4" };
 
+/** Primeiro nome pro "Olá, [Nome]." do e-mail — mesmo recorte de `emailOf()`
+ * (primeira palavra do nome completo cadastrado), sem remover apelidos entre
+ * parênteses aqui porque eles nunca vêm antes do primeiro nome. */
+function primeiroNome(nomeCompleto: string): string {
+  return nomeCompleto.trim().split(/\s+/)[0] || nomeCompleto;
+}
+
+/** Link direto pra movimentação: abre o Workflow já com o Drawer de detalhes
+ * dela aberto (?id=, lido em WorkflowPage.tsx) — nunca só a tela genérica,
+ * senão quem recebe o e-mail teria que procurar a movimentação certa entre
+ * as pendentes. */
+function linkMovimentacao(m: Movimentacao, baseUrl: string): string {
+  return `${baseUrl}/workflow?id=${encodeURIComponent(m.id)}`;
+}
+
 /** Notifica quem precisa agir agora: a movimentação acabou de ser criada, ou
- * uma etapa anterior acabou de ser aprovada e a próxima entrou em análise.
- * `baseUrl` é a origem do portal (`window.location.origin` de quem disparou a
- * ação) — evita fixar no código um domínio de deploy específico. */
+ * uma etapa anterior acabou de ser aprovada e a próxima entrou em análise —
+ * mesmo e-mail nos dois casos (é o mesmo evento de negócio: "uma etapa ficou
+ * pendente de mim"), só troca quem é `etapa.aprovador`. Texto/assunto fixos
+ * por pedido explícito do RH (e-mail "simples e objetivo", sempre igual,
+ * pra ser reconhecível de imediato). `baseUrl` é a origem do portal
+ * (`window.location.origin` de quem disparou a ação) — evita fixar no
+ * código um domínio de deploy específico. */
 export function notificacaoNovaEtapa(m: Movimentacao, etapa: Etapa, baseUrl: string): EmailNotificacao {
-  const subject = `[PeopleFlow] Aprovação pendente — ${m.tipo} de ${m.colaborador}`;
-  const link = `${baseUrl}/workflow`;
+  const nome = primeiroNome(etapa.aprovador);
+  const link = linkMovimentacao(m, baseUrl);
   return {
     to: emailOf(etapa.aprovador),
-    subject,
+    subject: `[PeopleFlow] Movimentação de Pessoal pendente de sua ação`,
     text: [
-      `Olá,`,
+      `Olá, ${nome}.`,
       ``,
-      `Uma movimentação de ${m.tipo} para ${m.colaborador} está aguardando sua aprovação (etapa: ${etapa.papel}).`,
+      `Existe uma Movimentação de Pessoal pendente de sua ação no PeopleFlow.`,
       ``,
-      `Resumo: ${m.resumo}`,
-      `Solicitado por: ${m.solicitante}`,
-      ``,
-      `Acesse o Portal PeopleFlow, na tela Workflow, para aprovar ou reprovar.`,
+      `Acesse o PeopleFlow para realizar a ação necessária.`,
       link,
+      ``,
+      `Atenciosamente,`,
+      `PeopleFlow | RH – MSB`,
     ].join("\n"),
     html: buildEmailHtml({
       accentColor: ACCENT_PENDENTE.cor,
       accentBg: ACCENT_PENDENTE.bg,
       badgeLabel: "Aprovação pendente",
-      title: `${m.tipo} de ${m.colaborador}`,
-      paragrafos: [`Uma movimentação está aguardando a sua aprovação na etapa "${etapa.papel}".`],
+      title: "Movimentação de Pessoal pendente de sua ação",
+      paragrafos: [`Olá, ${nome}.`, `Existe uma Movimentação de Pessoal pendente de sua ação no PeopleFlow.`, `Acesse o PeopleFlow para realizar a ação necessária.`],
       detalhes: [
         { label: "Tipo", valor: m.tipo },
         { label: "Colaborador", valor: m.colaborador },
-        { label: "Solicitado por", valor: m.solicitante },
-        { label: "Resumo", valor: m.resumo },
+        { label: "Etapa", valor: etapa.papel },
       ],
-      cta: { label: "Abrir Workflow no PeopleFlow", url: link },
+      cta: { label: "ACESSAR MOVIMENTAÇÃO", url: link },
     }),
   };
 }
@@ -85,32 +103,40 @@ export function notificacaoConcluida(m: Movimentacao): EmailNotificacao {
   };
 }
 
-/** Notifica o solicitante quando uma etapa reprova a movimentação, com a justificativa. */
-export function notificacaoReprovada(m: Movimentacao, etapa: Etapa): EmailNotificacao {
+/** Notifica o gestor/solicitante que abriu a movimentação quando uma etapa a
+ * reprova, com a justificativa. Texto/assunto fixos, mesmo motivo de
+ * `notificacaoNovaEtapa()`. */
+export function notificacaoReprovada(m: Movimentacao, etapa: Etapa, baseUrl: string): EmailNotificacao {
   const justificativa = etapa.comentario || "(sem justificativa informada)";
+  const nome = primeiroNome(m.solicitante);
+  const link = linkMovimentacao(m, baseUrl);
   return {
     to: emailOf(m.solicitante),
-    subject: `[PeopleFlow] Movimentação reprovada — ${m.tipo} de ${m.colaborador}`,
+    subject: `[PeopleFlow] Movimentação de Pessoal reprovada`,
     text: [
-      `Olá,`,
+      `Olá, ${nome}.`,
       ``,
-      `Sua solicitação de ${m.tipo} para ${m.colaborador} foi reprovada na etapa "${etapa.papel}" por ${etapa.aprovador}.`,
+      `A Movimentação de Pessoal foi reprovada.`,
       ``,
-      `Justificativa: ${justificativa}`,
+      `Para consultar os detalhes da reprovação, acesse o PeopleFlow.`,
+      link,
       ``,
-      `Acesse o Portal PeopleFlow para ver os detalhes.`,
+      `Atenciosamente,`,
+      `PeopleFlow | RH – MSB`,
     ].join("\n"),
     html: buildEmailHtml({
       accentColor: ACCENT_REPROVADA.cor,
       accentBg: ACCENT_REPROVADA.bg,
       badgeLabel: "Movimentação reprovada",
-      title: `${m.tipo} de ${m.colaborador}`,
-      paragrafos: [`Sua solicitação foi reprovada na etapa "${etapa.papel}", por ${etapa.aprovador}.`, `Acesse o Portal PeopleFlow para ver os detalhes.`],
+      title: "Movimentação de Pessoal reprovada",
+      paragrafos: [`Olá, ${nome}.`, `A Movimentação de Pessoal foi reprovada.`, `Para consultar os detalhes da reprovação, acesse o PeopleFlow.`],
       detalhes: [
         { label: "Tipo", valor: m.tipo },
         { label: "Colaborador", valor: m.colaborador },
+        { label: "Reprovado por", valor: etapa.aprovador },
         { label: "Justificativa", valor: justificativa },
       ],
+      cta: { label: "ACESSAR MOVIMENTAÇÃO", url: link },
     }),
   };
 }
