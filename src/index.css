@@ -9,13 +9,19 @@
   --color-muted-light: #9aa9af;
   --color-muted-lighter: #a8b4ba;
 
-  /* Paleta oficial MSB (Ref. Identidade Visual): Azul #1 #56a4bb (brand),
-     Azul #2 #5f89a1 (brand-dark — hover/estados secundários), Cinza #1
-     #818286, Cinza #2 #d9e4e8. */
-  --color-brand: #56a4bb;
-  --color-brand-dark: #5f89a1;
-  --color-brand-pale: #e3f0f4;
-  --color-cyan: #9ce5ee;
+  /* Acento do portal — alinhado ao Portal DP (ver "Padrão Visual Portal DP").
+     Decisão de 28/08/2026: o acento passa a ser o teal do Dashboard de
+     referência, em TODAS as telas, no lugar do azul MSB anterior.
+     Para reverter, basta restaurar os quatro valores originais:
+       --color-brand: #56a4bb;  (Azul #1)
+       --color-brand-dark: #5f89a1;  (Azul #2 — hover/estados secundários)
+       --color-brand-pale: #e3f0f4;
+       --color-cyan: #9ce5ee;
+     Cinza #1 #818286 e Cinza #2 #d9e4e8 seguem inalterados abaixo. */
+  --color-brand: #17a398;
+  --color-brand-dark: #0f7f78;
+  --color-brand-pale: #e7f4f2;
+  --color-cyan: #7fd6cc;
   --color-cinza-1: #818286;
   --color-cinza-2: #d9e4e8;
 
