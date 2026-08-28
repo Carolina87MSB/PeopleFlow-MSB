@@ -20,12 +20,13 @@ import styles from "./DashboardDesempenho.module.css";
 
 const STATUS_AVALIACAO: (StatusAvaliacaoDesempenho | "Todos")[] = ["Todos", "Não iniciada", "Em andamento", "Concluída", "Não Elegível"];
 
-/** Dashboard do Gestor (Etapa 8) — só a própria equipe (`colaboradoresListagem`
- * já filtra por `gestor === me` pro perfil Gestor). Read-only, puramente
- * derivado dos dados já existentes. */
+/** Dashboard do Gestor (Etapa 8) — só a própria equipe, via
+ * `colaboradoresParaMatriz9Box` (gestor ATUAL === me OU quem `me` avaliou
+ * como GESTOR em algum ciclo — união, ver `colaboradoresEquipe` abaixo).
+ * Read-only, puramente derivado dos dados já existentes. */
 export function DashboardGestorTab() {
   const {
-    colaboradoresListagem,
+    colaboradoresParaMatriz9Box,
     avaliacoesDesempenho,
     avaliacoesPotencial,
     ciclosAvaliacaoDesempenho,
@@ -39,16 +40,28 @@ export function DashboardGestorTab() {
   const [cargoFiltro, setCargoFiltro] = useState("Todos");
   const [statusFiltro, setStatusFiltro] = useState<StatusAvaliacaoDesempenho | "Todos">("Todos");
 
-  const opcoesDepartamento = useMemo(
-    () => ["Todos", ...Array.from(new Set(colaboradoresListagem.map((c) => c.depto).filter(Boolean))).sort()],
-    [colaboradoresListagem],
-  );
-  const opcoesCargo = useMemo(
-    () => ["Todos", ...Array.from(new Set(colaboradoresListagem.map((c) => c.cargo).filter(Boolean))).sort()],
-    [colaboradoresListagem],
+  // Mesma população de `colaboradoresParaMatriz9Box` (gestor ATUAL === me OU
+  // quem `me` avaliou como GESTOR em algum ciclo — união, já resolvida em
+  // usePortalData.ts), só que restrita a ativos: uma promoção/transferência
+  // depois do ciclo não pode fazer a pessoa sumir do dashboard/PDI de quem de
+  // fato a avaliou (achado real: Auxiliares de Produção e Ana Maria mudaram
+  // de gestor depois do 2º Ciclo e sumiam da visão de Tainara, que foi quem
+  // realmente as avaliou).
+  const colaboradoresEquipe = useMemo(
+    () => colaboradoresParaMatriz9Box.filter((c) => !c.desligado),
+    [colaboradoresParaMatriz9Box],
   );
 
-  const nomesPopulacao = useMemo(() => new Set(colaboradoresListagem.map((c) => c.nome)), [colaboradoresListagem]);
+  const opcoesDepartamento = useMemo(
+    () => ["Todos", ...Array.from(new Set(colaboradoresEquipe.map((c) => c.depto).filter(Boolean))).sort()],
+    [colaboradoresEquipe],
+  );
+  const opcoesCargo = useMemo(
+    () => ["Todos", ...Array.from(new Set(colaboradoresEquipe.map((c) => c.cargo).filter(Boolean))).sort()],
+    [colaboradoresEquipe],
+  );
+
+  const nomesPopulacao = useMemo(() => new Set(colaboradoresEquipe.map((c) => c.nome)), [colaboradoresEquipe]);
   const fichasPopulacao = useMemo(
     () => avaliacoesDesempenho.filter((f) => nomesPopulacao.has(f.colaboradorNome)),
     [avaliacoesDesempenho, nomesPopulacao],
@@ -60,8 +73,8 @@ export function DashboardGestorTab() {
   const pdiPopulacao = useMemo(() => pdi.filter((p) => nomesPopulacao.has(p.colaboradorNome)), [pdi, nomesPopulacao]);
 
   // Sem filtro de gestor aqui — a população já vem restrita à própria
-  // equipe (colaboradoresListagem filtra gestor === me pro perfil Gestor),
-  // então um sub-filtro por gestor seria redundante.
+  // equipe (colaboradoresEquipe), então um sub-filtro por gestor seria
+  // redundante.
   const filtros: FiltrosDashboard = useMemo(
     () => ({ cicloId, departamento: departamentoFiltro, gestor: "Todos", cargo: cargoFiltro, statusAvaliacao: statusFiltro }),
     [cicloId, departamentoFiltro, cargoFiltro, statusFiltro],
@@ -99,7 +112,7 @@ export function DashboardGestorTab() {
   const devolutivasPendentes = fichasHomologadas.filter((f) => !f.devolutivaRealizada).length;
 
   const pdisFiltrados = useMemo(() => {
-    const colaboradoresPorNome = new Map(colaboradoresListagem.map((c) => [c.nome, c]));
+    const colaboradoresPorNome = new Map(colaboradoresEquipe.map((c) => [c.nome, c]));
     return pdiPopulacao.filter((p) => {
       const colaborador = colaboradoresPorNome.get(p.colaboradorNome);
       if (!colaborador) return false;
@@ -108,7 +121,7 @@ export function DashboardGestorTab() {
         (cargoFiltro === "Todos" || colaborador.cargo === cargoFiltro)
       );
     });
-  }, [pdiPopulacao, colaboradoresListagem, departamentoFiltro, cargoFiltro]);
+  }, [pdiPopulacao, colaboradoresEquipe, departamentoFiltro, cargoFiltro]);
   const pdisPorStatus: Record<StatusPdi, number> = { "Não iniciado": 0, "Em andamento": 0, Concluído: 0 };
   for (const p of pdisFiltrados) pdisPorStatus[p.status] += 1;
 
@@ -144,22 +157,23 @@ export function DashboardGestorTab() {
 
   return (
     <>
-      <div className={styles.topo}>
-        <p className={styles.explicacao}>
-          Visão da sua equipe — todas as métricas de nota usam a Nota Oficial (pós-homologação do Comitê de
-          Calibração). Filtre por ciclo/departamento/cargo/status para refinar.
-        </p>
-        <div className={styles.acoes}>
-          <Button icon={<Download size={14} />} onClick={exportarCsv}>
-            Exportar CSV
-          </Button>
-          <Button icon={<Printer size={14} />} onClick={() => window.print()}>
-            Exportar PDF
-          </Button>
+      <div className={styles.topoCard}>
+        <div className={styles.topo}>
+          <p className={styles.explicacao}>
+            Visão da sua equipe — todas as métricas de nota usam a Nota Oficial (pós-homologação do Comitê de
+            Calibração). Filtre por ciclo/departamento/cargo/status para refinar.
+          </p>
+          <div className={styles.acoes}>
+            <Button icon={<Download size={14} />} onClick={exportarCsv}>
+              Exportar CSV
+            </Button>
+            <Button icon={<Printer size={14} />} onClick={() => window.print()}>
+              Exportar PDF
+            </Button>
+          </div>
         </div>
-      </div>
 
-      <div className={styles.filtros}>
+        <div className={styles.filtros}>
         <select className={styles.select} value={cicloId} onChange={(e) => setCicloId(e.target.value)}>
           {ciclosAvaliacaoDesempenho.map((c) => (
             <option key={c.id} value={c.id}>
@@ -188,6 +202,7 @@ export function DashboardGestorTab() {
             </option>
           ))}
         </select>
+        </div>
       </div>
 
       <div className={styles.kpis}>

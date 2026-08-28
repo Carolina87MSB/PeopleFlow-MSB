@@ -377,13 +377,20 @@ export function usePortalData(): PortalData {
   }, [perfil, me, ativosGlobal]);
 
   /** Matriz 9 Box (etapa 5) — RH vê todos, incl. desligados (o filtro de
-   * status Ativo/Inativo é da própria tela); Gestor/Diretoria vê quem tem
-   * `gestor === me` (gestor atual) OU quem `me` avaliou como GESTOR em
-   * algum ciclo (`gestorAvaliador`, congelado na ficha) — união dos dois,
-   * não só o atual: uma promoção/transferência depois do ciclo não pode
-   * fazer alguém que eu avaliei sumir da minha Matriz 9 Box (achado real:
-   * Ana Maria/Fabiana mudaram de gestor depois do 2º Ciclo e sumiam da
-   * visão de quem realmente as avaliou). Colaborador, nunca (defesa em
+   * status Ativo/Inativo é da própria tela); Gestor/Diretoria vê quem `me`
+   * avaliou como GESTOR em algum ciclo (`gestorAvaliador`, congelado na
+   * ficha) — pra não perder, numa promoção/transferência posterior, alguém
+   * que eu de fato avaliei (achado real: Ana Maria/os Auxiliares de Produção
+   * mudaram de gestor depois do 2º Ciclo e sumiam da visão de quem realmente
+   * os avaliou) — UNIDO com `gestor === me` (gestor atual) só pra quem
+   * NINGUÉM MAIS já avaliou como GESTOR em nenhum ciclo (cobre reportes
+   * novos/ainda sem avaliação nenhuma, que devem aparecer como "sem posição"
+   * na tela). Sem essa ressalva, o mesmo problema aparece ao contrário: um
+   * colaborador que hoje reporta a mim mas foi avaliado por OUTRO gestor
+   * (achado real: Fabiana Santos Sousa reporta a Tainara hoje, mas quem a
+   * avaliou no 2º Ciclo foi Ravena Peixoto) vazava pra minha Matriz 9 Box só
+   * por ser meu liderado atual — o registro de quem avaliou pertence a quem
+   * avaliou, não a quem gerencia agora. Colaborador, nunca (defesa em
    * profundidade — a aba já é bloqueada em GestaoDesempenhoPage.tsx).
    * Exceção pontual: `colaboradores.matriz9box_visao_completa` (ligada
    * manualmente pelo RH via SQL) libera a empresa inteira pra um Gestor
@@ -395,10 +402,15 @@ export function usePortalData(): PortalData {
     const proprio = state.colaboradores.find((c) => c.nome === me);
     if (proprio?.matriz9BoxVisaoCompleta) return state.colaboradores;
     const avaliadosPorMimComoGestor = new Set<string>();
+    const avaliadosPorOutroGestor = new Set<string>();
     for (const a of state.avaliacoesDesempenho) {
-      if (a.tipo === "GESTOR" && a.gestorAvaliador === me) avaliadosPorMimComoGestor.add(a.colaboradorNome);
+      if (a.tipo !== "GESTOR" || !a.gestorAvaliador) continue;
+      if (a.gestorAvaliador === me) avaliadosPorMimComoGestor.add(a.colaboradorNome);
+      else avaliadosPorOutroGestor.add(a.colaboradorNome);
     }
-    return state.colaboradores.filter((c) => c.gestor === me || avaliadosPorMimComoGestor.has(c.nome));
+    return state.colaboradores.filter(
+      (c) => avaliadosPorMimComoGestor.has(c.nome) || (c.gestor === me && !avaliadosPorOutroGestor.has(c.nome)),
+    );
   }, [state.colaboradores, state.avaliacoesDesempenho, perfil, me]);
 
   /** Histórico (etapa 9) — inclui desligados, mesma ideia de
@@ -535,14 +547,23 @@ export function usePortalData(): PortalData {
   /** RH vê tudo. Dono (`colaboradorNome === me`) só vê depois de concluído —
    * diferente da AVD (lá a ficha GESTOR nunca é vista pelo perfil
    * Colaborador), aqui é só uma questão de tempo: vê assim que o gestor
-   * concluir. Quem é gestor atual do dono (ao vivo) vê sempre. */
+   * concluir. Senão, só `gestorResponsavel` (congelado, sempre preenchido
+   * com o `gestorAvaliador` da avaliação que gerou o PDI — nunca vazio, ver
+   * `usePortalData.ts` onde o PDI é criado) — nunca o gestor atual (ao
+   * vivo): um PDI pertence a quem de fato avaliou e o gerou, não a quem
+   * gerencia o colaborador agora (achado real: Fabiana Santos Sousa reporta
+   * a Tainara hoje, mas foi Ravena Peixoto quem a avaliou e gerou o PDI dela
+   * — o PDI de Fabiana não pode vazar pra lista de Tainara só por isso).
+   * `podeEditarPdiFn` é DIFERENTE de propósito (permite um gestor novo
+   * assumir a edição de um PDI em andamento sem depender do RH) e continua
+   * unindo com o gestor atual — aqui é só visibilidade de leitura. */
   const pdiVisiveis = useMemo(() => {
     if (perfil === "RH") return state.pdi;
     return state.pdi.filter((p) => {
       if (p.colaboradorNome === me) return p.status === "Concluído";
-      return colaboradorPorNome.get(p.colaboradorNome)?.gestor === me;
+      return p.gestorResponsavel === me;
     });
-  }, [state.pdi, colaboradorPorNome, perfil, me]);
+  }, [state.pdi, perfil, me]);
 
   /** RH sempre — inclusive um PDI já concluído, é assim que ele "reabre".
    * Senão, quem originou o plano (gestorResponsavel, congelado — mesma

@@ -7,8 +7,7 @@
 // histórico é persistido. Comparação de strings ISO "aaaa-mm-dd" é comparação
 // cronológica válida (lexicográfica = cronológica nesse formato).
 
-import { dataBrParaIso, mesIsoFromDataBr, mesLabel } from "./dates";
-import { mesesCompletos } from "./dates";
+import { dataBrParaIso, mesesCompletos } from "./dates";
 import { filtrarFichasGestor, mediaNotasOficiais } from "./dashboardDesempenho";
 import type { AvaliacaoDesempenho, CicloAvaliacaoDesempenho, Colaborador } from "../types/domain";
 
@@ -98,39 +97,6 @@ export function turnoverPorSetor(colaboradores: Colaborador[], inicioIso: string
     .filter((s): s is { setor: string; resultado: ResultadoTurnover & { turnover: number } } => s.resultado.turnover !== null)
     .map((s) => ({ setor: s.setor, turnover: s.resultado.turnover }))
     .sort((a, b) => b.turnover - a.turnover);
-}
-
-export interface AdmissoesDesligamentosMes {
-  mes: string; // "aaaa-mm"
-  mesLabel: string; // "Jul/26"
-  admissoes: number;
-  desligamentos: number;
-}
-
-/** Mesmo padrão de bucket mensal de custosRescisaoPorMes() (domain/desligados.ts),
- * mas as duas pontas usam parsing DIFERENTE: `admissaoIso` já vem "aaaa-mm-dd"
- * (só `.slice(0, 7)` pro bucket "aaaa-mm"), `dataDesligamento` vem "dd/mmm/aaaa"
- * (usa mesIsoFromDataBr(), igual custosRescisaoPorMes já faz) — NUNCA aplicar
- * mesIsoFromDataBr() em admissaoIso (formato errado, sempre retorna null).
- * admissoesNoPeriodo/desligamentosNoPeriodo já limitam ao período. */
-export function admissoesDesligamentosPorMes(colaboradores: Colaborador[], inicioIso: string, fimIso: string): AdmissoesDesligamentosMes[] {
-  const porMes = new Map<string, AdmissoesDesligamentosMes>();
-  function bucket(mes: string): AdmissoesDesligamentosMes {
-    let b = porMes.get(mes);
-    if (!b) {
-      b = { mes, mesLabel: mesLabel(mes), admissoes: 0, desligamentos: 0 };
-      porMes.set(mes, b);
-    }
-    return b;
-  }
-  admissoesNoPeriodo(colaboradores, inicioIso, fimIso).forEach((c) => {
-    bucket(c.admissaoIso.slice(0, 7)).admissoes += 1;
-  });
-  desligamentosNoPeriodo(colaboradores, inicioIso, fimIso).forEach((c) => {
-    const mes = mesIsoFromDataBr(c.dataDesligamento);
-    if (mes) bucket(mes).desligamentos += 1;
-  });
-  return [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes));
 }
 
 /** Média de mesesCompletos(admissaoIso, dataReferenciaIso) dos colaboradores

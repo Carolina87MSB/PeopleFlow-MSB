@@ -175,22 +175,23 @@ export function DashboardRHTab() {
 
   return (
     <>
-      <div className={styles.topo}>
-        <p className={styles.explicacao}>
-          Visão gerencial da empresa toda — todas as métricas de nota usam a Nota Oficial (pós-homologação do
-          Comitê de Calibração). Filtre por ciclo/departamento/gestor/cargo/status para refinar.
-        </p>
-        <div className={styles.acoes}>
-          <Button icon={<Download size={14} />} onClick={exportarCsv}>
-            Exportar CSV
-          </Button>
-          <Button icon={<Printer size={14} />} onClick={() => window.print()}>
-            Exportar PDF
-          </Button>
+      <div className={styles.topoCard}>
+        <div className={styles.topo}>
+          <p className={styles.explicacao}>
+            Visão gerencial da empresa toda — todas as métricas de nota usam a Nota Oficial (pós-homologação do
+            Comitê de Calibração). Filtre por ciclo/departamento/gestor/cargo/status para refinar.
+          </p>
+          <div className={styles.acoes}>
+            <Button icon={<Download size={14} />} onClick={exportarCsv}>
+              Exportar CSV
+            </Button>
+            <Button icon={<Printer size={14} />} onClick={() => window.print()}>
+              Exportar PDF
+            </Button>
+          </div>
         </div>
-      </div>
 
-      <div className={styles.filtros}>
+        <div className={styles.filtros}>
         <select className={styles.select} value={cicloId} onChange={(e) => setCicloId(e.target.value)}>
           {ciclosAvaliacaoDesempenho.map((c) => (
             <option key={c.id} value={c.id}>
@@ -226,6 +227,7 @@ export function DashboardRHTab() {
             </option>
           ))}
         </select>
+        </div>
       </div>
 
       <div className={styles.kpis}>
