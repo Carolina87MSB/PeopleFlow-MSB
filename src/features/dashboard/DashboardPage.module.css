@@ -338,13 +338,23 @@
   color: rgba(255, 255, 255, 0.72);
 }
 
+/* O Headcount Planejado deixou de ter card próprio: virou a legenda do card
+ * Headcount Real, então o campo de edição agora vive na linha do hint (11px)
+ * em vez de ocupar o slot do número. */
+.headcountEdicao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .headcountInput {
-  width: 96px;
+  width: 62px;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--dp-radius-control);
-  padding: 2px 8px;
-  font: 600 26px var(--font-sans);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font: 600 12px var(--font-sans);
   color: var(--color-navy);
+  background: #fff;
   font-variant-numeric: tabular-nums;
 }
 
@@ -369,6 +379,18 @@
 .headcountBotao:hover {
   border-color: var(--color-brand);
   color: var(--color-brand);
+}
+
+/* O lápis/salvar/cancelar passaram a viver dentro do card escuro do Headcount
+ * Real — fundo branco ali seria um bloco claro no canto do card. */
+.kpiDark .headcountBotao {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.72);
+}
+.kpiDark .headcountBotao:hover {
+  border-color: #fff;
+  color: #fff;
 }
 
 /* --------------------------------------------------------------- cards */
@@ -424,6 +446,18 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: var(--dp-gap);
+}
+
+/* Turnover por Setor e Custos de Rescisão lado a lado, metade a metade.
+ * `minmax(0, 1fr)` (e não `1fr`) porque o card de custos contém uma tabela de
+ * 5 colunas e um SVG de largura fixa: com `1fr`, o min-content deles
+ * empurraria a coluna para fora do container em vez de a tabela rolar dentro
+ * do próprio wrapper. */
+.graficosGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--dp-gap);
+  align-items: start;
 }
 
 /* --------------------------------------------------- aprovações pendentes */
@@ -629,7 +663,8 @@
   .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .distribuicoesGrid {
+  .distribuicoesGrid,
+  .graficosGrid {
     grid-template-columns: 1fr;
   }
   .gestorGrid,

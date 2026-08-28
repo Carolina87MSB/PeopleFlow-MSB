@@ -292,46 +292,53 @@ export function DashboardPage() {
             <span className={styles.secaoContexto}>{recorteAtual}</span>
           </div>
           <div className={styles.kpis}>
-            {(perfil === "RH" || perfil === "Diretoria") && (
-              <Kpi
-                label="Headcount Planejado"
-                value={
-                  editandoHeadcountPlanejado ? (
-                    <input
-                      type="number"
-                      min={0}
-                      className={styles.headcountInput}
-                      value={headcountPlanejadoInput}
-                      onChange={(e) => setHeadcountPlanejadoInput(e.target.value)}
-                      autoFocus
-                    />
-                  ) : (
-                    configDashboard?.headcountPlanejado ?? "—"
-                  )
-                }
-                action={
-                  perfil === "RH" ? (
-                    editandoHeadcountPlanejado ? (
-                      <div className={styles.headcountAcoes}>
-                        <button type="button" className={styles.headcountBotao} onClick={handleSalvarHeadcountPlanejado} disabled={salvandoHeadcountPlanejado}>
-                          <Check size={13} />
-                        </button>
-                        <button type="button" className={styles.headcountBotao} onClick={() => setEditandoHeadcountPlanejado(false)}>
-                          <X size={13} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button type="button" className={styles.headcountBotao} onClick={iniciarEdicaoHeadcountPlanejado}>
-                        <Pencil size={13} />
-                      </button>
-                    )
-                  ) : undefined
-                }
-              />
-            )}
             {/* Único card escuro da tela — o indicador consolidado da seção,
-                conforme o padrão da referência. */}
-            <Kpi label="Headcount Real" value={headcountReal} tone="dark" />
+                conforme o padrão da referência. O Headcount Planejado deixou
+                de ter card próprio e virou informação complementar daqui: o
+                valor, a edição pelo RH e a visibilidade RH/Diretoria são
+                exatamente os de antes, só mudaram de lugar. */}
+            <Kpi
+              label="Headcount Real"
+              value={headcountReal}
+              tone="dark"
+              hint={
+                perfil === "RH" || perfil === "Diretoria" ? (
+                  editandoHeadcountPlanejado ? (
+                    <span className={styles.headcountEdicao}>
+                      Planejado:
+                      <input
+                        type="number"
+                        min={0}
+                        className={styles.headcountInput}
+                        value={headcountPlanejadoInput}
+                        onChange={(e) => setHeadcountPlanejadoInput(e.target.value)}
+                        autoFocus
+                      />
+                    </span>
+                  ) : (
+                    `Planejado: ${configDashboard?.headcountPlanejado ?? "—"}`
+                  )
+                ) : undefined
+              }
+              action={
+                perfil === "RH" ? (
+                  editandoHeadcountPlanejado ? (
+                    <div className={styles.headcountAcoes}>
+                      <button type="button" className={styles.headcountBotao} onClick={handleSalvarHeadcountPlanejado} disabled={salvandoHeadcountPlanejado}>
+                        <Check size={13} />
+                      </button>
+                      <button type="button" className={styles.headcountBotao} onClick={() => setEditandoHeadcountPlanejado(false)}>
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" className={styles.headcountBotao} onClick={iniciarEdicaoHeadcountPlanejado} title="Editar Headcount Planejado">
+                      <Pencil size={13} />
+                    </button>
+                  )
+                ) : undefined
+              }
+            />
             {(perfil === "RH" || perfil === "Diretoria") && (
               <Kpi
                 label="Aderência ao Planejamento"
@@ -352,6 +359,12 @@ export function DashboardPage() {
                   : "Nenhum ciclo de avaliação em aberto ou encerrado ainda"
               }
             />
+            {/* Espaço reservado: o PeopleFlow ainda não tem fonte de dado de
+                clima (nenhuma tabela, tipo ou getter). O card existe para
+                manter o lugar do indicador na grade e exibe "—" pelo mesmo
+                critério dos demais KPIs sem dado. Nada é calculado nem
+                inventado aqui. */}
+            <Kpi label="Clima Organizacional" value="—" hint="sem pesquisa de clima cadastrada" />
           </div>
         </section>
 
@@ -472,6 +485,22 @@ export function DashboardPage() {
               </div>
             )}
 
+          </div>
+        </section>
+
+        <section className={styles.secao}>
+          <div className={styles.secaoHeader}>
+            <h2 className={styles.secaoTitulo}>Turnover e Custos</h2>
+            {custosRescisao.length > 0 && (
+              <span className={styles.secaoContexto}>
+                {qtdDesligamentosTotal} desligamento{qtdDesligamentosTotal === 1 ? "" : "s"} · {money(custoRescisaoTotal)}
+              </span>
+            )}
+          </div>
+          {/* Turnover por Setor e Custos de Rescisão lado a lado, metade a
+              metade. Os dois cards são os mesmos de antes — mesmos dados,
+              mesmo período, mesmos filtros; só mudaram de posição. */}
+          <div className={styles.graficosGrid}>
             <div className={styles.panel}>
               <div className={styles.cardHeader}>
                 <h3 className={styles.cardTitle}>Turnover por Setor</h3>
@@ -482,19 +511,6 @@ export function DashboardPage() {
                 <TurnoverPorSetorList data={turnoverSetor} />
               )}
             </div>
-          </div>
-        </section>
-
-        <section className={styles.secao}>
-          <div className={styles.secaoHeader}>
-            <h2 className={styles.secaoTitulo}>Custos</h2>
-            {custosRescisao.length > 0 && (
-              <span className={styles.secaoContexto}>
-                {qtdDesligamentosTotal} desligamento{qtdDesligamentosTotal === 1 ? "" : "s"} · {money(custoRescisaoTotal)}
-              </span>
-            )}
-          </div>
-          <div className={styles.mainGrid}>
             {custosRescisao.length > 0 ? (
               <div className={styles.panel}>
                 <div className={styles.cardHeader}>
@@ -539,7 +555,17 @@ export function DashboardPage() {
                 <EmptyState message="Nenhum desligamento no período/recorte selecionado." />
               </div>
             )}
+          </div>
+        </section>
 
+        {/* "Integrações futuras" ganhou seção própria: ficava sob o rótulo
+            "Custos", que agora virou "Turnover e Custos", e numa grade de 2
+            colunas ela ocuparia meia largura. Conteúdo idêntico. */}
+        <section className={styles.secao}>
+          <div className={styles.secaoHeader}>
+            <h2 className={styles.secaoTitulo}>Integrações</h2>
+          </div>
+          <div className={styles.mainGrid}>
             <div className={styles.panel}>
               <div className={styles.cardHeader}>
                 <h3 className={styles.cardTitle}>Integrações futuras</h3>
