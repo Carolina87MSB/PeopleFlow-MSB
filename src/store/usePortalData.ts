@@ -277,9 +277,12 @@ export interface PortalData {
   pdiBiblioteca: PdiBibliotecaItem[];
   salvarItemBibliotecaPdi: (item: PdiBibliotecaItem) => Promise<{ ok: true } | { ok: false }>;
   excluirItemBibliotecaPdi: (chave: string, tipoCompetencia: TipoCompetenciaPdi) => Promise<{ ok: true } | { ok: false }>;
-  /** Mesma lista de liderados de `colaboradoresListagem` (RH/Diretoria: empresa
-   * toda; Gestor: quem tem `gestor === me` hoje) — Feedback nunca usa uma
-   * hierarquia própria. Colaborador nunca vê nada aqui. */
+  /** Liderados elegíveis pra Feedback — mesma população de
+   * `colaboradoresParaMatriz9Box` (RH/Diretoria: empresa toda; Gestor: quem
+   * `me` avaliou como GESTOR em algum ciclo da AVD OU quem tem `gestor === me`
+   * hoje se ninguém mais já avaliou), filtrada a ativos. Fonte da tela
+   * Feedback (lista de "Registrar Feedback" por colaborador). */
+  colaboradoresParaFeedback: Colaborador[];
   feedbacksVisiveis: Feedback[];
   podeRegistrarFeedback: (colaboradorNome: string) => boolean;
   registrarFeedback: (input: {
@@ -2000,21 +2003,31 @@ export function usePortalData(): PortalData {
   /** Feedback (Gestão de Desempenho → Desenvolvimento → Feedback) — histórico
    * contínuo de gestão, deliberadamente independente de AVD/PDI/ciclo (ver
    * types/domain.ts > Feedback). Visibilidade e permissão pra registrar usam
-   * a MESMA lista de liderados de sempre (`colaboradoresListagem`: RH/
-   * Diretoria veem a empresa toda, Gestor só quem tem `gestor === me` hoje —
-   * reaproveitado, nenhuma estrutura paralela de hierarquia criada aqui).
-   * Colaborador nunca alcança esta função (a aba já é bloqueada em
-   * GestaoDesempenhoPage.tsx), mas a checagem explícita aqui é defesa em
-   * profundidade, mesmo padrão de colaboradoresParaMatriz9Box. */
+   * a MESMA população de `colaboradoresParaMatriz9Box` (RH/Diretoria: empresa
+   * toda; Gestor: quem `me` avaliou como GESTOR em algum ciclo da AVD — ver
+   * `gestorAvaliador`, congelado na ficha — OU quem tem `gestor === me` hoje
+   * SE ninguém mais já avaliou essa pessoa), filtrada a ativos. Achado real:
+   * usar `colaboradoresListagem` (só gestor ATUAL) fazia a Tainara perder as
+   * Auxiliares de Produção que ela avaliou no 2º Ciclo depois que o gestor
+   * atual delas mudou para a Fabiana — mesmo bug já corrigido em
+   * DashboardGestorTab.tsx/PdiTab.tsx nesta mesma sessão, reaproveitando a
+   * mesma população em vez de duplicar a regra aqui. Colaborador nunca
+   * alcança esta função (a aba já é bloqueada em GestaoDesempenhoPage.tsx),
+   * mas a checagem explícita aqui é defesa em profundidade. */
+  const colaboradoresParaFeedback = useMemo(
+    () => colaboradoresParaMatriz9Box.filter((c) => !c.desligado),
+    [colaboradoresParaMatriz9Box],
+  );
+
   const feedbacksVisiveis = useMemo(() => {
     if (perfil === "Colaborador") return [];
-    const nomesPermitidos = new Set(colaboradoresListagem.map((c) => c.nome));
+    const nomesPermitidos = new Set(colaboradoresParaFeedback.map((c) => c.nome));
     return state.feedbacks.filter((f) => nomesPermitidos.has(f.colaboradorNome));
-  }, [state.feedbacks, colaboradoresListagem, perfil]);
+  }, [state.feedbacks, colaboradoresParaFeedback, perfil]);
 
   const podeRegistrarFeedbackFn = useCallback(
-    (colaboradorNome: string) => perfil !== "Colaborador" && colaboradoresListagem.some((c) => c.nome === colaboradorNome),
-    [perfil, colaboradoresListagem],
+    (colaboradorNome: string) => perfil !== "Colaborador" && colaboradoresParaFeedback.some((c) => c.nome === colaboradorNome),
+    [perfil, colaboradoresParaFeedback],
   );
 
   const registrarFeedbackFn = useCallback(
@@ -2308,6 +2321,7 @@ export function usePortalData(): PortalData {
     pdiBiblioteca: state.pdiBiblioteca,
     salvarItemBibliotecaPdi: salvarItemBibliotecaPdiFn,
     excluirItemBibliotecaPdi: excluirItemBibliotecaPdiFn,
+    colaboradoresParaFeedback,
     feedbacksVisiveis,
     podeRegistrarFeedback: podeRegistrarFeedbackFn,
     registrarFeedback: registrarFeedbackFn,

@@ -8,13 +8,16 @@ import styles from "./FeedbackTab.module.css";
 
 /** Feedback (Gestão de Desempenho → Desenvolvimento) — histórico contínuo de
  * conversas de gestão, independente de AVD/PDI/ciclo (ver domain/feedback.ts
- * e usePortalData.ts). Lista os liderados de `colaboradoresListagem` (mesma
- * fonte de sempre — RH/Diretoria veem a empresa toda, Gestor só a própria
- * equipe), sem coluna de Setor por pedido explícito do RH. Clicar na linha
- * abre o histórico; o botão "Registrar Feedback" abre direto o formulário
- * de novo registro dentro do mesmo modal, pra manter o fluxo rápido. */
+ * e usePortalData.ts). Lista os liderados de `colaboradoresParaFeedback`
+ * (RH/Diretoria: empresa toda; Gestor: quem `me` avaliou como GESTOR em
+ * algum ciclo da AVD OU quem tem `gestor === me` hoje se ninguém mais já
+ * avaliou — nunca só a equipe atual, pra não perder colaboradores que
+ * mudaram de gestor depois do ciclo em que foram avaliados), sem coluna de
+ * Setor por pedido explícito do RH. Clicar na linha abre o histórico; o
+ * botão "Registrar Feedback" abre direto o formulário de novo registro
+ * dentro do mesmo modal, pra manter o fluxo rápido. */
 export function FeedbackTab() {
-  const { colaboradoresListagem, feedbacksVisiveis } = usePortalData();
+  const { colaboradoresParaFeedback, feedbacksVisiveis } = usePortalData();
   const [colaboradorAberto, setColaboradorAberto] = useState<Colaborador | null>(null);
   const [abrirFormularioAoEntrar, setAbrirFormularioAoEntrar] = useState(false);
 
@@ -24,7 +27,10 @@ export function FeedbackTab() {
     return mapa;
   }, [feedbacksVisiveis]);
 
-  const liderados = useMemo(() => [...colaboradoresListagem].sort((a, b) => a.nome.localeCompare(b.nome)), [colaboradoresListagem]);
+  const liderados = useMemo(
+    () => [...colaboradoresParaFeedback].sort((a, b) => a.nome.localeCompare(b.nome)),
+    [colaboradoresParaFeedback],
+  );
 
   function abrirHistorico(colaborador: Colaborador) {
     setAbrirFormularioAoEntrar(false);
