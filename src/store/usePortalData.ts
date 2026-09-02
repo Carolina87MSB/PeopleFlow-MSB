@@ -47,7 +47,8 @@ import {
   criarAvaliacoesPotencial as criarAvaliacoesPotencialNoSupabase,
 } from "../repositories/avaliacoesPotencialRepository";
 import { notificar } from "../repositories/notificacoesRepository";
-import { formatarDataIso, tempoDeEmpresa } from "../domain/dates";
+import { formatarDataIso, hojeIso, tempoDeEmpresa } from "../domain/dates";
+import { colaboradoresAtivosEmData } from "../domain/dashboardExecutivo";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import {
   CAMPOS_DESCRICAO_CARGO,
@@ -374,7 +375,17 @@ export function usePortalData(): PortalData {
     return set;
   }, [perfil, me, state.colaboradores]);
 
-  const ativosGlobal = useMemo(() => state.colaboradores.filter((c) => !c.desligado), [state.colaboradores]);
+  /** Única fonte de verdade pra "colaborador ativo hoje" — reaproveita a
+   * MESMA função usada pelo Dashboard Executivo (`colaboradoresAtivosEmData`,
+   * domain/dashboardExecutivo.ts) em vez de um `!desligado` simples só aqui.
+   * Achado real: a Lista de Colaboradores (via este getter) e o Dashboard
+   * (via `headcountEmData`) mostravam totais diferentes porque cada um
+   * implementava sua própria noção de "ativo" — o `!desligado` sozinho não
+   * excluía quem tem `admissaoIso` vazia/futura (pré-cadastro que ainda não
+   * começou) nem quem é `empresaAfiliada` (pessoa de empresa afiliada do
+   * grupo econômico, nunca conta como colaborador MSB). Unificar aqui corrige
+   * os dois de uma vez, sem duplicar a regra. */
+  const ativosGlobal = useMemo(() => colaboradoresAtivosEmData(state.colaboradores, hojeIso()), [state.colaboradores]);
 
   const colaboradoresVisiveis = useMemo(() => {
     return perfil === "Gestor" && scopeSet ? ativosGlobal.filter((c) => scopeSet.has(c.nome)) : ativosGlobal;

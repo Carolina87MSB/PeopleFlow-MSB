@@ -38,6 +38,7 @@ interface ColaboradorRow {
   motivo_desligamento: string | null;
   desligado_by: string | null;
   matriz9box_visao_completa: boolean | null;
+  empresa_afiliada: boolean | null;
 }
 
 function fromRow(row: ColaboradorRow): Colaborador {
@@ -57,6 +58,7 @@ function fromRow(row: ColaboradorRow): Colaborador {
     motivoDesligamento: row.motivo_desligamento ?? "",
     desligadoBy: row.desligado_by ?? "",
     matriz9BoxVisaoCompleta: row.matriz9box_visao_completa ?? false,
+    empresaAfiliada: row.empresa_afiliada ?? false,
   };
 }
 
@@ -86,7 +88,7 @@ export async function requireRH(authHeader: string | string[] | undefined): Prom
   const { data, error } = await supabaseAdmin
     .from("colaboradores")
     .select(
-      "nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by, matriz9box_visao_completa",
+      "nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by, matriz9box_visao_completa, empresa_afiliada",
     );
   if (error) return { ok: false, status: 500, error: error.message };
 

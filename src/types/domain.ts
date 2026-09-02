@@ -35,6 +35,13 @@ export interface Colaborador {
    * colaboradoresParaMatriz9Box em usePortalData.ts. Sem efeito fora do
    * perfil Gestor. */
   matriz9BoxVisaoCompleta: boolean;
+  /** true para pessoas de uma empresa afiliada do grupo econômico que
+   * aparecem em `colaboradores` (têm cargo/gestor/e-mail no domínio da MSB
+   * pra fins de acesso a portal) mas NÃO são colaboradoras da MSB — nunca
+   * devem contar em headcount/contagens de colaboradores (ver
+   * colaboradoresAtivosEmData em domain/dashboardExecutivo.ts, única fonte
+   * usada tanto pelo Dashboard quanto pela Lista de Colaboradores). */
+  empresaAfiliada: boolean;
 }
 
 export interface DesligamentoFinanceiro {

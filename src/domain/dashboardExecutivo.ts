@@ -33,9 +33,15 @@ export function filtrarPorAtributos(colaboradores: Colaborador[], filtros: Filtr
  * marcado `desligado: true` mas com `dataDesligamento` não-parseável (fora do
  * contrato do tipo, não deveria ocorrer) é tratado como "ainda ativo" em
  * qualquer data de referência — intencional, evita subcontar headcount
- * histórico por dado ruim; não é um bug a corrigir com mais lógica. */
+ * histórico por dado ruim; não é um bug a corrigir com mais lógica.
+ * `empresaAfiliada` (pessoas de empresa afiliada do grupo econômico, com
+ * cadastro em `colaboradores` só pra fins de acesso a portal) nunca conta,
+ * em nenhuma data — única fonte de verdade pra headcount MSB, usada tanto
+ * pelo Dashboard Executivo quanto por `ativosGlobal`/Lista de Colaboradores
+ * (ver usePortalData.ts). */
 export function colaboradoresAtivosEmData(colaboradores: Colaborador[], dataIso: string): Colaborador[] {
   return colaboradores.filter((c) => {
+    if (c.empresaAfiliada) return false;
     if (!c.admissaoIso || c.admissaoIso > dataIso) return false;
     if (!c.desligado) return true;
     const desligamentoIso = dataBrParaIso(c.dataDesligamento);

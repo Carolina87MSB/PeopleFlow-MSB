@@ -1292,3 +1292,22 @@ create policy "authenticated_rw_feedbacks"
   to authenticated
   using (true)
   with check (true);
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 29) colaboradores.empresa_afiliada — pessoas de uma empresa afiliada do
+--    grupo econômico (ex.: Daiana Pereira Leite, Pedro Henrique Lages Rocha
+--    — "Biomedical", já com uma exceção de e-mail em domain/hierarquia.ts)
+--    que têm cadastro em `colaboradores` só pra fins de acesso a portal, mas
+--    NÃO são colaboradoras da MSB. Achado real: contavam no `!desligado`
+--    simples que a Lista de Colaboradores usava, mas não no
+--    `colaboradoresAtivosEmData()` do Dashboard (que também checa
+--    admissaoIso) — daí a divergência de headcount entre as duas telas.
+--    Esta coluna é a correção definitiva: nunca contam em NENHUMA tela que
+--    usa `colaboradoresAtivosEmData()`/`ativosGlobal` (única fonte de
+--    verdade agora, ver usePortalData.ts), independente de data.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.colaboradores
+  add column if not exists empresa_afiliada boolean not null default false;
+
+comment on column public.colaboradores.empresa_afiliada is
+  'PeopleFlow/SST: true para pessoas de uma empresa afiliada do grupo econômico, cadastradas em colaboradores só pra acesso a portal — nunca contam como colaborador MSB em headcount/contagens. Ligado manualmente pelo RH via SQL.';
