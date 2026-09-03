@@ -5,6 +5,7 @@ import { CAMPOS_DESCRICAO_CARGO, descricaoCargoVazia } from "../../domain/descri
 import type { CampoDescricaoCargo, CampoMeta } from "../../domain/descricaoCargo";
 import { statusDescricaoCargoMeta } from "../../domain/colors";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
+import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import type { HistoricoDescricaoCargo } from "../../types/domain";
 import styles from "./DescricaoCargoModal.module.css";
@@ -31,7 +32,9 @@ interface DescricaoCargoModalProps {
  * (código/revisão/data) ficam em destaque no topo por serem usados em
  * auditorias. */
 export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalProps) {
+  const { state } = usePortalStore();
   const {
+    colaboradores,
     descricoesCargo,
     podeEditarSecaoDescricaoCargo,
     podeAprovarDescricaoCargo,
@@ -44,6 +47,17 @@ export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalP
   const descricao = useMemo(
     () => descricoesCargo.find((d) => d.cargoNome === cargoNome) ?? descricaoCargoVazia(cargoNome),
     [descricoesCargo, cargoNome],
+  );
+
+  // "Subordinação" é sempre um CARGO (a quem este cargo se reporta), nunca o
+  // nome de uma pessoa — lista dinâmica com todos os cargos existentes
+  // (ocupados + custom), exceto o próprio cargo desta ficha.
+  const cargosParaSubordinacao = useMemo(
+    () =>
+      [...new Set([...colaboradores.map((c) => c.cargo), ...state.cargosCustom.map((c) => c.nome)])]
+        .filter((c) => Boolean(c) && c !== cargoNome)
+        .sort((a, b) => formatarNomeCargo(a).localeCompare(formatarNomeCargo(b), "pt-BR")),
+    [colaboradores, state.cargosCustom, cargoNome],
   );
 
   const [historico, setHistorico] = useState<HistoricoDescricaoCargo[]>([]);
@@ -145,6 +159,7 @@ export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalP
                   podeEditar={podeEditarSecaoDescricaoCargo(cargoNome, campo.grupo)}
                   onSalvar={(novo) => handleSalvarCampo(campo.key, novo)}
                   compacto={compacto}
+                  opcoesOverride={campo.key === "subordinacao" ? cargosParaSubordinacao : undefined}
                 />
               ))}
             </div>
@@ -250,18 +265,25 @@ interface CampoEditavelProps {
   onSalvar: (valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   /** "Dados do formulário (auditoria)" é metadado, não conteúdo do cargo — rótulo/valor menores, mesmo espírito da versão aprovada da tela. */
   compacto?: boolean;
+  /** Lista dinâmica que substitui `meta.opcoes` (ex.: Subordinação, cuja lista de cargos depende dos dados carregados, não é fixa no domínio). */
+  opcoesOverride?: string[];
 }
 
-function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar, compacto }: CampoEditavelProps) {
+const VALOR_OUTRO = "__outro__";
+
+function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar, compacto, opcoesOverride }: CampoEditavelProps) {
   const temProposta = valorPendente !== undefined && valorPendente !== valorOficial;
   const valorEfetivo = temProposta ? (valorPendente as string) : valorOficial;
+  const opcoes = opcoesOverride ?? meta.opcoes;
 
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState(valorEfetivo);
+  const [modoOutro, setModoOutro] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   function iniciarEdicao() {
     setRascunho(valorEfetivo);
+    setModoOutro(Boolean(opcoes) && valorEfetivo !== "" && !opcoes!.includes(valorEfetivo));
     setEditando(true);
   }
 
@@ -284,7 +306,52 @@ function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar
       </div>
       {editando ? (
         <div className={styles.edicao}>
-          {meta.multiline ? (
+          {opcoes ? (
+            modoOutro ? (
+              <>
+                <input
+                  value={rascunho}
+                  onChange={(e) => setRascunho(e.target.value)}
+                  className={styles.input}
+                  placeholder="Digite o valor"
+                  autoFocus
+                />
+                {meta.permiteOutro && (
+                  <button
+                    type="button"
+                    className={styles.trocarOpcaoBtn}
+                    onClick={() => {
+                      setModoOutro(false);
+                      setRascunho("");
+                    }}
+                  >
+                    Escolher da lista
+                  </button>
+                )}
+              </>
+            ) : (
+              <select
+                value={rascunho}
+                onChange={(e) => {
+                  if (e.target.value === VALOR_OUTRO) {
+                    setModoOutro(true);
+                    setRascunho("");
+                  } else {
+                    setRascunho(e.target.value);
+                  }
+                }}
+                className={styles.input}
+              >
+                <option value="">Selecione…</option>
+                {opcoes.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+                {meta.permiteOutro && <option value={VALOR_OUTRO}>Outro</option>}
+              </select>
+            )
+          ) : meta.multiline ? (
             <textarea value={rascunho} onChange={(e) => setRascunho(e.target.value)} rows={4} className={styles.textarea} />
           ) : (
             <input value={rascunho} onChange={(e) => setRascunho(e.target.value)} className={styles.input} />

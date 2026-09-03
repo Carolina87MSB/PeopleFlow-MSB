@@ -10,7 +10,20 @@ export interface CampoMeta {
   label: string;
   grupo: string;
   multiline?: boolean;
+  /** Lista fixa de opções pra virar campo de seleção em vez de texto livre.
+   * Subordinação não tem lista fixa aqui — usa lista dinâmica de cargos
+   * existentes, montada em DescricaoCargoModal.tsx (opcoesOverride). */
+  opcoes?: string[];
+  /** Além das opções fixas, mostra "Outro" pra digitar um valor livre. */
+  permiteOutro?: boolean;
 }
+
+/** Nível de senioridade dentro do cargo (não confundir com colaboradores.nivel,
+ * que é o nível hierárquico — Diretoria/Gerência/etc.). */
+export const NIVEIS_DESCRICAO_CARGO = ["Júnior", "Pleno", "Sênior"];
+
+/** Únicas localidades da MSB hoje — "Outro" cobre exceções (ex.: colaborador remoto). */
+export const LOCALIDADES_DESCRICAO_CARGO = ["Lauro de Freitas"];
 
 /** Ordem e agrupamento espelham as seções do formulário POP-RH-001 (Descrição de Cargo). */
 export const CAMPOS_DESCRICAO_CARGO: CampoMeta[] = [
@@ -19,8 +32,8 @@ export const CAMPOS_DESCRICAO_CARGO: CampoMeta[] = [
   { key: "dataFormulario", label: "Data do formulário", grupo: "Dados do formulário (auditoria)" },
   { key: "dataRevisaoCargo", label: "Data de revisão deste cargo", grupo: "Dados do formulário (auditoria)" },
   { key: "subordinacao", label: "Subordinação", grupo: "Informações do cargo" },
-  { key: "localidade", label: "Localidade", grupo: "Informações do cargo" },
-  { key: "nivelDocumento", label: "Nível", grupo: "Informações do cargo" },
+  { key: "localidade", label: "Localidade", grupo: "Informações do cargo", opcoes: LOCALIDADES_DESCRICAO_CARGO, permiteOutro: true },
+  { key: "nivelDocumento", label: "Nível", grupo: "Informações do cargo", opcoes: NIVEIS_DESCRICAO_CARGO },
   { key: "sumario", label: "Sumário do cargo", grupo: "Sumário do cargo", multiline: true },
   { key: "responsabilidades", label: "Principais responsabilidades", grupo: "Principais responsabilidades", multiline: true },
   { key: "escolaridade", label: "Escolaridade", grupo: "Requisitos do cargo", multiline: true },
