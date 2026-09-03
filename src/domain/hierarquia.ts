@@ -151,6 +151,21 @@ export function gestorDoDepartamento(colaboradores: Colaborador[], depto: string
   return cargosCustom.find((c) => c.depto === depto)?.gestor ?? null;
 }
 
+/** true quando `nome` já lidera pelo menos 1 colaborador no departamento
+ * `depto` hoje (ou é o gestor cadastrado num cargo custom desse depto, pra
+ * departamentos ainda sem ocupantes). Ao contrário de gestorDoDepartamento
+ * (que só retorna UM nome — o gestor com mais gente, útil pra exibição),
+ * esta função reconhece qualquer gestor legítimo de um departamento dividido
+ * entre várias lideranças (ex.: "Administrativo" com Daniel e Cintia, cada
+ * um respondendo por uma parte da equipe) — usada na autorização real de
+ * quem pode abrir uma Transferência/Promoção com mudança de departamento
+ * (ver validarForm em domain/formMovimentacao.ts). */
+export function ehGestorDoDepartamento(colaboradores: Colaborador[], depto: string, nome: string, cargosCustom: CargoCustom[] = []): boolean {
+  if (!nome) return false;
+  if (colaboradores.some((c) => c.depto === depto && c.gestor === nome)) return true;
+  return cargosCustom.some((c) => c.depto === depto && c.gestor === nome);
+}
+
 /** true se pelo menos um colaborador que hoje ocupa `cargoNome` está dentro
  * do `scopeSet` de um Gestor (toda a árvore de reportes, não só reporte
  * direto) — usado para decidir se ele pode editar a Descrição de Cargo

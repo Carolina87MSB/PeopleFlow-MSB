@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
 import { blankForm } from "../../domain/formMovimentacao";
 import { contarPorGestor } from "../../domain/agregados";
-import { gestorDoDepartamento } from "../../domain/hierarquia";
+import { ehGestorDoDepartamento, gestorDoDepartamento } from "../../domain/hierarquia";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { useToast } from "./ToastContext";
@@ -74,15 +74,24 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const proGestorDestino = form.proNovoDepto ? gestorDoDepartamento(colaboradores, form.proNovoDepto, state.cargosCustom) : null;
   const trfGestorDestino = form.trfNovoDepto ? gestorDoDepartamento(colaboradores, form.trfNovoDepto, state.cargosCustom) : null;
 
+  // O aviso/trava real considera QUALQUER gestor que já lidera alguém no
+  // departamento (ehGestorDoDepartamento) — não só o nome exibido acima
+  // (gestorDoDepartamento só mostra o gestor com mais gente, mas um
+  // departamento pode ter mais de uma liderança legítima, ex.:
+  // "Administrativo" dividido entre Daniel e Cintia).
   function avisoGestorErrado(): string | null {
-    if (tipo === "PRO" && form.proMudaDepto === "Sim" && proGestorDestino && proGestorDestino !== conta.nome) {
-      return `Somente ${proGestorDestino}, gestor(a) do departamento de destino, pode enviar esta movimentação.`;
+    if (tipo === "PRO" && form.proMudaDepto === "Sim" && form.proNovoDepto && !ehGestorDoDepartamento(colaboradores, form.proNovoDepto, conta.nome, state.cargosCustom)) {
+      return proGestorDestino
+        ? `Somente um gestor que já lidera colaboradores de ${form.proNovoDepto} pode enviar esta movimentação (ex.: ${proGestorDestino}).`
+        : "Não foi possível identificar o gestor do departamento de destino selecionado.";
     }
     if (tipo === "PRO" && form.proMudaDepto === "Não" && colaboradorSelecionado && colaboradorSelecionado.gestor !== conta.nome) {
       return `Somente ${colaboradorSelecionado.gestor}, gestor(a) atual de ${colaboradorSelecionado.nome}, pode enviar esta promoção.`;
     }
-    if (tipo === "TRF" && trfGestorDestino && trfGestorDestino !== conta.nome) {
-      return `Somente ${trfGestorDestino}, gestor(a) do departamento de destino, pode enviar esta movimentação.`;
+    if (tipo === "TRF" && form.trfNovoDepto && !ehGestorDoDepartamento(colaboradores, form.trfNovoDepto, conta.nome, state.cargosCustom)) {
+      return trfGestorDestino
+        ? `Somente um gestor que já lidera colaboradores de ${form.trfNovoDepto} pode enviar esta movimentação (ex.: ${trfGestorDestino}).`
+        : "Não foi possível identificar o gestor do departamento de destino selecionado.";
     }
     return null;
   }

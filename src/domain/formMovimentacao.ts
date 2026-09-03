@@ -1,5 +1,5 @@
 import { formatarDataAtual, formatarDataIso } from "./dates";
-import { gestorDoDepartamento } from "./hierarquia";
+import { ehGestorDoDepartamento, gestorDoDepartamento } from "./hierarquia";
 import { calcularPercentual, montarEtapas, nextId } from "./workflow";
 import type { CargoCustom, Colaborador, DadoField, DescricaoCargo, Movimentacao, NovaMovimentacaoForm, TipoMovimentacao } from "../types/domain";
 
@@ -89,10 +89,10 @@ export function validarForm(
     }
     if (f.proMudaDepto === "Sim") {
       if (!f.proNovoDepto) return { ok: false };
-      const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.proNovoDepto, ctx.cargosCustom);
-      if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
-      if (gestorDestino !== ctx.me) {
-        return { ok: false, error: `Somente ${gestorDestino}, gestor(a) de ${f.proNovoDepto}, pode abrir esta movimentação.` };
+      if (!ehGestorDoDepartamento(ctx.colaboradores, f.proNovoDepto, ctx.me, ctx.cargosCustom)) {
+        const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.proNovoDepto, ctx.cargosCustom);
+        if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
+        return { ok: false, error: `Somente um gestor que já lidera colaboradores de ${f.proNovoDepto} pode abrir esta movimentação (ex.: ${gestorDestino}).` };
       }
     } else if (colab && colab.gestor !== ctx.me) {
       return { ok: false, error: `Somente ${colab.gestor}, gestor(a) atual de ${colab.nome}, pode abrir esta promoção.` };
@@ -102,10 +102,10 @@ export function validarForm(
 
   if (f.tipo === "TRF") {
     if (!f.trfNovoDepto || !f.trfData) return { ok: false };
-    const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.trfNovoDepto, ctx.cargosCustom);
-    if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
-    if (gestorDestino !== ctx.me) {
-      return { ok: false, error: `Somente ${gestorDestino}, gestor(a) de ${f.trfNovoDepto}, pode abrir esta movimentação.` };
+    if (!ehGestorDoDepartamento(ctx.colaboradores, f.trfNovoDepto, ctx.me, ctx.cargosCustom)) {
+      const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.trfNovoDepto, ctx.cargosCustom);
+      if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
+      return { ok: false, error: `Somente um gestor que já lidera colaboradores de ${f.trfNovoDepto} pode abrir esta movimentação (ex.: ${gestorDestino}).` };
     }
     return { ok: true };
   }
