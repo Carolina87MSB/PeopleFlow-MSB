@@ -32,7 +32,14 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
     [colaboradores],
   );
 
-  const departamentos = useMemo(() => [...new Set(colaboradores.map((c) => c.depto))].sort(), [colaboradores]);
+  // Inclui também o depto de cargos custom (0 ocupantes) — sem isso, um
+  // departamento que só existe por causa de um cargo novo (ex.: criado direto
+  // no banco, ainda sem ninguém alocado) nunca aparece pra escolher como
+  // destino de uma movimentação.
+  const departamentos = useMemo(
+    () => [...new Set([...colaboradores.map((c) => c.depto), ...state.cargosCustom.map((c) => c.depto)])].sort(),
+    [colaboradores, state.cargosCustom],
+  );
   const gestores = useMemo(() => [...contarPorGestor(colaboradores).keys()].sort(), [colaboradores]);
   const cargosExistentes = useMemo(
     () => [...new Set([...colaboradores.map((c) => c.cargo), ...state.cargosCustom.map((c) => c.nome)])].filter(Boolean).sort(),
@@ -64,8 +71,8 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   // validarForm()/construirMovimentacao() (domain/formMovimentacao.ts). Aqui
   // só serve para preencher o campo somente-leitura e avisar quem preenche
   // se não é a pessoa certa para enviar esta movimentação.
-  const proGestorDestino = form.proNovoDepto ? gestorDoDepartamento(colaboradores, form.proNovoDepto) : null;
-  const trfGestorDestino = form.trfNovoDepto ? gestorDoDepartamento(colaboradores, form.trfNovoDepto) : null;
+  const proGestorDestino = form.proNovoDepto ? gestorDoDepartamento(colaboradores, form.proNovoDepto, state.cargosCustom) : null;
+  const trfGestorDestino = form.trfNovoDepto ? gestorDoDepartamento(colaboradores, form.trfNovoDepto, state.cargosCustom) : null;
 
   function avisoGestorErrado(): string | null {
     if (tipo === "PRO" && form.proMudaDepto === "Sim" && proGestorDestino && proGestorDestino !== conta.nome) {

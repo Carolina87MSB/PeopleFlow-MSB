@@ -1,5 +1,5 @@
 import { hojeIso, mesesCompletos } from "./dates.js";
-import type { Colaborador, Conta, Perfil } from "../types/domain.js";
+import type { CargoCustom, Colaborador, Conta, Perfil } from "../types/domain.js";
 
 const DIACRITICS = new RegExp("[" + String.fromCharCode(0x0300) + "-" + String.fromCharCode(0x036f) + "]", "g");
 
@@ -130,7 +130,7 @@ export function buildAccessAvd(colaboradores: Colaborador[]): Conta[] {
  * gestor mais frequente entre os colaboradores daquele departamento (o caso
  * comum, um departamento por gestor, sempre resolve sem ambiguidade).
  */
-export function gestorDoDepartamento(colaboradores: Colaborador[], depto: string): string | null {
+export function gestorDoDepartamento(colaboradores: Colaborador[], depto: string, cargosCustom: CargoCustom[] = []): string | null {
   const contagem = new Map<string, number>();
   colaboradores.forEach((c) => {
     if (c.depto !== depto || !c.gestor) return;
@@ -144,7 +144,11 @@ export function gestorDoDepartamento(colaboradores: Colaborador[], depto: string
       melhorCount = count;
     }
   });
-  return melhor;
+  if (melhor) return melhor;
+  // Departamento ainda sem nenhum colaborador (ex.: só existe por causa de um
+  // cargo novo criado direto no banco com um depto que ainda não tem
+  // ocupantes) — usa o gestor já cadastrado no cargo custom desse depto.
+  return cargosCustom.find((c) => c.depto === depto)?.gestor ?? null;
 }
 
 /** true se pelo menos um colaborador que hoje ocupa `cargoNome` está dentro

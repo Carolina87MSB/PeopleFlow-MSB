@@ -89,7 +89,7 @@ export function validarForm(
     }
     if (f.proMudaDepto === "Sim") {
       if (!f.proNovoDepto) return { ok: false };
-      const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.proNovoDepto);
+      const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.proNovoDepto, ctx.cargosCustom);
       if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
       if (gestorDestino !== ctx.me) {
         return { ok: false, error: `Somente ${gestorDestino}, gestor(a) de ${f.proNovoDepto}, pode abrir esta movimentação.` };
@@ -102,7 +102,7 @@ export function validarForm(
 
   if (f.tipo === "TRF") {
     if (!f.trfNovoDepto || !f.trfData) return { ok: false };
-    const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.trfNovoDepto);
+    const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.trfNovoDepto, ctx.cargosCustom);
     if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
     if (gestorDestino !== ctx.me) {
       return { ok: false, error: `Somente ${gestorDestino}, gestor(a) de ${f.trfNovoDepto}, pode abrir esta movimentação.` };
