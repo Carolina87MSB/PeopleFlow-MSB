@@ -365,8 +365,12 @@ export interface HistoricoEvento {
  * RH/Diretoria; Em revisão = existe uma proposta do Gestor em `pendente`
  * aguardando aprovação (o conteúdo oficial ainda é o último aprovado, não a
  * proposta); Rejeitada = a última proposta foi recusada — o conteúdo oficial
- * continua sendo o último aprovado, e o Gestor pode propor de novo. */
-export type StatusDescricaoCargo = "Aprovada" | "Em revisão" | "Rejeitada";
+ * continua sendo o último aprovado, e o Gestor pode propor de novo; Sem
+ * descrição = nunca existiu nenhum registro em peopleflow_descricoes_cargo
+ * pra este cargo (nunca vem do banco — só o fallback local de
+ * descricaoCargoVazia(), pra não mostrar "Aprovada" indevidamente num cargo
+ * que na verdade não tem descrição nenhuma ainda). */
+export type StatusDescricaoCargo = "Aprovada" | "Em revisão" | "Rejeitada" | "Sem descrição";
 
 export interface DescricaoCargo {
   cargoNome: string;

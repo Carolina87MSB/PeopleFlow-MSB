@@ -38,6 +38,7 @@ export interface PrioMeta {
 export function statusDescricaoCargoMeta(status: StatusDescricaoCargo | string): PrioMeta {
   if (status === "Aprovada") return { bg: "#e4f3ed", fg: "#1f6b4f" };
   if (status === "Rejeitada") return { bg: "#f8e7e4", fg: "#99413a" };
+  if (status === "Sem descrição") return { bg: "#eef2f4", fg: "#6b7780" };
   return { bg: "#f8efdc", fg: "#8a5e18" }; // "Em revisão"
 }
 

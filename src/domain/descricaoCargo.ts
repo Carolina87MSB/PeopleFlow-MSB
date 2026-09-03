@@ -107,7 +107,7 @@ export function descricaoCargoVazia(cargoNome: string): DescricaoCargo {
     epis: "",
     updatedAt: "",
     updatedBy: "",
-    status: "Aprovada",
+    status: "Sem descrição",
     pendente: null,
     elaboradoPor: "",
     elaboradoEm: "",
