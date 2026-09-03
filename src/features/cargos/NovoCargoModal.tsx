@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { Button, Modal } from "../../components/ui";
 import { contarPorGestor } from "../../domain/agregados";
+import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import styles from "./NovoCargoModal.module.css";
 
@@ -16,6 +17,7 @@ interface NovoCargoModalProps {
  * possível abrir uma movimentação de pessoal para este cargo (ver
  * validarForm em domain/formMovimentacao.ts). */
 export function NovoCargoModal({ onClose }: NovoCargoModalProps) {
+  const { state } = usePortalStore();
   const { colaboradores, criarCargoCustom } = usePortalData();
   const [nome, setNome] = useState("");
   const [depto, setDepto] = useState("");
@@ -23,8 +25,29 @@ export function NovoCargoModal({ onClose }: NovoCargoModalProps) {
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
 
-  const departamentos = useMemo(() => [...new Set(colaboradores.map((c) => c.depto))].sort(), [colaboradores]);
+  // Modo "novo departamento": em vez de escolher da lista, digita um nome
+  // que ainda não existe em nenhum colaborador nem cargo custom — ex.: um
+  // cargo novo criado num departamento que também é novo.
+  const [modoNovoDepto, setModoNovoDepto] = useState(false);
+
+  // Inclui também o depto de outros cargos custom (0 ocupantes) — sem isso,
+  // um departamento que só existe por causa de outro cargo novo não aparece
+  // pra reaproveitar aqui.
+  const departamentos = useMemo(
+    () => [...new Set([...colaboradores.map((c) => c.depto), ...state.cargosCustom.map((c) => c.depto)])].sort(),
+    [colaboradores, state.cargosCustom],
+  );
   const gestores = useMemo(() => [...contarPorGestor(colaboradores).keys()].sort(), [colaboradores]);
+
+  function abrirNovoDepto() {
+    setModoNovoDepto(true);
+    setDepto("");
+  }
+
+  function voltarParaListaDeDeptos() {
+    setModoNovoDepto(false);
+    setDepto("");
+  }
 
   async function handleCriar() {
     if (!nome.trim() || !depto || !gestor) {
@@ -63,14 +86,30 @@ export function NovoCargoModal({ onClose }: NovoCargoModalProps) {
         </label>
         <label className={styles.field}>
           <span>Departamento</span>
-          <select value={depto} onChange={(e) => setDepto(e.target.value)}>
-            <option value="">Selecione…</option>
-            {departamentos.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+          {modoNovoDepto ? (
+            <input
+              value={depto}
+              onChange={(e) => setDepto(e.target.value)}
+              placeholder="Nome do novo departamento"
+              autoFocus
+            />
+          ) : (
+            <select value={depto} onChange={(e) => setDepto(e.target.value)}>
+              <option value="">Selecione…</option>
+              {departamentos.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
+          <button type="button" className={styles.addDeptoBtn} onClick={modoNovoDepto ? voltarParaListaDeDeptos : abrirNovoDepto}>
+            {modoNovoDepto ? "Usar departamento existente" : (
+              <>
+                <Plus size={12} /> Departamento
+              </>
+            )}
+          </button>
         </label>
         <label className={styles.field}>
           <span>Gestor imediato</span>
