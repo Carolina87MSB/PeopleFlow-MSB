@@ -1,3 +1,22 @@
+/* table-layout: fixed trava as larguras do <colgroup> — sem isso, um
+ * <select> de filtro ou um texto longo (nome de cargo/lista de
+ * departamentos) força a coluna a crescer além do previsto e a tabela
+ * inteira passa a exigir rolagem horizontal. Com layout fixo, o que não
+ * cabe na largura da coluna quebra linha (ver regras de wrap abaixo) em vez
+ * de empurrar a tabela pra fora da tela. */
+.tabela {
+  table-layout: fixed;
+}
+
+/* Um pouco mais compacto que o padrão compartilhado (Table.module.css) —
+ * dá mais espaço útil pro conteúdo das colunas sem precisar de rolagem
+ * horizontal, já que esta tabela tem mais colunas de texto (Departamentos,
+ * Descrição de cargo) que a maioria das outras telas. */
+.tabela th,
+.tabela td {
+  padding: 11px 12px;
+}
+
 /* Cabeçalho com filtro embutido — o rótulo herda o estilo (maiúsculas,
  * cinza) já definido em `.table th` (Table.module.css, compartilhado);
  * só o `<select>` precisa das próprias regras, já que mostra o texto das
@@ -6,18 +25,27 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+}
+
+/* `.table th` (Table.module.css) força white-space: nowrap — sobrescrito
+ * aqui só pro rótulo, senão um título mais longo ("Departamentos",
+ * "Descrição de cargo") vaza pra fora da coluna sob table-layout: fixed. */
+.thFiltro > span {
+  white-space: normal;
 }
 
 .thSelect {
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: #fff;
-  padding: 5px 7px;
-  font: 600 11px var(--font-sans);
+  padding: 5px 6px;
+  font: 600 10.5px var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
   color: var(--color-text);
-  max-width: 100%;
+  width: 100%;
+  min-width: 0;
 }
 
 .thSelect:focus {

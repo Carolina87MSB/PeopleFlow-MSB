@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useToast } from "../components/shared/ToastContext";
-import { atualizarDescricaoCargoCustom } from "../repositories/cargosCustomRepository";
+import { criarCargoCustom as criarCargoCustomNoSupabase } from "../repositories/cargosCustomRepository";
 import {
   atualizarAdmissao as atualizarAdmissaoNoSupabase,
   criarPreCadastro as criarPreCadastroNoSupabase,
@@ -52,7 +52,9 @@ import { colaboradoresAtivosEmData } from "../domain/dashboardExecutivo";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import {
   CAMPOS_DESCRICAO_CARGO,
+  dataRevisaoHoje,
   descricaoCargoVazia,
+  disparaAutoRevisao,
   podeGestorEditarGrupo,
   valorEfetivoDescricaoCargo,
   type CampoDescricaoCargo,
@@ -209,7 +211,8 @@ export interface PortalData {
    * só marca a entrega na mesma linha. */
   marcarCartaMovimentacaoEntregue: (id: string) => void;
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
-  toggleDescricaoCargo: (nome: string) => void;
+  /** Botão "Novo Cargo" (RH-only) — cria só nome/depto/gestor, 0 ocupantes. */
+  criarCargoCustom: (nome: string, depto: string, gestor: string) => Promise<{ ok: true } | { ok: false }>;
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
   atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
@@ -845,26 +848,39 @@ export function usePortalData(): PortalData {
     [dispatch, state.movimentacoes, flash, me, perfil],
   );
 
-  const toggleDescricaoCargoFn = useCallback(
-    (nome: string) => {
-      const atual = state.cargosCustom.find((c) => c.nome === nome);
-      if (!atual) return;
-      const novaDescricao = atual.descricao === "OK" ? "Pendente" : "OK";
-      (async () => {
-        try {
-          await atualizarDescricaoCargoCustom(nome, novaDescricao);
-          dispatch({ type: "TOGGLE_DESCRICAO_CARGO", nome });
-        } catch (err) {
-          flash(err instanceof Error ? err.message : "Falha ao atualizar descrição de cargo.");
-        }
-      })();
+  /** Botão "Novo Cargo" em CargosPage.tsx (RH-only) — cria só nome/depto/
+   * gestor, 0 ocupantes, pronto pra Descrição de Cargo ser escrita (ver
+   * DescricaoCargoModal.tsx) e pra aparecer como opção de cargo em Nova
+   * Movimentação (NovaMovimentacaoModal.tsx já inclui `cargosCustom` na
+   * lista). `criarMovimentacaoFn` abaixo bloqueia abrir uma movimentação
+   * para ele até a descrição estar "Aprovada" — ver validarForm(). */
+  const criarCargoCustomFn = useCallback(
+    async (nome: string, depto: string, gestor: string) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode criar um novo cargo.");
+        return { ok: false as const };
+      }
+      const nomeLimpo = nome.trim();
+      if (state.cargosCustom.some((c) => c.nome === nomeLimpo) || state.colaboradores.some((c) => c.cargo === nomeLimpo)) {
+        flash("Já existe um cargo com esse nome.");
+        return { ok: false as const };
+      }
+      try {
+        const cargo = await criarCargoCustomNoSupabase(nomeLimpo, depto, gestor);
+        dispatch({ type: "REGISTRAR_CARGO_CUSTOM", cargo });
+        flash("Cargo criado — pronto para a Descrição de Cargo ser preenchida.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao criar cargo.");
+        return { ok: false as const };
+      }
     },
-    [dispatch, state.cargosCustom, flash],
+    [dispatch, perfil, state.cargosCustom, state.colaboradores, flash],
   );
 
   const criarMovimentacaoFn = useCallback(
     async (form: NovaMovimentacaoForm) => {
-      const validacao = validarForm(form, { me, colaboradores: state.colaboradores });
+      const validacao = validarForm(form, { me, colaboradores: state.colaboradores, cargosCustom: state.cargosCustom, descricoesCargo: state.descricoesCargo });
       if (!validacao.ok) return { ok: false as const, error: validacao.error };
       const ctx: FormContext = { me, tipos: state.tipos, colaboradores: state.colaboradores, movimentacoes: state.movimentacoes };
       const movimentacao = construirMovimentacao(form, ctx);
@@ -885,7 +901,7 @@ export function usePortalData(): PortalData {
         return { ok: false as const, error };
       }
     },
-    [dispatch, me, state.tipos, state.colaboradores, state.movimentacoes, flash],
+    [dispatch, me, state.tipos, state.colaboradores, state.movimentacoes, state.cargosCustom, state.descricoesCargo, flash],
   );
 
   /** RH e Diretoria sempre; Gestor só nos grupos liberados (ver
@@ -922,9 +938,17 @@ export function usePortalData(): PortalData {
       const ehRevisor = perfil === "RH" || perfil === "Diretoria";
       const coluna = COLUNA_POR_CAMPO[campo];
 
+      // "Data do formulário" nunca muda sozinha — só "Data de revisão deste
+      // cargo" reflete automaticamente que o conteúdo mudou (nunca quando o
+      // próprio campo editado é um dos 4 de "Dados do formulário
+      // (auditoria)", pra não sobrescrever uma correção manual explícita
+      // deles com um valor automático).
+      const autoRevisao = ehRevisor && disparaAutoRevisao(campo) ? { data_revisao_cargo: dataRevisaoHoje() } : {};
+
       const patch: Record<string, unknown> = ehRevisor
         ? {
             [coluna]: valorNovo,
+            ...autoRevisao,
             pendente: null,
             status: "Aprovada",
             elaborado_por: me,
@@ -957,6 +981,7 @@ export function usePortalData(): PortalData {
             ? {
                 ...atual,
                 [campo]: valorNovo,
+                ...(autoRevisao.data_revisao_cargo ? { dataRevisaoCargo: autoRevisao.data_revisao_cargo } : {}),
                 pendente: null,
                 status: "Aprovada",
                 elaboradoPor: me,
@@ -1007,11 +1032,17 @@ export function usePortalData(): PortalData {
       }
 
       const agora = new Date().toISOString();
+      // Uma proposta de Gestor nunca toca os 4 campos de "Dados do formulário
+      // (auditoria)" (ver GRUPOS_EDITAVEIS_GESTOR) — aprovar sempre é uma
+      // mudança real de conteúdo, então "Data de revisão deste cargo" sempre
+      // atualiza aqui (nunca "Data do formulário", que não muda por edição).
+      const dataRevisaoCargo = dataRevisaoHoje();
       const patch: Record<string, unknown> = {
         pendente: null,
         status: "Aprovada",
         aprovado_por: me,
         aprovado_em: agora,
+        data_revisao_cargo: dataRevisaoCargo,
         updated_at: agora,
         updated_by: me,
       };
@@ -1030,7 +1061,17 @@ export function usePortalData(): PortalData {
         });
         dispatch({
           type: "ATUALIZAR_DESCRICAO_CARGO",
-          descricao: { ...atual, ...atual.pendente, pendente: null, status: "Aprovada", aprovadoPor: me, aprovadoEm: agora, updatedAt: agora, updatedBy: me },
+          descricao: {
+            ...atual,
+            ...atual.pendente,
+            pendente: null,
+            status: "Aprovada",
+            aprovadoPor: me,
+            aprovadoEm: agora,
+            dataRevisaoCargo,
+            updatedAt: agora,
+            updatedBy: me,
+          },
         });
         flash("Alteração aprovada.");
         return { ok: true as const };
@@ -2285,7 +2326,7 @@ export function usePortalData(): PortalData {
     darCienciaCartaMovimentacao: darCienciaCartaMovimentacaoFn,
     marcarCartaMovimentacaoEntregue: marcarCartaMovimentacaoEntregueFn,
     criarMovimentacao: criarMovimentacaoFn,
-    toggleDescricaoCargo: toggleDescricaoCargoFn,
+    criarCargoCustom: criarCargoCustomFn,
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,
     atualizarCampoDescricaoCargo: atualizarCampoDescricaoCargoFn,
     carregarHistoricoDescricaoCargo: carregarHistoricoDescricaoCargoFn,

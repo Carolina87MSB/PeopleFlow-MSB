@@ -1,7 +1,19 @@
 import { formatarDataAtual, formatarDataIso } from "./dates";
 import { gestorDoDepartamento } from "./hierarquia";
 import { calcularPercentual, montarEtapas, nextId } from "./workflow";
-import type { Colaborador, DadoField, Movimentacao, NovaMovimentacaoForm, TipoMovimentacao } from "../types/domain";
+import type { CargoCustom, Colaborador, DadoField, DescricaoCargo, Movimentacao, NovaMovimentacaoForm, TipoMovimentacao } from "../types/domain";
+
+/** true só quando `nomeCargo` é um cargo "novo" (criado pelo botão Novo
+ * Cargo, ainda 0 ocupantes) SEM Descrição de Cargo aprovada — nunca pra um
+ * cargo já ocupado nem pra um nome digitado livremente numa Admissão que
+ * nunca passou pelo botão (esse continua funcionando como sempre, ver
+ * comentário de "cargos-existentes" em NovaMovimentacaoModal.tsx). */
+function cargoNovoSemDescricaoAprovada(nomeCargo: string, cargosCustom: CargoCustom[], descricoesCargo: DescricaoCargo[]): boolean {
+  const nome = nomeCargo.trim();
+  if (!nome || !cargosCustom.some((c) => c.nome === nome)) return false;
+  const descricao = descricoesCargo.find((d) => d.cargoNome === nome);
+  return !descricao || descricao.status !== "Aprovada";
+}
 
 export function blankForm(): NovaMovimentacaoForm {
   return {
@@ -54,9 +66,15 @@ export type FormValidation = { ok: true } | { ok: false; error?: string };
  * mudança de departamento, só o gestor atual do colaborador) — não é uma
  * sugestão, o app bloqueia o envio se `me` não for essa pessoa.
  */
-export function validarForm(f: NovaMovimentacaoForm, ctx: { me: string; colaboradores: Colaborador[] }): FormValidation {
+export function validarForm(
+  f: NovaMovimentacaoForm,
+  ctx: { me: string; colaboradores: Colaborador[]; cargosCustom: CargoCustom[]; descricoesCargo: DescricaoCargo[] },
+): FormValidation {
   if (f.tipo === "ADM") {
     if (!f.admCargo.trim() || !f.admDepto || !f.admGestor || !f.admVinculo || !f.justificativa.trim()) return { ok: false };
+    if (cargoNovoSemDescricaoAprovada(f.admCargo, ctx.cargosCustom, ctx.descricoesCargo)) {
+      return { ok: false, error: `O cargo "${f.admCargo.trim()}" ainda não tem uma Descrição de Cargo aprovada — aprove-a antes de abrir uma movimentação para ele.` };
+    }
     return { ok: true };
   }
   if (!f.tipo || !f.colab || !f.justificativa.trim()) return { ok: false };
@@ -66,6 +84,9 @@ export function validarForm(f: NovaMovimentacaoForm, ctx: { me: string; colabora
   if (f.tipo === "PRO") {
     if (!f.proNovoCargo.trim() || !f.proData) return { ok: false };
     if (f.proAltSal === "Sim" && !f.proNovoSalario.trim()) return { ok: false };
+    if (cargoNovoSemDescricaoAprovada(f.proNovoCargo, ctx.cargosCustom, ctx.descricoesCargo)) {
+      return { ok: false, error: `O cargo "${f.proNovoCargo.trim()}" ainda não tem uma Descrição de Cargo aprovada — aprove-a antes de abrir uma movimentação para ele.` };
+    }
     if (f.proMudaDepto === "Sim") {
       if (!f.proNovoDepto) return { ok: false };
       const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.proNovoDepto);

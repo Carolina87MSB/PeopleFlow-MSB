@@ -65,7 +65,6 @@ export type PortalAction =
   | { type: "ATUALIZAR_CARTA_MOVIMENTACAO"; id: string; carta: CartaMovimentacao }
   | { type: "CRIAR_MOVIMENTACAO"; movimentacao: Movimentacao }
   | { type: "REGISTRAR_CARGO_CUSTOM"; cargo: CargoCustom }
-  | { type: "TOGGLE_DESCRICAO_CARGO"; nome: string }
   | { type: "SALVAR_FECHAMENTO_FINANCEIRO"; desligamento: DesligamentoFinanceiro }
   | { type: "ATUALIZAR_DESCRICAO_CARGO"; descricao: DescricaoCargo }
   | { type: "ATUALIZAR_ADMISSAO_COLABORADOR"; nome: string; admissao: string; admissaoIso: string; tempoDeEmpresa: string }

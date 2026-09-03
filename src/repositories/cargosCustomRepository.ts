@@ -35,9 +35,23 @@ export async function getCargosCustom(): Promise<CargoCustom[]> {
   return (data as CargoCustomRow[]).map(fromRow);
 }
 
-export async function atualizarDescricaoCargoCustom(nome: string, descricao: "OK" | "Pendente"): Promise<void> {
+/** Cria um cargo só com nome/depto/gestor (botão "Novo Cargo" em
+ * CargosPage.tsx) — 0 ocupantes até a primeira Admissão/Promoção/
+ * Transferência ser concluída para ele. `nivel` sempre nasce "Novo cargo"
+ * (mesmo marcador já usado quando uma movimentação de Novo Cargo é
+ * aprovada) e `descricao` "Pendente", só pra manter a linha compatível com
+ * o resto do schema — nenhum dos dois é lido pelo resto do app depois desta
+ * etapa (a Descrição de Cargo real, com aprovação, é quem manda). */
+export async function criarCargoCustom(nome: string, depto: string, gestor: string): Promise<CargoCustom> {
   if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
 
-  const { error } = await supabase.from("peopleflow_cargos_custom").update({ descricao }).eq("nome", nome);
-  if (error) throw new Error(`Falha ao atualizar cargo personalizado no Supabase: ${error.message}`);
+  const { error } = await supabase.from("peopleflow_cargos_custom").insert({
+    nome,
+    depto,
+    gestor,
+    nivel: "Novo cargo",
+    descricao: "Pendente",
+  });
+  if (error) throw new Error(`Falha ao criar cargo no Supabase: ${error.message}`);
+  return { nome, depto, gestor, vagas: "", faixa: "", nivel: "Novo cargo", descricao: "Pendente" };
 }

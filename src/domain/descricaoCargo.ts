@@ -64,6 +64,30 @@ export function valorEfetivoDescricaoCargo(descricao: DescricaoCargo, campo: Cam
   return pendente !== undefined ? pendente : (descricao[campo] as string) ?? "";
 }
 
+/** "Data do formulário" é a data de CRIAÇÃO do documento — nunca deve mudar
+ * depois (só um RH corrigindo um erro de digitação, editando o campo
+ * diretamente). "Data de revisão deste cargo" é quem marca "o conteúdo
+ * mudou nesta data" — deve atualizar sozinha toda vez que algum campo de
+ * conteúdo (não os 4 de "Dados do formulário (auditoria)" em si) é editado
+ * ou uma proposta de Gestor é aprovada, sem depender de alguém lembrar de
+ * editá-la manualmente. Formato "dd/mm/aaaa" pra bater com o que já está
+ * cadastrado nesses dois campos (texto livre, nunca ISO). */
+export function dataRevisaoHoje(): string {
+  const hoje = new Date();
+  const dia = String(hoje.getDate()).padStart(2, "0");
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+  return `${dia}/${mes}/${hoje.getFullYear()}`;
+}
+
+/** Campos que nunca disparam a atualização automática de `dataRevisaoCargo`
+ * — são os próprios dados de controle do formulário, editados só quando o
+ * RH está corrigindo o registro em si, não o conteúdo do cargo. */
+const CAMPOS_SEM_AUTO_REVISAO = new Set<CampoDescricaoCargo>(["codigoFormulario", "revisaoFormulario", "dataFormulario", "dataRevisaoCargo"]);
+
+export function disparaAutoRevisao(campo: CampoDescricaoCargo): boolean {
+  return !CAMPOS_SEM_AUTO_REVISAO.has(campo);
+}
+
 export function descricaoCargoVazia(cargoNome: string): DescricaoCargo {
   return {
     cargoNome,

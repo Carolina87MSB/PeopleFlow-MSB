@@ -125,14 +125,6 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
       if (state.cargosCustom.some((c) => c.nome === action.cargo.nome)) return state;
       return { ...state, cargosCustom: [...state.cargosCustom, action.cargo] };
 
-    case "TOGGLE_DESCRICAO_CARGO":
-      return {
-        ...state,
-        cargosCustom: state.cargosCustom.map((c) =>
-          c.nome === action.nome ? { ...c, descricao: c.descricao === "OK" ? "Pendente" : "OK" } : c,
-        ),
-      };
-
     case "ATUALIZAR_CONFIG_AVALIACAO_DESEMPENHO":
       return { ...state, configAvaliacaoDesempenho: action.config };
 

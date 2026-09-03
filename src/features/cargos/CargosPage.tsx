@@ -1,22 +1,24 @@
 import { useMemo, useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Plus } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { Header } from "../../components/layout/Header";
-import { Badge, EmptyState, tableStyles } from "../../components/ui";
+import { Badge, Button, EmptyState, tableStyles } from "../../components/ui";
 import { agregarCargos } from "../../domain/agregados";
 import { nivelMeta, statusDescricaoCargoMeta } from "../../domain/colors";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { DescricaoCargoModal } from "./DescricaoCargoModal";
+import { NovoCargoModal } from "./NovoCargoModal";
 import styles from "./CargosPage.module.css";
 
 const STATUS_SEM_DESCRICAO = "Sem descrição";
 
 export function CargosPage() {
   const { state } = usePortalStore();
-  const { conta, perfil, colaboradoresVisiveis, podeVerCargos, toggleDescricaoCargo, descricoesCargo } = usePortalData();
+  const { conta, perfil, colaboradoresVisiveis, podeVerCargos, descricoesCargo } = usePortalData();
   const [cargoAberto, setCargoAberto] = useState<string | null>(null);
+  const [novoCargoAberto, setNovoCargoAberto] = useState(false);
   const [filtroCargo, setFiltroCargo] = useState("Todos");
   const [filtroNivel, setFiltroNivel] = useState("Todos");
   const [filtroDepto, setFiltroDepto] = useState("Todos");
@@ -68,15 +70,23 @@ export function CargosPage() {
 
   return (
     <>
-      <Header />
+      <Header
+        actions={
+          perfil === "RH" ? (
+            <Button variant="primary" icon={<Plus size={14} />} onClick={() => setNovoCargoAberto(true)}>
+              Novo Cargo
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className={tableStyles.wrap}>
-        <table className={tableStyles.table}>
+        <table className={[tableStyles.table, styles.tabela].join(" ")}>
           <colgroup>
+            <col style={{ width: "22%" }} />
+            <col style={{ width: "9%" }} />
             <col style={{ width: "24%" }} />
-            <col style={{ width: "13%" }} />
-            <col style={{ width: "19%" }} />
-            <col style={{ width: "28%" }} />
+            <col style={{ width: "30%" }} />
             <col style={{ width: "16%" }} />
           </colgroup>
           <thead>
@@ -172,21 +182,10 @@ export function CargosPage() {
                           {descricao.status}
                         </Badge>
                       </div>
-                    ) : c.novo ? (
-                      <button
-                        type="button"
-                        className={styles.descricaoToggle}
-                        onClick={() => toggleDescricaoCargo(c.nome)}
-                      >
-                        <Badge
-                          bg={c.descricao === "OK" ? "var(--color-success-bg)" : "var(--color-warning-bg)"}
-                          fg={c.descricao === "OK" ? "var(--color-success-fg)" : "var(--color-warning-fg)"}
-                        >
-                          {c.descricao === "OK" ? "OK" : "Pendente"}
-                        </Badge>
-                      </button>
                     ) : (
                       // Chegou aqui = já passou pelo guard de podeVerCargos no topo do componente.
+                      // Vale tanto pra cargo já ocupado quanto pra cargo novo (c.novo) — os dois
+                      // usam a mesma ficha real (POP-RH-001), nunca o toggle OK/Pendente antigo.
                       <button type="button" className={styles.descricaoLink} onClick={() => setCargoAberto(c.nome)}>
                         + Adicionar descrição
                       </button>
@@ -204,6 +203,7 @@ export function CargosPage() {
       </div>
 
       {cargoAberto ? <DescricaoCargoModal cargoNome={cargoAberto} onClose={() => setCargoAberto(null)} /> : null}
+      {novoCargoAberto ? <NovoCargoModal onClose={() => setNovoCargoAberto(false)} /> : null}
     </>
   );
 }
