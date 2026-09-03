@@ -17,6 +17,16 @@
   padding: 11px 12px;
 }
 
+/* Segurança contra qualquer badge/rótulo mais longo do que a coluna prevê
+ * (ex.: "Aprendiz / Estágio") — Badge.module.css usa white-space: nowrap,
+ * então sem isso o texto vaza visualmente por cima da célula vizinha em vez
+ * de só ficar cortado (a altura da linha continua livre pra crescer se o
+ * texto de outra célula quebrar em 2 linhas — overflow:hidden só limita a
+ * largura, nunca a altura). */
+.tabela td {
+  overflow: hidden;
+}
+
 /* Cabeçalho com filtro embutido — o rótulo herda o estilo (maiúsculas,
  * cinza) já definido em `.table th` (Table.module.css, compartilhado);
  * só o `<select>` precisa das próprias regras, já que mostra o texto das

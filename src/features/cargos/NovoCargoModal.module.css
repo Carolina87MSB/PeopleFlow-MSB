@@ -21,6 +21,10 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--color-navy);
+  /* Sem isso, um <select> mais largo que o próprio nome sugere (opções
+   * longas, ex.: nome de gestor grande) empurra a coluna do grid pra além
+   * de 1fr — item de grid nunca encolhe abaixo do min-content por padrão. */
+  min-width: 0;
 }
 
 .field.full {
@@ -36,6 +40,8 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--color-text);
+  width: 100%;
+  min-width: 0;
 }
 
 .field input:focus,

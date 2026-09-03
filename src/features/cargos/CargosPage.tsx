@@ -83,11 +83,11 @@ export function CargosPage() {
       <div className={tableStyles.wrap}>
         <table className={[tableStyles.table, styles.tabela].join(" ")}>
           <colgroup>
-            <col style={{ width: "22%" }} />
-            <col style={{ width: "9%" }} />
             <col style={{ width: "24%" }} />
-            <col style={{ width: "30%" }} />
-            <col style={{ width: "16%" }} />
+            <col style={{ width: "15%" }} />
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "32%" }} />
+            <col style={{ width: "9%" }} />
           </colgroup>
           <thead>
             <tr>
