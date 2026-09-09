@@ -1,7 +1,7 @@
 [
-  { "cod": "ADM", "nome": "Admissão", "desc": "Entrada de novo colaborador no quadro de pessoal.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 5, "impacto": "Estrutura + Orçamento" },
-  { "cod": "PRO", "nome": "Promoção", "desc": "Evolução vertical de cargo, com ou sem mudança de departamento, com impacto salarial e de estrutura.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 7, "impacto": "Cargo + Orçamento" },
-  { "cod": "SAL", "nome": "Alteração Salarial", "desc": "Reajuste salarial por mérito, equiparação ou reenquadramento.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 7, "impacto": "Orçamento" },
-  { "cod": "TRF", "nome": "Transferência", "desc": "Mudança de departamento, sem evolução hierárquica do colaborador.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 5, "impacto": "Estrutura" },
-  { "cod": "DES", "nome": "Desligamento", "desc": "Saída do colaborador, a pedido ou por iniciativa da empresa.", "etapas": ["Gestor Solicitante", "Diretor Industrial", "RH"], "sla": 5, "impacto": "Estrutura + Orçamento" }
+  { "cod": "ADM", "nome": "Admissão", "desc": "Entrada de novo colaborador no quadro de pessoal.", "etapas": ["Gestor Solicitante", "Diretoria", "RH"], "sla": 5, "impacto": "Estrutura + Orçamento" },
+  { "cod": "PRO", "nome": "Promoção", "desc": "Evolução vertical de cargo, com ou sem mudança de departamento, com impacto salarial e de estrutura.", "etapas": ["Gestor Solicitante", "Diretoria", "RH"], "sla": 7, "impacto": "Cargo + Orçamento" },
+  { "cod": "SAL", "nome": "Alteração Salarial", "desc": "Reajuste salarial por mérito, equiparação ou reenquadramento.", "etapas": ["Gestor Solicitante", "Diretoria", "RH"], "sla": 7, "impacto": "Orçamento" },
+  { "cod": "TRF", "nome": "Transferência", "desc": "Mudança de departamento, sem evolução hierárquica do colaborador.", "etapas": ["Gestor Solicitante", "Diretoria", "RH"], "sla": 5, "impacto": "Estrutura" },
+  { "cod": "DES", "nome": "Desligamento", "desc": "Saída do colaborador, a pedido ou por iniciativa da empresa.", "etapas": ["Gestor Solicitante", "Diretoria", "RH"], "sla": 5, "impacto": "Estrutura + Orçamento" }
 ]

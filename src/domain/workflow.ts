@@ -34,8 +34,8 @@ export function podeAgir(m: Movimentacao, me: string): boolean {
  * Monta as etapas de aprovação de uma movimentação. Quando quem solicita é o
  * CEO (ver ehCEO() em hierarquia.ts — checagem por cargo, não por perfil,
  * já que "Diretoria" também cobre o Diretor Industrial), a matriz normal é
- * ignorada: a movimentação pula Gestor Solicitante e Diretor Industrial e
- * vai direto para RH — regra válida para todos os tipos.
+ * ignorada: a movimentação pula Gestor Solicitante e Diretoria e vai direto
+ * para RH — regra válida para todos os tipos.
  *
  * Para Promoção e Transferência, `solicitanteGestor` já vem resolvido pelo
  * chamador (construirMovimentacao() em formMovimentacao.ts) para o gestor
@@ -43,18 +43,23 @@ export function podeAgir(m: Movimentacao, me: string): boolean {
  * departamento) ou gestor do departamento de destino (promoção com mudança
  * de departamento, e toda transferência) — nunca é pulado, sempre precisa
  * de aprovação explícita.
+ *
+ * `depto` decide quem aprova a etapa "Diretoria" (ver roleApprover() em
+ * hierarquia.ts) — Yuri Ivonei Crispim, exceto Administrativo/Comercial/
+ * Qualidade e Regulatório, que vão pro Daniel Emiliano Suguer (CEO).
  */
 export function montarEtapas(
   tipo: TipoMovimentacao,
   solicitanteGestor: string,
   solicitanteNome: string,
   colaboradores: Colaborador[],
+  depto: string,
 ): Etapa[] {
   const solicitanteColab = colaboradores.find((c) => c.nome === solicitanteNome);
   const papeis = ehCEO(solicitanteColab) ? ["RH"] : tipo.etapas;
   return papeis.map((papel, i) => ({
     papel,
-    aprovador: roleApprover(papel, { solicitanteGestor }),
+    aprovador: roleApprover(papel, { solicitanteGestor, depto }),
     status: i === 0 ? "Em análise" : "Aguardando",
     data: "",
     hora: "",
@@ -131,8 +136,8 @@ export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comenta
 /** true só quando quem reprovou foi a própria etapa de RH — a última de toda
  * matriz (ver tiposMovimentacao.json, "RH" é sempre o último papel). É o
  * único caso em que "restaurar para o RH" faz sentido: se quem reprovou foi
- * Gestor Solicitante ou Diretor Industrial, a decisão de reabrir é daquela
- * etapa, não do RH. */
+ * Gestor Solicitante ou Diretoria, a decisão de reabrir é daquela etapa, não
+ * do RH. */
 export function reprovadaPeloRH(m: Movimentacao): boolean {
   if (m.status !== "Reprovado") return false;
   const ultima = m.etapas[m.etapas.length - 1];
@@ -142,7 +147,7 @@ export function reprovadaPeloRH(m: Movimentacao): boolean {
 /** Reabre uma movimentação reprovada pelo próprio RH, devolvendo-a para "Em
  * Aprovação" com a etapa de RH de volta em "Em análise" (limpa data/hora/
  * comentário da tentativa anterior) — as etapas já aprovadas antes dela
- * (Gestor Solicitante, Diretor Industrial) não são tocadas, então a
+ * (Gestor Solicitante, Diretoria) não são tocadas, então a
  * movimentação não volta ao início do fluxo. O motivo da reprovação anterior
  * é preservado no histórico, não perdido. */
 export function reabrirParaRH(movimentacoes: Movimentacao[], id: string, autor: string): Movimentacao[] {

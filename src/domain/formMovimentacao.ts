@@ -131,7 +131,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
 
   if (f.tipo === "ADM") {
     const tipo = tipos.find((t) => t.cod === "ADM")!;
-    const etapas = montarEtapas(tipo, f.admGestor, me, colaboradores);
+    const etapas = montarEtapas(tipo, f.admGestor, me, colaboradores, f.admDepto);
     const dados: DadoField[] = [
       { label: "Motivo da contratação", value: f.admMotivo || "—" },
       { label: "Cargo solicitado", value: f.admCargo.trim() },
@@ -223,7 +223,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     ];
   }
 
-  const etapas = montarEtapas(tipo, solic, me, colaboradores);
+  const etapas = montarEtapas(tipo, solic, me, colaboradores, depto);
 
   let atualizacaoInfo: Movimentacao["atualizacaoInfo"];
   let desligamentoInfo: Movimentacao["desligamentoInfo"];

@@ -197,9 +197,26 @@ export function descendants(colaboradores: Colaborador[], nome: string): Set<str
   return out;
 }
 
-export function roleApprover(papel: string, ctx: { solicitanteGestor?: string }): string {
+// Administrativo/Comercial/Qualidade e Regulatório não têm um diretor
+// próprio — respondem direto ao Daniel (CEO), não ao Yuri (Diretor
+// Industrial). Decisão explícita da RH (Carolina), 2026-09 — antes disso, a
+// etapa "Diretoria" ia pro Yuri incondicionalmente, mesmo pra departamentos
+// fora da área Industrial.
+const DEPARTAMENTOS_DIRETORIA_CEO = new Set(["Administrativo", "Comercial", "Qualidade e Regulatório"]);
+
+/** Quem aprova a etapa "Diretoria" (entre Gestor Solicitante e RH) depende do
+ * departamento da movimentação (ver `depto` em roleApprover/montarEtapas) —
+ * Yuri Ivonei Crispim pros departamentos industriais (padrão), Daniel
+ * Emiliano Suguer pra Administrativo/Comercial/Qualidade e Regulatório.
+ * Depto vazio/desconhecido cai no Yuri (mesmo comportamento incondicional de
+ * antes). */
+function diretorResponsavelPeloDepartamento(depto: string | undefined): string {
+  return depto && DEPARTAMENTOS_DIRETORIA_CEO.has(depto) ? "Daniel Emiliano Suguer" : "Yuri Ivonei Crispim";
+}
+
+export function roleApprover(papel: string, ctx: { solicitanteGestor?: string; depto?: string }): string {
   if (papel === "RH") return "Carolina Matos da Cruz";
-  if (papel === "Diretor Industrial") return "Yuri Ivonei Crispim";
+  if (papel === "Diretoria") return diretorResponsavelPeloDepartamento(ctx.depto);
   if (papel === "CEO") return "Daniel Emiliano Suguer";
   return ctx.solicitanteGestor || "A definir";
 }
@@ -208,15 +225,15 @@ export function roleApprover(papel: string, ctx: { solicitanteGestor?: string })
 // só "CEO" — um prefixo estrito nunca bateu com ele (bug real, corrigido
 // depois de M-2026-004 precisar de um patch manual em
 // supabase/corrigir_fluxo_m2026_004.local.sql porque ehCEO() retornava false
-// e a etapa "Diretor Industrial" não era pulada). "CEO" como palavra isolada
-// em qualquer posição do cargo (prefixo, sufixo, etc.) já basta.
+// e a etapa "Diretoria" não era pulada). "CEO" como palavra isolada em
+// qualquer posição do cargo (prefixo, sufixo, etc.) já basta.
 const CARGO_CEO = /\bceo\b/;
 
 /**
  * true só para quem tem "CEO" no cargo (hoje, só o Daniel, cargo "Diretor
  * Geral - CEO") — deliberadamente NÃO usa perfilOf()/"Diretoria", já que esse
  * perfil também cobre o Diretor Industrial (Yuri) e os dois não podem ser
- * tratados igual aqui: só o CEO pula Gestor Solicitante/Diretor Industrial ao
+ * tratados igual aqui: só o CEO pula Gestor Solicitante/Diretoria ao
  * solicitar uma movimentação (ver montarEtapas() em workflow.ts). Cargo, não
  * nome — se um dia outra pessoa assumir o cargo de CEO, a regra já vale pra
  * ela automaticamente.
