@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { usePortalData } from "../../store/usePortalData";
@@ -59,13 +60,15 @@ const ABAS_ABERTAS: Aba[] = ["avaliacoes", "pdi", "historico"];
  * colaborador (spec da nova funcionalidade nunca menciona autovisualização). */
 const ABAS_GESTAO: Aba[] = ["potencial", "matriz9box", "dashboard", "feedback"];
 
-/** Agrupamento puramente visual do menu superior — mesmas abas, mesmas
- * permissões, mesmas rotas (não existem rotas por aba, é tudo troca de
- * estado local `aba` numa única página). Representa o fluxo Configuro →
- * Avalio → Calibro → Analiso → Desenvolvo → Acompanho. Um grupo com só 1
- * item visível pro perfil atual (ex.: Colaborador só vê "Avaliações" dentro
- * de "Ciclo de Avaliação") renderiza como botão simples, sem dropdown —
- * ver GestaoDesempenhoPage.tsx. */
+/** Agrupamento do menu superior — mesmas abas, mesmas permissões de sempre,
+ * só reorganizadas visualmente em grupos. Cada aba é uma sub-rota própria
+ * (/desempenho/:aba, ver App.tsx) — o 1º item visível de cada grupo (nesta
+ * ordem) é a "página inicial" desse grupo, pra onde se navega ao clicar
+ * direto no cabeçalho do grupo. Representa o fluxo Configuro → Avalio →
+ * Calibro → Analiso → Desenvolvo → Acompanho. Um grupo com só 1 item visível
+ * pro perfil atual (ex.: Colaborador só vê "Avaliações" dentro de "Ciclo de
+ * Avaliação") renderiza como botão simples, sem dropdown — ver
+ * GestaoDesempenhoPage.tsx. */
 const GRUPOS_ABAS: { titulo: string; abas: Aba[] }[] = [
   { titulo: "Configurações", abas: ["configuracao", "acessos", "comportamentais", "tecnicas"] },
   { titulo: "Ciclo de Avaliação", abas: ["avaliacoes", "potencial", "calibracao"] },
@@ -110,8 +113,8 @@ const GRUPOS_ABAS: { titulo: string; abas: Aba[] }[] = [
  * domain/feedback.ts). */
 export function GestaoDesempenhoPage() {
   const { podeVerCadastros, perfil } = usePortalData();
-  const [aba, setAba] = useState<Aba>(() => (podeVerCadastros ? "configuracao" : "avaliacoes"));
-  const [grupoAberto, setGrupoAberto] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { aba: abaDaRota } = useParams<{ aba?: string }>();
 
   const abasVisiveis = ABAS_RH.filter(
     (a) => podeVerCadastros || ABAS_ABERTAS.includes(a.id) || (ABAS_GESTAO.includes(a.id) && perfil !== "Colaborador"),
@@ -127,13 +130,45 @@ export function GestaoDesempenhoPage() {
     })).filter((g) => g.itens.length > 0);
   }, [abasVisiveis]);
 
+  // Aba efetiva = a da URL, se for válida/visível pro perfil atual; senão a
+  // mesma aba padrão de sempre (1ª aba RH-only, ou "avaliacoes" pra quem não
+  // vê cadastros). Cobre tanto /desempenho (sem sub-rota) quanto uma aba
+  // desconhecida/sem permissão.
+  const abaPadrao: Aba = podeVerCadastros ? "configuracao" : "avaliacoes";
+  const abaValida = abasVisiveis.some((a) => a.id === abaDaRota);
+  const aba: Aba = abaValida ? (abaDaRota as Aba) : abaPadrao;
+
+  // Corrige a URL sempre que ela não aponta pra uma aba válida — garante que
+  // toda aba principal tenha sua própria rota navegável/compartilhável, sem
+  // depender de clicar num submenu primeiro.
+  useEffect(() => {
+    if (!abaValida) navigate(`/desempenho/${abaPadrao}`, { replace: true });
+  }, [abaValida, abaPadrao, navigate]);
+
+  const grupoDaAbaAtual = gruposVisiveis.find((g) => g.itens.some((i) => i.id === aba))?.titulo ?? null;
+
+  // Grupo expandido visualmente: sempre acompanha a aba atual (inclusive ao
+  // acessar direto a rota de um submenu), mas pode ser fechado manualmente
+  // sem trocar de aba — ao reabrir ou trocar de grupo, volta a acompanhar.
+  const [grupoFechadoManualmente, setGrupoFechadoManualmente] = useState<string | null>(null);
+  const grupoAberto = grupoFechadoManualmente === grupoDaAbaAtual ? null : grupoDaAbaAtual;
   const grupoDeAberto = gruposVisiveis.find((g) => g.titulo === grupoAberto) ?? null;
 
-  // Escolher um item NÃO fecha o grupo aberto — ele continua na tela até o
-  // usuário clicar de novo no cabeçalho do grupo (ou abrir outro), pra dar
-  // tempo de conferir o item escolhido antes de fechar por conta própria.
   function selecionarAba(id: Aba) {
-    setAba(id);
+    navigate(`/desempenho/${id}`);
+  }
+
+  // Clicar num grupo diferente do atual navega direto pra página inicial
+  // dele (1º item visível) — nunca fica só marcado/expandido sem trocar o
+  // conteúdo. Clicar no grupo que já é o da aba atual só alterna
+  // mostrar/ocultar o submenu, sem mudar a aba selecionada.
+  function clicarGrupo(g: { titulo: string; itens: { id: Aba; label: string }[] }) {
+    if (g.titulo === grupoDaAbaAtual) {
+      setGrupoFechadoManualmente((atual) => (atual === g.titulo ? null : g.titulo));
+      return;
+    }
+    setGrupoFechadoManualmente(null);
+    navigate(`/desempenho/${g.itens[0].id}`);
   }
 
   return (
@@ -159,7 +194,7 @@ export function GestaoDesempenhoPage() {
                   key={g.titulo}
                   type="button"
                   className={grupoAtivo ? styles.abaAtiva : styles.aba}
-                  onClick={() => setGrupoAberto(aberto ? null : g.titulo)}
+                  onClick={() => clicarGrupo(g)}
                 >
                   {g.titulo}
                   <ChevronDown size={12} className={aberto ? styles.chevronAberto : styles.chevron} />

@@ -56,7 +56,7 @@ export function AppShell() {
   // centralizado aqui em vez de espalhar guarda em cada página, pra nenhuma
   // tela nova esquecer de bloquear esse perfil (ver README > "Gestão de
   // Desempenho").
-  if (conta.perfil === "Colaborador" && location.pathname !== "/desempenho") {
+  if (conta.perfil === "Colaborador" && !location.pathname.startsWith("/desempenho")) {
     return <Navigate to="/desempenho" replace />;
   }
 

@@ -46,6 +46,7 @@ function App() {
                 <Route path="/desligados" element={<DesligadosPage />} />
                 <Route path="/avaliacoes" element={<AvaliacoesPage />} />
                 <Route path="/desempenho" element={<GestaoDesempenhoPage />} />
+                <Route path="/desempenho/:aba" element={<GestaoDesempenhoPage />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Routes>
