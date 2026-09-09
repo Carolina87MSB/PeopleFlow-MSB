@@ -453,7 +453,7 @@ Todas as cores do portal são `var(--color-*)` definidas em `:root` (`src/index.
 
 ## Responsividade
 
-Passe completo de otimização mobile/tablet — só CSS/layout, nenhuma regra de negócio, cálculo, schema ou fluxo mudou. Dois breakpoints usados em todo o portal (consistentes com o que já existia antes deste passe, ex.: `DepartamentosPage.module.css`):
+Passe completo de otimização mobile/tablet — só CSS/layout, nenhuma regra de negócio, cálculo, schema ou fluxo mudou. Dois breakpoints usados em todo o portal (consistentes com o que já existia antes deste passe, ex.: `DashboardPage.module.css`):
 - **`@media (max-width: 1024px)`** — tablet: sidebar recolhe pra menu off-canvas, grids de 3-4 colunas caem pra 2.
 - **`@media (max-width: 700px)`** — celular: grids caem pra 1 coluna, filtros/formulários empilham em largura total. Dentro de Modal/Drawer (contexto já mais estreito) alguns grids usam `480px`/`560px` como limite próprio, já que o container em si é bem menor que a página.
 
@@ -462,5 +462,7 @@ Passe completo de otimização mobile/tablet — só CSS/layout, nenhuma regra d
 **Tabelas** (`components/ui/Table.module.css`) — `.wrap` usava `overflow: hidden`, cortando (não rolando) qualquer tabela mais larga que a tela; virou `overflow-x: auto` — resolve as ~18 páginas que reaproveitam `tableStyles`, sem precisar tocar em nenhuma delas individualmente.
 
 **Componentes compartilhados** — `Button` ganha `min-height: 44px` (alvo de toque) só ≤700px; `Modal`/`Drawer` ganham padding mais compacto ≤700px (`max-width: 100%` já existia, sempre funcionou); `Header`/`AppShell .content` reduzem padding e empilham `.actions` em coluna ≤700px.
+
+**Exceção — Departamentos (`DepartamentosPage.module.css`)**: passe de compactação puramente visual (fontes/paddings/gaps menores, sem remover nenhum dado) pra caber mais departamentos na tela sem rolagem. O grid trocou os dois breakpoints fixos (3→2→1 colunas) por `repeat(auto-fill, minmax(230px, 1fr))` — se ajusta sozinho ao número de colunas que cabem, aproveitando melhor telas largas (mais de 3 colunas em monitores grandes) sem precisar de um 3º breakpoint manual; continua caindo pra 1 coluna sozinho em telas estreitas. Também ganhou um novo dado no card, **Líder imediato** — só aparece quando existe um nome, dentro dos gestores já contados pro departamento (`DepartamentoAgregado.gestores`), que também é ele mesmo um colaborador lotado naquele departamento (lidera "de dentro"), diferente do "Gestor responsável" (o mais frequente entre todos os gestores do departamento, sem essa distinção — inalterado). Ex.: em Recursos Humanos, o Yuri é "Gestor responsável" da Carolina mas não trabalha em RH; a Carolina, que trabalha lá e lidera a Leslie, aparece como "Líder imediato". Quando os dois campos dariam o mesmo nome (ex.: Qualidade e Regulatório, Comercial), a linha "Líder imediato" não aparece — evita repetir a mesma informação duas vezes no card.
 
 **Matrizes 2D** (Matriz 9 Box, `Matriz9BoxTab.module.css`/`Matriz9BoxDistribuicao.module.css`) — deliberadamente **não** colapsam pra 1 coluna (perderiam o sentido como grid 3×3); mantêm `overflow-x: auto` própria, já existente, só com `-webkit-overflow-scrolling: touch` adicionado.
