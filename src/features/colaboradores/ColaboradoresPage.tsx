@@ -173,20 +173,10 @@ export function ColaboradoresPage() {
                     </Badge>
                   </td>
                   <td>
-                    <div className={styles.pessoa}>
-                      <Avatar nome={c.nome} size={26} />
-                      <span>{c.nome}</span>
-                    </div>
+                    <span className={styles.pessoa}>{c.nome}</span>
                   </td>
                   <td>{c.cargo}</td>
-                  <td>
-                    <span className={styles.deptoCell}>
-                      <Badge bg="var(--color-brand-pale)" fg="var(--color-navy-soft)" pill={false}>
-                        {c.deptoCode}
-                      </Badge>
-                      {c.depto}
-                    </span>
-                  </td>
+                  <td>{c.depto}</td>
                   <td>{c.gestor}</td>
                   <td>
                     <span className={styles.dataSecundaria}>{c.admissao}</span>
