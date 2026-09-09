@@ -575,7 +575,7 @@ export function DashboardPage() {
                 movimentações alimentem outras iniciativas de RH.
               </p>
               <div className={styles.integracoesGrid}>
-                {["Academia MSB", "Radar de EPI", "Central RH"].map((nome) => (
+                {["Treinamentos MSB", "Portal SST"].map((nome) => (
                   <div key={nome} className={styles.integracaoItem}>
                     <CheckCircle2 size={16} strokeWidth={1.8} />
                     <span>{nome}</span>
