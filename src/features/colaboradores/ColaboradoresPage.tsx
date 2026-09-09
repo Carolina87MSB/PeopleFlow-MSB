@@ -152,7 +152,7 @@ export function ColaboradoresPage() {
         <EmptyState message="Nenhum colaborador encontrado para este filtro." />
       ) : (
         <div className={tableStyles.wrap}>
-          <table className={tableStyles.table}>
+          <table className={[tableStyles.table, styles.tabela].join(" ")}>
             <thead>
               <tr>
                 <th>Vínculo</th>
@@ -174,7 +174,7 @@ export function ColaboradoresPage() {
                   </td>
                   <td>
                     <div className={styles.pessoa}>
-                      <Avatar nome={c.nome} size={30} />
+                      <Avatar nome={c.nome} size={26} />
                       <span>{c.nome}</span>
                     </div>
                   </td>
@@ -211,7 +211,9 @@ export function ColaboradoresPage() {
               <Avatar nome={colaboradorSelecionado.nome} size={44} />
               <div>
                 <div className={styles.drawerNome}>{colaboradorSelecionado.nome}</div>
-                <div className={styles.drawerCargo}>{colaboradorSelecionado.cargo}</div>
+                <div className={styles.drawerCargo}>
+                  {colaboradorSelecionado.cargo} · {colaboradorSelecionado.depto}
+                </div>
               </div>
             </div>
           }
@@ -220,6 +222,12 @@ export function ColaboradoresPage() {
             <div className={styles.detalheItem}>
               <span className={styles.detalheLabel}>Vínculo</span>
               <span className={styles.detalheValor}>{colaboradorSelecionado.vinculo}</span>
+            </div>
+            <div className={styles.detalheItem}>
+              <span className={styles.detalheLabel}>Nível</span>
+              <Badge bg={nivelMeta(colaboradorSelecionado.nivel).bg} fg={nivelMeta(colaboradorSelecionado.nivel).fg}>
+                {colaboradorSelecionado.nivel}
+              </Badge>
             </div>
             <div className={styles.detalheItem}>
               <span className={styles.detalheLabel}>Cargo</span>
@@ -232,16 +240,14 @@ export function ColaboradoresPage() {
               </span>
             </div>
             <div className={styles.detalheItem}>
-              <span className={styles.detalheLabel}>Nível</span>
-              <Badge bg={nivelMeta(colaboradorSelecionado.nivel).bg} fg={nivelMeta(colaboradorSelecionado.nivel).fg}>
-                {colaboradorSelecionado.nivel}
-              </Badge>
-            </div>
-            <div className={styles.detalheItem}>
               <span className={styles.detalheLabel}>Gestor imediato</span>
               <span className={styles.detalheValor}>{colaboradorSelecionado.gestor}</span>
             </div>
             <div className={styles.detalheItem}>
+              <span className={styles.detalheLabel}>Tempo de empresa</span>
+              <span className={styles.detalheValor}>{colaboradorSelecionado.tempoDeEmpresa}</span>
+            </div>
+            <div className={[styles.detalheItem, styles.full].join(" ")}>
               <div className={styles.detalheTopo}>
                 <span className={styles.detalheLabel}>Admissão</span>
                 {podeEditarAdmissao && !editandoAdmissao ? (
@@ -271,10 +277,6 @@ export function ColaboradoresPage() {
                 <span className={styles.detalheValor}>{colaboradorSelecionado.admissao}</span>
               )}
             </div>
-            <div className={styles.detalheItem}>
-              <span className={styles.detalheLabel}>Tempo de empresa</span>
-              <span className={styles.detalheValor}>{colaboradorSelecionado.tempoDeEmpresa}</span>
-            </div>
             {verSalario && (
               <>
                 <div className={styles.detalheItem}>
@@ -300,88 +302,88 @@ export function ColaboradoresPage() {
                   <span className={styles.detalheValor}>
                     {detalheCusto ? formatarValorMonetario(detalheCusto.custoMensalFolha) : "—"}
                   </span>
-                  {mostrarDetalheCusto && detalheCusto && (
-                    <div className={styles.detalheCalculo}>
-                      <div className={styles.detalheCalculoLinha}>
-                        <span>Salário</span>
-                        <strong>{formatarValorMonetario(detalheCusto.salario)}</strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinha}>
-                        <span>INSS Patronal</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.inssPatronal)} ·{" "}
-                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.inssPatronal) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinha}>
-                        <span title={detalheCusto.ratObservacao}>RAT (GIILRAT efetivo)</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.rat)} · {formatarValorMonetario((detalheCusto.salario * detalheCusto.rat) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinha}>
-                        <span>Terceiros</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.terceiros)} ·{" "}
-                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.terceiros) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinha}>
-                        <span>FGTS ({detalheCusto.ehAprendiz ? "Aprendiz" : "Celetista"})</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.fgts)} · {formatarValorMonetario((detalheCusto.salario * detalheCusto.fgts) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinha}>
-                        <span>Provisão 13º</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.provisaoDecimoTerceiro)} ·{" "}
-                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoDecimoTerceiro) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinha}>
-                        <span>Provisão Férias</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.provisaoFerias)} ·{" "}
-                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoFerias) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinha}>
-                        <span>Provisão 1/3 Férias</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.provisaoTercoFerias)} ·{" "}
-                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoTercoFerias) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinhaSub}>
-                        <span>Encargos diretos</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.encargosDiretosPct)} ·{" "}
-                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.encargosDiretosPct) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinhaSub}>
-                        <span>Provisões</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.provisoesPct)} ·{" "}
-                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisoesPct) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinhaSub}>
-                        <span>Encargos sobre as provisões</span>
-                        <strong>
-                          {formatarPercentual(detalheCusto.encargosSobreProvisoesPct)} ·{" "}
-                          {formatarValorMonetario((detalheCusto.salario * detalheCusto.encargosSobreProvisoesPct) / 100)}
-                        </strong>
-                      </div>
-                      <div className={styles.detalheCalculoLinhaFinal}>
-                        <span>Custo Mensal Folha</span>
-                        <strong>{formatarValorMonetario(detalheCusto.custoMensalFolha)}</strong>
-                      </div>
-                      <p className={styles.detalheCalculoNota}>{detalheCusto.ratObservacao}</p>
-                    </div>
-                  )}
                 </div>
+                {mostrarDetalheCusto && detalheCusto && (
+                  <div className={[styles.detalheCalculo, styles.full].join(" ")}>
+                    <div className={styles.detalheCalculoLinha}>
+                      <span>Salário</span>
+                      <strong>{formatarValorMonetario(detalheCusto.salario)}</strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinha}>
+                      <span>INSS Patronal</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.inssPatronal)} ·{" "}
+                        {formatarValorMonetario((detalheCusto.salario * detalheCusto.inssPatronal) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinha}>
+                      <span title={detalheCusto.ratObservacao}>RAT (GIILRAT efetivo)</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.rat)} · {formatarValorMonetario((detalheCusto.salario * detalheCusto.rat) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinha}>
+                      <span>Terceiros</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.terceiros)} ·{" "}
+                        {formatarValorMonetario((detalheCusto.salario * detalheCusto.terceiros) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinha}>
+                      <span>FGTS ({detalheCusto.ehAprendiz ? "Aprendiz" : "Celetista"})</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.fgts)} · {formatarValorMonetario((detalheCusto.salario * detalheCusto.fgts) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinha}>
+                      <span>Provisão 13º</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.provisaoDecimoTerceiro)} ·{" "}
+                        {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoDecimoTerceiro) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinha}>
+                      <span>Provisão Férias</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.provisaoFerias)} ·{" "}
+                        {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoFerias) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinha}>
+                      <span>Provisão 1/3 Férias</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.provisaoTercoFerias)} ·{" "}
+                        {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisaoTercoFerias) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinhaSub}>
+                      <span>Encargos diretos</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.encargosDiretosPct)} ·{" "}
+                        {formatarValorMonetario((detalheCusto.salario * detalheCusto.encargosDiretosPct) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinhaSub}>
+                      <span>Provisões</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.provisoesPct)} ·{" "}
+                        {formatarValorMonetario((detalheCusto.salario * detalheCusto.provisoesPct) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinhaSub}>
+                      <span>Encargos sobre as provisões</span>
+                      <strong>
+                        {formatarPercentual(detalheCusto.encargosSobreProvisoesPct)} ·{" "}
+                        {formatarValorMonetario((detalheCusto.salario * detalheCusto.encargosSobreProvisoesPct) / 100)}
+                      </strong>
+                    </div>
+                    <div className={styles.detalheCalculoLinhaFinal}>
+                      <span>Custo Mensal Folha</span>
+                      <strong>{formatarValorMonetario(detalheCusto.custoMensalFolha)}</strong>
+                    </div>
+                    <p className={styles.detalheCalculoNota}>{detalheCusto.ratObservacao}</p>
+                  </div>
+                )}
               </>
             )}
           </div>
