@@ -105,11 +105,11 @@ export function CargosPage() {
               </th>
               <th>
                 <div className={styles.thFiltro}>
-                  <span>Nível</span>
+                  <span>Categoria</span>
                   <select className={styles.thSelect} value={filtroNivel} onChange={(e) => setFiltroNivel(e.target.value)}>
                     {opcoesNivel.map((o) => (
                       <option key={o} value={o}>
-                        {o === "Todos" ? "Todos os níveis" : o}
+                        {o === "Todos" ? "Todas as categorias" : o}
                       </option>
                     ))}
                   </select>

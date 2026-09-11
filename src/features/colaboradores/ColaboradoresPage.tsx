@@ -214,7 +214,7 @@ export function ColaboradoresPage() {
               <span className={styles.detalheValor}>{colaboradorSelecionado.vinculo}</span>
             </div>
             <div className={styles.detalheItem}>
-              <span className={styles.detalheLabel}>Nível</span>
+              <span className={styles.detalheLabel}>Categoria</span>
               <Badge bg={nivelMeta(colaboradorSelecionado.nivel).bg} fg={nivelMeta(colaboradorSelecionado.nivel).fg}>
                 {colaboradorSelecionado.nivel}
               </Badge>
