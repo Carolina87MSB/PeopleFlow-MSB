@@ -505,9 +505,13 @@ export function usePortalData(): PortalData {
   const colaboradorPorNome = useMemo(() => new Map(state.colaboradores.map((c) => [c.nome, c])), [state.colaboradores]);
 
   /** RH vê tudo. Fora isso: cada um vê suas próprias 3 fichas do ciclo (a
-   * ficha GESTOR sobre si mesmo fica oculta pro perfil "Colaborador" — regra
-   * explícita, ele nunca vê a avaliação que o gestor fez dele — mas visível
-   * pra Gestor/Diretoria, que também são "colaborador" de alguém); e quem é
+   * ficha GESTOR sobre si mesmo só fica visível pro perfil "Colaborador"
+   * depois que `devolutivaRealizada` vira true — pedido da RH, 2026-09:
+   * antes disso ela pode mudar em calibração, então só é justo mostrar
+   * depois que o gestor já conversou pessoalmente com o colaborador sobre
+   * o resultado; pra Gestor/Diretoria, que também são "colaborador" de
+   * alguém, continua sempre visível — eles não dependem de devolutiva de
+   * ninguém pra ver a própria); e quem é
    * gestor definido para AQUELE ciclo (`gestorAvaliador` congelado na
    * própria ficha GESTOR do colaborador — não `colaborador.gestor`, atual/
    * ao vivo: RH pode substituir manualmente quem avalia sem que o cadastro
@@ -552,7 +556,7 @@ export function usePortalData(): PortalData {
         return a.colaboradorNome === me;
       }
       if (a.colaboradorNome === me) {
-        if (a.tipo === "GESTOR") return perfil !== "Colaborador";
+        if (a.tipo === "GESTOR") return perfil !== "Colaborador" || a.devolutivaRealizada === true;
         return true;
       }
       return gestorAvaliadorPorColaboradorCiclo.get(`${a.cicloId}::${a.colaboradorNome}`) === me;
