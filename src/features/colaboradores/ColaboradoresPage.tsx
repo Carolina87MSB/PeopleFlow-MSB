@@ -65,8 +65,10 @@ export function ColaboradoresPage() {
   // Salário/Custo Mensal Folha nunca vêm do cadastro do colaborador — ver
   // domain/salario.ts (fonte principal: campo "Novo salário" das
   // movimentações PRO/SAL já aprovadas; depois, reajustes estruturados como
-  // o da AVD; fallback: planilha importada em salariosBase). Visibilidade
-  // restrita a RH/Diretoria, mesma regra já usada na Timeline (podeVerSalario).
+  // o da AVD; fallback: planilha importada em salariosBase). Visibilidade via
+  // podeVerSalario (RH/Diretoria/Gestor) — pra Gestor, o escopo de "só o
+  // próprio colaborador" já vem de graça: colaboradorSelecionado só pode ser
+  // alguém de colaboradoresListagem, que pra Gestor já é só reporte direto.
   const verSalario = podeVerSalario(perfil);
   const salario = useMemo(
     () =>

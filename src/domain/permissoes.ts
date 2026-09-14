@@ -60,13 +60,19 @@ export function canSeeMov(
   return (scopeSet !== null && scopeSet.has(m.colaborador)) || m.solicitante === me || m.etapas.some((e) => e.aprovador === me);
 }
 
-/** Valor salarial é informação sensível — só RH/Diretoria veem o valor em
+/** Valor salarial é informação sensível — RH/Diretoria/Gestor veem o valor em
  * qualquer tela que precise exibi-lo fora do fluxo de aprovação da própria
  * movimentação (ex.: evento "Alteração salarial" na Timeline de carreira do
- * colaborador, ver domain/timelineCarreira.ts). Gestor/Colaborador veem que
- * o evento existiu, sem o valor. */
+ * colaborador, ver domain/timelineCarreira.ts, e o bloco Salário/Custo Mensal
+ * Folha em ColaboradoresPage.tsx). Pedido da RH, 2026-09: Gestor passou a
+ * enxergar salário/custo, mas só do próprio colaborador — não é uma regra
+ * nova aqui, e sim consequência do escopo que `colaboradoresListagem` já
+ * aplica pra Gestor (só quem tem ele como gestor imediato, ver
+ * usePortalData.ts) nas duas únicas telas que chamam esta função. Só
+ * Colaborador (perfil que ainda não existe no app) veria que o evento
+ * existiu sem o valor, se um dia existir. */
 export function podeVerSalario(perfil: Perfil): boolean {
-  return perfil === "RH" || perfil === "Diretoria";
+  return perfil === "RH" || perfil === "Diretoria" || perfil === "Gestor";
 }
 
 export function filtrarColaboradoresPorEscopo<T extends { nome: string }>(
