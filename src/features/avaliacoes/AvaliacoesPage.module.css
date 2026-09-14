@@ -4,3 +4,41 @@
   font-weight: 700;
   color: var(--color-navy);
 }
+
+.etapaCelula {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.etapaData {
+  font-size: 12.5px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.etapaSemData {
+  font-size: 12.5px;
+  color: var(--color-muted-light);
+}
+
+.etapaStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.etapaStatusOk {
+  color: var(--color-success-fg, #1f6b4f);
+}
+
+.etapaStatusPendente {
+  color: var(--color-muted-light);
+}
+
+.acoesCelula {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}

@@ -1,11 +1,50 @@
 import { useMemo, useState } from "react";
+import { Check } from "lucide-react";
 import { Badge, Button, EmptyState, tableStyles } from "../../components/ui";
 import { Header } from "../../components/layout/Header";
+import { dataEtapaAvaliacaoExperiencia, etapaConcluida } from "../../domain/avaliacaoExperiencia";
+import { formatarDataIso } from "../../domain/dates";
 import { usePortalData } from "../../store/usePortalData";
-import type { Colaborador, EtapaAvaliacaoExperiencia } from "../../types/domain";
+import type { AvaliacaoExperiencia, Colaborador, EtapaAvaliacaoExperiencia } from "../../types/domain";
 import { AvaliacaoExperienciaDrawer } from "./AvaliacaoExperienciaDrawer";
 import { DispensarAvaliacaoModal } from "./DispensarAvaliacaoModal";
 import styles from "./AvaliacoesPage.module.css";
+
+/** Célula de acompanhamento das colunas "45 dias"/"90 dias": data prevista
+ * (calculada a partir da admissão, nunca digitada) + status daquela etapa
+ * específica — puramente informativo, não decide pendência (isso continua
+ * só em pendenciasAvaliacaoExperiencia(), sem nenhuma mudança de regra). */
+function CelulaEtapa({
+  admissaoIso,
+  dias,
+  etapa,
+  avaliacoes,
+  colaboradorNome,
+}: {
+  admissaoIso: string;
+  dias: number;
+  etapa: EtapaAvaliacaoExperiencia;
+  avaliacoes: AvaliacaoExperiencia[];
+  colaboradorNome: string;
+}) {
+  const dataIso = dataEtapaAvaliacaoExperiencia(admissaoIso, dias);
+  if (!dataIso) return <span className={styles.etapaSemData}>—</span>;
+  const concluida = etapaConcluida(colaboradorNome, etapa, avaliacoes);
+  return (
+    <div className={styles.etapaCelula}>
+      <span className={styles.etapaData}>{formatarDataIso(dataIso)}</span>
+      <span className={[styles.etapaStatus, concluida ? styles.etapaStatusOk : styles.etapaStatusPendente].join(" ")}>
+        {concluida ? (
+          <>
+            <Check size={11} strokeWidth={2.5} /> Concluída
+          </>
+        ) : (
+          "• Pendente"
+        )}
+      </span>
+    </div>
+  );
+}
 
 export function AvaliacoesPage() {
   const { conta, perfil, colaboradores, avaliacoesExperiencia, pendenciasAvaliacaoExperiencia, criarAvaliacaoExperiencia, dispensarAvaliacaoExperiencia } =
@@ -41,6 +80,8 @@ export function AvaliacoesPage() {
                 <th>Colaborador</th>
                 <th>Cargo</th>
                 <th>Departamento</th>
+                <th>45 dias</th>
+                <th>90 dias</th>
                 <th>Etapa</th>
                 <th>Ações</th>
               </tr>
@@ -52,20 +93,49 @@ export function AvaliacoesPage() {
                   <td>{colaborador.cargo}</td>
                   <td>{colaborador.depto}</td>
                   <td>
+                    <CelulaEtapa
+                      admissaoIso={colaborador.admissaoIso}
+                      dias={45}
+                      etapa="45 dias"
+                      avaliacoes={avaliacoesExperiencia}
+                      colaboradorNome={colaborador.nome}
+                    />
+                  </td>
+                  <td>
+                    <CelulaEtapa
+                      admissaoIso={colaborador.admissaoIso}
+                      dias={90}
+                      etapa="90 dias"
+                      avaliacoes={avaliacoesExperiencia}
+                      colaboradorNome={colaborador.nome}
+                    />
+                  </td>
+                  <td>
                     <Badge bg="var(--color-warning-bg)" fg="var(--color-warning-fg)" dot="var(--color-warning)">
                       {etapa}
                     </Badge>
                   </td>
                   <td>
-                    <Button
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDispensando({ colaborador, etapa });
-                      }}
-                    >
-                      Dispensar
-                    </Button>
+                    <div className={styles.acoesCelula}>
+                      <Button
+                        variant="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelecionado({ colaborador, etapa });
+                        }}
+                      >
+                        Avaliar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDispensando({ colaborador, etapa });
+                        }}
+                      >
+                        Dispensar
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
