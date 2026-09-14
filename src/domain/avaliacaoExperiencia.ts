@@ -94,6 +94,11 @@ export interface PendenciaAvaliacaoExperiencia {
  * Colaboradores ativos, admitidos há menos de 90 dias, que ainda não têm a
  * avaliação da etapa atual registrada.
  *
+ * Vínculo PJ nunca entra (regra da RH, 2026-09 — contrato PJ não tem período
+ * de experiência CLT). `dispensas` continua cobrindo o caso de alguém
+ * avaliado fora do sistema antes da implantação; PJ é uma exclusão estrutural
+ * à parte, não precisa de dispensa individual.
+ *
  * Só entram na lista enquanto o contrato de experiência (45+45 dias) ainda
  * está em curso — < 45 dias → nenhuma pendência; ≥ 90 dias → sai da lista
  * automaticamente, tenha ou não sido avaliado (a CLT não permite prorrogar
@@ -118,7 +123,8 @@ export function pendenciasAvaliacaoExperiencia(
   const pendencias: PendenciaAvaliacaoExperiencia[] = [];
 
   for (const c of colaboradores) {
-    if (c.desligado || dispensados.has(c.nome)) continue;
+    // Regra da RH, 2026-09: vínculo PJ não realiza Avaliação de Experiência.
+    if (c.desligado || c.vinculo === "PJ" || dispensados.has(c.nome)) continue;
     const dias = diasDesdeAdmissao(c.admissaoIso, hoje);
     if (dias === null || dias < 45 || dias >= 90) continue;
 

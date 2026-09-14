@@ -285,6 +285,12 @@ export function elegivelParaCicloAvaliacaoDesempenho(
 ): { elegivel: boolean; motivo?: string } {
   if (colaborador.desligado) return { elegivel: false, motivo: "Colaborador desligado" };
 
+  // Regra da RH, 2026-09: vínculo PJ não participa de ciclo de AVD — vale só
+  // pra ciclos abertos a partir de agora (fichas de PJ já geradas em ciclos
+  // anteriores, como o 2º Ciclo MSB, permanecem como estão, por decisão
+  // explícita da RH).
+  if (colaborador.vinculo === "PJ") return { elegivel: false, motivo: "Vínculo PJ — não participa de ciclo de AVD" };
+
   if (!colaborador.admissaoIso || colaborador.admissaoIso > dataCorteAdmissaoIso) {
     return {
       elegivel: false,
