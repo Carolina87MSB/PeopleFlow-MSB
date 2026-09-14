@@ -3,12 +3,19 @@ import { Check } from "lucide-react";
 import { Badge, Button, EmptyState, tableStyles } from "../../components/ui";
 import { Header } from "../../components/layout/Header";
 import { dataEtapaAvaliacaoExperiencia, etapaConcluida } from "../../domain/avaliacaoExperiencia";
-import { formatarDataIso } from "../../domain/dates";
 import { usePortalData } from "../../store/usePortalData";
 import type { AvaliacaoExperiencia, Colaborador, EtapaAvaliacaoExperiencia } from "../../types/domain";
 import { AvaliacaoExperienciaDrawer } from "./AvaliacaoExperienciaDrawer";
 import { DispensarAvaliacaoModal } from "./DispensarAvaliacaoModal";
 import styles from "./AvaliacoesPage.module.css";
+
+/** "aaaa-mm-dd" -> "dd/mm/aaaa" — só pras colunas 45/90 dias desta tela (o
+ * resto do app usa "dd/mmm/aaaa" via formatarDataIso(), mas aqui o pedido
+ * foi especificamente o formato numérico). */
+function formatarDataNumerica(iso: string): string {
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
 
 /** Célula de acompanhamento das colunas "45 dias"/"90 dias": data prevista
  * (calculada a partir da admissão, nunca digitada) + status daquela etapa
@@ -32,7 +39,7 @@ function CelulaEtapa({
   const concluida = etapaConcluida(colaboradorNome, etapa, avaliacoes);
   return (
     <div className={styles.etapaCelula}>
-      <span className={styles.etapaData}>{formatarDataIso(dataIso)}</span>
+      <span className={styles.etapaData}>{formatarDataNumerica(dataIso)}</span>
       <span className={[styles.etapaStatus, concluida ? styles.etapaStatusOk : styles.etapaStatusPendente].join(" ")}>
         {concluida ? (
           <>
