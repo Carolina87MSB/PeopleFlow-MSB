@@ -265,10 +265,14 @@ export interface PortalData {
   podeReabrirAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => boolean;
   reabrirAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => Promise<{ ok: true } | { ok: false }>;
   pdi: Pdi[];
-  /** RH vê todo mundo; dono só vê depois de "Concluído"; quem é gestor atual do dono vê sempre. */
+  /** RH vê todo mundo; dono só vê depois de "Concluído"; gestorResponsavel (quem gerou o
+   * plano) OU o gestor atual do colaborador veem sempre — mas só gestorResponsavel edita
+   * (ver podeEditarPdi). */
   pdiVisiveis: Pdi[];
-  /** RH sempre (inclusive pra reabrir um PDI concluído); senão, quem originou o plano
-   * (gestorResponsavel) OU o gestor atual do colaborador — e só enquanto não estiver "Concluído". */
+  /** RH sempre (inclusive pra reabrir um PDI concluído); senão, só quem originou o plano
+   * (gestorResponsavel) — nunca o gestor atual, mesmo que diferente (pedido da RH, 2026-09:
+   * autoria/construção do PDI é sempre de quem fez a AVD que o gerou, nunca passa pro gestor
+   * novo automaticamente). O gestor atual só acompanha (ver pdiVisiveis) — nunca edita. */
   podeEditarPdi: (pdi: Pdi) => boolean;
   /** Retorna o Pdi salvo (com o `updatedAt` novo gerado pelo Supabase) — o
    * chamador deve substituir seu rascunho local por ele antes de qualquer
@@ -587,36 +591,45 @@ export function usePortalData(): PortalData {
   /** RH vê tudo. Dono (`colaboradorNome === me`) só vê depois de concluído —
    * diferente da AVD (lá a ficha GESTOR nunca é vista pelo perfil
    * Colaborador), aqui é só uma questão de tempo: vê assim que o gestor
-   * concluir. Senão, só `gestorResponsavel` (congelado, sempre preenchido
-   * com o `gestorAvaliador` da avaliação que gerou o PDI — nunca vazio, ver
-   * `usePortalData.ts` onde o PDI é criado) — nunca o gestor atual (ao
-   * vivo): um PDI pertence a quem de fato avaliou e o gerou, não a quem
-   * gerencia o colaborador agora (achado real: Fabiana Santos Sousa reporta
-   * a Tainara hoje, mas foi Ravena Peixoto quem a avaliou e gerou o PDI dela
-   * — o PDI de Fabiana não pode vazar pra lista de Tainara só por isso).
-   * `podeEditarPdiFn` é DIFERENTE de propósito (permite um gestor novo
-   * assumir a edição de um PDI em andamento sem depender do RH) e continua
-   * unindo com o gestor atual — aqui é só visibilidade de leitura. */
+   * concluir. Senão, `gestorResponsavel` (congelado, sempre preenchido com o
+   * `gestorAvaliador` da avaliação que gerou o PDI — nunca vazio) OU o
+   * gestor ATUAL do colaborador (ao vivo) veem — pedido da RH, 2026-09,
+   * achado real: William Alves Cruz/Tais Batista Santos Araujo/Cidália
+   * Pereira Cardoso foram avaliados pela Raissa Rayane Santos Laurindo
+   * Caldas (gestora deles à época, gestorResponsavel do PDI), mas hoje
+   * respondem pra Cintia Santos Silva Batista — sem essa união, o PDI
+   * simplesmente sumia da lista de trabalho da liderança atual, que não
+   * tinha nenhuma forma de acompanhar a evolução de quem lidera hoje.
+   * **Visibilidade não é edição**: o gestor atual só acompanha em modo
+   * leitura — a autoria/construção do plano continua exclusiva de
+   * `gestorResponsavel` (ver `podeEditarPdiFn` logo abaixo), nunca migra
+   * pro gestor novo automaticamente. */
   const pdiVisiveis = useMemo(() => {
     if (perfil === "RH") return state.pdi;
     return state.pdi.filter((p) => {
       if (p.colaboradorNome === me) return p.status === "Concluído";
-      return p.gestorResponsavel === me;
+      if (p.gestorResponsavel === me) return true;
+      return colaboradorPorNome.get(p.colaboradorNome)?.gestor === me;
     });
-  }, [state.pdi, perfil, me]);
+  }, [state.pdi, perfil, me, colaboradorPorNome]);
 
   /** RH sempre — inclusive um PDI já concluído, é assim que ele "reabre".
-   * Senão, quem originou o plano (gestorResponsavel, congelado — mesma
-   * lógica de gestorAvaliador na AVD, pra não perder acesso numa
-   * transferência) OU o gestor atual do colaborador (pra um gestor novo
-   * poder assumir sem precisar do RH) — e só enquanto não "Concluído". */
+   * Senão, só quem originou o plano (`gestorResponsavel`, congelado — mesma
+   * lógica de `gestorAvaliador` na AVD) — e só enquanto não "Concluído".
+   * Pedido explícito da RH, 2026-09: NUNCA o gestor atual, mesmo que
+   * diferente do gestorResponsavel (antes unia os dois, pra deixar um
+   * gestor novo assumir a edição sem depender do RH — a RH decidiu que
+   * autoria/construção do PDI nunca deve migrar automaticamente pro gestor
+   * novo só porque ele passou a liderar o colaborador; se o gestor original
+   * não está mais disponível, só o RH edita). Visibilidade de leitura pro
+   * gestor atual continua garantida por `pdiVisiveis`, acima. */
   const podeEditarPdiFn = useCallback(
     (pdi: Pdi) => {
       if (perfil === "RH") return true;
       if (pdi.status === "Concluído") return false;
-      return pdi.gestorResponsavel === me || colaboradorPorNome.get(pdi.colaboradorNome)?.gestor === me;
+      return pdi.gestorResponsavel === me;
     },
-    [perfil, me, colaboradorPorNome],
+    [perfil, me],
   );
 
   /** Regra absoluta (mais restrita que a AVD): o colaborador NUNCA vê a

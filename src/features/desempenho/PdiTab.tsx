@@ -12,7 +12,9 @@ const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
 
 /** Plano de Desenvolvimento Individual — gerado automaticamente na conclusão
  * da avaliação GESTOR de cada ciclo (ver usePortalData.ts). RH vê todos;
- * Gestor vê os próprios liderados; Colaborador só depois de concluído. */
+ * Gestor vê quem ele avaliou (gestorResponsavel) e/ou quem lidera hoje —
+ * podem ser pessoas diferentes após uma transferência, e só quem avaliou
+ * pode editar (ver podeEditarPdi); Colaborador só depois de concluído. */
 export function PdiTab() {
   const { pdiVisiveis, colaboradores, ciclosAvaliacaoDesempenho, podeEditarGestaoDesempenho } = usePortalData();
   const [cicloFiltro, setCicloFiltro] = useState("Todos");
