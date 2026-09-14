@@ -85,6 +85,16 @@ export function ColaboradoresPage() {
 
   if (!podeVerColaboradores) return <Navigate to="/dashboard" replace />;
 
+  // "Liderados diretos" — pedido da RH, 2026-09: contagem independente do
+  // indicador "Colaboradores" (Sidebar, que usa colaboradoresVisiveis e inclui
+  // reportes indiretos). Aqui é sempre igual a colaboradoresListagem.length,
+  // que pra perfil Gestor já é, por definição (usePortalData.ts), só quem tem
+  // esse gestor como gestor imediato — a mesma população que preenche esta
+  // tabela antes de qualquer filtro de busca/departamento/gestor selecionado
+  // (a lista de liderados diretos em si, não a lista já filtrada pela busca).
+  // Só faz sentido pro próprio Gestor — RH/Diretoria veem a base inteira em
+  // colaboradoresListagem, então o número não representaria "liderados".
+
   function handleGestorChange(nome: string) {
     setGestorSelecionado(nome);
     const params = new URLSearchParams(searchParams);
@@ -121,7 +131,15 @@ export function ColaboradoresPage() {
 
   return (
     <>
-      <Header />
+      <Header
+        actions={
+          perfil === "Gestor" ? (
+            <span className={styles.liderados}>
+              Liderados diretos: <strong>{colaboradoresListagem.length}</strong>
+            </span>
+          ) : undefined
+        }
+      />
 
       <FilterChips options={deptos} value={depto} onChange={setDepto} />
 

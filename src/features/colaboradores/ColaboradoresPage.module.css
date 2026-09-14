@@ -1,3 +1,18 @@
+/* "Liderados diretos" (Etapa 2026-09) — indicador discreto, texto simples
+ * (não um Badge colorido) pra não competir visualmente com o indicador
+ * "Colaboradores" já existente na Sidebar; só aparece pro perfil Gestor. */
+.liderados {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.liderados strong {
+  color: var(--color-navy);
+  font-weight: 700;
+}
+
 .filtersRow {
   display: flex;
   align-items: center;

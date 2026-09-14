@@ -51,6 +51,8 @@ Três perfis, com visão e permissões diferentes (ver `src/domain/permissoes.ts
 
 `colaboradoresListagem` (fonte de `/colaboradores`, com a regra por perfil acima) é diferente de `colaboradoresVisiveis` (escopo de hierarquia completa do Gestor, usado no resto do app) — ver `usePortalData.ts`.
 
+**Indicador "Liderados diretos" (`/colaboradores`, só perfil Gestor)** — pedido da RH, 2026-09: um texto discreto ao lado do título (`Header actions`) mostrando `colaboradoresListagem.length`, ou seja, a contagem de reportes diretos do gestor logado — a mesma população que já preenche a tabela desta tela antes de qualquer filtro de busca/departamento. Independente do badge "Colaboradores" da Sidebar (que usa `colaboradoresVisiveis`, hierarquia completa incluindo reportes indiretos) — nenhum dos dois foi alterado pelo outro.
+
 ### Exceção de aprovação para o CEO
 
 Daniel (CEO) e Yuri (Diretor Industrial) têm o mesmo perfil "Diretoria", mas **só o CEO** tem uma regra especial: toda movimentação que ele solicitar pula as etapas "Gestor Solicitante" e "Diretoria" e vai direto para o RH — em qualquer tipo de movimentação. Yuri, com o mesmo perfil, continua seguindo a matriz normal.
