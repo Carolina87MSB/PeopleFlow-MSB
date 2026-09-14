@@ -207,6 +207,9 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
     case "CRIAR_FEEDBACK":
       return { ...state, feedbacks: [action.feedback, ...state.feedbacks] };
 
+    case "ATUALIZAR_FEEDBACK":
+      return { ...state, feedbacks: state.feedbacks.map((f) => (f.id === action.feedback.id ? action.feedback : f)) };
+
     default:
       return state;
   }

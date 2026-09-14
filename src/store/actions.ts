@@ -85,4 +85,5 @@ export type PortalAction =
   | { type: "ATUALIZAR_CONFIG_DASHBOARD"; config: ConfigDashboard }
   | { type: "ADICIONAR_REAJUSTES_SALARIAIS"; reajustes: ReajusteSalarial[] }
   | { type: "CRIAR_FEEDBACK"; feedback: Feedback }
+  | { type: "ATUALIZAR_FEEDBACK"; feedback: Feedback }
   | { type: "RESET" };

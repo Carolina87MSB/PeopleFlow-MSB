@@ -37,7 +37,7 @@ import {
 } from "../repositories/ciclosAvaliacaoDesempenhoRepository";
 import { registrarLogAvaliacaoDesempenho as registrarLogAvaliacaoDesempenhoNoSupabase } from "../repositories/logAvaliacaoDesempenhoRepository";
 import { criarPdi as criarPdiNoSupabase, salvarPdi as salvarPdiNoSupabase } from "../repositories/pdiRepository";
-import { registrarFeedback as registrarFeedbackNoSupabase } from "../repositories/feedbacksRepository";
+import { atualizarFeedback as atualizarFeedbackNoSupabase, registrarFeedback as registrarFeedbackNoSupabase } from "../repositories/feedbacksRepository";
 import {
   excluirItemBiblioteca as excluirItemBibliotecaNoSupabase,
   salvarItemBiblioteca as salvarItemBibliotecaNoSupabase,
@@ -294,6 +294,11 @@ export interface PortalData {
     tema: TemaFeedback;
     comentarios: string;
   }) => Promise<{ ok: true; feedback: Feedback } | { ok: false }>;
+  podeEditarFeedback: (feedback: Feedback) => boolean;
+  editarFeedback: (
+    feedback: Feedback,
+    patch: { dataFeedback: string; tema: TemaFeedback; comentarios: string },
+  ) => Promise<{ ok: true; feedback: Feedback } | { ok: false }>;
   podeEditarGestaoDesempenho: boolean;
   avaliacoesPotencial: AvaliacaoPotencial[];
   /** RH vê tudo; senão, só quem é gestor ATUAL do colaborador — o próprio
@@ -2090,6 +2095,33 @@ export function usePortalData(): PortalData {
     [dispatch, me, flash, podeRegistrarFeedbackFn],
   );
 
+  /** Corrigir um feedback já registrado — só quem registrou originalmente
+   * (`gestorNome === me`) ou RH/Diretoria, nunca outro gestor que só
+   * enxerga o registro por visibilidade compartilhada (feedbacksVisiveis). */
+  const podeEditarFeedbackFn = useCallback(
+    (feedback: Feedback) => perfil === "RH" || perfil === "Diretoria" || feedback.gestorNome === me,
+    [perfil, me],
+  );
+
+  const editarFeedbackFn = useCallback(
+    async (feedback: Feedback, patch: { dataFeedback: string; tema: TemaFeedback; comentarios: string }) => {
+      if (!podeEditarFeedbackFn(feedback)) {
+        flash("Você só pode corrigir feedbacks que você mesmo registrou.");
+        return { ok: false as const };
+      }
+      try {
+        const atualizado = await atualizarFeedbackNoSupabase(feedback.id, patch, me);
+        dispatch({ type: "ATUALIZAR_FEEDBACK", feedback: atualizado });
+        flash("Feedback corrigido.");
+        return { ok: true as const, feedback: atualizado };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao corrigir feedback.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, podeEditarFeedbackFn],
+  );
+
   /** Salva uma Avaliação de Potencial (respostas/comentário, mudança de
    * status, conclusão) — um só ponto pra tudo, igual salvarAvaliacaoDesempenho.
    * Recalcula notaPotencial via calcularNotaPotencial() antes de gravar
@@ -2366,6 +2398,8 @@ export function usePortalData(): PortalData {
     feedbacksVisiveis,
     podeRegistrarFeedback: podeRegistrarFeedbackFn,
     registrarFeedback: registrarFeedbackFn,
+    podeEditarFeedback: podeEditarFeedbackFn,
+    editarFeedback: editarFeedbackFn,
     podeEditarGestaoDesempenho: perfil === "RH",
     avaliacoesPotencial: state.avaliacoesPotencial,
     avaliacoesPotencialVisiveis,

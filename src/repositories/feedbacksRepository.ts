@@ -15,6 +15,8 @@ interface FeedbackRow {
   tema: string;
   comentarios: string;
   criado_em: string;
+  editado_por: string | null;
+  editado_em: string | null;
 }
 
 function fromRow(row: FeedbackRow): Feedback {
@@ -26,6 +28,8 @@ function fromRow(row: FeedbackRow): Feedback {
     tema: row.tema as TemaFeedback,
     comentarios: row.comentarios,
     criadoEm: row.criado_em,
+    editadoPor: row.editado_por,
+    editadoEm: row.editado_em,
   };
 }
 
@@ -58,5 +62,28 @@ export async function registrarFeedback(input: {
     .select()
     .single();
   if (error) throw new Error(`Falha ao registrar feedback no Supabase: ${error.message}`);
+  return fromRow(data as FeedbackRow);
+}
+
+export async function atualizarFeedback(
+  id: number,
+  patch: { dataFeedback: string; tema: TemaFeedback; comentarios: string },
+  editadoPor: string,
+): Promise<Feedback> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { data, error } = await supabase
+    .from("peopleflow_feedbacks")
+    .update({
+      data_feedback: patch.dataFeedback,
+      tema: patch.tema,
+      comentarios: patch.comentarios,
+      editado_por: editadoPor,
+      editado_em: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(`Falha ao corrigir feedback no Supabase: ${error.message}`);
   return fromRow(data as FeedbackRow);
 }

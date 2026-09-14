@@ -1311,3 +1311,20 @@ alter table public.colaboradores
 
 comment on column public.colaboradores.empresa_afiliada is
   'PeopleFlow/SST: true para pessoas de uma empresa afiliada do grupo econômico, cadastradas em colaboradores só pra acesso a portal — nunca contam como colaborador MSB em headcount/contagens. Ligado manualmente pelo RH via SQL.';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 30) Feedback — edição de correção. Até aqui, um feedback registrado nunca
+--    podia ser corrigido (nem um erro de digitação) — só existia "Registrar
+--    Feedback" (novo registro). `editado_por`/`editado_em` só são
+--    preenchidos quando o registro é de fato corrigido depois de criado;
+--    `criado_em` nunca muda, continua sendo o timestamp real do registro
+--    original. Edição liberada só pro próprio gestor que registrou
+--    (`gestor_nome = me`) ou RH/Diretoria — ver podeEditarFeedback() em
+--    usePortalData.ts.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_feedbacks
+  add column if not exists editado_por text,
+  add column if not exists editado_em timestamptz;
+
+comment on column public.peopleflow_feedbacks.editado_por is 'Preenchido só quando o feedback é corrigido depois de criado — null se nunca editado.';
+comment on column public.peopleflow_feedbacks.editado_em is 'Timestamp da última correção — null se nunca editado. Distinto de criado_em (nunca muda).';

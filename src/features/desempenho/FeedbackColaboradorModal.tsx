@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Modal } from "../../components/ui";
 import { ordenarFeedbacks, TEMAS_FEEDBACK } from "../../domain/feedback";
-import { formatarDataIso, hojeIso } from "../../domain/dates";
+import { formatarDataHora, formatarDataIso, hojeIso } from "../../domain/dates";
 import { usePortalData } from "../../store/usePortalData";
-import type { Colaborador, TemaFeedback } from "../../types/domain";
+import type { Colaborador, Feedback, TemaFeedback } from "../../types/domain";
 import styles from "./FeedbackTab.module.css";
 
 interface FeedbackColaboradorModalProps {
@@ -20,7 +20,7 @@ interface FeedbackColaboradorModalProps {
  * modal, mantendo o fluxo rápido pedido ("incentivar os gestores a
  * registrarem feedbacks ao longo do ano"). */
 export function FeedbackColaboradorModal({ colaborador, abrirFormularioInicial, onClose }: FeedbackColaboradorModalProps) {
-  const { feedbacksVisiveis, registrarFeedback } = usePortalData();
+  const { feedbacksVisiveis, registrarFeedback, podeEditarFeedback, editarFeedback } = usePortalData();
   const [mostrarFormulario, setMostrarFormulario] = useState(abrirFormularioInicial);
   const [dataFeedback, setDataFeedback] = useState(() => hojeIso());
   const [tema, setTema] = useState<TemaFeedback>(TEMAS_FEEDBACK[0]);
@@ -125,20 +125,110 @@ export function FeedbackColaboradorModal({ colaborador, abrirFormularioInicial, 
         ) : (
           <div className={styles.historicoLista}>
             {historico.map((f) => (
-              <Card key={f.id} className={styles.historicoItem}>
-                <div className={styles.historicoTopo}>
-                  <Badge bg="var(--color-brand-pale, #eef7f9)" fg="var(--color-brand)">
-                    {f.tema}
-                  </Badge>
-                  <span className={styles.historicoData}>{formatarDataIso(f.dataFeedback)}</span>
-                </div>
-                <p className={styles.historicoComentarios}>{f.comentarios}</p>
-                <span className={styles.historicoAutor}>Registrado por {f.gestorNome}</span>
-              </Card>
+              <HistoricoFeedbackItem
+                key={f.id}
+                feedback={f}
+                podeEditar={podeEditarFeedback(f)}
+                onSalvar={(patch) => editarFeedback(f, patch)}
+              />
             ))}
           </div>
         )}
       </div>
     </Modal>
+  );
+}
+
+interface HistoricoFeedbackItemProps {
+  feedback: Feedback;
+  podeEditar: boolean;
+  onSalvar: (patch: { dataFeedback: string; tema: TemaFeedback; comentarios: string }) => Promise<{ ok: true } | { ok: false }>;
+}
+
+function HistoricoFeedbackItem({ feedback, podeEditar, onSalvar }: HistoricoFeedbackItemProps) {
+  const [editando, setEditando] = useState(false);
+  const [dataFeedback, setDataFeedback] = useState(feedback.dataFeedback);
+  const [tema, setTema] = useState<TemaFeedback>(feedback.tema);
+  const [comentarios, setComentarios] = useState(feedback.comentarios);
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  function iniciarEdicao() {
+    setDataFeedback(feedback.dataFeedback);
+    setTema(feedback.tema);
+    setComentarios(feedback.comentarios);
+    setErro("");
+    setEditando(true);
+  }
+
+  async function salvar() {
+    if (!comentarios.trim()) {
+      setErro("Descreva o feedback antes de salvar.");
+      return;
+    }
+    setSalvando(true);
+    setErro("");
+    const resultado = await onSalvar({ dataFeedback, tema, comentarios: comentarios.trim() });
+    setSalvando(false);
+    if (resultado.ok) setEditando(false);
+  }
+
+  if (editando) {
+    return (
+      <Card className={styles.historicoItem}>
+        <div className={styles.linha}>
+          <div className={styles.campo}>
+            <span className={styles.label}>Data do Feedback</span>
+            <input type="date" className={styles.input} value={dataFeedback} onChange={(e) => setDataFeedback(e.target.value)} />
+          </div>
+          <div className={styles.campo}>
+            <span className={styles.label}>Tema</span>
+            <select className={styles.select} value={tema} onChange={(e) => setTema(e.target.value as TemaFeedback)}>
+              {TEMAS_FEEDBACK.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className={styles.campo}>
+          <span className={styles.label}>Comentários</span>
+          <textarea className={styles.textarea} rows={5} value={comentarios} onChange={(e) => setComentarios(e.target.value)} />
+        </div>
+        {erro && <p className={styles.erro}>{erro}</p>}
+        <div className={styles.formularioAcoes}>
+          <Button variant="ghost" onClick={() => setEditando(false)} disabled={salvando}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando..." : "Salvar correção"}
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className={styles.historicoItem}>
+      <div className={styles.historicoTopo}>
+        <Badge bg="var(--color-brand-pale, #eef7f9)" fg="var(--color-brand)">
+          {feedback.tema}
+        </Badge>
+        <div className={styles.historicoTopoDireita}>
+          <span className={styles.historicoData}>{formatarDataIso(feedback.dataFeedback)}</span>
+          {podeEditar && (
+            <button type="button" className={styles.editarBtn} onClick={iniciarEdicao} title="Corrigir este feedback">
+              <Pencil size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+      <p className={styles.historicoComentarios}>{feedback.comentarios}</p>
+      <span className={styles.historicoAutor}>Registrado por {feedback.gestorNome}</span>
+      {feedback.editadoPor && (
+        <span className={styles.editadoTag}> · corrigido por {feedback.editadoPor} em {formatarDataHora(feedback.editadoEm)}</span>
+      )}
+    </Card>
   );
 }

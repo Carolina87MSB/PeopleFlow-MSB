@@ -873,7 +873,10 @@ export type TemaFeedback =
  * PDI: sem nota, sem aprovação, sem vínculo obrigatório com nenhum dos dois
  * (ver domain/feedback.ts). `dataFeedback` é quando a conversa de fato
  * aconteceu (editável, default hoje); `criadoEm` é o timestamp real de
- * quando o registro foi salvo (auditoria, nunca editável). */
+ * quando o registro foi salvo (auditoria, nunca editável). `editadoPor`/
+ * `editadoEm` só são preenchidos se o registro for corrigido depois de
+ * criado (ver podeEditarFeedback/editarFeedback em usePortalData.ts) —
+ * `null` num feedback nunca editado. */
 export interface Feedback {
   id: number;
   colaboradorNome: string;
@@ -882,6 +885,8 @@ export interface Feedback {
   tema: TemaFeedback;
   comentarios: string;
   criadoEm: string; // ISO timestamp
+  editadoPor: string | null;
+  editadoEm: string | null; // ISO timestamp
 }
 
 /** Modelo de objetivo/ações por competência, mantido pelo RH — consultado na
