@@ -16,8 +16,18 @@ export function gerarIdPdiAcao(): string {
  * (Concluída ou Cancelada) — gate pro botão "Concluir PDI". Exige pelo
  * menos uma ação de propósito: `every()` sobre uma lista vazia é
  * vacuamente verdadeiro, o que deixaria um plano recém-gerado sem nenhum
- * item "concluível" na hora, sem nenhum desenvolvimento de fato registrado. */
-export function pdiPodeSerConcluido(pdi: { itens: { acoes: { status: string }[] }[] }): boolean {
+ * item "concluível" na hora, sem nenhum desenvolvimento de fato registrado.
+ *
+ * Exceção (pedido da RH, 2026-09): quando `itens` está vazio — colaborador
+ * não ficou abaixo da nota mínima em nada naquele ciclo —, não existe
+ * nenhuma ação possível de cumprir, então a regra acima travaria esse PDI
+ * pra sempre. Nesse caso, `semCompetenciaDesenvolvimento` (declaração
+ * explícita do gestor, ver PdiModal.tsx) é o único requisito. */
+export function pdiPodeSerConcluido(pdi: {
+  itens: { acoes: { status: string }[] }[];
+  semCompetenciaDesenvolvimento: boolean;
+}): boolean {
+  if (pdi.itens.length === 0) return pdi.semCompetenciaDesenvolvimento;
   const todasAcoes = pdi.itens.flatMap((i) => i.acoes);
   return todasAcoes.length > 0 && todasAcoes.every((a) => a.status === "Concluída" || a.status === "Cancelada");
 }

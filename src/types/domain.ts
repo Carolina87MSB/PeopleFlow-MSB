@@ -834,12 +834,13 @@ export interface PdiItem {
 /** Plano de Desenvolvimento Individual — gerado automaticamente quando a
  * avaliação GESTOR de um ciclo é concluída (nunca por AUTOAVALIACAO/
  * LIDERANCA), permanece vinculado a esse ciclo. `gestorResponsavel` é
- * snapshot do `gestorAvaliador` da avaliação que originou o plano — a
- * autoridade de edição usa esse campo OU o gestor atual do colaborador
- * (união, ver `podeEditarPdi()` em usePortalData.ts), pra não perder acesso
- * numa transferência nem exigir intervenção do RH pro gestor novo assumir.
- * Colaborador só vê depois de `status === "Concluído"` (diferente da AVD,
- * onde a ficha GESTOR nunca é vista por ele). */
+ * snapshot do `gestorAvaliador` da avaliação que originou o plano — só ele
+ * (+ RH) edita (`podeEditarPdi()` em usePortalData.ts); o gestor atual do
+ * colaborador (`colaboradores.gestor`, ao vivo) só acompanha em modo
+ * leitura quando diferente do responsável (`pdiVisiveis`, mesmo arquivo) —
+ * visibilidade nunca implica edição. Colaborador só vê depois de
+ * `status === "Concluído"` (diferente da AVD, onde a ficha GESTOR nunca é
+ * vista por ele). */
 export interface Pdi {
   id: number;
   colaboradorNome: string;
@@ -851,6 +852,12 @@ export interface Pdi {
   comentarios: string;
   concluidoPor: string;
   concluidoEm: string | null;
+  /** Declaração do gestor de que não há nenhuma competência/KPI a
+   * desenvolver neste ciclo — único jeito de concluir um PDI com `itens`
+   * vazio (ver `pdiPodeSerConcluido()` em domain/pdi.ts). Sem efeito quando
+   * existe pelo menos 1 item; nesse caso a regra de sempre (pelo menos 1
+   * ação, todas Concluída/Cancelada) continua valendo. */
+  semCompetenciaDesenvolvimento: boolean;
   itens: PdiItem[];
   criadoEm: string;
   updatedAt: string;

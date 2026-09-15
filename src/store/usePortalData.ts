@@ -1905,6 +1905,7 @@ export function usePortalData(): PortalData {
           comentarios: "",
           concluidoPor: "",
           concluidoEm: null,
+          semCompetenciaDesenvolvimento: false,
           itens,
           criadoEm: agora,
           updatedAt: agora,

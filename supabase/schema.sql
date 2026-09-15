@@ -1327,4 +1327,24 @@ alter table public.peopleflow_feedbacks
   add column if not exists editado_em timestamptz;
 
 comment on column public.peopleflow_feedbacks.editado_por is 'Preenchido só quando o feedback é corrigido depois de criado — null se nunca editado.';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 31) PDI — conclusão sem nenhuma competência a desenvolver. Até aqui,
+--    pdiPodeSerConcluido() (domain/pdi.ts) exigia pelo menos 1 ação
+--    Concluída/Cancelada — um PDI gerado sem nenhum item (colaborador não
+--    ficou abaixo da nota mínima em nada naquele ciclo) nunca tinha ação
+--    nenhuma pra cumprir essa exigência, e por isso nunca podia ser
+--    concluído (ficava preso em "Não iniciado"/"Em andamento" pra sempre).
+--    Esta coluna é a declaração explícita do gestor de que não há mesmo
+--    nenhuma competência a desenvolver naquele ciclo — só assim o botão
+--    "Concluir PDI" fica disponível quando `itens` está vazio (ver
+--    PdiModal.tsx). Sem efeito quando o PDI tem pelo menos 1 item — nesse
+--    caso a regra de sempre (pelo menos 1 ação, todas resolvidas) continua
+--    valendo, sem alteração.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_pdi
+  add column if not exists sem_competencia_desenvolvimento boolean not null default false;
+
+comment on column public.peopleflow_pdi.sem_competencia_desenvolvimento is
+  'Declaração do gestor de que não há nenhuma competência/KPI a desenvolver neste ciclo — único jeito de concluir um PDI sem itens (ver pdiPodeSerConcluido() em domain/pdi.ts). Irrelevante quando existe pelo menos 1 item.';
 comment on column public.peopleflow_feedbacks.editado_em is 'Timestamp da última correção — null se nunca editado. Distinto de criado_em (nunca muda).';

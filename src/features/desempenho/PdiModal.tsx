@@ -39,7 +39,9 @@ function acaoVazia(itemId: string): PdiAcao {
  * abaixo da nota mínima na avaliação GESTOR) ou adicionados manualmente pelo
  * gestor, cada um com uma lista de ações de desenvolvimento. "Concluir" só
  * fica disponível quando há pelo menos 1 ação e todas estão
- * Concluída/Cancelada (ver pdiPodeSerConcluido em domain/pdi.ts). */
+ * Concluída/Cancelada — ou, se não há nenhum item, quando o gestor declara
+ * explicitamente que não há competência a desenvolver neste ciclo (ver
+ * pdiPodeSerConcluido em domain/pdi.ts). */
 export function PdiModal({ pdi, onClose }: PdiModalProps) {
   const { colaboradores, competenciasComportamentais, kpisCargo, pdiBiblioteca, perfil, conta, podeEditarPdi, salvarPdi, reabrirPdi } = usePortalData();
 
@@ -170,7 +172,18 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
       )}
 
       {rascunho.itens.length === 0 && (
-        <p className={styles.explicacao}>Nenhuma competência/KPI abaixo da nota mínima nesta avaliação — adicione manualmente, se necessário.</p>
+        <>
+          <p className={styles.explicacao}>Nenhuma competência/KPI abaixo da nota mínima nesta avaliação — adicione manualmente, se necessário.</p>
+          <label className={styles.declaracaoSemItens}>
+            <input
+              type="checkbox"
+              checked={rascunho.semCompetenciaDesenvolvimento}
+              disabled={!podeEditar}
+              onChange={(e) => setRascunho((r) => ({ ...r, semCompetenciaDesenvolvimento: e.target.checked }))}
+            />
+            <span>Declaro que não há nenhuma competência a ser desenvolvida neste ciclo — só assim é possível concluir este PDI sem itens.</span>
+          </label>
+        </>
       )}
 
       {rascunho.itens.map((item) => (
@@ -345,7 +358,18 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
             <Button variant="secondary" onClick={() => handleSalvar()} disabled={salvando !== null}>
               {salvando === "salvar" ? "Salvando..." : "Salvar"}
             </Button>
-            <Button variant="primary" onClick={() => handleSalvar("Concluído")} disabled={!podeConcluir || salvando !== null} title={!podeConcluir ? "Só é possível concluir quando houver pelo menos 1 ação, todas concluídas ou canceladas." : undefined}>
+            <Button
+              variant="primary"
+              onClick={() => handleSalvar("Concluído")}
+              disabled={!podeConcluir || salvando !== null}
+              title={
+                podeConcluir
+                  ? undefined
+                  : rascunho.itens.length === 0
+                    ? "Marque a declaração acima confirmando que não há competência a desenvolver neste ciclo."
+                    : "Só é possível concluir quando houver pelo menos 1 ação, todas concluídas ou canceladas."
+              }
+            >
               {salvando === "concluir" ? "Concluindo..." : "Concluir PDI"}
             </Button>
           </>

@@ -17,6 +17,7 @@ interface PdiRow {
   comentarios: string | null;
   concluido_por: string | null;
   concluido_em: string | null;
+  sem_competencia_desenvolvimento: boolean | null;
   criado_em: string;
   updated_at: string;
 }
@@ -68,6 +69,7 @@ function fromRowPdi(row: PdiRow): Pdi {
     comentarios: row.comentarios ?? "",
     concluidoPor: row.concluido_por ?? "",
     concluidoEm: row.concluido_em,
+    semCompetenciaDesenvolvimento: row.sem_competencia_desenvolvimento ?? false,
     itens: [],
     criadoEm: row.criado_em,
     updatedAt: row.updated_at,
@@ -125,6 +127,7 @@ function toRowPdi(pdi: Pdi) {
     comentarios: pdi.comentarios,
     concluido_por: pdi.concluidoPor || null,
     concluido_em: pdi.concluidoEm,
+    sem_competencia_desenvolvimento: pdi.semCompetenciaDesenvolvimento,
   };
 }
 
