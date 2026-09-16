@@ -41,11 +41,21 @@ function acaoVazia(itemId: string): PdiAcao {
  * fica disponível quando há pelo menos 1 ação e todas estão
  * Concluída/Cancelada — ou, se não há nenhum item, quando o gestor declara
  * explicitamente que não há competência a desenvolver neste ciclo (ver
- * pdiPodeSerConcluido em domain/pdi.ts). */
+ * pdiPodeSerConcluido em domain/pdi.ts).
+ *
+ * Dois níveis de permissão (pedido da RH, 2026-09): `podeEditar` (RH/
+ * gestorResponsavel) libera tudo, inclusive itens estruturais/diagnósticos
+ * (objetivo de desenvolvimento, adicionar/remover competência, declarar
+ * "sem competência", concluir o plano); `podeExecucao` (superset de
+ * `podeEditar`, também libera o gestor ATUAL do colaborador) só libera
+ * acompanhamento de execução — ações propostas, status/observações/datas
+ * de cada item, comentários gerais — nunca os itens estruturais acima. */
 export function PdiModal({ pdi, onClose }: PdiModalProps) {
-  const { colaboradores, competenciasComportamentais, kpisCargo, pdiBiblioteca, perfil, conta, podeEditarPdi, salvarPdi, reabrirPdi } = usePortalData();
+  const { colaboradores, competenciasComportamentais, kpisCargo, pdiBiblioteca, perfil, conta, podeEditarPdi, podeAtualizarExecucaoPdi, salvarPdi, reabrirPdi } =
+    usePortalData();
 
   const podeEditar = podeEditarPdi(pdi);
+  const podeExecucao = podeAtualizarExecucaoPdi(pdi);
   const [rascunho, setRascunho] = useState<Pdi>(() => ({ ...pdi, itens: pdi.itens.map((i) => ({ ...i, acoes: i.acoes.map((a) => ({ ...a })) })) }));
   const [novaChave, setNovaChave] = useState("");
   const [salvando, setSalvando] = useState<"salvar" | "concluir" | "reabrir" | null>(null);
@@ -159,7 +169,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
       onClose={onClose}
       width={680}
     >
-      {(rascunho.status === "Concluído" || !podeEditar) && (
+      {(rascunho.status === "Concluído" || !podeExecucao) && (
         <div className={styles.statusRow}>
           {rascunho.status === "Concluído" ? (
             <span className={styles.trancada}>
@@ -217,7 +227,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
           <div className={styles.linha}>
             <div className={styles.campo}>
               <span className={styles.label}>Responsável</span>
-              <select className={styles.select} value={item.responsavel} onChange={(e) => atualizarItem(item.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeEditar}>
+              <select className={styles.select} value={item.responsavel} onChange={(e) => atualizarItem(item.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeExecucao}>
                 {RESPONSAVEL_OPCOES.map((r) => (
                   <option key={r} value={r}>
                     {r || "—"}
@@ -227,7 +237,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
             </div>
             <div className={styles.campo}>
               <span className={styles.label}>Status</span>
-              <select className={styles.select} value={item.status} onChange={(e) => atualizarItem(item.id, { status: e.target.value as StatusItemPdi })} disabled={!podeEditar}>
+              <select className={styles.select} value={item.status} onChange={(e) => atualizarItem(item.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
                 {STATUS_ITEM_OPCOES.map((s) => (
                   <option key={s} value={s}>
                     {s}
@@ -240,7 +250,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
           <div className={styles.linha}>
             <div className={styles.campo}>
               <span className={styles.label}>Data início</span>
-              <input type="date" className={styles.input} value={item.dataInicio ?? ""} onChange={(e) => atualizarItem(item.id, { dataInicio: e.target.value || null })} disabled={!podeEditar} />
+              <input type="date" className={styles.input} value={item.dataInicio ?? ""} onChange={(e) => atualizarItem(item.id, { dataInicio: e.target.value || null })} disabled={!podeExecucao} />
             </div>
             <div className={styles.campo}>
               <span className={styles.label}>Data prevista de conclusão</span>
@@ -249,7 +259,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                 className={styles.input}
                 value={item.dataPrevistaConclusao ?? ""}
                 onChange={(e) => atualizarItem(item.id, { dataPrevistaConclusao: e.target.value || null })}
-                disabled={!podeEditar}
+                disabled={!podeExecucao}
               />
             </div>
           </div>
@@ -265,9 +275,9 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                       placeholder="Descrição da ação"
                       value={acao.descricao}
                       onChange={(e) => atualizarAcao(item.id, acao.id, { descricao: e.target.value })}
-                      disabled={!podeEditar}
+                      disabled={!podeExecucao}
                     />
-                    {podeEditar && (
+                    {podeExecucao && (
                       <button type="button" className={styles.iconBtnPequeno} title="Remover ação" onClick={() => removerAcao(item.id, acao.id)}>
                         <Trash2 size={13} />
                       </button>
@@ -275,15 +285,15 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                   </div>
 
                   <div className={styles.acaoItemGrid}>
-                    <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeEditar}>
+                    <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeExecucao}>
                       {RESPONSAVEL_OPCOES.map((r) => (
                         <option key={r} value={r}>
                           {r || "—"}
                         </option>
                       ))}
                     </select>
-                    <input type="date" className={styles.input} value={acao.prazo ?? ""} onChange={(e) => atualizarAcao(item.id, acao.id, { prazo: e.target.value || null })} disabled={!podeEditar} />
-                    <select className={styles.select} value={acao.status} onChange={(e) => atualizarAcao(item.id, acao.id, { status: e.target.value as StatusItemPdi })} disabled={!podeEditar}>
+                    <input type="date" className={styles.input} value={acao.prazo ?? ""} onChange={(e) => atualizarAcao(item.id, acao.id, { prazo: e.target.value || null })} disabled={!podeExecucao} />
+                    <select className={styles.select} value={acao.status} onChange={(e) => atualizarAcao(item.id, acao.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
                       {STATUS_ITEM_OPCOES.map((s) => (
                         <option key={s} value={s}>
                           {s}
@@ -292,11 +302,11 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                     </select>
                   </div>
 
-                  <EvidenciaAcao acao={acao} podeEditar={podeEditar} onAtualizar={(patch) => atualizarAcao(item.id, acao.id, patch)} autor={conta.nome} />
+                  <EvidenciaAcao acao={acao} podeEditar={podeExecucao} onAtualizar={(patch) => atualizarAcao(item.id, acao.id, patch)} autor={conta.nome} />
                 </div>
               ))}
             </div>
-            {podeEditar && (
+            {podeExecucao && (
               <Button variant="secondary" icon={<Plus size={13} />} onClick={() => adicionarAcao(item.id)}>
                 Adicionar ação
               </Button>
@@ -305,7 +315,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
 
           <div className={styles.campo}>
             <span className={styles.label}>Observações</span>
-            <textarea className={styles.textarea} rows={2} value={item.observacoes} onChange={(e) => atualizarItem(item.id, { observacoes: e.target.value })} disabled={!podeEditar} />
+            <textarea className={styles.textarea} rows={2} value={item.observacoes} onChange={(e) => atualizarItem(item.id, { observacoes: e.target.value })} disabled={!podeExecucao} />
           </div>
         </div>
       ))}
@@ -344,7 +354,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
 
       <div className={styles.campo}>
         <span className={styles.label}>Comentários</span>
-        <textarea className={styles.textarea} rows={2} value={rascunho.comentarios} onChange={(e) => setRascunho((r) => ({ ...r, comentarios: e.target.value }))} disabled={!podeEditar} />
+        <textarea className={styles.textarea} rows={2} value={rascunho.comentarios} onChange={(e) => setRascunho((r) => ({ ...r, comentarios: e.target.value }))} disabled={!podeExecucao} />
       </div>
 
       <div className={styles.edicaoAcoes}>
@@ -353,26 +363,26 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
             {salvando === "reabrir" ? "Reabrindo..." : "Reabrir PDI"}
           </Button>
         )}
+        {podeExecucao && (
+          <Button variant="secondary" onClick={() => handleSalvar()} disabled={salvando !== null}>
+            {salvando === "salvar" ? "Salvando..." : "Salvar"}
+          </Button>
+        )}
         {podeEditar && (
-          <>
-            <Button variant="secondary" onClick={() => handleSalvar()} disabled={salvando !== null}>
-              {salvando === "salvar" ? "Salvando..." : "Salvar"}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => handleSalvar("Concluído")}
-              disabled={!podeConcluir || salvando !== null}
-              title={
-                podeConcluir
-                  ? undefined
-                  : rascunho.itens.length === 0
-                    ? "Marque a declaração acima confirmando que não há competência a desenvolver neste ciclo."
-                    : "Só é possível concluir quando houver pelo menos 1 ação, todas concluídas ou canceladas."
-              }
-            >
-              {salvando === "concluir" ? "Concluindo..." : "Concluir PDI"}
-            </Button>
-          </>
+          <Button
+            variant="primary"
+            onClick={() => handleSalvar("Concluído")}
+            disabled={!podeConcluir || salvando !== null}
+            title={
+              podeConcluir
+                ? undefined
+                : rascunho.itens.length === 0
+                  ? "Marque a declaração acima confirmando que não há competência a desenvolver neste ciclo."
+                  : "Só é possível concluir quando houver pelo menos 1 ação, todas concluídas ou canceladas."
+            }
+          >
+            {salvando === "concluir" ? "Concluindo..." : "Concluir PDI"}
+          </Button>
         )}
       </div>
     </Modal>

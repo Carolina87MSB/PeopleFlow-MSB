@@ -835,12 +835,13 @@ export interface PdiItem {
  * avaliação GESTOR de um ciclo é concluída (nunca por AUTOAVALIACAO/
  * LIDERANCA), permanece vinculado a esse ciclo. `gestorResponsavel` é
  * snapshot do `gestorAvaliador` da avaliação que originou o plano — só ele
- * (+ RH) edita (`podeEditarPdi()` em usePortalData.ts); o gestor atual do
- * colaborador (`colaboradores.gestor`, ao vivo) só acompanha em modo
- * leitura quando diferente do responsável (`pdiVisiveis`, mesmo arquivo) —
- * visibilidade nunca implica edição. Colaborador só vê depois de
- * `status === "Concluído"` (diferente da AVD, onde a ficha GESTOR nunca é
- * vista por ele). */
+ * (+ RH) edita o diagnóstico/estrutura do plano e conclui
+ * (`podeEditarPdi()` em usePortalData.ts); o gestor atual do colaborador
+ * (`colaboradores.gestor`, ao vivo), quando diferente do responsável,
+ * acompanha e atualiza a execução — ações, status, comentários
+ * (`podeAtualizarExecucaoPdi()`, mesmo arquivo), sem poder concluir nem
+ * mexer no diagnóstico. Colaborador só vê depois de `status === "Concluído"`
+ * (diferente da AVD, onde a ficha GESTOR nunca é vista por ele). */
 export interface Pdi {
   id: number;
   colaboradorNome: string;

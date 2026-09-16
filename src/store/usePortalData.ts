@@ -272,8 +272,16 @@ export interface PortalData {
   /** RH sempre (inclusive pra reabrir um PDI concluído); senão, só quem originou o plano
    * (gestorResponsavel) — nunca o gestor atual, mesmo que diferente (pedido da RH, 2026-09:
    * autoria/construção do PDI é sempre de quem fez a AVD que o gerou, nunca passa pro gestor
-   * novo automaticamente). O gestor atual só acompanha (ver pdiVisiveis) — nunca edita. */
+   * novo automaticamente). Só isto libera itens estruturais (objetivo, adicionar/remover
+   * competência, declarar "sem competência", concluir) — pra acompanhamento de execução, ver
+   * podeAtualizarExecucaoPdi. */
   podeEditarPdi: (pdi: Pdi) => boolean;
+  /** Superset de podeEditarPdi (RH/gestorResponsavel também passam aqui) + o gestor ATUAL do
+   * colaborador, mesmo diferente do gestorResponsavel — pedido da RH, 2026-09: quem acompanha
+   * no dia a dia pode atualizar as ações propostas (status/prazo/responsável/descrição/
+   * evidência), status/observações/datas de cada item, e os comentários gerais — nunca o que é
+   * estrutural/diagnóstico, isso continua exclusivo de podeEditarPdi. */
+  podeAtualizarExecucaoPdi: (pdi: Pdi) => boolean;
   /** Retorna o Pdi salvo (com o `updatedAt` novo gerado pelo Supabase) — o
    * chamador deve substituir seu rascunho local por ele antes de qualquer
    * gravação seguinte, senão a trava de concorrência otimista (ver
@@ -617,12 +625,12 @@ export function usePortalData(): PortalData {
    * Senão, só quem originou o plano (`gestorResponsavel`, congelado — mesma
    * lógica de `gestorAvaliador` na AVD) — e só enquanto não "Concluído".
    * Pedido explícito da RH, 2026-09: NUNCA o gestor atual, mesmo que
-   * diferente do gestorResponsavel (antes unia os dois, pra deixar um
-   * gestor novo assumir a edição sem depender do RH — a RH decidiu que
-   * autoria/construção do PDI nunca deve migrar automaticamente pro gestor
-   * novo só porque ele passou a liderar o colaborador; se o gestor original
-   * não está mais disponível, só o RH edita). Visibilidade de leitura pro
-   * gestor atual continua garantida por `pdiVisiveis`, acima. */
+   * diferente do gestorResponsavel — autoria/construção do PDI (objetivo de
+   * desenvolvimento, adicionar/remover competência, declarar "sem
+   * competência a desenvolver", concluir o plano) nunca migra
+   * automaticamente pro gestor novo só porque ele passou a liderar o
+   * colaborador. O que o gestor atual pode fazer é acompanhamento de
+   * execução — ver `podeAtualizarExecucaoPdiFn`, logo abaixo. */
   const podeEditarPdiFn = useCallback(
     (pdi: Pdi) => {
       if (perfil === "RH") return true;
@@ -630,6 +638,33 @@ export function usePortalData(): PortalData {
       return pdi.gestorResponsavel === me;
     },
     [perfil, me],
+  );
+
+  /** Acompanhamento de execução (pedido da RH, 2026-09) — prática comum de
+   * mercado: quem de fato observa o colaborador no dia a dia é quem
+   * consegue dizer se uma ação foi cumprida, não o gestor que só fez o
+   * diagnóstico (AVD) e não gerencia mais essa pessoa. `podeEditarPdi` já
+   * cobre RH/gestorResponsavel (por isso entra aqui primeiro); a diferença
+   * real é liberar TAMBÉM o gestor ATUAL do colaborador (ao vivo, mesmo
+   * quando diferente de gestorResponsavel) pra atualizar as ações
+   * propostas — status, prazo, responsável, descrição, evidência — e o
+   * status/observações/datas de cada item, e os comentários gerais do
+   * plano. Nunca libera o que é estrutural/diagnóstico: objetivo de
+   * desenvolvimento, adicionar/remover competência, declarar "sem
+   * competência a desenvolver" ou concluir o plano — isso continua
+   * exclusivo de `podeEditarPdi` (ver PdiModal.tsx, variáveis `podeEditar`
+   * vs `podeExecucao`). Caso de referência: William Alves Cruz, Tais
+   * Batista Santos Araujo e Cidália Pereira Cardoso, avaliados pela Raissa
+   * Rayane Santos Laurindo Caldas mas hoje sob a Cintia Santos Silva
+   * Batista — regra dinâmica, vale pra qualquer colaborador nessa mesma
+   * situação, não só pra esses três. */
+  const podeAtualizarExecucaoPdiFn = useCallback(
+    (pdi: Pdi) => {
+      if (podeEditarPdiFn(pdi)) return true;
+      if (pdi.status === "Concluído") return false;
+      return colaboradorPorNome.get(pdi.colaboradorNome)?.gestor === me;
+    },
+    [podeEditarPdiFn, me, colaboradorPorNome],
   );
 
   /** Regra absoluta (mais restrita que a AVD): o colaborador NUNCA vê a
@@ -2407,6 +2442,7 @@ export function usePortalData(): PortalData {
     pdi: state.pdi,
     pdiVisiveis,
     podeEditarPdi: podeEditarPdiFn,
+    podeAtualizarExecucaoPdi: podeAtualizarExecucaoPdiFn,
     salvarPdi: salvarPdiFn,
     reabrirPdi: reabrirPdiFn,
     pdiBiblioteca: state.pdiBiblioteca,
