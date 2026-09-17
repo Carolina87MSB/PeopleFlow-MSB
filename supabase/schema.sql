@@ -1327,6 +1327,7 @@ alter table public.peopleflow_feedbacks
   add column if not exists editado_em timestamptz;
 
 comment on column public.peopleflow_feedbacks.editado_por is 'Preenchido só quando o feedback é corrigido depois de criado — null se nunca editado.';
+comment on column public.peopleflow_feedbacks.editado_em is 'Timestamp da última correção — null se nunca editado. Distinto de criado_em (nunca muda).';
 
 -- ────────────────────────────────────────────────────────────────────────
 -- 31) PDI — conclusão sem nenhuma competência a desenvolver. Até aqui,
@@ -1347,4 +1348,19 @@ alter table public.peopleflow_pdi
 
 comment on column public.peopleflow_pdi.sem_competencia_desenvolvimento is
   'Declaração do gestor de que não há nenhuma competência/KPI a desenvolver neste ciclo — único jeito de concluir um PDI sem itens (ver pdiPodeSerConcluido() em domain/pdi.ts). Irrelevante quando existe pelo menos 1 item.';
-comment on column public.peopleflow_feedbacks.editado_em is 'Timestamp da última correção — null se nunca editado. Distinto de criado_em (nunca muda).';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 32) PDI — data de início por ação. `peopleflow_pdi_itens.data_inicio`
+--    (nível do item) saiu da tela (achado de UX: duplicava a mesma
+--    informação que já existe por ação, causando desalinhamento no
+--    layout) — a granularidade real de acompanhamento é a ação, não o
+--    item. Esta coluna nova é o equivalente em `peopleflow_pdi_acoes`,
+--    ao lado de `prazo` (que já existia, mas sem rótulo na tela — agora
+--    exibido como "Data prevista de conclusão"). Puramente informativo,
+--    sem regra de negócio em cima.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_pdi_acoes
+  add column if not exists data_inicio date;
+
+comment on column public.peopleflow_pdi_acoes.data_inicio is
+  'Data prevista pra começar a executar a ação — distinta de prazo (quando deve estar concluída). Puramente informativo.';

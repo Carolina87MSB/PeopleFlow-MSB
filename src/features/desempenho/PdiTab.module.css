@@ -160,13 +160,18 @@
   flex: 1;
 }
 
-/* Responsável/Prazo/Status — grid que quebra linha quando não cabe, nunca
- * rolagem horizontal (era um flex row rígido, cortava conteúdo em telas
- * estreitas). */
+/* Responsável/Data início/Data prevista de conclusão/Status — grid que
+ * quebra linha quando não cabe, nunca rolagem horizontal (era um flex row
+ * rígido, cortava conteúdo em telas estreitas). minmax em 240px (não
+ * 120px) porque cada campo agora tem rótulo próprio ("Data prevista de
+ * conclusão" é o mais longo) — abaixo disso o rótulo quebra em 2 linhas e
+ * desalinha as colunas entre si; com 240px, 2 colunas cabem confortavelmente
+ * na largura do modal (680px) e cai pra 1 coluna sozinho em telas estreitas,
+ * sem precisar de media query dedicada. */
 .acaoItemGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px 14px;
 }
 
 .acaoItemGrid .select {

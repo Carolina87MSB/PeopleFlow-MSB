@@ -46,6 +46,7 @@ interface PdiAcaoRow {
   item_id: string;
   descricao: string;
   responsavel: string;
+  data_inicio: string | null;
   prazo: string | null;
   status: string;
   ordem: number;
@@ -104,6 +105,7 @@ function fromRowAcao(row: PdiAcaoRow): PdiAcao {
     itemId: row.item_id,
     descricao: row.descricao,
     responsavel: row.responsavel as ResponsavelPdi,
+    dataInicio: row.data_inicio,
     prazo: row.prazo,
     status: row.status as StatusItemPdi,
     ordem: row.ordem,
@@ -156,6 +158,7 @@ function toRowAcao(acao: PdiAcao) {
     item_id: acao.itemId,
     descricao: acao.descricao,
     responsavel: acao.responsavel,
+    data_inicio: acao.dataInicio,
     prazo: acao.prazo,
     status: acao.status,
     ordem: acao.ordem,

@@ -23,6 +23,7 @@ function acaoVazia(itemId: string): PdiAcao {
     itemId,
     descricao: "",
     responsavel: "",
+    dataInicio: null,
     prazo: null,
     status: "Não iniciada",
     ordem: 0,
@@ -121,6 +122,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
         itemId,
         descricao,
         responsavel: "" as ResponsavelPdi,
+        dataInicio: null,
         prazo: null,
         status: "Não iniciada" as const,
         ordem: i,
@@ -254,6 +256,16 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className={styles.acaoCampo}>
+                      <span className={styles.label}>Data de início</span>
+                      <input
+                        type="date"
+                        className={styles.input}
+                        value={acao.dataInicio ?? ""}
+                        onChange={(e) => atualizarAcao(item.id, acao.id, { dataInicio: e.target.value || null })}
+                        disabled={!podeExecucao}
+                      />
                     </div>
                     <div className={styles.acaoCampo}>
                       <span className={styles.label}>Data prevista de conclusão</span>

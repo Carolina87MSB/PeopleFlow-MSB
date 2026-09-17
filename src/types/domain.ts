@@ -791,6 +791,10 @@ export interface PdiAcao {
   itemId: string;
   descricao: string;
   responsavel: ResponsavelPdi;
+  /** Data prevista pra começar a executar a ação (ISO "aaaa-mm-dd") — distinta
+   * de `prazo` (quando deve estar concluída). Puramente informativo, sem
+   * regra de negócio em cima (não bloqueia status/conclusão). */
+  dataInicio: string | null;
   prazo: string | null;
   status: StatusItemPdi;
   ordem: number;
