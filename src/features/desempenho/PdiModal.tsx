@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { Badge, Button, Modal } from "../../components/ui";
 import { gerarIdPdiAcao, gerarIdPdiItem, pdiPodeSerConcluido, statusPdiAoSalvar, sugerirObjetivoEAcoes } from "../../domain/pdi";
@@ -15,6 +15,43 @@ interface PdiModalProps {
 
 const STATUS_ITEM_OPCOES: StatusItemPdi[] = ["Não iniciada", "Em andamento", "Concluída", "Cancelada"];
 const RESPONSAVEL_OPCOES: ResponsavelPdi[] = ["", "Colaborador", "Gestor", "Ambos"];
+
+/** Textarea que cresce com o conteúdo em vez de rolar por dentro — usada
+ * onde o texto precisa fluir naturalmente, nunca ser cortado (Objetivo de
+ * desenvolvimento, descrição da ação). `rows={1}` é só o ponto de partida;
+ * a altura real vem do `scrollHeight` recalculado a cada mudança de valor. */
+function CampoAutoAjustavel({
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  className: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className={className}
+      rows={1}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+    />
+  );
+}
 
 function acaoVazia(itemId: string): PdiAcao {
   const agora = new Date().toISOString();
@@ -60,6 +97,10 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
   const [rascunho, setRascunho] = useState<Pdi>(() => ({ ...pdi, itens: pdi.itens.map((i) => ({ ...i, acoes: i.acoes.map((a) => ({ ...a })) })) }));
   const [novaChave, setNovaChave] = useState("");
   const [salvando, setSalvando] = useState<"salvar" | "concluir" | "reabrir" | null>(null);
+  // Itens cujo campo "Observações" foi aberto nesta sessão mesmo estando
+  // vazio (clique em "Adicionar observação") — sem isso, a caixa de texto
+  // sumiria de novo a cada re-render enquanto o usuário ainda não digitou nada.
+  const [observacoesAbertas, setObservacoesAbertas] = useState<Set<string>>(new Set());
 
   const colaborador = colaboradores.find((c) => c.nome === pdi.colaboradorNome);
   const competenciasDisponiveis = competenciasComportamentais.filter((c) => c.ativo && c.categoria !== "Lideranca");
@@ -216,27 +257,26 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
           </div>
 
           <div className={styles.campo}>
-            <span className={styles.label}>Objetivo de desenvolvimento</span>
-            <textarea
-              className={styles.textarea}
-              rows={2}
+            <span className={styles.labelSimples}>Objetivo de desenvolvimento</span>
+            <CampoAutoAjustavel
+              className={styles.textoFluido}
               value={item.objetivoDesenvolvimento}
-              onChange={(e) => atualizarItem(item.id, { objetivoDesenvolvimento: e.target.value })}
+              onChange={(v) => atualizarItem(item.id, { objetivoDesenvolvimento: v })}
               disabled={!podeEditar}
             />
           </div>
 
           <div className={styles.campo}>
-            <span className={styles.label}>Ações de desenvolvimento</span>
+            <span className={styles.labelSimples}>Ações de desenvolvimento</span>
             <div className={styles.acoesLista}>
               {item.acoes.map((acao) => (
-                <div key={acao.id} className={styles.acaoItem}>
+                <div key={acao.id} className={styles.acaoCard}>
                   <div className={styles.acaoItemTopo}>
-                    <input
-                      className={styles.input}
-                      placeholder="Descrição da ação"
+                    <CampoAutoAjustavel
+                      className={styles.acaoDescricao}
                       value={acao.descricao}
-                      onChange={(e) => atualizarAcao(item.id, acao.id, { descricao: e.target.value })}
+                      onChange={(v) => atualizarAcao(item.id, acao.id, { descricao: v })}
+                      placeholder="Descrição da ação"
                       disabled={!podeExecucao}
                     />
                     {podeExecucao && (
@@ -248,7 +288,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
 
                   <div className={styles.acaoItemGrid}>
                     <div className={styles.acaoCampo}>
-                      <span className={styles.label}>Responsável</span>
+                      <span className={styles.labelSimples}>Responsável</span>
                       <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeExecucao}>
                         {RESPONSAVEL_OPCOES.map((r) => (
                           <option key={r} value={r}>
@@ -258,7 +298,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                       </select>
                     </div>
                     <div className={styles.acaoCampo}>
-                      <span className={styles.label}>Data de início</span>
+                      <span className={styles.labelSimples}>Data início</span>
                       <input
                         type="date"
                         className={styles.input}
@@ -268,11 +308,11 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                       />
                     </div>
                     <div className={styles.acaoCampo}>
-                      <span className={styles.label}>Data prevista de conclusão</span>
+                      <span className={styles.labelSimples}>Data conclusão</span>
                       <input type="date" className={styles.input} value={acao.prazo ?? ""} onChange={(e) => atualizarAcao(item.id, acao.id, { prazo: e.target.value || null })} disabled={!podeExecucao} />
                     </div>
                     <div className={styles.acaoCampo}>
-                      <span className={styles.label}>Status</span>
+                      <span className={styles.labelSimples}>Status</span>
                       <select className={styles.select} value={acao.status} onChange={(e) => atualizarAcao(item.id, acao.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
                         {STATUS_ITEM_OPCOES.map((s) => (
                           <option key={s} value={s}>
@@ -281,30 +321,42 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                         ))}
                       </select>
                     </div>
+                    <EvidenciaAcao acao={acao} podeEditar={podeExecucao} onAtualizar={(patch) => atualizarAcao(item.id, acao.id, patch)} autor={conta.nome} />
                   </div>
-
-                  <EvidenciaAcao acao={acao} podeEditar={podeExecucao} onAtualizar={(patch) => atualizarAcao(item.id, acao.id, patch)} autor={conta.nome} />
                 </div>
               ))}
             </div>
             {podeExecucao && (
-              <Button variant="secondary" icon={<Plus size={13} />} onClick={() => adicionarAcao(item.id)}>
+              <Button variant="ghost" icon={<Plus size={13} />} className={styles.botaoAlinhadoEsquerda} onClick={() => adicionarAcao(item.id)}>
                 Adicionar ação
               </Button>
             )}
           </div>
 
-          <div className={styles.campo}>
-            <span className={styles.label}>Observações</span>
-            <textarea className={styles.textarea} rows={2} value={item.observacoes} onChange={(e) => atualizarItem(item.id, { observacoes: e.target.value })} disabled={!podeExecucao} />
-          </div>
+          {item.observacoes !== "" || observacoesAbertas.has(item.id) ? (
+            <div className={styles.campo}>
+              <span className={styles.labelSimples}>Observações</span>
+              <textarea className={styles.textarea} rows={2} value={item.observacoes} onChange={(e) => atualizarItem(item.id, { observacoes: e.target.value })} disabled={!podeExecucao} />
+            </div>
+          ) : (
+            podeExecucao && (
+              <Button
+                variant="ghost"
+                icon={<Plus size={13} />}
+                className={styles.botaoAlinhadoEsquerda}
+                onClick={() => setObservacoesAbertas((s) => new Set(s).add(item.id))}
+              >
+                Adicionar observação
+              </Button>
+            )
+          )}
         </div>
       ))}
 
       {podeEditar && (competenciasDisponiveis.length > 0 || kpisDisponiveis.length > 0) && (
         <div className={styles.novoItemBox}>
           <div className={styles.campo}>
-            <span className={styles.label}>Adicionar competência manualmente</span>
+            <span className={styles.labelSimples}>Adicionar competência manualmente</span>
             <select className={styles.select} value={novaChave} onChange={(e) => setNovaChave(e.target.value)}>
               <option value="">Selecione...</option>
               {competenciasDisponiveis.length > 0 && (
@@ -334,7 +386,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
       )}
 
       <div className={styles.campo}>
-        <span className={styles.label}>Comentários</span>
+        <span className={styles.labelSimples}>Comentários</span>
         <textarea className={styles.textarea} rows={2} value={rascunho.comentarios} onChange={(e) => setRascunho((r) => ({ ...r, comentarios: e.target.value }))} disabled={!podeExecucao} />
       </div>
 
@@ -467,9 +519,8 @@ function EvidenciaAcao({ acao, podeEditar, autor, onAtualizar }: EvidenciaAcaoPr
         </div>
       ) : (
         podeEditar && (
-          <button type="button" className={styles.evidenciaBtn} onClick={() => inputRef.current?.click()} disabled={enviando}>
-            {enviando ? <Loader2 size={12} className={styles.spin} /> : <Paperclip size={12} />}
-            {enviando ? "Enviando..." : "Anexar evidência"}
+          <button type="button" className={styles.evidenciaIcone} title="Anexar evidência" onClick={() => inputRef.current?.click()} disabled={enviando}>
+            {enviando ? <Loader2 size={14} className={styles.spin} /> : <Paperclip size={14} />}
           </button>
         )
       )}

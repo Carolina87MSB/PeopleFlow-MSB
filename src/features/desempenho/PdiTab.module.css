@@ -72,6 +72,17 @@
   color: var(--color-muted-light);
 }
 
+/* Mesma família visual de .label, sem caixa alta nem letter-spacing — só
+ * a primeira letra maiúscula (a própria string em português já vem assim),
+ * pedido de UX pro PDI (2026-09): rótulo em CAIXA ALTA lia como "mais
+ * burocrático" do que o resto do portal. Usado só dentro de PdiModal.tsx —
+ * .label continua em uso por PdiTab.tsx (filtros Ciclos/Status/Departamentos). */
+.labelSimples {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted-light);
+}
+
 .input,
 .select,
 .textarea {
@@ -79,11 +90,37 @@
   background: #fff;
   border-radius: var(--radius-sm);
   padding: 9px 11px;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.5;
   font-family: inherit;
   color: var(--color-text);
   resize: vertical;
   width: 100%;
+}
+
+/* Texto que precisa fluir naturalmente, nunca ser cortado nem rolar por
+ * dentro (Objetivo de desenvolvimento) — visualmente indistinguível de um
+ * parágrafo, mesmo quando editável (sem borda, sem fundo destacado). A
+ * altura vem do JS (CampoAutoAjustavel, PdiModal.tsx), nunca de scroll. */
+.textoFluido {
+  display: block;
+  border: 0;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  padding: 0;
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.textoFluido:disabled {
+  background: transparent;
+  color: var(--color-text);
+  opacity: 1;
+  cursor: default;
 }
 
 .input:focus,
@@ -144,34 +181,70 @@
   margin: 10px 0;
 }
 
-.acaoItem {
+/* Card de ação — borda suave própria, separando cada ação visualmente
+ * mesmo dentro do card maior do item (pedido de UX, 2026-09). */
+.acaoCard {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
 }
 
 .acaoItemTopo {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
 }
 
-.acaoItemTopo .input {
+.acaoDescricao {
   flex: 1;
+  border: 1px solid var(--color-border-strong);
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: inherit;
+  color: var(--color-text);
+  resize: none;
+  overflow: hidden;
+  width: 100%;
 }
 
-/* Responsável/Data início/Data prevista de conclusão/Status — grid que
- * quebra linha quando não cabe, nunca rolagem horizontal (era um flex row
- * rígido, cortava conteúdo em telas estreitas). minmax em 240px (não
- * 120px) porque cada campo agora tem rótulo próprio ("Data prevista de
- * conclusão" é o mais longo) — abaixo disso o rótulo quebra em 2 linhas e
- * desalinha as colunas entre si; com 240px, 2 colunas cabem confortavelmente
- * na largura do modal (680px) e cai pra 1 coluna sozinho em telas estreitas,
- * sem precisar de media query dedicada. */
+.acaoDescricao:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(86, 164, 187, 0.16);
+}
+
+.acaoDescricao:disabled {
+  background: var(--color-surface, #f6fafb);
+  color: var(--color-muted);
+}
+
+/* Linha 2 da ação: Responsável/Data início/Data conclusão/Status em 4
+ * colunas iguais, mais uma 5ª coluna de largura própria (auto) pro ícone/
+ * chip de evidência — alinhados na base (align-items: end) pra ficar na
+ * mesma linha dos controles reais, não dos rótulos. Rótulos curtos e sem
+ * caixa alta (.labelSimples) evitam quebra de linha nas 4 colunas iguais;
+ * abaixo de ~500px de largura, cai pra 1 coluna (mobile). */
 .acaoItemGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(4, 1fr) auto;
   gap: 10px 14px;
+  align-items: end;
+}
+
+@media (max-width: 500px) {
+  .acaoItemGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .acaoItemEvidencia {
+    justify-self: start;
+  }
 }
 
 .acaoItemGrid .select {
@@ -189,33 +262,35 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-left: 2px;
 }
 
 .arquivoOculto {
   display: none;
 }
 
-.evidenciaBtn {
+/* Ícone discreto — substitui o antigo botão pontilhado "Anexar evidência".
+ * Mesma altura aproximada de um .input/.select (padding 9px + linha 14px),
+ * pra alinhar visualmente com o resto da linha. */
+.evidenciaIcone {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  border: 1px dashed var(--color-border-strong);
-  background: transparent;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 600;
+  background: #fff;
   color: var(--color-muted);
   cursor: pointer;
+  flex: none;
 }
 
-.evidenciaBtn:hover:not(:disabled) {
+.evidenciaIcone:hover:not(:disabled) {
   color: var(--color-brand);
   border-color: var(--color-brand);
 }
 
-.evidenciaBtn:disabled {
+.evidenciaIcone:disabled {
   cursor: default;
   opacity: 0.7;
 }
@@ -285,6 +360,13 @@
 .iconBtnPequeno:disabled {
   color: var(--color-divider);
   cursor: default;
+}
+
+/* Botões "Adicionar ação"/"Adicionar observação" (variant="ghost") — sem
+ * isso, eles esticariam pra largura inteira (herdam align-items: stretch
+ * do .campo pai, que é flex-direction: column). */
+.botaoAlinhadoEsquerda {
+  align-self: flex-start;
 }
 
 .declaracaoSemItens {
