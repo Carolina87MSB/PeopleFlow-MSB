@@ -224,44 +224,15 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
             />
           </div>
 
-          <div className={styles.linha}>
-            <div className={styles.campo}>
-              <span className={styles.label}>Responsável</span>
-              <select className={styles.select} value={item.responsavel} onChange={(e) => atualizarItem(item.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeExecucao}>
-                {RESPONSAVEL_OPCOES.map((r) => (
-                  <option key={r} value={r}>
-                    {r || "—"}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className={styles.campo}>
-              <span className={styles.label}>Status</span>
-              <select className={styles.select} value={item.status} onChange={(e) => atualizarItem(item.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
-                {STATUS_ITEM_OPCOES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className={styles.linha}>
-            <div className={styles.campo}>
-              <span className={styles.label}>Data início</span>
-              <input type="date" className={styles.input} value={item.dataInicio ?? ""} onChange={(e) => atualizarItem(item.id, { dataInicio: e.target.value || null })} disabled={!podeExecucao} />
-            </div>
-            <div className={styles.campo}>
-              <span className={styles.label}>Data prevista de conclusão</span>
-              <input
-                type="date"
-                className={styles.input}
-                value={item.dataPrevistaConclusao ?? ""}
-                onChange={(e) => atualizarItem(item.id, { dataPrevistaConclusao: e.target.value || null })}
-                disabled={!podeExecucao}
-              />
-            </div>
+          <div className={styles.campo}>
+            <span className={styles.label}>Status</span>
+            <select className={[styles.select, styles.selectCompacto].join(" ")} value={item.status} onChange={(e) => atualizarItem(item.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
+              {STATUS_ITEM_OPCOES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className={styles.campo}>
