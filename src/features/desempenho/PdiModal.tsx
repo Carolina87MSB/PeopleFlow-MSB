@@ -287,7 +287,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                   </div>
 
                   <div className={styles.acaoItemGrid}>
-                    <div className={styles.acaoCampo}>
+                    <div className={[styles.acaoCampo, styles.acaoCampoResponsavel].join(" ")}>
                       <span className={styles.labelSimples}>Responsável</span>
                       <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeExecucao}>
                         {RESPONSAVEL_OPCOES.map((r) => (
@@ -297,7 +297,7 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                         ))}
                       </select>
                     </div>
-                    <div className={styles.acaoCampo}>
+                    <div className={[styles.acaoCampo, styles.acaoCampoData].join(" ")}>
                       <span className={styles.labelSimples}>Data início</span>
                       <input
                         type="date"
@@ -307,11 +307,11 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                         disabled={!podeExecucao}
                       />
                     </div>
-                    <div className={styles.acaoCampo}>
+                    <div className={[styles.acaoCampo, styles.acaoCampoData].join(" ")}>
                       <span className={styles.labelSimples}>Data conclusão</span>
                       <input type="date" className={styles.input} value={acao.prazo ?? ""} onChange={(e) => atualizarAcao(item.id, acao.id, { prazo: e.target.value || null })} disabled={!podeExecucao} />
                     </div>
-                    <div className={styles.acaoCampo}>
+                    <div className={[styles.acaoCampo, styles.acaoCampoStatus].join(" ")}>
                       <span className={styles.labelSimples}>Status</span>
                       <select className={styles.select} value={acao.status} onChange={(e) => atualizarAcao(item.id, acao.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
                         {STATUS_ITEM_OPCOES.map((s) => (
