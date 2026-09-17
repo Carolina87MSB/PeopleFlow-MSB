@@ -225,17 +225,6 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
           </div>
 
           <div className={styles.campo}>
-            <span className={styles.label}>Status</span>
-            <select className={[styles.select, styles.selectCompacto].join(" ")} value={item.status} onChange={(e) => atualizarItem(item.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
-              {STATUS_ITEM_OPCOES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className={styles.campo}>
             <span className={styles.label}>Ações de desenvolvimento</span>
             <div className={styles.acoesLista}>
               {item.acoes.map((acao) => (
@@ -256,21 +245,30 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
                   </div>
 
                   <div className={styles.acaoItemGrid}>
-                    <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeExecucao}>
-                      {RESPONSAVEL_OPCOES.map((r) => (
-                        <option key={r} value={r}>
-                          {r || "—"}
-                        </option>
-                      ))}
-                    </select>
-                    <input type="date" className={styles.input} value={acao.prazo ?? ""} onChange={(e) => atualizarAcao(item.id, acao.id, { prazo: e.target.value || null })} disabled={!podeExecucao} />
-                    <select className={styles.select} value={acao.status} onChange={(e) => atualizarAcao(item.id, acao.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
-                      {STATUS_ITEM_OPCOES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
+                    <div className={styles.acaoCampo}>
+                      <span className={styles.label}>Responsável</span>
+                      <select className={styles.select} value={acao.responsavel} onChange={(e) => atualizarAcao(item.id, acao.id, { responsavel: e.target.value as ResponsavelPdi })} disabled={!podeExecucao}>
+                        {RESPONSAVEL_OPCOES.map((r) => (
+                          <option key={r} value={r}>
+                            {r || "—"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={styles.acaoCampo}>
+                      <span className={styles.label}>Data prevista de conclusão</span>
+                      <input type="date" className={styles.input} value={acao.prazo ?? ""} onChange={(e) => atualizarAcao(item.id, acao.id, { prazo: e.target.value || null })} disabled={!podeExecucao} />
+                    </div>
+                    <div className={styles.acaoCampo}>
+                      <span className={styles.label}>Status</span>
+                      <select className={styles.select} value={acao.status} onChange={(e) => atualizarAcao(item.id, acao.id, { status: e.target.value as StatusItemPdi })} disabled={!podeExecucao}>
+                        {STATUS_ITEM_OPCOES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   <EvidenciaAcao acao={acao} podeEditar={podeExecucao} onAtualizar={(patch) => atualizarAcao(item.id, acao.id, patch)} autor={conta.nome} />

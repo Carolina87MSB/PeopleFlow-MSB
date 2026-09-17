@@ -101,17 +101,6 @@
   color: var(--color-muted);
 }
 
-/* Campo isolado (sem par ao lado, ex.: Status do item do PDI) — não faz
- * sentido esticar até a largura inteira do modal só porque .select herda
- * width:100% do grupo .input/.select/.textarea acima. align-self precisa
- * ser explícito: o pai (.campo) é flex-direction:column, e align-items
- * default é stretch — width:auto sozinho não bastaria pra conter a largura. */
-.selectCompacto {
-  align-self: flex-start;
-  width: auto;
-  min-width: 200px;
-}
-
 .itemBloco {
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
@@ -181,6 +170,13 @@
 }
 
 .acaoItemGrid .select {
+  min-width: 0;
+}
+
+.acaoCampo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
 }
 
