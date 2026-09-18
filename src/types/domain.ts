@@ -844,8 +844,9 @@ export interface PdiItem {
  * (`colaboradores.gestor`, ao vivo), quando diferente do responsável,
  * acompanha e atualiza a execução — ações, status, comentários
  * (`podeAtualizarExecucaoPdi()`, mesmo arquivo), sem poder concluir nem
- * mexer no diagnóstico. Colaborador só vê depois de `status === "Concluído"`
- * (diferente da AVD, onde a ficha GESTOR nunca é vista por ele). */
+ * mexer no diagnóstico. Colaborador (dono) sempre vê o próprio PDI, em
+ * qualquer status — só leitura, nunca edita — diferente da AVD, onde a
+ * ficha GESTOR nunca é vista pelo perfil Colaborador. */
 export interface Pdi {
   id: number;
   colaboradorNome: string;

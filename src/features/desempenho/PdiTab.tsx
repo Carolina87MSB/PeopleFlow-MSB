@@ -16,7 +16,8 @@ const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
  * podem ser pessoas diferentes após uma transferência: quem avaliou edita
  * tudo (podeEditarPdi), quem só lidera hoje acompanha a execução — ações,
  * status, comentários (podeAtualizarExecucaoPdi), sem mexer no diagnóstico
- * nem concluir o plano; Colaborador só depois de concluído. */
+ * nem concluir o plano; Colaborador sempre vê o próprio PDI, em qualquer
+ * status (só leitura, nunca edita). */
 export function PdiTab() {
   const { pdiVisiveis, colaboradores, ciclosAvaliacaoDesempenho, podeEditarGestaoDesempenho } = usePortalData();
   const [cicloFiltro, setCicloFiltro] = useState("Todos");

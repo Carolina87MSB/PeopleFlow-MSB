@@ -265,9 +265,9 @@ export interface PortalData {
   podeReabrirAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => boolean;
   reabrirAvaliacaoDesempenho: (avaliacao: AvaliacaoDesempenho) => Promise<{ ok: true } | { ok: false }>;
   pdi: Pdi[];
-  /** RH vê todo mundo; dono só vê depois de "Concluído"; gestorResponsavel (quem gerou o
-   * plano) OU o gestor atual do colaborador veem sempre — mas só gestorResponsavel edita
-   * (ver podeEditarPdi). */
+  /** RH vê todo mundo; dono sempre vê o próprio, em qualquer status (só leitura, nunca edita);
+   * gestorResponsavel (quem gerou o plano) OU o gestor atual do colaborador veem sempre — mas só
+   * gestorResponsavel edita (ver podeEditarPdi). */
   pdiVisiveis: Pdi[];
   /** RH sempre (inclusive pra reabrir um PDI concluído); senão, só quem originou o plano
    * (gestorResponsavel) — nunca o gestor atual, mesmo que diferente (pedido da RH, 2026-09:
@@ -596,10 +596,18 @@ export function usePortalData(): PortalData {
     [perfil, me, state.ciclosAvaliacaoDesempenho],
   );
 
-  /** RH vê tudo. Dono (`colaboradorNome === me`) só vê depois de concluído —
-   * diferente da AVD (lá a ficha GESTOR nunca é vista pelo perfil
-   * Colaborador), aqui é só uma questão de tempo: vê assim que o gestor
-   * concluir. Senão, `gestorResponsavel` (congelado, sempre preenchido com o
+  /** RH vê tudo. Dono (`colaboradorNome === me`) sempre vê o próprio PDI, em
+   * qualquer status — pedido da RH, 2026-09: antes só via depois de
+   * "Concluído", mas isso escondia o plano até do colaborador enquanto o
+   * gestor ainda estava construindo, mesmo quando já tinha bastante coisa
+   * preenchida (achado real: Ravena Peixoto recebeu um PDI elaborado pelo
+   * Yuri Ivonei Crispim e não conseguia ver nada dele). Sempre só leitura pra
+   * quem só é dono (nunca edita, ver `podeEditarPdiFn`/`podeAtualizarExecucaoPdiFn`
+   * abaixo — nenhum dos dois inclui `colaboradorNome === me`) — diferente da
+   * AVD, onde a ficha GESTOR nunca é vista pelo perfil Colaborador, aqui o
+   * dono sempre acompanha o próprio plano.
+   *
+   * Senão, `gestorResponsavel` (congelado, sempre preenchido com o
    * `gestorAvaliador` da avaliação que gerou o PDI — nunca vazio) OU o
    * gestor ATUAL do colaborador (ao vivo) veem — pedido da RH, 2026-09,
    * achado real: William Alves Cruz/Tais Batista Santos Araujo/Cidália
@@ -615,7 +623,7 @@ export function usePortalData(): PortalData {
   const pdiVisiveis = useMemo(() => {
     if (perfil === "RH") return state.pdi;
     return state.pdi.filter((p) => {
-      if (p.colaboradorNome === me) return p.status === "Concluído";
+      if (p.colaboradorNome === me) return true;
       if (p.gestorResponsavel === me) return true;
       return colaboradorPorNome.get(p.colaboradorNome)?.gestor === me;
     });
