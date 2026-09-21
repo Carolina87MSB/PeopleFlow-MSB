@@ -6,11 +6,13 @@ import type {
   CartaMovimentacao,
   CicloAvaliacaoDesempenho,
   Colaborador,
+  CompetenciaCargoCatalogo,
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
   ConfigDashboard,
   ConfigEncargosFolha,
   DescricaoCargo,
+  DescricaoCargoCompetencia,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
   Feedback,
@@ -34,6 +36,8 @@ export type PortalAction =
       perfis: Perfil2Info[];
       desligamentosFinanceiros: DesligamentoFinanceiro[];
       descricoesCargo: DescricaoCargo[];
+      catalogoCompetenciasCargo: CompetenciaCargoCatalogo[];
+      descricaoCargoCompetencias: DescricaoCargoCompetencia[];
       avaliacoesExperiencia: AvaliacaoExperiencia[];
       dispensasAvaliacaoExperiencia: DispensaAvaliacaoExperiencia[];
       configAvaliacaoDesempenho: ConfigAvaliacaoDesempenho | null;
@@ -50,6 +54,8 @@ export type PortalAction =
       reajustesSalariais: ReajusteSalarial[];
       feedbacks: Feedback[];
     }
+  | { type: "ADICIONAR_COMPETENCIA_CARGO"; relacao: DescricaoCargoCompetencia }
+  | { type: "REMOVER_COMPETENCIA_CARGO"; cargoNome: string; competenciaId: string }
   | { type: "CRIAR_AVALIACAO_EXPERIENCIA"; avaliacao: AvaliacaoExperiencia }
   | { type: "CRIAR_DISPENSA_AVALIACAO_EXPERIENCIA"; dispensa: DispensaAvaliacaoExperiencia }
   | { type: "APROVAR_ETAPA"; id: string }

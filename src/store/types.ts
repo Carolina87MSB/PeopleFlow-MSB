@@ -5,11 +5,13 @@ import type {
   CargoCustom,
   CicloAvaliacaoDesempenho,
   Colaborador,
+  CompetenciaCargoCatalogo,
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
   ConfigDashboard,
   ConfigEncargosFolha,
   DescricaoCargo,
+  DescricaoCargoCompetencia,
   DesligamentoFinanceiro,
   DispensaAvaliacaoExperiencia,
   Feedback,
@@ -31,6 +33,8 @@ export interface PortalState {
   perfis: Perfil2Info[];
   desligamentosFinanceiros: DesligamentoFinanceiro[];
   descricoesCargo: DescricaoCargo[];
+  catalogoCompetenciasCargo: CompetenciaCargoCatalogo[];
+  descricaoCargoCompetencias: DescricaoCargoCompetencia[];
   avaliacoesExperiencia: AvaliacaoExperiencia[];
   dispensasAvaliacaoExperiencia: DispensaAvaliacaoExperiencia[];
   configAvaliacaoDesempenho: ConfigAvaliacaoDesempenho | null;

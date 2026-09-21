@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { Badge, Button, Modal } from "../../components/ui";
 import { CAMPOS_DESCRICAO_CARGO, descricaoCargoVazia } from "../../domain/descricaoCargo";
 import type { CampoDescricaoCargo, CampoMeta } from "../../domain/descricaoCargo";
@@ -143,14 +143,21 @@ export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalP
 
       {grupos.map(([grupo, campos]) => {
         const compacto = grupo === "Dados do formulário (auditoria)";
+        // "Habilidades comportamentais" saiu do fluxo genérico de CampoEditavel
+        // (RH, 2026-09) — vira o seletor estruturado de competências
+        // (SeletorCompetenciasCargo), renderizado como mais uma "célula" deste
+        // mesmo grid, no lugar de onde o textarea livre aparecia antes.
+        const camposRenderizados = campos.filter((c) => c.key !== "habilidadesComportamentais");
+        const mostrarCompetencias = grupo === "Competências e requisitos desejáveis";
+        const totalColunas = camposRenderizados.length + (mostrarCompetencias ? 1 : 0);
         return (
           <div key={grupo} className={styles.grupo}>
             <h4 className={styles.sectionTitle}>{grupo}</h4>
             <div
-              className={campos.length === 1 ? styles.camposGridFull : styles.camposGrid}
-              style={campos.length === 1 ? undefined : { gridTemplateColumns: `repeat(${campos.length}, 1fr)` }}
+              className={totalColunas === 1 ? styles.camposGridFull : styles.camposGrid}
+              style={totalColunas === 1 ? undefined : { gridTemplateColumns: `repeat(${totalColunas}, 1fr)` }}
             >
-              {campos.map((campo) => (
+              {camposRenderizados.map((campo) => (
                 <CampoEditavel
                   key={campo.key}
                   meta={campo}
@@ -162,6 +169,13 @@ export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalP
                   opcoesOverride={campo.key === "subordinacao" ? cargosParaSubordinacao : undefined}
                 />
               ))}
+              {mostrarCompetencias && (
+                <SeletorCompetenciasCargo
+                  cargoNome={cargoNome}
+                  textoLegado={descricao.habilidadesComportamentais}
+                  podeEditar={podeEditarSecaoDescricaoCargo(cargoNome, grupo)}
+                />
+              )}
             </div>
           </div>
         );
@@ -377,6 +391,101 @@ function CampoEditavel({ meta, valorOficial, valorPendente, podeEditar, onSalvar
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+interface SeletorCompetenciasCargoProps {
+  cargoNome: string;
+  /** Texto livre legado do campo "Habilidades comportamentais" (POP-RH-001,
+   * anterior a 2026-09) — nunca mais editado por aqui, só exibido como
+   * referência pro RH enquanto a migração pra seleção estruturada não cobre
+   * 100% dos cargos. Continua gravado no banco (nunca apagado). */
+  textoLegado: string;
+  podeEditar: boolean;
+}
+
+/** Substitui o antigo textarea livre de "Habilidades comportamentais" por uma
+ * seleção estruturada no catálogo corporativo de competências comportamentais
+ * (`peopleflow_catalogo_competencias_cargo` / `peopleflow_descricao_cargo_competencias`,
+ * RH 2026-09): dropdown "Selecionar competência…" + chips removíveis, sem
+ * checkbox, sem digitação livre, sem duplicidade. Grava direto (sem
+ * rascunho/Salvar e sem passar pelo fluxo de proposta/aprovação do restante
+ * da ficha) porque a relação é imediata e reversível a qualquer momento por
+ * quem tem permissão na seção. */
+function SeletorCompetenciasCargo({ cargoNome, textoLegado, podeEditar }: SeletorCompetenciasCargoProps) {
+  const { catalogoCompetenciasCargo, competenciasDoCargo, adicionarCompetenciaCargo, removerCompetenciaCargo } =
+    usePortalData();
+  const [salvandoId, setSalvandoId] = useState<string | null>(null);
+
+  const selecionadas = competenciasDoCargo(cargoNome);
+  const idsSelecionados = new Set(selecionadas.map((c) => c.id));
+  const disponiveis = catalogoCompetenciasCargo.filter((c) => !idsSelecionados.has(c.id));
+
+  async function handleAdicionar(competenciaId: string) {
+    if (!competenciaId) return;
+    setSalvandoId(competenciaId);
+    await adicionarCompetenciaCargo(cargoNome, competenciaId);
+    setSalvandoId(null);
+  }
+
+  async function handleRemover(competenciaId: string) {
+    setSalvandoId(competenciaId);
+    await removerCompetenciaCargo(cargoNome, competenciaId);
+    setSalvandoId(null);
+  }
+
+  return (
+    <div className={styles.campo}>
+      <div className={styles.campoTopo}>
+        <span className={styles.campoLabel}>Habilidades comportamentais</span>
+      </div>
+
+      <div className={styles.chips}>
+        {selecionadas.length === 0 ? (
+          <span className={styles.vazio}>Nenhuma competência selecionada</span>
+        ) : (
+          selecionadas.map((c) => (
+            <span key={c.id} className={styles.chip}>
+              {c.nome}
+              {podeEditar && (
+                <button
+                  type="button"
+                  className={styles.chipRemover}
+                  onClick={() => handleRemover(c.id)}
+                  disabled={salvandoId === c.id}
+                  title={`Remover ${c.nome}`}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </span>
+          ))
+        )}
+      </div>
+
+      {podeEditar && disponiveis.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => handleAdicionar(e.target.value)}
+          className={styles.input}
+          disabled={salvandoId !== null}
+        >
+          <option value="">Selecionar competência…</option>
+          {disponiveis.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nome}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {textoLegado && (
+        <div className={styles.propostaPendente}>
+          <span className={styles.propostaTag}>Texto anterior (legado, somente leitura)</span>
+          <div className={styles.propostaValor}>{textoLegado}</div>
+        </div>
       )}
     </div>
   );

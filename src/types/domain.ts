@@ -388,6 +388,11 @@ export interface DescricaoCargo {
   escolaridade: string;
   experiencia: string;
   habilidadesTecnicas: string;
+  /** LEGADO (RH, 2026-09) — texto livre, substituído na tela pela seleção
+   * estruturada de competências (ver `CompetenciaCargoCatalogo` /
+   * `peopleflow_descricao_cargo_competencias`, mesmo arquivo). Continua
+   * gravado e visível (só leitura) pra consulta/validação do RH — nunca
+   * apagado, nunca mais editado pela tela normal. */
   habilidadesComportamentais: string;
   epis: string;
   updatedAt: string;
@@ -420,6 +425,31 @@ export interface HistoricoDescricaoCargo {
   /** Perfil de quem editou no momento da ação (Gestor/RH/Diretoria) — snapshot, não recalculado. */
   perfil: string;
   editadoEm: string;
+}
+
+/** Catálogo corporativo das 18 competências comportamentais oficiais (RH,
+ * 2026-09) — estrutura própria do PeopleFlow pro seletor de competências da
+ * Descrição de Cargo. Diferente de `CompetenciaComportamental` (catálogo da
+ * AVD/PDI, outra tabela, outro conjunto de nomes) — nenhuma relação entre
+ * os dois. `descricao` pode vir vazia até a RH fornecer o texto oficial. */
+export interface CompetenciaCargoCatalogo {
+  id: string;
+  nome: string;
+  descricao: string;
+  ativo: boolean;
+  ordem: number;
+}
+
+/** Uma linha da relação Cargo × Competência (Descrição de Cargo) —
+ * `origem` só rastreia se veio da migração automática do texto legado
+ * (`habilidadesComportamentais`) ou de uma seleção manual; não afeta
+ * permissão nem comportamento. */
+export interface DescricaoCargoCompetencia {
+  cargoNome: string;
+  competenciaId: string;
+  origem: "Migração automática" | "Manual";
+  criadoEm: string;
+  criadoPor: string;
 }
 
 export interface PerguntaAvaliacaoExperiencia {

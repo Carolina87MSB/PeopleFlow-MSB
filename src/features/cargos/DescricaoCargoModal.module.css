@@ -145,6 +145,51 @@
   line-height: 1.5;
 }
 
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px 4px 10px;
+  background: var(--color-brand-pale, #eef7f9);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+
+.chipRemover {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  flex: none;
+}
+
+.chipRemover:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--color-text);
+}
+
+.chipRemover:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .edicao {
   margin-top: 6px;
   display: flex;

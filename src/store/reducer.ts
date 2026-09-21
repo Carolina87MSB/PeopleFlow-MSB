@@ -10,6 +10,8 @@ export const initialPortalState: PortalState = {
   perfis: [],
   desligamentosFinanceiros: [],
   descricoesCargo: [],
+  catalogoCompetenciasCargo: [],
+  descricaoCargoCompetencias: [],
   avaliacoesExperiencia: [],
   dispensasAvaliacaoExperiencia: [],
   configAvaliacaoDesempenho: null,
@@ -39,6 +41,8 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         perfis: action.perfis,
         desligamentosFinanceiros: action.desligamentosFinanceiros,
         descricoesCargo: action.descricoesCargo,
+        catalogoCompetenciasCargo: action.catalogoCompetenciasCargo,
+        descricaoCargoCompetencias: action.descricaoCargoCompetencias,
         avaliacoesExperiencia: action.avaliacoesExperiencia,
         dispensasAvaliacaoExperiencia: action.dispensasAvaliacaoExperiencia,
         configAvaliacaoDesempenho: action.configAvaliacaoDesempenho,
@@ -54,6 +58,22 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         salariosBase: action.salariosBase,
         reajustesSalariais: action.reajustesSalariais,
         feedbacks: action.feedbacks,
+      };
+
+    case "ADICIONAR_COMPETENCIA_CARGO":
+      // Idempotente no cliente também — se por algum motivo o par já estiver
+      // no estado (corrida entre 2 cliques), não duplica na lista local.
+      if (state.descricaoCargoCompetencias.some((r) => r.cargoNome === action.relacao.cargoNome && r.competenciaId === action.relacao.competenciaId)) {
+        return state;
+      }
+      return { ...state, descricaoCargoCompetencias: [...state.descricaoCargoCompetencias, action.relacao] };
+
+    case "REMOVER_COMPETENCIA_CARGO":
+      return {
+        ...state,
+        descricaoCargoCompetencias: state.descricaoCargoCompetencias.filter(
+          (r) => !(r.cargoNome === action.cargoNome && r.competenciaId === action.competenciaId),
+        ),
       };
 
     case "ADICIONAR_REAJUSTES_SALARIAIS":

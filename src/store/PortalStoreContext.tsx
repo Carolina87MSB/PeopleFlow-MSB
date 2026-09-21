@@ -5,6 +5,7 @@ import { getColaboradores } from "../repositories/colaboradoresRepository";
 import { getCargosCustom } from "../repositories/cargosCustomRepository";
 import { getDesligamentosFinanceiros } from "../repositories/desligadosRepository";
 import { getDescricoesCargo } from "../repositories/descricoesCargoRepository";
+import { getCatalogoCompetenciasCargo, getDescricaoCargoCompetencias } from "../repositories/competenciasCargoRepository";
 import { efetivarSincronizacoesPendentes, getMovimentacoes } from "../repositories/movimentacoesRepository";
 import { getAvaliacoesExperiencia, getDispensasAvaliacaoExperiencia } from "../repositories/avaliacoesExperienciaRepository";
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
@@ -64,6 +65,8 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getPerfis(),
       getDesligamentosFinanceiros(),
       getDescricoesCargo(),
+      getCatalogoCompetenciasCargo(),
+      getDescricaoCargoCompetencias(),
       getAvaliacoesExperiencia(),
       getDispensasAvaliacaoExperiencia(),
       getConfigAvaliacaoDesempenho(),
@@ -89,6 +92,8 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           perfis,
           desligamentosFinanceiros,
           descricoesCargo,
+          catalogoCompetenciasCargo,
+          descricaoCargoCompetencias,
           avaliacoesExperiencia,
           dispensasAvaliacaoExperiencia,
           configAvaliacaoDesempenho,
@@ -122,6 +127,8 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             perfis,
             desligamentosFinanceiros,
             descricoesCargo,
+            catalogoCompetenciasCargo,
+            descricaoCargoCompetencias,
             avaliacoesExperiencia,
             dispensasAvaliacaoExperiencia,
             configAvaliacaoDesempenho,

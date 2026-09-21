@@ -13,6 +13,10 @@ import {
   salvarRevisaoDescricaoCargo as salvarRevisaoDescricaoCargoNoSupabase,
 } from "../repositories/descricoesCargoRepository";
 import {
+  adicionarCompetenciaCargo as adicionarCompetenciaCargoNoSupabase,
+  removerCompetenciaCargo as removerCompetenciaCargoNoSupabase,
+} from "../repositories/competenciasCargoRepository";
+import {
   atualizarMovimentacao,
   criarMovimentacao as criarMovimentacaoNoSupabase,
   efetivarSincronizacoesPendentes,
@@ -110,6 +114,7 @@ import type {
   AvaliacaoPotencial,
   CicloAvaliacaoDesempenho,
   Colaborador,
+  CompetenciaCargoCatalogo,
   CompetenciaComportamental,
   ConfigAvaliacaoDesempenho,
   ConfigDashboard,
@@ -216,6 +221,24 @@ export interface PortalData {
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
   atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
+  /** Catálogo fechado das 18 competências comportamentais oficiais (RH,
+   * 2026-09) — estrutura própria do PeopleFlow pro seletor da Descrição de
+   * Cargo, sem relação com o catálogo da AVD nem com o Portal de
+   * Treinamentos. Só leitura nesta etapa (sem tela de cadastro). */
+  catalogoCompetenciasCargo: CompetenciaCargoCatalogo[];
+  /** As competências já selecionadas de um cargo, na ordem do catálogo —
+   * deriva de `descricaoCargoCompetencias` (a relação Cargo × Competência),
+   * nunca do texto legado (`descricao.habilidadesComportamentais`). */
+  competenciasDoCargo: (cargoNome: string) => CompetenciaCargoCatalogo[];
+  /** Mesma regra de permissão do grupo "Competências e requisitos
+   * desejáveis" (`podeEditarSecaoDescricaoCargo`) — aplica direto, sem
+   * fluxo de proposta/aprovação do Gestor (diferente dos outros campos
+   * desse grupo): a relação Cargo × Competência não tem hoje um "pendente"
+   * próprio, decisão deliberada pra não replicar a complexidade do
+   * `Record<string,string>` de `DescricaoCargo.pendente` numa relação N:N.
+   * Sinalizado explicitamente pra RH — pode virar uma etapa futura. */
+  adicionarCompetenciaCargo: (cargoNome: string, competenciaId: string) => Promise<{ ok: true } | { ok: false }>;
+  removerCompetenciaCargo: (cargoNome: string, competenciaId: string) => Promise<{ ok: true } | { ok: false }>;
   atualizarAdmissao: (nome: string, admissaoIso: string) => Promise<{ ok: true } | { ok: false }>;
   avaliacoesExperiencia: AvaliacaoExperiencia[];
   /** Colaboradores com etapa (45/90 dias) vencida e ainda sem avaliação — RH vê
@@ -1079,6 +1102,55 @@ export function usePortalData(): PortalData {
   const carregarHistoricoDescricaoCargoFn = useCallback(
     (cargoNome: string) => getHistoricoDescricaoCargo(cargoNome),
     [],
+  );
+
+  const competenciasDoCargoFn = useCallback(
+    (cargoNome: string) => {
+      const ids = new Set(state.descricaoCargoCompetencias.filter((r) => r.cargoNome === cargoNome).map((r) => r.competenciaId));
+      return state.catalogoCompetenciasCargo.filter((c) => ids.has(c.id));
+    },
+    [state.descricaoCargoCompetencias, state.catalogoCompetenciasCargo],
+  );
+
+  /** Mesma permissão do grupo "Competências e requisitos desejáveis" —
+   * aplica direto (sem proposta/aprovação, ver comentário na interface). */
+  const adicionarCompetenciaCargoFn = useCallback(
+    async (cargoNome: string, competenciaId: string) => {
+      if (!podeEditarSecaoDescricaoCargoFn(cargoNome, "Competências e requisitos desejáveis")) {
+        flash("Você não pode editar as competências deste cargo.");
+        return { ok: false as const };
+      }
+      try {
+        await adicionarCompetenciaCargoNoSupabase(cargoNome, competenciaId, me);
+        dispatch({
+          type: "ADICIONAR_COMPETENCIA_CARGO",
+          relacao: { cargoNome, competenciaId, origem: "Manual", criadoEm: new Date().toISOString(), criadoPor: me },
+        });
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao adicionar competência.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, podeEditarSecaoDescricaoCargoFn, flash],
+  );
+
+  const removerCompetenciaCargoFn = useCallback(
+    async (cargoNome: string, competenciaId: string) => {
+      if (!podeEditarSecaoDescricaoCargoFn(cargoNome, "Competências e requisitos desejáveis")) {
+        flash("Você não pode editar as competências deste cargo.");
+        return { ok: false as const };
+      }
+      try {
+        await removerCompetenciaCargoNoSupabase(cargoNome, competenciaId);
+        dispatch({ type: "REMOVER_COMPETENCIA_CARGO", cargoNome, competenciaId });
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao remover competência.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, podeEditarSecaoDescricaoCargoFn, flash],
   );
 
   /** RH/Diretoria-only, e só quando há uma proposta pendente — aplica cada
@@ -2425,6 +2497,10 @@ export function usePortalData(): PortalData {
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,
     atualizarCampoDescricaoCargo: atualizarCampoDescricaoCargoFn,
     carregarHistoricoDescricaoCargo: carregarHistoricoDescricaoCargoFn,
+    catalogoCompetenciasCargo: state.catalogoCompetenciasCargo,
+    competenciasDoCargo: competenciasDoCargoFn,
+    adicionarCompetenciaCargo: adicionarCompetenciaCargoFn,
+    removerCompetenciaCargo: removerCompetenciaCargoFn,
     atualizarAdmissao: atualizarAdmissaoFn,
     avaliacoesExperiencia: state.avaliacoesExperiencia,
     pendenciasAvaliacaoExperiencia,

@@ -1364,3 +1364,107 @@ alter table public.peopleflow_pdi_acoes
 
 comment on column public.peopleflow_pdi_acoes.data_inicio is
   'Data prevista pra começar a executar a ação — distinta de prazo (quando deve estar concluída). Puramente informativo.';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 33) Competências comportamentais da Descrição de Cargo — catálogo próprio
+--    e relação Cargo × Competência (pedido da RH, 2026-09). Substitui, na
+--    tela, o preenchimento livre de "Habilidades comportamentais"
+--    (`peopleflow_descricoes_cargo.habilidades_comportamentais`, que
+--    CONTINUA existindo — vira campo legado, só leitura, nunca apagado).
+--
+--    Investigação prévia (não pulada): NÃO existe hoje uma tabela "catálogo
+--    das 18 competências" pronta em nenhum dos portais que compartilham
+--    este banco. `peopleflow_competencias_comportamentais` é um catálogo
+--    DIFERENTE (da Avaliação de Desempenho — AVD/PDI, ids tipo
+--    "melhoria-continua" mas nomes/conjunto próprios, nunca tocada aqui).
+--    `treinamentos_matriz_requisitos` (Portal de Treinamentos) é uma tabela
+--    de requisitos POR CARGO, não um catálogo — só 8 das 18 competências
+--    aparecem lá, todas com `status_validacao = 'pendente'`, sem chave
+--    primária própria por competência. Por isso este catálogo é uma
+--    estrutura NOVA e PRÓPRIA do PeopleFlow (decisão explícita da RH,
+--    depois de ver esse levantamento) — não duplica nem altera nada do
+--    Portal de Treinamentos.
+--
+--    `cargo_nome` (não `cargo_id`): o PeopleFlow nunca teve uma tabela de
+--    cargos com id numérico — `colaboradores.cargo` /
+--    `peopleflow_cargos_custom.nome` / `peopleflow_descricoes_cargo.cargo_nome`
+--    já usam o nome do cargo (texto) como chave universal em todo o app.
+--    Criar um `cargo_id` novo aqui seria criar a "segunda tabela de cargos"
+--    que a RH pediu explicitamente pra evitar — por isso `cargo_nome text`,
+--    sem FK (mesmo padrão já usado em todo o schema pra referências de
+--    cargo/ciclo — ver comentários de `ciclo_id`/`avaliacao_id` em seções
+--    anteriores): um cargo pode ganhar sua 1ª competência antes mesmo de
+--    ter uma linha em `peopleflow_descricoes_cargo` (cargo "Sem descrição"
+--    ainda, ver `descricaoCargoVazia()` em domain/descricaoCargo.ts), e uma
+--    FK travaria exatamente esse caso. `competencia_id` já referencia um
+--    catálogo fechado e estável (18 linhas, nunca criadas por um usuário
+--    comum) — aí sim FK de verdade.
+-- ────────────────────────────────────────────────────────────────────────
+create table if not exists public.peopleflow_catalogo_competencias_cargo (
+  id text primary key,
+  nome text not null unique,
+  descricao text,
+  ativo boolean not null default true,
+  ordem integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.peopleflow_catalogo_competencias_cargo is
+  'Catálogo corporativo das 18 competências comportamentais oficiais (RH, 2026-09) — fonte fixa pro seletor de competências da Descrição de Cargo. Estrutura própria do PeopleFlow, não é o catálogo da AVD (peopleflow_competencias_comportamentais) nem nada do Portal de Treinamentos. `descricao` fica em branco até a RH fornecer o texto oficial de cada uma — não foi inventado.';
+
+insert into public.peopleflow_catalogo_competencias_cargo (id, nome, ordem) values
+  ('adaptabilidade', 'Adaptabilidade', 1),
+  ('aprendizagem-e-desenvolvimento', 'Aprendizagem e desenvolvimento', 2),
+  ('comunicacao', 'Comunicação', 3),
+  ('etica-e-integridade', 'Ética e integridade', 4),
+  ('foco-no-cliente', 'Foco no cliente', 5),
+  ('gestao-de-conflitos', 'Gestão de conflitos', 6),
+  ('gestao-de-pessoas', 'Gestão de pessoas', 7),
+  ('lideranca', 'Liderança', 8),
+  ('melhoria-continua', 'Melhoria contínua', 9),
+  ('negociacao', 'Negociação', 10),
+  ('organizacao-e-planejamento', 'Organização e planejamento', 11),
+  ('orientacao-para-resultados', 'Orientação para resultados', 12),
+  ('pensamento-analitico', 'Pensamento analítico', 13),
+  ('relacionamento-interpessoal', 'Relacionamento interpessoal', 14),
+  ('resolucao-de-problemas', 'Resolução de problemas', 15),
+  ('responsabilidade-e-comprometimento', 'Responsabilidade e comprometimento', 16),
+  ('tomada-de-decisao', 'Tomada de decisão', 17),
+  ('trabalho-em-equipe', 'Trabalho em equipe', 18)
+on conflict (id) do nothing;
+
+alter table public.peopleflow_catalogo_competencias_cargo enable row level security;
+
+drop policy if exists "authenticated_rw_catalogo_competencias_cargo" on public.peopleflow_catalogo_competencias_cargo;
+create policy "authenticated_rw_catalogo_competencias_cargo"
+  on public.peopleflow_catalogo_competencias_cargo
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+create table if not exists public.peopleflow_descricao_cargo_competencias (
+  id bigint generated always as identity primary key,
+  cargo_nome text not null,
+  competencia_id text not null references public.peopleflow_catalogo_competencias_cargo(id),
+  origem text not null default 'Manual',
+  created_at timestamptz not null default now(),
+  created_by text,
+  unique (cargo_nome, competencia_id)
+);
+
+comment on table public.peopleflow_descricao_cargo_competencias is
+  'Relação Cargo × Competência comportamental (Descrição de Cargo) — um cargo pode ter várias competências, uma competência pode estar em vários cargos. unique(cargo_nome, competencia_id) impede duplicidade do mesmo par.';
+comment on column public.peopleflow_descricao_cargo_competencias.origem is
+  '''Migração automática'' (veio do texto livre legado, equivalência clara/sem ambiguidade) ou ''Manual'' (selecionada por alguém na tela) — só rastreio, sem efeito na regra de acesso.';
+
+alter table public.peopleflow_descricao_cargo_competencias enable row level security;
+
+drop policy if exists "authenticated_rw_descricao_cargo_competencias" on public.peopleflow_descricao_cargo_competencias;
+create policy "authenticated_rw_descricao_cargo_competencias"
+  on public.peopleflow_descricao_cargo_competencias
+  for all
+  to authenticated
+  using (true)
+  with check (true);
