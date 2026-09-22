@@ -35,6 +35,9 @@ interface DescricaoCargoRow {
   elaborado_em: string | null;
   aprovado_por: string | null;
   aprovado_em: string | null;
+  obsoleto: boolean | null;
+  obsoleto_em: string | null;
+  obsoleto_por: string | null;
 }
 
 interface HistoricoRow {
@@ -73,6 +76,9 @@ function fromRow(row: DescricaoCargoRow): DescricaoCargo {
     elaboradoEm: row.elaborado_em ?? "",
     aprovadoPor: row.aprovado_por ?? "",
     aprovadoEm: row.aprovado_em ?? "",
+    obsoleto: row.obsoleto ?? false,
+    obsoletoEm: row.obsoleto_em ?? "",
+    obsoletoPor: row.obsoleto_por ?? "",
   };
 }
 

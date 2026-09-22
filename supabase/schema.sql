@@ -1468,3 +1468,20 @@ create policy "authenticated_rw_descricao_cargo_competencias"
   to authenticated
   using (true)
   with check (true);
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 34) Cargo obsoleto (RH, 2026-09) — tela de Cargos passa a listar todo
+--    cargo com Descrição de Cargo, mesmo sem ocupante ativo (uma vaga por
+--    desligamento não deve mais sumir da lista — "0" em Ocupantes já avisa
+--    que está vago). Cargos genuinamente fora de uso são marcados
+--    "obsoleto" pelo RH em vez de desaparecerem: saem do seletor de "Cargo
+--    solicitado" de novas Admissões, mas a Descrição e o histórico
+--    continuam intactos, e dá pra reativar a qualquer momento.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_descricoes_cargo
+  add column if not exists obsoleto boolean not null default false,
+  add column if not exists obsoleto_em timestamptz,
+  add column if not exists obsoleto_por text;
+
+comment on column public.peopleflow_descricoes_cargo.obsoleto is
+  'RH-only. true = cargo fora de uso, não aparece mais no seletor de "Cargo solicitado" de novas Admissões. Descrição e histórico permanecem intactos; reversível.';

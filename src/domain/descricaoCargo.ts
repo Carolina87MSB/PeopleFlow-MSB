@@ -2,7 +2,18 @@ import type { DescricaoCargo } from "../types/domain";
 
 export type CampoDescricaoCargo = Exclude<
   keyof DescricaoCargo,
-  "cargoNome" | "updatedAt" | "updatedBy" | "elaboradoPor" | "elaboradoEm" | "aprovadoPor" | "aprovadoEm" | "status" | "pendente"
+  | "cargoNome"
+  | "updatedAt"
+  | "updatedBy"
+  | "elaboradoPor"
+  | "elaboradoEm"
+  | "aprovadoPor"
+  | "aprovadoEm"
+  | "status"
+  | "pendente"
+  | "obsoleto"
+  | "obsoletoEm"
+  | "obsoletoPor"
 >;
 
 export interface CampoMeta {
@@ -126,5 +137,8 @@ export function descricaoCargoVazia(cargoNome: string): DescricaoCargo {
     elaboradoEm: "",
     aprovadoPor: "",
     aprovadoEm: "",
+    obsoleto: false,
+    obsoletoEm: "",
+    obsoletoPor: "",
   };
 }

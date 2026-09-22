@@ -183,6 +183,12 @@ export interface PortalData {
    * (nunca chega a virar oficial) e marca `status` "Rejeitada" — o Gestor
    * pode propor de novo depois. */
   rejeitarDescricaoCargo: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
+  /** RH-only. */
+  podeMarcarCargoObsoleto: boolean;
+  /** RH-only, e só quando o cargo não tem ninguém ocupando ele agora. */
+  marcarCargoObsoleto: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
+  /** RH-only. */
+  reativarCargo: (cargoNome: string) => Promise<{ ok: true } | { ok: false }>;
   podeEditarAdmissao: boolean;
   scopeSet: Set<string> | null;
   podeCriar: boolean;
@@ -1249,6 +1255,72 @@ export function usePortalData(): PortalData {
         return { ok: true as const };
       } catch (err) {
         flash(err instanceof Error ? err.message : "Falha ao rejeitar alteração.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, perfil, state.descricoesCargo, flash],
+  );
+
+  /** RH-only, e só quando o cargo não tem ninguém ocupando ele agora
+   * (`ativosGlobal`, contagem global — não a scopeada por gestor) — não faz
+   * sentido tirar de circulação um cargo com gente de fato nele. Some do
+   * seletor de "Cargo solicitado" de novas Admissões (ver cargosParaAdmissao
+   * em NovaMovimentacaoModal.tsx); Descrição/histórico continuam intactos. */
+  const marcarCargoObsoletoFn = useCallback(
+    async (cargoNome: string) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode marcar um cargo como obsoleto.");
+        return { ok: false as const };
+      }
+      if (ativosGlobal.some((c) => c.cargo === cargoNome)) {
+        flash("Este cargo ainda tem colaborador ativo — não pode ser marcado como obsoleto.");
+        return { ok: false as const };
+      }
+      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome);
+      const agora = new Date().toISOString();
+      try {
+        await salvarRevisaoDescricaoCargoNoSupabase(
+          cargoNome,
+          { obsoleto: true, obsoleto_em: agora, obsoleto_por: me },
+          { campo: "status", valorAnterior: "Ativo", valorNovo: "Obsoleto", editadoPor: me, perfil },
+        );
+        dispatch({
+          type: "ATUALIZAR_DESCRICAO_CARGO",
+          descricao: { ...(atual ?? descricaoCargoVazia(cargoNome)), obsoleto: true, obsoletoEm: agora, obsoletoPor: me },
+        });
+        flash("Cargo marcado como obsoleto.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao marcar cargo como obsoleto.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, perfil, state.descricoesCargo, ativosGlobal, flash],
+  );
+
+  /** RH-only — volta o cargo pra Cargos ativos e pro seletor de "Cargo
+   * solicitado" de novas Admissões. */
+  const reativarCargoFn = useCallback(
+    async (cargoNome: string) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode reativar um cargo.");
+        return { ok: false as const };
+      }
+      const atual = state.descricoesCargo.find((d) => d.cargoNome === cargoNome);
+      try {
+        await salvarRevisaoDescricaoCargoNoSupabase(
+          cargoNome,
+          { obsoleto: false, obsoleto_em: null, obsoleto_por: null },
+          { campo: "status", valorAnterior: "Obsoleto", valorNovo: "Ativo", editadoPor: me, perfil },
+        );
+        dispatch({
+          type: "ATUALIZAR_DESCRICAO_CARGO",
+          descricao: { ...(atual ?? descricaoCargoVazia(cargoNome)), obsoleto: false, obsoletoEm: "", obsoletoPor: "" },
+        });
+        flash("Cargo reativado.");
+        return { ok: true as const };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao reativar cargo.");
         return { ok: false as const };
       }
     },
@@ -2477,6 +2549,9 @@ export function usePortalData(): PortalData {
     podeAprovarDescricaoCargo: perfil === "RH" || perfil === "Diretoria",
     aprovarDescricaoCargo: aprovarDescricaoCargoFn,
     rejeitarDescricaoCargo: rejeitarDescricaoCargoFn,
+    podeMarcarCargoObsoleto: perfil === "RH",
+    marcarCargoObsoleto: marcarCargoObsoletoFn,
+    reativarCargo: reativarCargoFn,
     podeEditarAdmissao: perfil === "RH",
     scopeSet,
     podeCriar: canCreate(perfil),

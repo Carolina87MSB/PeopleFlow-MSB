@@ -412,6 +412,12 @@ export interface DescricaoCargo {
   elaboradoEm: string;
   aprovadoPor: string;
   aprovadoEm: string;
+  /** RH-only (RH, 2026-09) — cargo fora de uso: some do seletor de "Cargo
+   * solicitado" de novas Admissões, mas continua listado em Cargos (aba
+   * "Obsoletos") e com a Descrição/histórico intactos. Reversível. */
+  obsoleto: boolean;
+  obsoletoEm: string;
+  obsoletoPor: string;
 }
 
 export interface HistoricoDescricaoCargo {

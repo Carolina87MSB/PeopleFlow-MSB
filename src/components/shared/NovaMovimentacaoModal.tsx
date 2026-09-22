@@ -54,7 +54,11 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   // antes de abrir esta admissão — evita repetir o caso da MP-2026-025
   // ("líder de logística" digitado livre, sem bater com o cargo real).
   const cargosParaAdmissao = useMemo(
-    () => descricoesCargo.filter((d) => d.status === "Aprovada").map((d) => d.cargoNome).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    () =>
+      descricoesCargo
+        .filter((d) => d.status === "Aprovada" && !d.obsoleto)
+        .map((d) => d.cargoNome)
+        .sort((a, b) => a.localeCompare(b, "pt-BR")),
     [descricoesCargo],
   );
 
