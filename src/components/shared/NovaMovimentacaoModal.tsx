@@ -16,7 +16,7 @@ const TIPOS_SEM_CADASTRO_PREVIO: TipoCod[] = ["ADM"];
 
 export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const { state } = usePortalStore();
-  const { conta, colaboradores, criarMovimentacao } = usePortalData();
+  const { conta, colaboradores, descricoesCargo, criarMovimentacao } = usePortalData();
   const { flash } = useToast();
   const navigate = useNavigate();
 
@@ -44,6 +44,18 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const cargosExistentes = useMemo(
     () => [...new Set([...colaboradores.map((c) => c.cargo), ...state.cargosCustom.map((c) => c.nome)])].filter(Boolean).sort(),
     [colaboradores, state.cargosCustom],
+  );
+
+  // Admissão só pode pedir um cargo que já tem Descrição de Cargo aprovada
+  // (POP-RH-001) — inclui cargos hoje sem ocupante (ex.: substituição de
+  // alguém desligado), que `cargosExistentes`/`colaboradores` não cobrem
+  // sozinhos. Se o cargo desejado não aparecer aqui, o gestor precisa pedir
+  // ao RH pra criar o cargo (botão "Novo Cargo" em Descrições de Cargo)
+  // antes de abrir esta admissão — evita repetir o caso da MP-2026-025
+  // ("líder de logística" digitado livre, sem bater com o cargo real).
+  const cargosParaAdmissao = useMemo(
+    () => descricoesCargo.filter((d) => d.status === "Aprovada").map((d) => d.cargoNome).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [descricoesCargo],
   );
 
   function set<K extends keyof NovaMovimentacaoForm>(key: K, value: NovaMovimentacaoForm[K]) {
@@ -154,7 +166,17 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
           <>
             <label className={styles.field}>
               <span>Cargo solicitado</span>
-              <input value={form.admCargo} onChange={(e) => set("admCargo", e.target.value)} list="cargos-existentes" />
+              <select value={form.admCargo} onChange={(e) => set("admCargo", e.target.value)}>
+                <option value="">Selecione…</option>
+                {cargosParaAdmissao.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <span className={styles.fieldHint}>
+                Não encontrou o cargo? Peça ao RH para criá-lo primeiro (Descrições de Cargo → Novo Cargo).
+              </span>
             </label>
             <label className={styles.field}>
               <span>Departamento</span>
@@ -357,14 +379,6 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
       </div>
 
       {avisoGestor && <div className={styles.info}>{avisoGestor}</div>}
-
-      {/* Sugestão de cargos já cadastrados para "Cargo solicitado" (Admissão) — campo
-       * continua sendo texto livre, já que uma admissão pode pedir um cargo inédito. */}
-      <datalist id="cargos-existentes">
-        {cargosExistentes.map((cargo) => (
-          <option key={cargo} value={cargo} />
-        ))}
-      </datalist>
 
       {erro && <div className={styles.error}>{erro}</div>}
     </Modal>
