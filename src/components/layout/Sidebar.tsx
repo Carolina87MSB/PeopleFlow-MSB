@@ -6,10 +6,13 @@ import {
   CheckCircle2,
   ClipboardCheck,
   ClipboardList,
+  GraduationCap,
   History,
   KeyRound,
   LayoutDashboard,
+  ListChecks,
   LogOut,
+  Puzzle,
   Target,
   UserMinus,
   Users,
@@ -163,6 +166,18 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             badge={pendenciasFinanceirasCount}
             badgeTone="warning"
           />
+        )}
+
+        {/* Módulo Desenvolvimento — nesta fase só RH e Gestor (Colaborador e
+            Diretoria ficam de fora até decisão). Sem contadores: o menu não
+            dispara nenhuma consulta do módulo. */}
+        {(perfil === "RH" || perfil === "Gestor") && (
+          <>
+            <div className={styles.sectionLabel}>Desenvolvimento</div>
+            <NavItem to="/desenvolvimento/habilidades" icon={<Puzzle size={18} strokeWidth={1.9} />} label="Habilidades" />
+            <NavItem to="/desenvolvimento/lnt" icon={<ListChecks size={18} strokeWidth={1.9} />} label="LNT" />
+            <NavItem to="/desenvolvimento/treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Treinamentos" />
+          </>
         )}
       </nav>
 

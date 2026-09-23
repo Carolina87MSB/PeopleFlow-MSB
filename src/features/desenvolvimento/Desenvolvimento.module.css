@@ -1,0 +1,222 @@
+/* Módulo Desenvolvimento — reutiliza os tokens globais (index.css) e a mesma
+ * linguagem visual das abas de Gestão de Desempenho, para o módulo parecer
+ * parte do PeopleFlow desde sempre. */
+
+.abas {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 20px;
+  border-bottom: 1px solid var(--color-divider);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.abas::-webkit-scrollbar {
+  display: none;
+}
+
+.aba,
+.abaAtiva {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 10px 14px;
+  font: 600 12.5px var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--color-muted-light);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.aba:hover {
+  color: var(--color-text);
+}
+
+.abaAtiva {
+  color: var(--color-brand);
+  border-bottom-color: var(--color-brand);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+
+.cardSubtitle {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.filtros {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.select,
+.input {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 8px 10px;
+  font: 600 12.5px var(--font-sans);
+  color: var(--color-text);
+  min-width: 220px;
+  max-width: 100%;
+}
+
+.select:focus,
+.input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.tabela td.secundario,
+.secundario {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tom_success {
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
+}
+.tom_warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+.tom_danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+}
+.tom_neutral {
+  background: var(--color-neutral-bg);
+  color: var(--color-neutral-fg);
+}
+.tom_info {
+  background: var(--color-brand-pale);
+  color: var(--color-navy-soft);
+}
+
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.paginacao button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.paginacao button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.estado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--color-muted-light);
+}
+
+.estado strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.estado span {
+  max-width: 460px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.erro {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.duasColunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.pilha {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .duasColunas {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .select,
+  .input {
+    min-width: 0;
+    width: 100%;
+  }
+  .filtros {
+    width: 100%;
+  }
+}

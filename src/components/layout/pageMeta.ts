@@ -16,9 +16,16 @@ const PAGE_META: Record<string, PageMeta> = {
   desligados: { eyebrow: "Operação", title: "Desligados" },
   avaliacoes: { eyebrow: "Operação", title: "Avaliações de experiência" },
   desempenho: { eyebrow: "Cadastro", title: "Gestão de Desempenho" },
+  desenvolvimento: { eyebrow: "Desenvolvimento", title: "Desenvolvimento" },
+  "desenvolvimento/habilidades": { eyebrow: "Desenvolvimento", title: "Habilidades" },
+  "desenvolvimento/lnt": { eyebrow: "Desenvolvimento", title: "LNT — Levantamento de Necessidades" },
+  "desenvolvimento/treinamentos": { eyebrow: "Desenvolvimento", title: "Treinamentos" },
 };
 
+/** Procura primeiro "segmento/subsegmento" (só o módulo Desenvolvimento usa)
+ * e cai no 1º segmento — o mesmo comportamento de sempre para as demais telas. */
 export function pageMetaFromPath(pathname: string): PageMeta {
-  const segment = pathname.split("/").filter(Boolean)[0] ?? "dashboard";
-  return PAGE_META[segment] ?? PAGE_META.dashboard;
+  const segments = pathname.split("/").filter(Boolean);
+  const segment = segments[0] ?? "dashboard";
+  return PAGE_META[`${segment}/${segments[1] ?? ""}`] ?? PAGE_META[segment] ?? PAGE_META.dashboard;
 }
