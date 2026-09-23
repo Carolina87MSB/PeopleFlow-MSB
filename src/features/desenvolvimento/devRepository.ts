@@ -59,14 +59,16 @@ export interface ItemListaMestra {
   data_revisao: string | null;
   situacao: "vigente" | "obsoleto";
   periodicidade_meses: number | null;
+  observacao: string;
 }
 
-export async function listarListaMestra(pagina: number, busca: string): Promise<Pagina<ItemListaMestra>> {
+export async function listarListaMestra(pagina: number, busca: string, situacao: "vigente" | "obsoleto" | null = null): Promise<Pagina<ItemListaMestra>> {
   let q = supabase
     .from("peopleflow_dev_lista_mestra")
-    .select("codigo, titulo, revisao_atual, data_revisao, situacao, periodicidade_meses", { count: "exact" })
+    .select("codigo, titulo, revisao_atual, data_revisao, situacao, periodicidade_meses, observacao", { count: "exact" })
     .order("codigo")
     .range(...faixa(pagina));
+  if (situacao) q = q.eq("situacao", situacao);
   const termo = busca.trim().replace(/[%,()]/g, " ");
   if (termo) q = q.or(`codigo.ilike.%${termo}%,titulo.ilike.%${termo}%`);
   const { data, error, count } = await q;
@@ -89,15 +91,27 @@ export interface Habilidade {
   descricao: string;
   tipo: "tecnica" | "regulatoria";
   norma: string | null;
+  categoria: string | null;
   ativo: boolean;
 }
 
-export async function listarHabilidades(pagina: number): Promise<Pagina<Habilidade>> {
-  const { data, error, count } = await supabase
+export interface FiltroHabilidades {
+  busca: string;
+  tipo: "tecnica" | "regulatoria" | null;
+  ativo: boolean | null;
+}
+
+export async function listarHabilidades(pagina: number, filtro: FiltroHabilidades): Promise<Pagina<Habilidade>> {
+  let q = supabase
     .from("peopleflow_dev_habilidades")
-    .select("id, nome, descricao, tipo, norma, ativo", { count: "exact" })
+    .select("id, nome, descricao, tipo, norma, categoria, ativo", { count: "exact" })
     .order("nome")
     .range(...faixa(pagina));
+  const termo = filtro.busca.trim().replace(/[%,()]/g, " ");
+  if (termo) q = q.or(`nome.ilike.%${termo}%,categoria.ilike.%${termo}%,descricao.ilike.%${termo}%`);
+  if (filtro.tipo) q = q.eq("tipo", filtro.tipo);
+  if (filtro.ativo !== null) q = q.eq("ativo", filtro.ativo);
+  const { data, error, count } = await q;
   if (error) falha("Habilidades", error.message);
   return { itens: (data ?? []) as Habilidade[], total: count ?? 0 };
 }
@@ -109,21 +123,36 @@ export interface RequisitoCargo {
   periodicidade_meses: number | null;
   prazo_apos_admissao_dias: number | null;
   recicla_na_revisao: boolean;
-  status: "sugerido" | "vigente" | "inativo";
+  status: StatusRequisito;
+  status_motivo: string | null;
   lista_mestra_codigo: string | null;
-  habilidade: { nome: string } | null;
-  lista_mestra: { titulo: string; periodicidade_meses: number | null } | null;
+  habilidade_id: number | null;
+  descricao_sugerida: string | null;
+  observacao: string;
+  justificativa: string;
+  origem: "rh" | "gestor" | "importacao";
+  sugerido_por_colaborador_id: number | null;
+  validado_em: string | null;
+  created_at: string;
+  updated_at: string;
+  habilidade: { nome: string; ativo: boolean } | null;
+  lista_mestra: { titulo: string; periodicidade_meses: number | null; situacao: string } | null;
 }
 
-export async function listarRequisitosDoCargo(cargoNome: string): Promise<RequisitoCargo[]> {
+export type StatusRequisito = "sugerido" | "vigente" | "inativo";
+
+const COLUNAS_REQUISITO =
+  "id, tipo_requisito, obrigatorio, periodicidade_meses, prazo_apos_admissao_dias, recicla_na_revisao, status, status_motivo, lista_mestra_codigo, habilidade_id, descricao_sugerida, observacao, justificativa, origem, sugerido_por_colaborador_id, validado_em, created_at, updated_at, habilidade:peopleflow_dev_habilidades(nome, ativo), lista_mestra:peopleflow_dev_lista_mestra(titulo, periodicidade_meses, situacao)";
+
+/** O RLS decide o que cada perfil vê: RH tudo; Gestor só vigentes dos cargos da equipe + as próprias sugestões. */
+export async function listarRequisitosDoCargo(cargoNome: string, status: StatusRequisito[]): Promise<RequisitoCargo[]> {
   const { data, error } = await supabase
     .from("peopleflow_dev_cargo_requisitos")
-    .select(
-      "id, tipo_requisito, obrigatorio, periodicidade_meses, prazo_apos_admissao_dias, recicla_na_revisao, status, lista_mestra_codigo, habilidade:peopleflow_dev_habilidades(nome), lista_mestra:peopleflow_dev_lista_mestra(titulo, periodicidade_meses)",
-    )
+    .select(COLUNAS_REQUISITO)
     .eq("cargo_nome", cargoNome)
-    .neq("status", "inativo")
+    .in("status", status)
     .order("tipo_requisito")
+    .order("id")
     .limit(500);
   if (error) falha("Requisitos do cargo", error.message);
   return (data ?? []) as unknown as RequisitoCargo[];
@@ -247,4 +276,88 @@ export async function listarNecessidades(pagina: number, status: StatusNecessida
   const { data, error, count } = await q;
   if (error) falha("LNT", error.message);
   return { itens: (data ?? []) as Necessidade[], total: count ?? 0 };
+}
+
+// ── Opções para formulários (carregadas só ao abrir o formulário) ───────
+export interface OpcaoListaMestra {
+  codigo: string;
+  titulo: string;
+  periodicidade_meses: number | null;
+}
+
+export async function opcoesListaMestra(): Promise<OpcaoListaMestra[]> {
+  const { data, error } = await supabase
+    .from("peopleflow_dev_lista_mestra")
+    .select("codigo, titulo, periodicidade_meses")
+    .eq("situacao", "vigente")
+    .order("codigo")
+    .limit(2000);
+  if (error) falha("Lista Mestra", error.message);
+  return (data ?? []) as OpcaoListaMestra[];
+}
+
+export interface OpcaoHabilidade {
+  id: number;
+  nome: string;
+  categoria: string | null;
+}
+
+export async function opcoesHabilidades(): Promise<OpcaoHabilidade[]> {
+  const { data, error } = await supabase.from("peopleflow_dev_habilidades").select("id, nome, categoria").eq("ativo", true).order("nome").limit(2000);
+  if (error) falha("Habilidades", error.message);
+  return (data ?? []) as OpcaoHabilidade[];
+}
+
+export async function categoriasHabilidades(): Promise<string[]> {
+  const { data, error } = await supabase.from("peopleflow_dev_habilidades").select("categoria").not("categoria", "is", null).limit(2000);
+  if (error) falha("Habilidades", error.message);
+  return [...new Set((data ?? []).map((r) => r.categoria as string))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+export interface RevisaoListaMestra {
+  id: number;
+  revisao: string;
+  data_revisao: string | null;
+  observacao: string;
+  registrado_em: string;
+}
+
+export async function revisoesListaMestra(codigo: string): Promise<RevisaoListaMestra[]> {
+  const { data, error } = await supabase
+    .from("peopleflow_dev_lista_mestra_revisoes")
+    .select("id, revisao, data_revisao, observacao, registrado_em")
+    .eq("codigo", codigo)
+    .order("registrado_em", { ascending: false })
+    .limit(200);
+  if (error) falha("Histórico de revisões", error.message);
+  return (data ?? []) as RevisaoListaMestra[];
+}
+
+/** Relê um requisito com os nomes vinculados (habilidade/documento) depois de gravar. */
+export async function obterRequisito(id: number): Promise<RequisitoCargo | null> {
+  const { data, error } = await supabase.from("peopleflow_dev_cargo_requisitos").select(COLUNAS_REQUISITO).eq("id", id).maybeSingle();
+  if (error) falha("Requisito", error.message);
+  return (data as unknown as RequisitoCargo | null) ?? null;
+}
+
+// ── Gravações: sempre pelo servidor (api/desenvolvimento.ts) ────────────
+export type AcaoGravacao =
+  | "lista_mestra_salvar"
+  | "lista_mestra_revisao"
+  | "lista_mestra_situacao"
+  | "habilidade_salvar"
+  | "habilidade_ativo"
+  | "requisito_salvar"
+  | "requisito_status"
+  | "requisito_sugerir";
+
+export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify(corpo),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string; dados?: T };
+  if (!res.ok) throw new Error(body.error ?? `Falha ao salvar (${res.status}).`);
+  return body.dados as T;
 }

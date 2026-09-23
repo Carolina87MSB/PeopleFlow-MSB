@@ -17,6 +17,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "./_lib/adminAuth.js";
+import { ehAcaoDeGravacao, executarAcao } from "./_lib/desenvolvimentoAcoes.js";
 import { buildAccess, descendants } from "../src/domain/hierarquia.js";
 import { tempoDeEmpresa } from "../src/domain/dates.js";
 import type { Colaborador } from "../src/types/domain.js";
@@ -203,6 +204,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const acao = typeof req.query.acao === "string" ? req.query.acao : "";
     if (acao === "sessao" && req.method === "POST") {
       await sessao(req, res);
+      return;
+    }
+    if (ehAcaoDeGravacao(acao) && req.method === "POST") {
+      await executarAcao(acao, req, res);
       return;
     }
     res.status(404).json({ error: "Ação não encontrada." });

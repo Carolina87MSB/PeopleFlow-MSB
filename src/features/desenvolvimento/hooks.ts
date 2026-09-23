@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Pagina } from "./devRepository";
 
+interface EstadoConsulta<T> {
+  dados: T | null;
+  erro: string | null;
+  carregando: boolean;
+}
+
 /** Carrega uma consulta assíncrona, refazendo quando `deps` mudam. Sem cache
- * global: cada tela busca só o que exibe, quando é aberta. */
-export function useConsulta<T>(fn: () => Promise<T>, deps: unknown[]): { dados: T | null; erro: string | null; carregando: boolean } {
-  const [estado, setEstado] = useState<{ dados: T | null; erro: string | null; carregando: boolean }>({ dados: null, erro: null, carregando: true });
+ * global: cada tela busca só o que exibe, quando é aberta. `mutar` aplica uma
+ * alteração local (ex.: item recém-salvo) sem nova ida ao banco. */
+export function useConsulta<T>(fn: () => Promise<T>, deps: unknown[]) {
+  const [estado, setEstado] = useState<EstadoConsulta<T>>({ dados: null, erro: null, carregando: true });
+  const [versao, setVersao] = useState(0);
   useEffect(() => {
     let vivo = true;
     setEstado((s) => ({ ...s, carregando: true, erro: null }));
@@ -15,8 +23,10 @@ export function useConsulta<T>(fn: () => Promise<T>, deps: unknown[]): { dados: 
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-  return estado;
+  }, [...deps, versao]);
+  const recarregar = useCallback(() => setVersao((v) => v + 1), []);
+  const mutar = useCallback((f: (dados: T) => T) => setEstado((s) => (s.dados ? { ...s, dados: f(s.dados) } : s)), []);
+  return { ...estado, recarregar, mutar };
 }
 
 export function usePaginado<T>(fn: (pagina: number) => Promise<Pagina<T>>, deps: unknown[]) {
@@ -25,5 +35,11 @@ export function usePaginado<T>(fn: (pagina: number) => Promise<Pagina<T>>, deps:
   const [estado, setEstado] = useState({ chave, pagina: 0 });
   const pagina = estado.chave === chave ? estado.pagina : 0;
   const consulta = useConsulta(() => fn(pagina), [pagina, chave]);
-  return { ...consulta, pagina, setPagina: (p: number) => setEstado({ chave, pagina: p }) };
+  const { mutar } = consulta;
+  /** Substitui um item da página atual (atualização localizada após gravação). */
+  const atualizarItem = useCallback(
+    (igual: (item: T) => boolean, novo: T) => mutar((d) => ({ ...d, itens: d.itens.map((i) => (igual(i) ? novo : i)) })),
+    [mutar],
+  );
+  return { ...consulta, pagina, setPagina: (p: number) => setEstado({ chave, pagina: p }), atualizarItem };
 }

@@ -1,13 +1,13 @@
-import { useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
-import { BookOpen, CalendarDays, CheckCircle2 } from "lucide-react";
+import { CalendarDays, CheckCircle2 } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { Card, tableStyles } from "../../components/ui";
-import { listarListaMestra, listarTreinamentos, type StatusTreinamento } from "./devRepository";
+import { listarTreinamentos, type StatusTreinamento } from "./devRepository";
 import { useDesenvolvimento } from "./contexto";
 import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, type AbaDef } from "./componentes";
 import { usePaginado } from "./hooks";
-import { formatarCarga, formatarData, formatarPeriodicidade, STATUS_TREINAMENTO } from "./rotulos";
+import { formatarCarga, formatarData, STATUS_TREINAMENTO } from "./rotulos";
+import { ListaMestraAba } from "./ListaMestraAba";
 import styles from "./Desenvolvimento.module.css";
 
 type AbaTreinamentos = "agenda" | "concluidos" | "lista-mestra";
@@ -111,74 +111,6 @@ function ListaTreinamentos(props: {
                     <td className={styles.mono}>{formatarCarga(t.carga_horaria_min)}</td>
                     <td>
                       <Selo tom={STATUS_TREINAMENTO[t.status].tom}>{STATUS_TREINAMENTO[t.status].rotulo}</Selo>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Paginacao pagina={pagina} total={dados.total} onChange={setPagina} />
-        </>
-      )}
-    </Card>
-  );
-}
-
-function ListaMestraAba() {
-  const [busca, setBusca] = useState("");
-  const [termo, setTermo] = useState("");
-  const { dados, erro, carregando, pagina, setPagina } = usePaginado((p) => listarListaMestra(p, termo), [termo]);
-  return (
-    <Card>
-      <div className={styles.cardHeader}>
-        <div>
-          <h3 className={styles.cardTitle}>Lista Mestra</h3>
-          <p className={styles.cardSubtitle}>Documentos e POPs controlados, com revisão vigente e periodicidade</p>
-        </div>
-        <form
-          className={styles.filtros}
-          onSubmit={(e) => {
-            e.preventDefault();
-            setTermo(busca);
-          }}
-        >
-          <input className={styles.input} type="search" placeholder="Buscar por código ou título" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
-        </form>
-      </div>
-      {erro ? (
-        <Erro mensagem={erro} />
-      ) : carregando || !dados ? (
-        <Carregando />
-      ) : dados.itens.length === 0 ? (
-        <EstadoVazio
-          icone={<BookOpen size={26} strokeWidth={1.6} />}
-          titulo={termo ? "Nenhum documento encontrado." : "Nenhum documento cadastrado na Lista Mestra."}
-          descricao={termo ? undefined : "A importação será feita após a conferência com a Lista Mestra oficial do SGQ."}
-        />
-      ) : (
-        <>
-          <div className={tableStyles.wrap}>
-            <table className={tableStyles.table}>
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Título</th>
-                  <th>Revisão</th>
-                  <th>Data da revisão</th>
-                  <th>Periodicidade</th>
-                  <th>Situação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dados.itens.map((d) => (
-                  <tr key={d.codigo}>
-                    <td className={styles.mono}>{d.codigo}</td>
-                    <td>{d.titulo}</td>
-                    <td className={styles.mono}>{d.revisao_atual}</td>
-                    <td className={styles.mono}>{formatarData(d.data_revisao)}</td>
-                    <td className={styles.secundario}>{formatarPeriodicidade(d.periodicidade_meses)}</td>
-                    <td>
-                      <Selo tom={d.situacao === "vigente" ? "success" : "neutral"}>{d.situacao === "vigente" ? "Vigente" : "Obsoleto"}</Selo>
                     </td>
                   </tr>
                 ))}

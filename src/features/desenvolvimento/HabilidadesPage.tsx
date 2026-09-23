@@ -1,15 +1,12 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
-import { Award, Briefcase, ClipboardCheck, UserRound } from "lucide-react";
+import { Award, ClipboardCheck, UserRound } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { Card, FilterChips, tableStyles } from "../../components/ui";
-import { usePortalStore } from "../../store/PortalStoreContext";
 import {
   conformidadeDoColaborador,
   historicoDoColaborador,
   listarGaps,
-  listarHabilidades,
-  listarRequisitosDoCargo,
   titulosListaMestra,
   type LinhaConformidade,
   type Situacao,
@@ -17,7 +14,9 @@ import {
 import { useDesenvolvimento } from "./contexto";
 import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, type AbaDef } from "./componentes";
 import { useConsulta, usePaginado } from "./hooks";
-import { formatarCarga, formatarData, formatarPeriodicidade, SITUACAO } from "./rotulos";
+import { formatarCarga, formatarData, SITUACAO } from "./rotulos";
+import { RequisitosCargoAba } from "./RequisitosCargoAba";
+import { CatalogoHabilidadesAba } from "./CatalogoHabilidadesAba";
 import styles from "./Desenvolvimento.module.css";
 
 type AbaHabilidades = "gaps" | "cargo" | "colaborador" | "catalogo";
@@ -39,9 +38,9 @@ export default function HabilidadesPage() {
       <Header />
       <Abas base="/desenvolvimento/habilidades" abas={abas} atual={atual} />
       {atual === "gaps" && <GapsAba />}
-      {atual === "cargo" && <PorCargoAba />}
+      {atual === "cargo" && <RequisitosCargoAba />}
       {atual === "colaborador" && <PorColaboradorAba />}
-      {atual === "catalogo" && <CatalogoAba />}
+      {atual === "catalogo" && <CatalogoHabilidadesAba />}
     </>
   );
 }
@@ -127,88 +126,6 @@ function GapsAba() {
           </div>
           <Paginacao pagina={pagina} total={dados.total} onChange={setPagina} />
         </>
-      )}
-    </Card>
-  );
-}
-
-function PorCargoAba() {
-  const { perfil, pessoas } = useDesenvolvimento();
-  const { state } = usePortalStore();
-  // Fonte oficial de cargo: Descrição de Cargo (não obsoleta). Gestor vê só
-  // os cargos ocupados pela própria equipe.
-  const cargos = useMemo(() => {
-    const cargosEquipe = new Set(pessoas.map((p) => p.cargo));
-    return state.descricoesCargo
-      .filter((d) => !d.obsoleto && (perfil === "RH" || cargosEquipe.has(d.cargoNome)))
-      .map((d) => d.cargoNome)
-      .sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [state.descricoesCargo, pessoas, perfil]);
-  const [cargo, setCargo] = useState("");
-  const selecionado = cargos.includes(cargo) ? cargo : "";
-  const { dados, erro, carregando } = useConsulta(() => (selecionado ? listarRequisitosDoCargo(selecionado) : Promise.resolve([])), [selecionado]);
-
-  return (
-    <Card>
-      <div className={styles.cardHeader}>
-        <div>
-          <h3 className={styles.cardTitle}>Requisitos por cargo</h3>
-          <p className={styles.cardSubtitle}>Habilidades e treinamentos obrigatórios exigidos pelo cargo</p>
-        </div>
-        <div className={styles.filtros}>
-          <select className={styles.select} value={selecionado} onChange={(e) => setCargo(e.target.value)} aria-label="Cargo">
-            <option value="">Selecione um cargo</option>
-            {cargos.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      {!selecionado ? (
-        <EstadoVazio
-          icone={<Briefcase size={26} strokeWidth={1.6} />}
-          titulo={cargos.length ? "Selecione um cargo para ver os requisitos." : "Nenhum cargo com Descrição de Cargo disponível."}
-        />
-      ) : erro ? (
-        <Erro mensagem={erro} />
-      ) : carregando || !dados ? (
-        <Carregando />
-      ) : dados.length === 0 ? (
-        <EstadoVazio icone={<Briefcase size={26} strokeWidth={1.6} />} titulo="Nenhum requisito cadastrado para este cargo." />
-      ) : (
-        <div className={tableStyles.wrap}>
-          <table className={tableStyles.table}>
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Requisito</th>
-                <th>Obrigatório</th>
-                <th>Periodicidade</th>
-                <th>Situação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dados.map((r) => (
-                <tr key={r.id}>
-                  <td className={styles.secundario}>{r.tipo_requisito === "habilidade" ? "Habilidade" : "Treinamento"}</td>
-                  <td>
-                    {r.tipo_requisito === "habilidade" ? r.habilidade?.nome : r.lista_mestra_codigo}
-                    {r.lista_mestra?.titulo && <span className={styles.secundario}> · {r.lista_mestra.titulo}</span>}
-                  </td>
-                  <td>{r.obrigatorio ? "Sim" : "Não"}</td>
-                  <td className={styles.secundario}>
-                    {r.tipo_requisito === "treinamento" ? formatarPeriodicidade(r.periodicidade_meses ?? r.lista_mestra?.periodicidade_meses) : "—"}
-                  </td>
-                  <td>
-                    <Selo tom={r.status === "vigente" ? "success" : "neutral"}>{r.status === "vigente" ? "Vigente" : "Sugerido"}</Selo>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
     </Card>
   );
@@ -334,59 +251,5 @@ function PorColaboradorAba() {
         </div>
       )}
     </div>
-  );
-}
-
-const ROTULO_NORMA: Record<string, string> = { iso_13485: "ISO 13485", rdc_665: "RDC 665", ambas: "ISO 13485 e RDC 665", nao_aplicavel: "—" };
-
-function CatalogoAba() {
-  const { dados, erro, carregando, pagina, setPagina } = usePaginado((p) => listarHabilidades(p), []);
-  return (
-    <Card>
-      <div className={styles.cardHeader}>
-        <div>
-          <h3 className={styles.cardTitle}>Catálogo de habilidades</h3>
-          <p className={styles.cardSubtitle}>Habilidades técnicas e regulatórias usadas nos requisitos dos cargos</p>
-        </div>
-      </div>
-      {erro ? (
-        <Erro mensagem={erro} />
-      ) : carregando || !dados ? (
-        <Carregando />
-      ) : dados.itens.length === 0 ? (
-        <EstadoVazio icone={<Award size={26} strokeWidth={1.6} />} titulo="Nenhuma habilidade cadastrada." />
-      ) : (
-        <>
-          <div className={tableStyles.wrap}>
-            <table className={tableStyles.table}>
-              <thead>
-                <tr>
-                  <th>Habilidade</th>
-                  <th>Tipo</th>
-                  <th>Norma</th>
-                  <th>Situação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dados.itens.map((h) => (
-                  <tr key={h.id}>
-                    <td>
-                      {h.nome}
-                      {h.descricao && <div className={styles.secundario}>{h.descricao}</div>}
-                    </td>
-                    <td className={styles.secundario}>{h.tipo === "tecnica" ? "Técnica" : "Regulatória"}</td>
-                    <td className={styles.secundario}>{h.norma ? ROTULO_NORMA[h.norma] : "—"}</td>
-                    <td>
-                      <Selo tom={h.ativo ? "success" : "neutral"}>{h.ativo ? "Ativa" : "Inativa"}</Selo>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Paginacao pagina={pagina} total={dados.total} onChange={setPagina} />
-        </>
-      )}
-    </Card>
   );
 }

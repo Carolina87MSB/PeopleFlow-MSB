@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react";
+import { Button } from "../../components/ui";
 import { TAMANHO_PAGINA } from "./devRepository";
 import type { Tom } from "./rotulos";
 import styles from "./Desenvolvimento.module.css";
@@ -73,6 +74,69 @@ export function Paginacao({ pagina, total, onChange }: { pagina: number; total: 
       <button type="button" aria-label="Próxima página" disabled={ate >= total} onClick={() => onChange(pagina + 1)}>
         <ChevronRight size={15} />
       </button>
+    </div>
+  );
+}
+
+export function CabecalhoDrawer({ eyebrow, titulo, sub }: { eyebrow: string; titulo: string; sub?: ReactNode }) {
+  return (
+    <div>
+      <div className={styles.drawerEyebrow}>{eyebrow}</div>
+      <h2 className={styles.drawerTitle}>{titulo}</h2>
+      {sub && <div className={styles.drawerSub}>{sub}</div>}
+    </div>
+  );
+}
+
+/** Botão que abre um campo de motivo antes de confirmar (inativação, rejeição, reativação). */
+export function ConfirmarComMotivo(props: {
+  rotulo: string;
+  confirmar: string;
+  variante: "danger" | "success" | "secondary";
+  motivoObrigatorio: boolean;
+  desabilitado?: boolean;
+  onConfirmar: (motivo: string) => Promise<void>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  if (!aberto) {
+    return (
+      <Button type="button" variant={props.variante} disabled={props.desabilitado} onClick={() => setAberto(true)}>
+        {props.rotulo}
+      </Button>
+    );
+  }
+  return (
+    <div className={styles.secao} style={{ borderBottom: 0, paddingBottom: 0, marginBottom: 0, width: "100%" }}>
+      <label className={styles.campo}>
+        Motivo{props.motivoObrigatorio ? " *" : " (opcional)"}
+        <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={1000} autoFocus />
+      </label>
+      <div className={styles.acoes}>
+        <Button type="button" variant="ghost" onClick={() => setAberto(false)} disabled={enviando}>
+          Cancelar
+        </Button>
+        <Button
+          type="button"
+          variant={props.variante}
+          disabled={enviando || (props.motivoObrigatorio && !motivo.trim())}
+          onClick={async () => {
+            setEnviando(true);
+            try {
+              await props.onConfirmar(motivo.trim());
+              setAberto(false);
+              setMotivo("");
+            } catch {
+              // o erro já é exibido por quem chamou; mantém o campo aberto para nova tentativa
+            } finally {
+              setEnviando(false);
+            }
+          }}
+        >
+          {enviando ? "Salvando..." : props.confirmar}
+        </Button>
+      </div>
     </div>
   );
 }
