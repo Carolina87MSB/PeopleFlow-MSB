@@ -1,4 +1,4 @@
-import type { OrigemNecessidade, Situacao, StatusNecessidade, StatusTreinamento } from "./devRepository";
+import type { CategoriaNecessidade, OrigemNecessidade, Prioridade, Situacao, StatusNecessidade, StatusTreinamento } from "./devRepository";
 
 export type Tom = "success" | "warning" | "danger" | "neutral" | "info";
 
@@ -10,13 +10,32 @@ export const ROTULO_ORIGEM: Record<OrigemNecessidade, string> = {
   gestor: "Gestor",
   pdi: "PDI",
   rh: "RH",
+  operacional: "Operacional",
 };
 
 export const STATUS_NECESSIDADE: Record<StatusNecessidade, { rotulo: string; tom: Tom }> = {
-  aberta: { rotulo: "Aberta", tom: "warning" },
+  sugerida: { rotulo: "Sugerida", tom: "warning" },
+  validada: { rotulo: "Validada", tom: "info" },
   planejada: { rotulo: "Planejada", tom: "info" },
   atendida: { rotulo: "Atendida", tom: "success" },
   cancelada: { rotulo: "Cancelada", tom: "neutral" },
+};
+
+export const CATEGORIA_NECESSIDADE: Record<CategoriaNecessidade, string> = {
+  tecnica: "Técnica",
+  qualidade_regulatorio: "Qualidade / Regulatório",
+  seguranca: "Segurança do trabalho",
+  sistemas_ferramentas: "Sistemas e ferramentas",
+  comportamental: "Comportamental",
+  lideranca: "Liderança",
+  integracao: "Integração",
+  outra: "Outra",
+};
+
+export const PRIORIDADE: Record<Prioridade, { rotulo: string; tom: Tom }> = {
+  alta: { rotulo: "Alta", tom: "danger" },
+  media: { rotulo: "Média", tom: "warning" },
+  baixa: { rotulo: "Baixa", tom: "neutral" },
 };
 
 export const STATUS_TREINAMENTO: Record<StatusTreinamento, { rotulo: string; tom: Tom }> = {

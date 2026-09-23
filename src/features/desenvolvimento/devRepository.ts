@@ -250,8 +250,10 @@ export async function listarTreinamentos(pagina: number, status: StatusTreinamen
 }
 
 // ── LNT ─────────────────────────────────────────────────────────────────
-export type OrigemNecessidade = "habilidade" | "treinamento_obrigatorio" | "revisao_pop" | "integracao" | "gestor" | "pdi" | "rh";
-export type StatusNecessidade = "aberta" | "planejada" | "atendida" | "cancelada";
+export type OrigemNecessidade = "habilidade" | "treinamento_obrigatorio" | "revisao_pop" | "integracao" | "gestor" | "pdi" | "rh" | "operacional";
+export type StatusNecessidade = "sugerida" | "validada" | "planejada" | "atendida" | "cancelada";
+export type CategoriaNecessidade = "tecnica" | "qualidade_regulatorio" | "seguranca" | "sistemas_ferramentas" | "comportamental" | "lideranca" | "integracao" | "outra";
+export type Prioridade = "alta" | "media" | "baixa";
 
 export interface Necessidade {
   id: number;
@@ -259,23 +261,114 @@ export interface Necessidade {
   cargo_nome: string | null;
   origem: OrigemNecessidade;
   descricao: string;
-  prioridade: "alta" | "media" | "baixa" | null;
-  prazo: string | null;
+  justificativa: string;
+  categoria: CategoriaNecessidade | null;
+  prioridade: Prioridade | null;
+  sugestao_capacitacao: string;
+  observacao: string;
   status: StatusNecessidade;
+  status_motivo: string | null;
+  gestor_colaborador_id: number | null;
+  departamento: string | null;
+  requisito_id: number | null;
+  pdi_id: number | null;
+  pdi_item_id: string | null;
+  pdi_acao_id: string | null;
+  pdi_item_nome: string | null;
+  grupo_id: number | null;
+  solicitado_por_colaborador_id: number | null;
+  validada_em: string | null;
   created_at: string;
+  updated_at: string;
 }
 
-export async function listarNecessidades(pagina: number, status: StatusNecessidade[], origem: OrigemNecessidade | null): Promise<Pagina<Necessidade>> {
+export const COLUNAS_NECESSIDADE =
+  "id, colaborador_id, cargo_nome, origem, descricao, justificativa, categoria, prioridade, sugestao_capacitacao, observacao, status, status_motivo, gestor_colaborador_id, departamento, requisito_id, pdi_id, pdi_item_id, pdi_acao_id, pdi_item_nome, grupo_id, solicitado_por_colaborador_id, validada_em, created_at, updated_at";
+
+export interface FiltroNecessidades {
+  status: StatusNecessidade[];
+  busca: string;
+  origem: OrigemNecessidade | null;
+  categoria: CategoriaNecessidade | null;
+  prioridade: Prioridade | null;
+  colaboradorId: number | null;
+  gestorId: number | null;
+  departamento: string | null;
+  grupoId: number | null;
+}
+
+/** O RLS decide o escopo: RH vê tudo; Gestor, a própria equipe e o que registrou. */
+export async function listarNecessidades(pagina: number, f: FiltroNecessidades): Promise<Pagina<Necessidade>> {
   let q = supabase
     .from("peopleflow_dev_necessidades")
-    .select("id, colaborador_id, cargo_nome, origem, descricao, prioridade, prazo, status, created_at", { count: "exact" })
-    .in("status", status)
+    .select(COLUNAS_NECESSIDADE, { count: "exact" })
+    .in("status", f.status)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .range(...faixa(pagina));
-  if (origem) q = q.eq("origem", origem);
+  const termo = f.busca.trim().replace(/[%,()]/g, " ");
+  if (termo) q = q.or(`descricao.ilike.%${termo}%,sugestao_capacitacao.ilike.%${termo}%,justificativa.ilike.%${termo}%`);
+  if (f.origem) q = q.eq("origem", f.origem);
+  if (f.categoria) q = q.eq("categoria", f.categoria);
+  if (f.prioridade) q = q.eq("prioridade", f.prioridade);
+  if (f.colaboradorId) q = q.eq("colaborador_id", f.colaboradorId);
+  if (f.gestorId) q = q.eq("gestor_colaborador_id", f.gestorId);
+  if (f.departamento) q = q.eq("departamento", f.departamento);
+  if (f.grupoId) q = q.eq("grupo_id", f.grupoId);
   const { data, error, count } = await q;
-  if (error) falha("LNT", error.message);
+  if (error) falha("Necessidades", error.message);
   return { itens: (data ?? []) as Necessidade[], total: count ?? 0 };
+}
+
+export async function obterNecessidade(id: number): Promise<Necessidade | null> {
+  const { data, error } = await supabase.from("peopleflow_dev_necessidades").select(COLUNAS_NECESSIDADE).eq("id", id).maybeSingle();
+  if (error) falha("Necessidade", error.message);
+  return (data as Necessidade | null) ?? null;
+}
+
+export interface GrupoNecessidades {
+  id: number;
+  titulo: string;
+  categoria: CategoriaNecessidade | null;
+}
+
+/** Somente RH (RLS). */
+export async function listarGrupos(): Promise<GrupoNecessidades[]> {
+  const { data, error } = await supabase.from("peopleflow_dev_necessidade_grupos").select("id, titulo, categoria").eq("ativo", true).order("titulo").limit(1000);
+  if (error) falha("Grupos", error.message);
+  return (data ?? []) as GrupoNecessidades[];
+}
+
+/** Ações do PDI que já viraram necessidade ou foram dispensadas (para não sugerir de novo). Somente RH. */
+export async function acoesPdiJaTratadas(): Promise<Set<string>> {
+  const [nec, disp] = await Promise.all([
+    supabase.from("peopleflow_dev_necessidades").select("pdi_acao_id").not("pdi_acao_id", "is", null).limit(5000),
+    supabase.from("peopleflow_dev_pdi_sugestoes_dispensadas").select("pdi_acao_id").limit(5000),
+  ]);
+  if (nec.error) falha("Necessidades", nec.error.message);
+  if (disp.error) falha("Sugestões dispensadas", disp.error.message);
+  return new Set([...(nec.data ?? []), ...(disp.data ?? [])].map((r) => r.pdi_acao_id as string));
+}
+
+export interface OpcaoRequisito {
+  id: number;
+  tipo_requisito: "habilidade" | "treinamento";
+  descricao: string;
+}
+
+/** Requisitos VIGENTES do cargo — única fonte permitida para necessidade de origem "requisito". */
+export async function requisitosVigentesDoCargo(cargoNome: string): Promise<OpcaoRequisito[]> {
+  const { data, error } = await supabase
+    .from("peopleflow_dev_cargo_requisitos")
+    .select("id, tipo_requisito, lista_mestra_codigo, habilidade:peopleflow_dev_habilidades(nome), lista_mestra:peopleflow_dev_lista_mestra(titulo)")
+    .eq("cargo_nome", cargoNome)
+    .eq("status", "vigente")
+    .order("id")
+    .limit(500);
+  if (error) falha("Requisitos", error.message);
+  return ((data ?? []) as unknown as { id: number; tipo_requisito: "habilidade" | "treinamento"; lista_mestra_codigo: string | null; habilidade: { nome: string } | null; lista_mestra: { titulo: string } | null }[]).map(
+    (r) => ({ id: r.id, tipo_requisito: r.tipo_requisito, descricao: r.habilidade?.nome ?? `${r.lista_mestra_codigo} — ${r.lista_mestra?.titulo ?? ""}` }),
+  );
 }
 
 // ── Opções para formulários (carregadas só ao abrir o formulário) ───────
@@ -349,7 +442,14 @@ export type AcaoGravacao =
   | "habilidade_ativo"
   | "requisito_salvar"
   | "requisito_status"
-  | "requisito_sugerir";
+  | "requisito_sugerir"
+  | "necessidade_registrar"
+  | "necessidade_editar"
+  | "necessidade_status"
+  | "necessidade_consolidar"
+  | "necessidade_desagrupar"
+  | "pdi_sugestao_aceitar"
+  | "pdi_sugestao_dispensar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {

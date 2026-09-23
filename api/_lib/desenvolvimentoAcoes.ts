@@ -466,6 +466,286 @@ async function requisitoSugerir(conta: ContaDev, corpo: Corpo) {
   return data;
 }
 
+// ── Base de Necessidades (Fase 4) ───────────────────────────────────────
+const CATEGORIAS_NEC = ["tecnica", "qualidade_regulatorio", "seguranca", "sistemas_ferramentas", "comportamental", "lideranca", "integracao", "outra"] as const;
+const PRIORIDADES = ["alta", "media", "baixa"] as const;
+const COLS_NEC =
+  "id, colaborador_id, cargo_nome, origem, descricao, justificativa, categoria, prioridade, sugestao_capacitacao, observacao, status, status_motivo, gestor_colaborador_id, departamento, requisito_id, pdi_id, pdi_item_id, pdi_acao_id, pdi_item_nome, grupo_id, solicitado_por_colaborador_id, validada_em, created_at, updated_at";
+
+/** Colaborador ativo + fotografia de departamento e gestor (id) na data do registro. */
+async function lerColaboradorParaNecessidade(colaboradorId: number) {
+  const { data: c, error } = await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento, gestor, desligado").eq("id", colaboradorId).maybeSingle();
+  if (error) erroBanco(error, "Colaborador");
+  if (!c || c.desligado) throw new ErroHttp(422, "Colaborador não encontrado ou desligado.");
+  let gestorId: number | null = null;
+  if (c.gestor) {
+    const { data: g, error: gErro } = await supabaseAdmin.from("colaboradores").select("id").eq("nome", c.gestor).eq("desligado", false);
+    if (gErro) erroBanco(gErro, "Gestor");
+    if (g && g.length === 1) gestorId = g[0].id as number;
+  }
+  return { id: c.id as number, cargo: c.cargo as string, departamento: (c.departamento as string) || null, gestorId };
+}
+
+async function exigirColaboradorNaEquipe(conta: ContaDev, colaboradorId: number) {
+  if (conta.perfil === "RH") return;
+  if (colaboradorId === conta.colaboradorId) throw new ErroHttp(422, "Registre necessidades para os seus liderados.");
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_escopo")
+    .select("colaborador_id")
+    .eq("gestor_colaborador_id", conta.colaboradorId)
+    .eq("colaborador_id", colaboradorId)
+    .maybeSingle();
+  if (error) erroBanco(error, "Escopo");
+  if (!data) throw new ErroHttp(403, "Colaborador fora da sua equipe.");
+}
+
+function lerCamposNecessidade(corpo: Corpo) {
+  return {
+    descricao: texto(corpo, "descricao", { obrigatorio: true, max: 500, rotulo: "a necessidade" }),
+    categoria: umDe(texto(corpo, "categoria"), CATEGORIAS_NEC, "Categoria"),
+    prioridade: umDe(texto(corpo, "prioridade") || "media", PRIORIDADES, "Prioridade"),
+    sugestao_capacitacao: texto(corpo, "sugestao_capacitacao", { max: 500 }),
+    observacao: texto(corpo, "observacao", { max: 2000 }),
+  };
+}
+
+async function necessidadeRegistrar(conta: ContaDev, corpo: Corpo) {
+  const colaboradorId = idObrigatorio(corpo, "colaborador_id", "Colaborador");
+  await exigirColaboradorNaEquipe(conta, colaboradorId);
+  const colab = await lerColaboradorParaNecessidade(colaboradorId);
+  const campos = lerCamposNecessidade(corpo);
+  const justificativa = texto(corpo, "justificativa", { obrigatorio: true, max: 2000, rotulo: "a justificativa" });
+  const agora = new Date().toISOString();
+
+  let origem: string = "gestor";
+  let vinculoRequisito: Record<string, unknown> = {};
+  if (conta.perfil === "RH") {
+    origem = umDe(texto(corpo, "origem") || "rh", ["rh", "operacional"] as const, "Origem");
+    const requisitoId = corpo.requisito_id ? idObrigatorio(corpo, "requisito_id", "Requisito") : null;
+    if (requisitoId) {
+      // Preparação da integração com requisitos: só requisito VIGENTE do cargo do colaborador.
+      const { data: req, error } = await supabaseAdmin
+        .from("peopleflow_dev_cargo_requisitos")
+        .select("id, cargo_nome, status, tipo_requisito, habilidade_id, lista_mestra_codigo")
+        .eq("id", requisitoId)
+        .maybeSingle();
+      if (error) erroBanco(error, "Requisito");
+      if (!req || req.status !== "vigente") throw new ErroHttp(422, "Somente requisito VIGENTE pode originar necessidade.");
+      if (req.cargo_nome !== colab.cargo) throw new ErroHttp(422, "O requisito não é do cargo atual do colaborador.");
+      origem = req.tipo_requisito === "habilidade" ? "habilidade" : "treinamento_obrigatorio";
+      vinculoRequisito = { requisito_id: req.id, habilidade_id: req.habilidade_id, lista_mestra_codigo: req.lista_mestra_codigo };
+    }
+  }
+  const status = conta.perfil === "RH" ? "validada" : "sugerida";
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_necessidades")
+    .insert({
+      ...campos,
+      ...vinculoRequisito,
+      justificativa,
+      colaborador_id: colab.id,
+      departamento: colab.departamento,
+      gestor_colaborador_id: colab.gestorId,
+      origem,
+      status,
+      validada_em: status === "validada" ? agora : null,
+      validada_por: status === "validada" ? conta.userId : null,
+      solicitado_por_colaborador_id: conta.colaboradorId,
+      origem_registro: "sistema",
+      created_by: conta.userId,
+      updated_by: conta.userId,
+    })
+    .select(COLS_NEC)
+    .single();
+  if (error) erroBanco(error, "Necessidade");
+  await auditar(conta, "necessidade_registrada", "peopleflow_dev_necessidades", String(data.id), { depois: data });
+  return data;
+}
+
+async function lerNecessidade(id: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").select(COLS_NEC).eq("id", id).maybeSingle();
+  if (error) erroBanco(error, "Necessidade");
+  if (!data) throw new ErroHttp(404, "Necessidade não encontrada.");
+  return data;
+}
+
+async function necessidadeEditar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const id = idObrigatorio(corpo, "id", "Necessidade");
+  const antes = await lerNecessidade(id);
+  if (antes.status === "cancelada") throw new ErroHttp(422, "Reabra a necessidade antes de editar.");
+  const campos = lerCamposNecessidade(corpo);
+  const mudou = diferencas(antes, campos);
+  if (Object.keys(mudou).length === 0) return antes;
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").update({ ...campos, updated_by: conta.userId }).eq("id", id).select(COLS_NEC).single();
+  if (error) erroBanco(error, "Necessidade");
+  await auditar(conta, "necessidade_editada", "peopleflow_dev_necessidades", String(id), { alteracoes: mudou });
+  return data;
+}
+
+async function necessidadeStatus(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const id = idObrigatorio(corpo, "id", "Necessidade");
+  const status = umDe(texto(corpo, "status"), ["validada", "cancelada", "sugerida"] as const, "Status");
+  const motivo = texto(corpo, "motivo", { obrigatorio: status === "cancelada", max: 1000, rotulo: "a justificativa" });
+  const antes = await lerNecessidade(id);
+  // PLANEJADA e ATENDIDA serão definidas pelo vínculo com treinamento (fase seguinte), não manualmente.
+  const permitidas: Record<string, string[]> = { sugerida: ["validada", "cancelada"], validada: ["cancelada"], cancelada: ["sugerida"] };
+  if (!(permitidas[antes.status] ?? []).includes(status)) throw new ErroHttp(422, `Não é possível passar de ${antes.status} para ${status}.`);
+  const agora = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_necessidades")
+    .update({
+      status,
+      status_motivo: motivo || null,
+      ...(status === "validada" ? { validada_em: agora, validada_por: conta.userId } : {}),
+      ...(status === "sugerida" ? { validada_em: null, validada_por: null } : {}),
+      updated_by: conta.userId,
+    })
+    .eq("id", id)
+    .select(COLS_NEC)
+    .single();
+  if (error) erroBanco(error, "Necessidade");
+  const acao = status === "validada" ? "necessidade_validada" : status === "cancelada" ? "necessidade_cancelada" : "necessidade_reaberta";
+  await auditar(conta, acao, "peopleflow_dev_necessidades", String(id), { status: { antes: antes.status, depois: status }, motivo });
+  return data;
+}
+
+async function necessidadeConsolidar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const ids = Array.isArray(corpo.ids) ? [...new Set(corpo.ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
+  if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos uma necessidade.");
+  if (ids.length > 500) throw new ErroHttp(422, "Selecione no máximo 500 necessidades por vez.");
+  let grupoId = corpo.grupo_id ? idObrigatorio(corpo, "grupo_id", "Grupo") : null;
+  if (grupoId) {
+    const { data: g, error } = await supabaseAdmin.from("peopleflow_dev_necessidade_grupos").select("id, ativo").eq("id", grupoId).maybeSingle();
+    if (error) erroBanco(error, "Grupo");
+    if (!g || !g.ativo) throw new ErroHttp(422, "Grupo não encontrado.");
+  } else {
+    const titulo = texto(corpo, "titulo", { obrigatorio: true, max: 200, rotulo: "o título do grupo" });
+    const categoria = texto(corpo, "categoria") || null;
+    if (categoria) umDe(categoria, CATEGORIAS_NEC, "Categoria");
+    const { data: g, error } = await supabaseAdmin
+      .from("peopleflow_dev_necessidade_grupos")
+      .insert({ titulo, categoria, descricao: texto(corpo, "descricao", { max: 2000 }), created_by: conta.userId, updated_by: conta.userId })
+      .select("id, titulo, categoria")
+      .single();
+    if (error) {
+      if (error.code === "23505") throw new ErroHttp(409, "Já existe um grupo com esse título — selecione-o na lista.");
+      erroBanco(error, "Grupo");
+    }
+    grupoId = g.id as number;
+    await auditar(conta, "grupo_necessidades_criado", "peopleflow_dev_necessidade_grupos", String(grupoId), { depois: g });
+  }
+  const { data: alvo, error: lerErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, status, grupo_id").in("id", ids);
+  if (lerErro) erroBanco(lerErro, "Necessidade");
+  const validos = (alvo ?? []).filter((n) => n.status !== "cancelada").map((n) => n.id as number);
+  if (validos.length === 0) throw new ErroHttp(422, "Nenhuma das necessidades selecionadas pode ser consolidada (canceladas não entram).");
+  const { error } = await supabaseAdmin.from("peopleflow_dev_necessidades").update({ grupo_id: grupoId, updated_by: conta.userId }).in("id", validos);
+  if (error) erroBanco(error, "Consolidação");
+  await auditar(conta, "necessidades_consolidadas", "peopleflow_dev_necessidade_grupos", String(grupoId), {
+    necessidades: validos,
+    grupos_anteriores: Object.fromEntries((alvo ?? []).filter((n) => validos.includes(n.id as number)).map((n) => [n.id, n.grupo_id])),
+  });
+  return { grupo_id: grupoId, consolidadas: validos.length, ignoradas: ids.length - validos.length };
+}
+
+async function necessidadeDesagrupar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const id = idObrigatorio(corpo, "id", "Necessidade");
+  const antes = await lerNecessidade(id);
+  if (!antes.grupo_id) throw new ErroHttp(422, "A necessidade não está consolidada.");
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").update({ grupo_id: null, updated_by: conta.userId }).eq("id", id).select(COLS_NEC).single();
+  if (error) erroBanco(error, "Necessidade");
+  await auditar(conta, "necessidade_desagrupada", "peopleflow_dev_necessidades", String(id), { grupo_anterior: antes.grupo_id });
+  return data;
+}
+
+// ── Integração com PDI: SOMENTE LEITURA do PDI ──────────────────────────
+/** Lê a ação do PDI, o item e o cabeçalho (o PDI é a fonte oficial; nada é gravado nele). */
+async function lerAcaoPdi(pdiAcaoId: string) {
+  const { data: acao, error } = await supabaseAdmin.from("peopleflow_pdi_acoes").select("id, item_id, descricao, status, prazo").eq("id", pdiAcaoId).maybeSingle();
+  if (error) erroBanco(error, "PDI");
+  if (!acao) throw new ErroHttp(404, "Ação do PDI não encontrada (pode ter sido removida do PDI).");
+  const { data: item, error: iErro } = await supabaseAdmin.from("peopleflow_pdi_itens").select("id, pdi_id, competencia_nome, tipo_competencia, objetivo_desenvolvimento").eq("id", acao.item_id).maybeSingle();
+  if (iErro) erroBanco(iErro, "PDI");
+  if (!item) throw new ErroHttp(404, "Item do PDI não encontrado.");
+  const { data: pdi, error: pErro } = await supabaseAdmin.from("peopleflow_pdi").select("id, colaborador_nome, ciclo").eq("id", item.pdi_id).maybeSingle();
+  if (pErro) erroBanco(pErro, "PDI");
+  if (!pdi) throw new ErroHttp(404, "PDI não encontrado.");
+  return { acao, item, pdi };
+}
+
+async function pdiSugestaoAceitar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const pdiAcaoId = texto(corpo, "pdi_acao_id", { obrigatorio: true, max: 100, rotulo: "a ação do PDI" });
+  const { acao, item, pdi } = await lerAcaoPdi(pdiAcaoId);
+  const { data: dispensada } = await supabaseAdmin.from("peopleflow_dev_pdi_sugestoes_dispensadas").select("pdi_acao_id").eq("pdi_acao_id", pdiAcaoId).maybeSingle();
+  if (dispensada) throw new ErroHttp(422, "Esta sugestão já foi dispensada.");
+  // O PDI identifica a pessoa por nome; aqui o vínculo passa a ser por id (homônimo → não vincula).
+  const { data: pessoas, error: pErro } = await supabaseAdmin.from("colaboradores").select("id").eq("nome", pdi.colaborador_nome).eq("desligado", false);
+  if (pErro) erroBanco(pErro, "Colaborador");
+  if (!pessoas || pessoas.length !== 1) throw new ErroHttp(409, "Não foi possível identificar o colaborador do PDI de forma única.");
+  const colab = await lerColaboradorParaNecessidade(pessoas[0].id as number);
+  const categoria = umDe(texto(corpo, "categoria"), CATEGORIAS_NEC, "Categoria");
+  const prioridade = umDe(texto(corpo, "prioridade") || "media", PRIORIDADES, "Prioridade");
+  const justificativa =
+    texto(corpo, "justificativa", { max: 2000 }) ||
+    `PDI ${pdi.ciclo} — ${item.tipo_competencia === "Tecnica" ? "KPI" : "competência"} "${item.competencia_nome}"${item.objetivo_desenvolvimento ? `: ${item.objetivo_desenvolvimento}` : ""}`;
+  const agora = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_necessidades")
+    .insert({
+      colaborador_id: colab.id,
+      departamento: colab.departamento,
+      gestor_colaborador_id: colab.gestorId,
+      origem: "pdi",
+      pdi_id: pdi.id,
+      pdi_item_id: item.id,
+      pdi_acao_id: acao.id,
+      pdi_item_nome: item.competencia_nome,
+      descricao: String(acao.descricao).slice(0, 500),
+      justificativa,
+      categoria,
+      prioridade,
+      sugestao_capacitacao: texto(corpo, "sugestao_capacitacao", { max: 500 }),
+      observacao: texto(corpo, "observacao", { max: 2000 }),
+      status: "validada",
+      validada_em: agora,
+      validada_por: conta.userId,
+      solicitado_por_colaborador_id: conta.colaboradorId,
+      origem_registro: "sistema",
+      created_by: conta.userId,
+      updated_by: conta.userId,
+    })
+    .select(COLS_NEC)
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new ErroHttp(409, "Esta ação do PDI já está na Base de Necessidades.");
+    erroBanco(error, "Necessidade");
+  }
+  await auditar(conta, "necessidade_do_pdi", "peopleflow_dev_necessidades", String(data.id), { pdi_id: pdi.id, pdi_item_id: item.id, pdi_acao_id: acao.id, depois: data });
+  return data;
+}
+
+async function pdiSugestaoDispensar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const pdiAcaoId = texto(corpo, "pdi_acao_id", { obrigatorio: true, max: 100, rotulo: "a ação do PDI" });
+  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
+  const { item } = await lerAcaoPdi(pdiAcaoId);
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_pdi_sugestoes_dispensadas")
+    .insert({ pdi_acao_id: pdiAcaoId, pdi_id: item.pdi_id, motivo, dispensada_por: conta.userId })
+    .select("pdi_acao_id, motivo, dispensada_em")
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new ErroHttp(409, "Sugestão já dispensada.");
+    erroBanco(error, "Sugestão do PDI");
+  }
+  await auditar(conta, "sugestao_pdi_dispensada", "peopleflow_dev_pdi_sugestoes_dispensadas", pdiAcaoId, { pdi_id: item.pdi_id, motivo });
+  return data;
+}
+
 // ── Roteamento ──────────────────────────────────────────────────────────
 const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>> = {
   lista_mestra_salvar: listaMestraSalvar,
@@ -476,6 +756,13 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   requisito_salvar: requisitoSalvar,
   requisito_status: requisitoStatus,
   requisito_sugerir: requisitoSugerir,
+  necessidade_registrar: necessidadeRegistrar,
+  necessidade_editar: necessidadeEditar,
+  necessidade_status: necessidadeStatus,
+  necessidade_consolidar: necessidadeConsolidar,
+  necessidade_desagrupar: necessidadeDesagrupar,
+  pdi_sugestao_aceitar: pdiSugestaoAceitar,
+  pdi_sugestao_dispensar: pdiSugestaoDispensar,
 };
 
 export function ehAcaoDeGravacao(acao: string): boolean {
