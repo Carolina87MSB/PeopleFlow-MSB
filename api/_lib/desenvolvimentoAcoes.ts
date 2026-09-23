@@ -87,9 +87,17 @@ function umDe<T extends string>(valor: string, opcoes: readonly T[], rotulo: str
   return valor as T;
 }
 
-/** Nome padronizado: sem acento, minúsculo, espaços simples — base da regra de não duplicidade. */
+/** Nome padronizado: sem acento, minúsculo, espaços simples — base da regra de
+ * não duplicidade. IDÊNTICA a public.peopleflow_dev_normalizar_nome()
+ * (supabase/desenvolvimento_fase2.sql): mesmos passos, mesma ordem e o mesmo
+ * conjunto explícito de espaços (espaço, tab, \n, \v, \f, \r, NBSP). */
 export function normalizarNome(nome: string): string {
-  return nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return nome
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[ \t\n\v\f\r ]+/g, " ")
+    .replace(/^ +| +$/g, "");
 }
 
 function erroBanco(error: { code?: string; message: string }, contexto: string): never {

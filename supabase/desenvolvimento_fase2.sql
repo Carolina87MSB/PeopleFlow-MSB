@@ -33,9 +33,36 @@ alter table public.peopleflow_dev_lista_mestra_revisoes
   add column if not exists observacao text not null default '';
 
 -- ── Habilidades ─────────────────────────────────────────────────────────
+-- Regra de nome padronizado — IDÊNTICA a normalizarNome() em
+-- api/_lib/desenvolvimentoAcoes.ts: decompõe (NFD), remove acentos
+-- (U+0300–U+036F), minúsculas, troca espaços/tab/quebra/NBSP por um espaço
+-- e tira espaços das pontas. Usada aqui só para preencher linhas que já
+-- existam; no dia a dia quem grava é o servidor.
+create or replace function public.peopleflow_dev_normalizar_nome(p_nome text)
+returns text language sql immutable strict set search_path = public as $$
+  select btrim(
+    regexp_replace(
+      lower(regexp_replace(normalize(p_nome, NFD), '[' || chr(768) || '-' || chr(879) || ']', '', 'g')),
+      '[' || chr(32) || chr(9) || chr(10) || chr(11) || chr(12) || chr(13) || chr(160) || ']+', ' ', 'g'),
+    ' ')
+$$;
+revoke all on function public.peopleflow_dev_normalizar_nome(text) from public, anon, authenticated;
+grant execute on function public.peopleflow_dev_normalizar_nome(text) to service_role;
+
+-- 1) coluna nasce aceitando NULL; 2) preenche o que já existir;
+-- 3) só então NOT NULL; 4) só então o índice único. Se houver dois nomes
+-- que se tornam iguais após a padronização, o passo 4 falha e a transação
+-- inteira é desfeita (nada fica pela metade).
 alter table public.peopleflow_dev_habilidades
   add column if not exists categoria text,
-  add column if not exists nome_normalizado text not null;
+  add column if not exists nome_normalizado text;
+
+update public.peopleflow_dev_habilidades
+  set nome_normalizado = public.peopleflow_dev_normalizar_nome(nome)
+  where nome_normalizado is null;
+
+alter table public.peopleflow_dev_habilidades
+  alter column nome_normalizado set not null;
 
 create unique index if not exists peopleflow_dev_habilidades_nome_norm_uidx
   on public.peopleflow_dev_habilidades (nome_normalizado);

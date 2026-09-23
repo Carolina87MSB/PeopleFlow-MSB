@@ -51,6 +51,7 @@ drop index if exists public.peopleflow_dev_habilidades_nome_norm_uidx;
 alter table public.peopleflow_dev_habilidades
   drop column if exists categoria,
   drop column if exists nome_normalizado;
+drop function if exists public.peopleflow_dev_normalizar_nome(text);
 
 alter table public.peopleflow_dev_lista_mestra_revisoes drop column if exists observacao;
 alter table public.peopleflow_dev_lista_mestra drop column if exists observacao;
