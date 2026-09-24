@@ -843,11 +843,14 @@ function lerCamposTreinamento(corpo: Corpo) {
   };
 }
 
+/** Título do treinamento é sempre gravado em CAIXA ALTA (justificativa/observação ficam como digitadas). */
+const caixaAlta = (s: string) => s.toLocaleUpperCase("pt-BR");
+
 /** Novo POP / Revisão de POP / Instrução de Trabalho: o título É o título oficial do documento (fotografado). */
 function tituloDoTreinamento(tipo: string, titulo: string, doc: { lista_mestra_titulo?: string | null }): string {
-  if (!TIPOS_COM_DOCUMENTO.has(tipo)) return titulo;
+  if (!TIPOS_COM_DOCUMENTO.has(tipo)) return caixaAlta(titulo);
   if (!doc.lista_mestra_titulo) throw new ErroHttp(422, "Selecione o documento da Lista Mestra (Novo POP, Revisão de POP ou Instrução de Trabalho).");
-  return doc.lista_mestra_titulo;
+  return caixaAlta(doc.lista_mestra_titulo);
 }
 
 function exigirMinimoPlanejamento(t: Record<string, unknown>) {
@@ -963,7 +966,7 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
     if (antes.status === "concluido") throw new ErroHttp(422, "O documento de um treinamento concluído não pode ser trocado.");
     doc = campos.lista_mestra_codigo ? await fotografiaDocumento(campos.lista_mestra_codigo) : { lista_mestra_codigo: null, lista_mestra_titulo: null, lista_mestra_revisao: null };
   }
-  const atualizacao = { ...campos, ...doc, titulo: TIPOS_COM_DOCUMENTO.has(campos.tipo) ? tituloDoTreinamento(campos.tipo, "", doc as { lista_mestra_titulo?: string }) : campos.titulo || antes.titulo };
+  const atualizacao = { ...campos, ...doc, titulo: TIPOS_COM_DOCUMENTO.has(campos.tipo) ? tituloDoTreinamento(campos.tipo, "", doc as { lista_mestra_titulo?: string }) : caixaAlta(campos.titulo || antes.titulo) };
   if (antes.status !== "solicitado") exigirMinimoPlanejamento(atualizacao);
   const mudou = diferencas(antes, atualizacao);
   if (Object.keys(mudou).length === 0) return antes;
@@ -1230,7 +1233,7 @@ async function treinamentoReposicao(conta: ContaDev, corpo: Corpo) {
   const { data: irmaos, error: iErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("id").eq("reposicao_raiz_id", raiz);
   if (iErro) erroBanco(iErro, "Reposições");
   const planejar = conta.perfil === "RH" && corpo.planejar === true;
-  const linha = { ...campos, ...doc, titulo: TIPOS_COM_DOCUMENTO.has(campos.tipo) ? tituloDoTreinamento(campos.tipo, "", doc) : campos.titulo || origem.titulo };
+  const linha = { ...campos, ...doc, titulo: TIPOS_COM_DOCUMENTO.has(campos.tipo) ? tituloDoTreinamento(campos.tipo, "", doc) : caixaAlta(campos.titulo || origem.titulo) };
   if (planejar) exigirMinimoPlanejamento(linha);
   const agora = new Date().toISOString();
   const { data: nova, error } = await supabaseAdmin

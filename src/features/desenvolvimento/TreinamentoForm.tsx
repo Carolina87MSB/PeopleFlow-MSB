@@ -52,7 +52,8 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
   const doc = (documentos.dados ?? []).find((d) => d.codigo === form.lista_mestra_codigo);
   // Novo POP / Revisão de POP / Instrução de Trabalho: título = título oficial do documento (somente leitura).
   const tituloDoc = item?.lista_mestra_codigo && item.lista_mestra_codigo === form.lista_mestra_codigo ? (item.lista_mestra_titulo ?? "") : (doc?.titulo ?? "");
-  const tituloEfetivo = exigeDoc ? tituloDoc : form.titulo;
+  // Título do treinamento: sempre em CAIXA ALTA (o servidor normaliza de novo ao gravar).
+  const tituloEfetivo = (exigeDoc ? tituloDoc : form.titulo).toLocaleUpperCase("pt-BR");
   // Responsável/instrutor: pessoas do escopo + quem já está no treinamento de origem.
   const opcoesPessoa = [...pessoas];
   for (const id of [item?.responsavel_colaborador_id, item?.instrutor_colaborador_id]) {
@@ -195,9 +196,9 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
           <label className={[styles.campo, styles.cheio].join(" ")}>
             Título do treinamento *
             {exigeDoc ? (
-              <input value={tituloDoc} readOnly aria-readonly="true" tabIndex={-1} placeholder="Preenchido pelo documento selecionado" />
+              <input value={tituloDoc.toLocaleUpperCase("pt-BR")} readOnly aria-readonly="true" tabIndex={-1} placeholder="Preenchido pelo documento selecionado" />
             ) : (
-              <input value={form.titulo} onChange={set("titulo")} maxLength={300} required />
+              <input value={form.titulo} onChange={(e) => setForm((f) => ({ ...f, titulo: e.target.value.toLocaleUpperCase("pt-BR") }))} maxLength={300} required />
             )}
             {exigeDoc && <span className={styles.dica}>Título oficial do documento na Lista Mestra.</span>}
           </label>
