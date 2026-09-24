@@ -262,7 +262,8 @@ export function NecessidadesAba() {
           }}
         />
       )}
-      {consolidando && (
+      {/* Consolidação é governança exclusiva do RH (o servidor também recusa qualquer outro perfil). */}
+      {ehRH && consolidando && (
         <ConsolidarDrawer
           ids={[...marcadas]}
           grupos={grupos.dados ?? []}
