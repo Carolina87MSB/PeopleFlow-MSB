@@ -428,17 +428,19 @@ export interface Evidencia {
   enviado_em: string;
   substituida_em: string | null;
   substituida_motivo: string | null;
+  /** Lista de Presença gerada pelo PeopleFlow (pasta do sistema, gravada só pelo servidor). */
+  sistema: boolean;
 }
 
 export async function listarEvidencias(treinamentoId: number): Promise<Evidencia[]> {
   const { data, error } = await supabase
     .from("peopleflow_dev_evidencias")
-    .select("id, participante_id, tipo, file_name, mime, tamanho_bytes, observacao, enviado_em, substituida_em, substituida_motivo")
+    .select("id, participante_id, tipo, file_name, mime, tamanho_bytes, observacao, enviado_em, substituida_em, substituida_motivo, storage_path")
     .eq("treinamento_id", treinamentoId)
     .order("enviado_em", { ascending: false })
     .limit(500);
   if (error) falha("Evidências", error.message);
-  return (data ?? []) as Evidencia[];
+  return ((data ?? []) as (Omit<Evidencia, "sistema"> & { storage_path: string })[]).map(({ storage_path, ...e }) => ({ ...e, sistema: /^treinamentos\/\d+\/sistema\//.test(storage_path) }));
 }
 
 const BUCKET_EVIDENCIAS = "desenvolvimento-evidencias";
@@ -678,7 +680,8 @@ export type AcaoGravacao =
   | "eficacia_registrar"
   | "participantes_opcoes"
   | "reposicao_faltantes"
-  | "treinamento_reposicao";
+  | "treinamento_reposicao"
+  | "lista_presenca_gerar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {

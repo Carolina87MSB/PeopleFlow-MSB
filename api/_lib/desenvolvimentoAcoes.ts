@@ -10,9 +10,10 @@
 //   • nunca grava em tabelas existentes do PeopleFlow.
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
+import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 
 export interface ContaDev {
   userId: string;
@@ -752,7 +753,7 @@ async function pdiSugestaoDispensar(conta: ContaDev, corpo: Corpo) {
 const COLS_TRE =
   "id, codigo, titulo, tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, modalidade, formato, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, reposicao_de_id, reposicao_raiz_id, reposicao_numero, created_at, updated_at";
 const COLS_PART =
-  "id, treinamento_id, colaborador_id, origem_inclusao, presenca_status, presenca_metodo, presenca_em, presenca_motivo, eficacia_resultado, eficacia_observacao, eficacia_em, eficacia_por_colaborador_id, removido_em, removido_motivo";
+  "id, treinamento_id, colaborador_id, origem_inclusao, presenca_status, presenca_metodo, presenca_em, presenca_por, presenca_motivo, eficacia_resultado, eficacia_observacao, eficacia_em, eficacia_por_colaborador_id, removido_em, removido_motivo";
 // Tipo (classificação) ≠ Modalidade (interno/externo) ≠ Formato (presencial/online/híbrido).
 const TIPOS_TREINAMENTO = [
   "novo_pop", "revisao_pop", "instrucao_trabalho", "integracao", "reciclagem", "capacitacao_tecnica",
@@ -973,6 +974,7 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
   const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").update({ ...atualizacao, updated_by: conta.userId }).eq("id", id).select(COLS_TRE).single();
   if (error) erroBanco(error, "Treinamento");
   await auditar(conta, antes.status === "concluido" ? "treinamento_retificado" : "treinamento_editado", "peopleflow_dev_treinamentos", String(id), { alteracoes: mudou, motivo });
+  if (antes.status === "concluido" && data.modalidade === "interno") await gerarListaPresenca(conta, data, `Retificação do treinamento: ${motivo}`);
   return data;
 }
 
@@ -1060,9 +1062,12 @@ async function treinamentoConcluir(conta: ContaDev, corpo: Corpo) {
     if (!ev || ev.length === 0) throw new ErroHttp(422, "Treinamento externo precisa de evidência (certificado, comprovante…) antes da conclusão.");
   }
   const agora = new Date().toISOString();
+  const cargaRealizada = t.carga_realizada_min ?? t.carga_horaria_min;
+  // Presença controlada pelo PeopleFlow (interno): a Lista de Presença é gerada dos registros individuais.
+  const lista = externo ? null : await prepararListaPresenca(conta, { ...t, status: "concluido", data_realizacao: dataRealizacao, carga_realizada_min: cargaRealizada }, participantes, null);
   const { data, error } = await supabaseAdmin
     .from("peopleflow_dev_treinamentos")
-    .update({ status: "concluido", concluido_em: agora, concluido_por: conta.userId, data_realizacao: dataRealizacao, carga_realizada_min: t.carga_realizada_min ?? t.carga_horaria_min, updated_by: conta.userId })
+    .update({ status: "concluido", concluido_em: agora, concluido_por: conta.userId, data_realizacao: dataRealizacao, carga_realizada_min: cargaRealizada, updated_by: conta.userId })
     .eq("id", t.id)
     .select(COLS_TRE)
     .single();
@@ -1073,6 +1078,7 @@ async function treinamentoConcluir(conta: ContaDev, corpo: Corpo) {
     realizaram: participantes.filter((p) => p.presenca_status === "presente").length,
     ausentes: participantes.filter((p) => p.presenca_status === "ausente").length,
   });
+  if (lista) await registrarListaPresenca(conta, data, lista);
   for (const p of participantes) await processarNecessidadesDoParticipante(conta, data, p);
   return data;
 }
@@ -1359,6 +1365,7 @@ async function presencaManual(conta: ContaDev, corpo: Corpo) {
     });
     if (retificacao) await processarNecessidadesDoParticipante(conta, t, data);
   }
+  if (retificacao && alterados.length && t.modalidade === "interno") await gerarListaPresenca(conta, t, `Retificação de presença: ${motivo}`);
   return { alterados: alterados.length };
 }
 
@@ -1408,6 +1415,7 @@ async function exigirPodeAnexar(conta: ContaDev, t: Treinamento) {
 async function evidenciaUploadUrl(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
   await exigirPodeAnexar(conta, t);
+  exigirTipoManual(t, texto(corpo, "tipo"));
   const mime = texto(corpo, "mime", { obrigatorio: true, max: 120, rotulo: "o tipo do arquivo" });
   if (!MIMES.has(mime)) throw new ErroHttp(422, "Formato não aceito (use PDF, imagem, Word, Excel ou PowerPoint).");
   const tamanho = inteiroOpcional(corpo, "tamanho_bytes", "Tamanho", 1, 20 * 1024 * 1024);
@@ -1424,7 +1432,8 @@ async function evidenciaRegistrar(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
   await exigirPodeAnexar(conta, t);
   const caminho = texto(corpo, "path", { obrigatorio: true, max: 400, rotulo: "o arquivo" });
-  if (!caminho.startsWith(`treinamentos/${t.id}/`)) throw new ErroHttp(422, "Arquivo não pertence a este treinamento.");
+  if (!caminho.startsWith(`treinamentos/${t.id}/`) || ehListaDoSistema(caminho)) throw new ErroHttp(422, "Arquivo não pertence a este treinamento.");
+  exigirTipoManual(t, texto(corpo, "tipo"));
   const participanteId = corpo.participante_id ? idObrigatorio(corpo, "participante_id", "Participante") : null;
   if (participanteId) {
     const p = await lerParticipante(participanteId);
@@ -1456,6 +1465,188 @@ async function evidenciaRegistrar(conta: ContaDev, corpo: Corpo) {
   return data;
 }
 
+// ── Lista de Presença gerada pelo PeopleFlow ───────────────────────────
+// Fonte primária: registros individuais de presença (participantes + auditoria).
+// O PDF consolidado fica no bucket privado, em treinamentos/{id}/sistema/ — pasta
+// que só o servidor grava (uploads manuais recebem outro caminho), o que marca a
+// origem = sistema. Versões anteriores nunca são apagadas: ficam "substituídas".
+const ROTULO_TIPO: Record<string, string> = {
+  novo_pop: "Novo POP", revisao_pop: "Revisão de POP", instrucao_trabalho: "Instrução de Trabalho", integracao: "Integração",
+  reciclagem: "Reciclagem", capacitacao_tecnica: "Capacitação Técnica", desenvolvimento: "Desenvolvimento",
+  qualidade_regulatorio: "Qualidade / Regulatório", saude_seguranca: "Saúde e Segurança", sistemas_ferramentas: "Sistemas e Ferramentas", outro: "Outro",
+};
+const ROTULO_MODALIDADE: Record<string, string> = { interno: "Interno", externo: "Externo" };
+const ROTULO_FORMATO: Record<string, string> = { presencial: "Presencial", online: "Online", hibrido: "Híbrido" };
+
+function ehListaDoSistema(caminho: string): boolean {
+  return /^treinamentos\/\d+\/sistema\//.test(caminho);
+}
+
+function exigirTipoManual(t: Treinamento, tipo: string) {
+  if (tipo === "lista_presenca" && t.modalidade !== "externo") {
+    throw new ErroHttp(422, "Em treinamento interno a Lista de Presença é gerada automaticamente pelo PeopleFlow na conclusão.");
+  }
+}
+
+const fmtDataHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const dataHoraBR = (iso: string | Date | null | undefined) => (iso ? fmtDataHora.format(new Date(iso)).replace(", ", " às ") : null);
+function dataBR(d: string | Date | null | undefined): string {
+  if (!d) return "—";
+  const iso = d instanceof Date ? d.toISOString() : String(d);
+  return iso.slice(0, 10).split("-").reverse().join("/");
+}
+function cargaBR(min: number | null | undefined): string {
+  if (!min) return "—";
+  const h = Math.floor(min / 60), m = min % 60;
+  return h === 0 ? `${m} min` : m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+}
+
+async function listasDoSistema(treinamentoId: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_evidencias").select("id, storage_path, substituida_em").eq("treinamento_id", treinamentoId).eq("tipo", "lista_presenca");
+  if (error) erroBanco(error, "Evidências");
+  return (data ?? []).filter((e) => ehListaDoSistema(String(e.storage_path)));
+}
+
+interface ListaPreparada {
+  path: string;
+  fileName: string;
+  versao: number;
+  tamanho: number;
+  presentes: number;
+  ausentes: number;
+  sha256: string;
+  codigoVerificacao: string;
+  motivo: string | null;
+  anteriores: number[];
+}
+
+/** Monta o PDF a partir dos registros e grava no bucket privado (ainda sem registrar a evidência). */
+async function prepararListaPresenca(conta: ContaDev, t: Treinamento, participantes: Record<string, any>[], motivo: string | null): Promise<ListaPreparada> {
+  const listas = await listasDoSistema(t.id);
+  const versao = listas.length + 1;
+  const registradores = [...new Set(participantes.filter((p) => p.presenca_metodo === "manual" && p.presenca_por).map((p) => String(p.presenca_por)))];
+  const { data: contas, error: cErro } = await supabaseAdmin.from("peopleflow_dev_contas").select("user_id, colaborador_id").in("user_id", [...registradores, conta.userId]);
+  if (cErro) erroBanco(cErro, "Contas");
+  const colabDaConta = new Map((contas ?? []).map((c) => [String(c.user_id), Number(c.colaborador_id)]));
+  const ids = [
+    ...participantes.map((p) => Number(p.colaborador_id)),
+    ...[t.responsavel_colaborador_id, t.instrutor_colaborador_id, conta.colaboradorId].filter((x) => x != null).map(Number),
+    ...colabDaConta.values(),
+  ];
+  const { data: pessoas, error: pErro } = await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento").in("id", [...new Set(ids)]);
+  if (pErro) erroBanco(pErro, "Colaboradores");
+  const pessoa = new Map((pessoas ?? []).map((c) => [Number(c.id), c]));
+  const nomeDe = (id: number | null | undefined) => (id != null ? String(pessoa.get(Number(id))?.nome ?? `#${id}`) : null);
+  let reposicao: string | null = null;
+  if (t.reposicao_de_id) {
+    const { data: origem } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("codigo").eq("id", t.reposicao_de_id).maybeSingle();
+    reposicao = `Reposição ${t.reposicao_numero} — faltantes de ${origem?.codigo ?? `#${t.reposicao_de_id}`}`;
+  }
+  const linhas: ParticipanteLista[] = participantes
+    .map((p) => {
+      const c = pessoa.get(Number(p.colaborador_id));
+      const manual = p.presenca_metodo === "manual";
+      return {
+        nome: String(c?.nome ?? `#${p.colaborador_id}`),
+        cargo: String(c?.cargo ?? ""),
+        departamento: String(c?.departamento ?? ""),
+        situacao: p.presenca_status === "presente" ? "Presente" : "Ausente",
+        forma: p.presenca_metodo === "qr" ? "QR Code" : manual ? "Registro manual" : "—",
+        confirmadoEm: dataHoraBR(p.presenca_em),
+        registradoPor: manual ? nomeDe(colabDaConta.get(String(p.presenca_por))) : null,
+        justificativa: manual ? (p.presenca_motivo ?? null) : null,
+      } as ParticipanteLista;
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  const registros = participantes.map((p) => [p.id, p.colaborador_id, p.presenca_status, p.presenca_metodo, p.presenca_em]).sort((a, b) => Number(a[0]) - Number(b[0]));
+  const hashRegistros = createHash("sha256").update(JSON.stringify({ treinamento: t.id, versao, registros })).digest("hex");
+  const codigoVerificacao = hashRegistros.slice(0, 16).toUpperCase().replace(/(.{4})(?=.)/g, "$1-");
+  const presentes = linhas.filter((l) => l.situacao === "Presente").length;
+  const bytes = await gerarPdfListaPresenca({
+    codigo: t.codigo,
+    titulo: t.titulo,
+    tipo: ROTULO_TIPO[t.tipo] ?? t.tipo,
+    modalidade: ROTULO_MODALIDADE[t.modalidade] ?? t.modalidade,
+    formato: t.formato ? (ROTULO_FORMATO[t.formato] ?? t.formato) : "—",
+    dataRealizacao: dataBR(t.data_realizacao ?? t.data_fim ?? t.data_inicio),
+    cargaRealizada: cargaBR(t.carga_realizada_min ?? t.carga_horaria_min),
+    local: t.local_link ?? "",
+    responsavel: nomeDe(t.responsavel_colaborador_id) ?? "—",
+    instrutor: nomeDe(t.instrutor_colaborador_id) ?? t.instrutor_externo ?? "—",
+    // Fotografia do treinamento (revisão treinada) — nunca a revisão atual da Lista Mestra.
+    documento: t.lista_mestra_codigo ? { codigo: t.lista_mestra_codigo, titulo: t.lista_mestra_titulo ?? "", revisao: t.lista_mestra_revisao ?? "" } : null,
+    reposicao,
+    participantes: linhas,
+    versao,
+    motivoVersao: motivo,
+    geradoEm: dataHoraBR(new Date().toISOString())!,
+    geradoPor: nomeDe(conta.colaboradorId) ?? "PeopleFlow",
+    codigoVerificacao,
+  });
+  const path = `treinamentos/${t.id}/sistema/lista-presenca-v${versao}-${Date.now()}.pdf`;
+  const { error: uErro } = await supabaseAdmin.storage.from(BUCKET).upload(path, bytes, { contentType: "application/pdf", upsert: false });
+  if (uErro) throw new ErroHttp(500, `Storage (lista de presença): ${uErro.message}`);
+  return {
+    path,
+    fileName: `Lista de Presença ${t.codigo} v${versao}.pdf`,
+    versao,
+    tamanho: bytes.length,
+    presentes,
+    ausentes: linhas.length - presentes,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    codigoVerificacao,
+    motivo,
+    anteriores: listas.filter((l) => !l.substituida_em).map((l) => Number(l.id)),
+  };
+}
+
+/** Registra a evidência (origem sistema), marca a versão anterior como substituída e audita. */
+async function registrarListaPresenca(conta: ContaDev, t: Treinamento, a: ListaPreparada) {
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_evidencias")
+    .insert({
+      treinamento_id: t.id,
+      participante_id: null,
+      tipo: "lista_presenca",
+      storage_path: a.path,
+      file_name: a.fileName,
+      mime: "application/pdf",
+      tamanho_bytes: a.tamanho,
+      observacao: `Gerada automaticamente pelo PeopleFlow · versão ${a.versao} · ${a.presentes} presente${a.presentes === 1 ? "" : "s"} • ${a.ausentes} ausente${a.ausentes === 1 ? "" : "s"}`,
+      enviado_por: conta.userId,
+    })
+    .select("id, treinamento_id, participante_id, tipo, file_name, mime, tamanho_bytes, observacao, enviado_em")
+    .single();
+  if (error) erroBanco(error, "Lista de presença");
+  for (const anterior of a.anteriores) {
+    const { error: sErro } = await supabaseAdmin
+      .from("peopleflow_dev_evidencias")
+      .update({ substituida_em: new Date().toISOString(), substituida_por: conta.userId, substituida_motivo: `Substituída pela versão ${a.versao}. ${a.motivo ?? ""}`.trim() })
+      .eq("id", anterior);
+    if (sErro) erroBanco(sErro, "Lista de presença");
+  }
+  await auditar(conta, "lista_presenca_gerada", "peopleflow_dev_evidencias", String(data.id), {
+    treinamento_id: t.id, origem: "sistema", versao: a.versao, arquivo: a.path, sha256: a.sha256, codigo_verificacao: a.codigoVerificacao,
+    presentes: a.presentes, ausentes: a.ausentes, motivo: a.motivo, substitui: a.anteriores,
+  });
+  return data;
+}
+
+async function gerarListaPresenca(conta: ContaDev, t: Treinamento, motivo: string | null) {
+  const participantes = await participantesAtivos(t.id);
+  return registrarListaPresenca(conta, t, await prepararListaPresenca(conta, t, participantes, motivo));
+}
+
+/** RH: gera a lista de um treinamento interno concluído (ex.: concluído antes deste recurso) ou uma nova versão, com motivo. */
+async function listaPresencaGerar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  if (t.status !== "concluido" || t.modalidade !== "interno") throw new ErroHttp(422, "A Lista de Presença é gerada para treinamentos internos concluídos.");
+  const vigente = (await listasDoSistema(t.id)).some((l) => !l.substituida_em);
+  const motivo = texto(corpo, "motivo", { obrigatorio: vigente, max: 1000, rotulo: "o motivo da nova versão" });
+  return gerarListaPresenca(conta, t, motivo || null);
+}
+
 async function lerEvidencia(id: number) {
   const { data, error } = await supabaseAdmin.from("peopleflow_dev_evidencias").select("id, treinamento_id, participante_id, storage_path, file_name, substituida_em").eq("id", id).maybeSingle();
   if (error) erroBanco(error, "Evidência");
@@ -1473,7 +1664,8 @@ async function evidenciaUrl(conta: ContaDev, corpo: Corpo) {
     else pode = (await participantesAtivos(t.id)).some((p) => escopo.has(Number(p.colaborador_id))) || ehSolicitante(conta, t);
   }
   if (!pode) throw new ErroHttp(403, "Sem acesso a esta evidência.");
-  const { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(ev.storage_path, 300, { download: ev.file_name });
+  // "visualizar": abre no navegador; padrão: baixa com o nome original. Link válido por 5 minutos.
+  const { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(ev.storage_path, 300, corpo.visualizar === true ? undefined : { download: ev.file_name });
   if (error || !data) throw new ErroHttp(500, `Storage: ${error?.message ?? "sem URL"}`);
   return { url: data.signedUrl };
 }
@@ -1484,6 +1676,7 @@ async function evidenciaSubstituir(conta: ContaDev, corpo: Corpo) {
   await exigirPodeAnexar(conta, t);
   const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
   if (ev.substituida_em) throw new ErroHttp(422, "Evidência já substituída.");
+  if (ehListaDoSistema(ev.storage_path)) throw new ErroHttp(422, "A Lista de Presença gerada pelo PeopleFlow não é substituída manualmente: retifique a presença (gera nova versão).");
   const { error } = await supabaseAdmin.from("peopleflow_dev_evidencias").update({ substituida_em: new Date().toISOString(), substituida_por: conta.userId, substituida_motivo: motivo }).eq("id", ev.id);
   if (error) erroBanco(error, "Evidência");
   await auditar(conta, "evidencia_substituida", "peopleflow_dev_evidencias", String(ev.id), { treinamento_id: t.id, motivo });
@@ -1613,6 +1806,7 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   treinamento_reposicao: treinamentoReposicao,
   reposicao_faltantes: reposicaoFaltantes,
   participantes_opcoes: participantesOpcoes,
+  lista_presenca_gerar: listaPresencaGerar,
   treinamento_planejar: treinamentoPlanejar,
   treinamento_iniciar: treinamentoIniciar,
   treinamento_concluir: treinamentoConcluir,

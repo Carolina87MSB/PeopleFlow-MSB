@@ -245,7 +245,7 @@ export default function TreinamentoPage() {
 
         <Reposicoes t={t} podeRepor={p.podeRepor} ausentes={ativos.filter((x) => x.presenca_status === "ausente").length} />
 
-        <Evidencias t={t} podeAnexar={p.podeAnexar} participantes={ativos} />
+        <Evidencias t={t} podeAnexar={p.podeAnexar} participantes={ativos} versao={versaoVinculos} />
       </div>
 
       {editando && (
@@ -989,11 +989,20 @@ function EficaciaDrawer({ participante, onFechar, onSalvar }: { participante: Pa
 }
 
 // ── Evidências ──────────────────────────────────────────────────────────
-function Evidencias({ t, podeAnexar, participantes }: { t: Treinamento; podeAnexar: boolean; participantes: Participante[] }) {
+function Evidencias({ t, podeAnexar, participantes, versao }: { t: Treinamento; podeAnexar: boolean; participantes: Participante[]; versao: number }) {
   const { flash } = useToast();
-  const lista = useConsulta(() => listarEvidencias(t.id), [t.id]);
+  const { perfil } = useDesenvolvimento();
+  const interno = t.modalidade === "interno";
+  const lista = useConsulta(() => listarEvidencias(t.id), [t.id, t.status, t.updated_at, versao]);
   const [arquivo, setArquivo] = useState<File | null>(null);
-  const [tipo, setTipo] = useState<TipoEvidencia>(t.modalidade === "externo" ? "certificado" : "lista_presenca");
+  const [tipo, setTipo] = useState<TipoEvidencia>(interno ? "material" : "certificado");
+  // Interno: a lista de presença é gerada pelo PeopleFlow (não é tipo de upload). Externo: lista vinda de terceiros.
+  const tiposUpload = (Object.keys(TIPO_EVIDENCIA) as TipoEvidencia[]).filter((k) => !(interno && k === "lista_presenca"));
+  const rotuloTipo = (k: TipoEvidencia) => (k === "lista_presenca" && !interno ? "Lista de presença externa" : TIPO_EVIDENCIA[k]);
+  const listasSistema = (lista.dados ?? []).filter((e) => e.sistema);
+  const listaAtual = listasSistema.find((e) => !e.substituida_em) ?? null;
+  const versoesAnteriores = listasSistema.filter((e) => e.substituida_em);
+  const manuais = (lista.dados ?? []).filter((e) => !e.sistema);
   const [participante, setParticipante] = useState("");
   const [obs, setObs] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -1001,10 +1010,10 @@ function Evidencias({ t, podeAnexar, participantes }: { t: Treinamento; podeAnex
   const [versaoInput, setVersaoInput] = useState(0);
   const nomePart = new Map(participantes.map((x) => [x.id, x.pessoa?.nome ?? `#${x.colaborador_id}`]));
 
-  async function baixar(id: number) {
+  async function baixar(id: number, visualizar = false) {
     setErro(null);
     try {
-      const { url } = await gravar<{ url: string }>("evidencia_url", { id });
+      const { url } = await gravar<{ url: string }>("evidencia_url", { id, visualizar });
       window.open(url, "_blank", "noopener");
     } catch (e) {
       setErro(mensagem(e));
@@ -1016,15 +1025,93 @@ function Evidencias({ t, podeAnexar, participantes }: { t: Treinamento; podeAnex
       <div className={styles.cardHeader}>
         <div>
           <h3 className={styles.cardTitle}>Evidências</h3>
-          <p className={styles.cardSubtitle}>{t.modalidade === "externo" ? "Treinamento externo: anexe certificado ou comprovante antes de concluir." : "Lista de presença, material, ata, fotos…"} Arquivos em área privada, abertos por link temporário.</p>
+          <p className={styles.cardSubtitle}>
+            {interno
+              ? "Material, ata, fotos, certificados… A Lista de Presença é gerada pelo PeopleFlow."
+              : "Treinamento externo: anexe certificado, lista de presença externa, comprovante ou declaração antes de concluir."}{" "}
+            Arquivos em área privada, abertos por link temporário.
+          </p>
         </div>
       </div>
       {erro && <Erro mensagem={erro} />}
+      {interno && (
+        <div className={styles.secao}>
+          <h4 className={styles.secaoTitulo}>Lista de Presença</h4>
+          {listaAtual ? (
+            <div className={styles.toolbar} style={{ marginBottom: 0, alignItems: "center" }}>
+              <div>
+                <strong>Gerada automaticamente pelo PeopleFlow</strong>
+                <div className={styles.secundario}>{listaAtual.observacao.replace(/^Gerada automaticamente pelo PeopleFlow · /, "")}</div>
+                <div className={styles.secundario}>Gerada em {formatarDataHora(listaAtual.enviado_em).replace(" ", " às ")}</div>
+              </div>
+              <div className={styles.acoes}>
+                <Button variant="primary" icon={<FileText size={16} />} onClick={() => void baixar(listaAtual.id, true)}>
+                  Visualizar lista
+                </Button>
+                {perfil === "RH" && (
+                  <ConfirmarComMotivo
+                    rotulo="Gerar nova versão"
+                    confirmar="Gerar nova versão"
+                    variante="secondary"
+                    motivoObrigatorio
+                    onConfirmar={async (motivo) => {
+                      try {
+                        await gravar("lista_presenca_gerar", { treinamento_id: t.id, motivo });
+                        flash("Nova versão da Lista de Presença gerada; a anterior foi preservada.");
+                        lista.recarregar();
+                      } catch (e) {
+                        setErro(mensagem(e));
+                        throw e;
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          ) : t.status === "concluido" ? (
+            <div className={styles.toolbar} style={{ marginBottom: 0 }}>
+              <span className={styles.secundario}>Lista de Presença ainda não gerada para este treinamento.</span>
+              {perfil === "RH" && (
+                <Button
+                  variant="primary"
+                  onClick={async () => {
+                    setErro(null);
+                    try {
+                      await gravar("lista_presenca_gerar", { treinamento_id: t.id });
+                      flash("Lista de Presença gerada.");
+                      lista.recarregar();
+                    } catch (e) {
+                      setErro(mensagem(e));
+                    }
+                  }}
+                >
+                  Gerar Lista de Presença
+                </Button>
+              )}
+            </div>
+          ) : (
+            <p className={styles.secundario}>Será gerada automaticamente na conclusão, a partir dos registros de presença (QR e manuais).</p>
+          )}
+          {versoesAnteriores.length > 0 && (
+            <ul className={styles.historico}>
+              {versoesAnteriores.map((v) => (
+                <li key={v.id} className={styles.secundario}>
+                  {v.file_name} — gerada em {formatarDataHora(v.enviado_em)}, substituída em {formatarDataHora(v.substituida_em)}. {v.substituida_motivo}{" "}
+                  <Button variant="ghost" onClick={() => void baixar(v.id, true)}>
+                    Visualizar
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {interno && <h4 className={styles.secaoTitulo}>Outras evidências</h4>}
       {lista.erro ? (
         <Erro mensagem={lista.erro} />
       ) : lista.carregando && !lista.dados ? (
         <Carregando />
-      ) : (lista.dados ?? []).length === 0 ? (
+      ) : manuais.length === 0 ? (
         <p className={styles.secundario}>Nenhuma evidência anexada.</p>
       ) : (
         <div className={tableStyles.wrap}>
@@ -1039,7 +1126,7 @@ function Evidencias({ t, podeAnexar, participantes }: { t: Treinamento; podeAnex
               </tr>
             </thead>
             <tbody>
-              {(lista.dados ?? []).map((ev) => (
+              {manuais.map((ev) => (
                 <tr key={ev.id} className={ev.substituida_em ? styles.linhaInativa : ""}>
                   <td>
                     <FileText size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
@@ -1047,7 +1134,7 @@ function Evidencias({ t, podeAnexar, participantes }: { t: Treinamento; podeAnex
                     {ev.observacao && <div className={styles.secundario}>{ev.observacao}</div>}
                     {ev.substituida_em && <div className={styles.secundario}>Substituída: {ev.substituida_motivo}</div>}
                   </td>
-                  <td className={styles.secundario}>{TIPO_EVIDENCIA[ev.tipo] ?? ev.tipo}</td>
+                  <td className={styles.secundario}>{rotuloTipo(ev.tipo)}</td>
                   <td className={styles.secundario}>{ev.participante_id ? (nomePart.get(ev.participante_id) ?? "—") : "Turma"}</td>
                   <td className={styles.mono}>{formatarDataHora(ev.enviado_em)}</td>
                   <td style={{ minWidth: 160 }}>
@@ -1107,9 +1194,9 @@ function Evidencias({ t, podeAnexar, participantes }: { t: Treinamento; podeAnex
           <label className={styles.campo}>
             Tipo
             <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoEvidencia)}>
-              {(Object.keys(TIPO_EVIDENCIA) as TipoEvidencia[]).map((k) => (
+              {tiposUpload.map((k) => (
                 <option key={k} value={k}>
-                  {TIPO_EVIDENCIA[k]}
+                  {rotuloTipo(k)}
                 </option>
               ))}
             </select>
