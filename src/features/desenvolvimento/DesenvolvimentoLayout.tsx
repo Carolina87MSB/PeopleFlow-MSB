@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Lock, Wrench } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { Card } from "../../components/ui";
@@ -19,10 +19,14 @@ type Estado =
   | { tipo: "ok"; ctx: ContextoDesenvolvimento };
 
 /** Casca do módulo: carrega a sessão (perfil + escopo) só quando o usuário
- * entra em /desenvolvimento, e bloqueia perfis ainda não liberados. */
+ * entra em /desenvolvimento, e bloqueia perfis ainda não liberados.
+ * RH e Gestor: menu completo. Demais perfis: o servidor só libera quem é
+ * responsável/instrutor de algum treinamento (perfil "Responsavel"), e a
+ * navegação fica restrita a Treinamentos. */
 export default function DesenvolvimentoLayout() {
   const { perfil } = usePortalData();
-  const liberado = perfil === "RH" || perfil === "Gestor";
+  const location = useLocation();
+  const liberado = Boolean(perfil);
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
 
   useEffect(() => {
@@ -60,7 +64,7 @@ export default function DesenvolvimentoLayout() {
           <EstadoVazio
             icone={<Lock size={26} strokeWidth={1.6} />}
             titulo="Módulo não disponível para o seu perfil"
-            descricao="O módulo Desenvolvimento está liberado nesta etapa para o RH e para gestores."
+            descricao="O módulo Desenvolvimento está liberado para o RH, para gestores e para quem conduz um treinamento."
           />
         </Card>
       </>
@@ -104,6 +108,10 @@ export default function DesenvolvimentoLayout() {
         </Card>
       </>
     );
+  }
+
+  if (estado.ctx.perfil === "Responsavel" && !/^\/desenvolvimento\/treinamentos?(\/|$)/.test(location.pathname)) {
+    return <Navigate to="/desenvolvimento/treinamentos/agenda" replace />;
   }
 
   return (

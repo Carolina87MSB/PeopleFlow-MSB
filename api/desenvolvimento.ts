@@ -11,14 +11,16 @@
 //   4. devolve só o mínimo para a interface: perfil + pessoas no escopo
 //      (id, nome, cargo, departamento — nada de CPF, salário ou avaliação).
 //
-// Nesta fase o módulo é liberado apenas a RH e Gestor. Colaborador e
-// Diretoria recebem 403 (decisões deliberadamente pendentes).
+// Perfis do módulo: RH e Gestor (regras do PeopleFlow) e, desde a Fase 5,
+// "Responsavel" — qualquer outra conta que seja responsável/instrutor de um
+// treinamento enxerga SOMENTE esses treinamentos. Sem isso, Colaborador e
+// Diretoria recebem 403.
 // Nunca escreve em tabelas existentes do PeopleFlow.
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "./_lib/adminAuth.js";
-import { ehAcaoDeGravacao, executarAcao } from "./_lib/desenvolvimentoAcoes.js";
-import { buildAccess, descendants } from "../src/domain/hierarquia.js";
+import { ehAcaoDeGravacao, ehAcaoDePresencaQr, executarAcao, executarPresencaQr } from "./_lib/desenvolvimentoAcoes.js";
+import { buildAccess, descendants, emailOf } from "../src/domain/hierarquia.js";
 import { tempoDeEmpresa } from "../src/domain/dates.js";
 import type { Colaborador } from "../src/types/domain.js";
 
@@ -115,30 +117,56 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
   }
   const linhas = rows as ColaboradorRow[];
   const colaboradores = linhas.map(toColaborador);
-  const conta = buildAccess(colaboradores).find((a) => a.email === email);
+  const contaPrincipal = buildAccess(colaboradores).find((a) => a.email === email);
+  const ativos = linhas.filter((r) => !r.desligado);
 
-  if (!conta || (conta.perfil !== "RH" && conta.perfil !== "Gestor")) {
-    res.status(403).json({ error: "O módulo Desenvolvimento ainda não está liberado para este perfil.", codigo: "sem_acesso" });
-    return;
+  // RH e Gestor: regras do PeopleFlow. Demais perfis (Colaborador/Diretoria):
+  // acesso SOMENTE aos treinamentos que conduzem (responsável/instrutor),
+  // vinculado ao treinamento — não vira Gestor nem RH.
+  let perfil: "RH" | "Gestor" | "Responsavel";
+  let nomeConta: string;
+  if (contaPrincipal && (contaPrincipal.perfil === "RH" || contaPrincipal.perfil === "Gestor")) {
+    perfil = contaPrincipal.perfil;
+    nomeConta = contaPrincipal.nome;
+  } else {
+    const candidatos = ativos.filter((r) => emailOf(r.nome) === email);
+    if (candidatos.length !== 1) {
+      res.status(403).json({ error: "O módulo Desenvolvimento ainda não está liberado para este perfil.", codigo: "sem_acesso" });
+      return;
+    }
+    const { data: conduz, error: conduzErro } = await supabaseAdmin
+      .from("peopleflow_dev_treinamentos")
+      .select("id")
+      .or(`responsavel_colaborador_id.eq.${candidatos[0].id},instrutor_colaborador_id.eq.${candidatos[0].id}`)
+      .in("status", ["planejado", "em_andamento", "concluido"])
+      .limit(1);
+    if (tabelaInexistente(conduzErro) || conduzErro || !conduz || conduz.length === 0) {
+      res.status(403).json({ error: "O módulo Desenvolvimento ainda não está liberado para este perfil.", codigo: "sem_acesso" });
+      return;
+    }
+    perfil = "Responsavel";
+    nomeConta = candidatos[0].nome;
   }
 
   // O PeopleFlow identifica pessoas por nome; aqui o vínculo passa a ser por id.
-  const minhas = linhas.filter((r) => r.nome === conta.nome && !r.desligado);
+  const minhas = linhas.filter((r) => r.nome === nomeConta && !r.desligado);
   if (minhas.length !== 1) {
     res.status(409).json({ error: "Não foi possível identificar o colaborador desta conta de forma única. Fale com o RH.", codigo: "identificacao_ambigua" });
     return;
   }
   const eu = minhas[0];
 
-  const ativos = linhas.filter((r) => !r.desligado);
   let escopo: ColaboradorRow[];
-  if (conta.perfil === "RH") {
+  if (perfil === "RH") {
     escopo = ativos;
-  } else {
-    const nomes = descendants(colaboradores, conta.nome);
-    nomes.add(conta.nome);
+  } else if (perfil === "Gestor") {
+    const nomes = descendants(colaboradores, nomeConta);
+    nomes.add(nomeConta);
     escopo = ativos.filter((r) => nomes.has(r.nome));
+  } else {
+    escopo = [];
   }
+  const conta = { perfil, nome: nomeConta };
 
   const agora = new Date().toISOString();
   const { data: anterior, error: anteriorError } = await supabaseAdmin
@@ -204,6 +232,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const acao = typeof req.query.acao === "string" ? req.query.acao : "";
     if (acao === "sessao" && req.method === "POST") {
       await sessao(req, res);
+      return;
+    }
+    // Página /participar/:token — qualquer conta do PeopleFlow, sem sessão do módulo.
+    if (ehAcaoDePresencaQr(acao) && req.method === "POST") {
+      await executarPresencaQr(acao, req, res);
       return;
     }
     if (ehAcaoDeGravacao(acao) && req.method === "POST") {

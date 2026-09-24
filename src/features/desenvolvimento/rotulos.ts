@@ -1,4 +1,14 @@
-import type { CategoriaNecessidade, OrigemNecessidade, Prioridade, Situacao, StatusNecessidade, StatusTreinamento } from "./devRepository";
+import type {
+  CategoriaNecessidade,
+  OrigemNecessidade,
+  OrigemTreinamento,
+  Prioridade,
+  ResultadoEficacia,
+  Situacao,
+  StatusNecessidade,
+  StatusTreinamento,
+  TipoEvidencia,
+} from "./devRepository";
 
 export type Tom = "success" | "warning" | "danger" | "neutral" | "info";
 
@@ -39,10 +49,47 @@ export const PRIORIDADE: Record<Prioridade, { rotulo: string; tom: Tom }> = {
 };
 
 export const STATUS_TREINAMENTO: Record<StatusTreinamento, { rotulo: string; tom: Tom }> = {
+  solicitado: { rotulo: "Solicitado", tom: "warning" },
   planejado: { rotulo: "Planejado", tom: "info" },
   em_andamento: { rotulo: "Em andamento", tom: "warning" },
   concluido: { rotulo: "Concluído", tom: "success" },
   cancelado: { rotulo: "Cancelado", tom: "neutral" },
+};
+
+export const ORIGEM_TREINAMENTO: Record<OrigemTreinamento, string> = {
+  desenvolvimento: "Necessidade de desenvolvimento",
+  pop_it: "POP / IT",
+  revisao_documental: "Revisão documental",
+  integracao: "Integração",
+  requisito_regulatorio: "Requisito regulatório",
+  reciclagem: "Reciclagem",
+  operacional: "Operacional",
+  outro: "Outro",
+};
+
+export const PRESENCA: Record<"pendente" | "presente" | "ausente", { rotulo: string; tom: Tom }> = {
+  pendente: { rotulo: "Pendente", tom: "neutral" },
+  presente: { rotulo: "Realizou", tom: "success" },
+  ausente: { rotulo: "Ausente", tom: "danger" },
+};
+
+export const METODO_PRESENCA: Record<string, string> = { qr: "QR", manual: "Manual", login: "Login", importacao: "Importação" };
+
+export const EFICACIA: Record<ResultadoEficacia, { rotulo: string; tom: Tom }> = {
+  eficaz: { rotulo: "Eficaz", tom: "success" },
+  parcialmente_eficaz: { rotulo: "Parcialmente eficaz", tom: "warning" },
+  nao_eficaz: { rotulo: "Não eficaz", tom: "danger" },
+};
+
+export const TIPO_EVIDENCIA: Record<TipoEvidencia, string> = {
+  lista_presenca: "Lista de presença",
+  certificado: "Certificado",
+  material: "Material",
+  ata: "Ata",
+  foto: "Foto",
+  comprovante: "Comprovante",
+  avaliacao: "Avaliação",
+  outro: "Outro",
 };
 
 export const SITUACAO: Record<Situacao, { rotulo: string; tom: Tom }> = {

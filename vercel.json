@@ -1,3 +1,6 @@
 {
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/participar/:token", "destination": "/participar.html" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }

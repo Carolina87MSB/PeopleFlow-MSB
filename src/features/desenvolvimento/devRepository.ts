@@ -8,7 +8,8 @@ import { supabase } from "../../lib/supabaseClient";
 
 export const TAMANHO_PAGINA = 50;
 
-export type PerfilDesenvolvimento = "RH" | "Gestor";
+/** "Responsavel": conta que só conduz treinamentos (responsável/instrutor) — vê apenas esses. */
+export type PerfilDesenvolvimento = "RH" | "Gestor" | "Responsavel";
 
 export interface PessoaDesenvolvimento {
   id: number;
@@ -221,32 +222,189 @@ export async function historicoDoColaborador(colaboradorId: number): Promise<Lin
   return (data ?? []) as LinhaHistorico[];
 }
 
-// ── Treinamentos ────────────────────────────────────────────────────────
-export type StatusTreinamento = "planejado" | "em_andamento" | "concluido" | "cancelado";
+// ── Treinamentos (Fase 5) ───────────────────────────────────────────────
+export type StatusTreinamento = "solicitado" | "planejado" | "em_andamento" | "concluido" | "cancelado";
+export type OrigemTreinamento = "desenvolvimento" | "pop_it" | "revisao_documental" | "integracao" | "requisito_regulatorio" | "reciclagem" | "operacional" | "outro";
 
 export interface Treinamento {
   id: number;
   codigo: string;
   titulo: string;
+  origem_tipo: OrigemTreinamento;
+  lista_mestra_codigo: string | null;
+  lista_mestra_revisao: string | null;
+  lista_mestra_titulo: string | null;
   tipo: "interno" | "externo";
-  modalidade: string | null;
+  modalidade: "presencial" | "ead" | "hibrido" | null;
   data_inicio: string | null;
   data_fim: string | null;
   carga_horaria_min: number | null;
+  instrutor_colaborador_id: number | null;
+  instrutor_externo: string | null;
+  responsavel_colaborador_id: number | null;
+  justificativa: string;
+  local_link: string;
+  observacao: string;
+  exige_eficacia: boolean;
+  eficacia_prazo: string | null;
+  data_realizacao: string | null;
+  carga_realizada_min: number | null;
   status: StatusTreinamento;
-  lista_mestra_codigo: string | null;
+  status_motivo: string | null;
+  solicitado_por_colaborador_id: number | null;
+  planejado_em: string | null;
+  iniciado_em: string | null;
+  concluido_em: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export async function listarTreinamentos(pagina: number, status: StatusTreinamento[], recentesPrimeiro: boolean): Promise<Pagina<Treinamento>> {
-  const { data, error, count } = await supabase
+const COLUNAS_TREINAMENTO =
+  "id, codigo, titulo, origem_tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, tipo, modalidade, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, created_at, updated_at";
+
+export type TreinamentoNaLista = Treinamento & { participantes: { count: number }[] };
+
+export interface FiltroTreinamentos {
+  status: StatusTreinamento[];
+  busca: string;
+  origem: OrigemTreinamento | null;
+  recentesPrimeiro: boolean;
+  /** Só os que a pessoa conduz (responsável ou instrutor). */
+  conduzidosPor?: number;
+}
+
+/** O RLS decide o que cada perfil vê (RH tudo; Gestor equipe/solicitados/conduzidos; Responsável só os que conduz). */
+export async function listarTreinamentos(pagina: number, f: FiltroTreinamentos): Promise<Pagina<TreinamentoNaLista>> {
+  let q = supabase
     .from("peopleflow_dev_treinamentos")
-    .select("id, codigo, titulo, tipo, modalidade, data_inicio, data_fim, carga_horaria_min, status, lista_mestra_codigo", { count: "exact" })
-    .in("status", status)
-    .order(recentesPrimeiro ? "data_fim" : "data_inicio", { ascending: !recentesPrimeiro, nullsFirst: false })
-    .order("id", { ascending: !recentesPrimeiro })
+    .select(`${COLUNAS_TREINAMENTO}, participantes:peopleflow_dev_participantes(count)`, { count: "exact" })
+    .in("status", f.status)
+    .is("participantes.removido_em", null)
+    .order(f.recentesPrimeiro ? "data_realizacao" : "data_inicio", { ascending: !f.recentesPrimeiro, nullsFirst: false })
+    .order("id", { ascending: !f.recentesPrimeiro })
     .range(...faixa(pagina));
+  const termo = f.busca.trim().replace(/[%,()]/g, " ");
+  if (termo) q = q.or(`titulo.ilike.%${termo}%,codigo.ilike.%${termo}%,lista_mestra_codigo.ilike.%${termo}%`);
+  if (f.origem) q = q.eq("origem_tipo", f.origem);
+  if (f.conduzidosPor) q = q.or(`responsavel_colaborador_id.eq.${f.conduzidosPor},instrutor_colaborador_id.eq.${f.conduzidosPor}`);
+  const { data, error, count } = await q;
   if (error) falha("Treinamentos", error.message);
-  return { itens: (data ?? []) as Treinamento[], total: count ?? 0 };
+  return { itens: (data ?? []) as unknown as TreinamentoNaLista[], total: count ?? 0 };
+}
+
+export async function obterTreinamento(id: number): Promise<Treinamento | null> {
+  const { data, error } = await supabase.from("peopleflow_dev_treinamentos").select(COLUNAS_TREINAMENTO).eq("id", id).maybeSingle();
+  if (error) falha("Treinamento", error.message);
+  return (data as Treinamento | null) ?? null;
+}
+
+export type ResultadoEficacia = "eficaz" | "parcialmente_eficaz" | "nao_eficaz";
+
+export interface Participante {
+  id: number;
+  treinamento_id: number;
+  colaborador_id: number;
+  origem_inclusao: "manual" | "criterio" | "lnt";
+  presenca_status: "pendente" | "presente" | "ausente";
+  presenca_metodo: "manual" | "qr" | "login" | "importacao" | null;
+  presenca_em: string | null;
+  presenca_motivo: string | null;
+  eficacia_resultado: ResultadoEficacia | null;
+  eficacia_observacao: string | null;
+  eficacia_em: string | null;
+  removido_em: string | null;
+  removido_motivo: string | null;
+  pessoa: PessoaDesenvolvimento | null;
+}
+
+/** Nomes vêm do cadastro oficial (colaboradores), nunca de cópia local. */
+export async function pessoasPorId(ids: number[]): Promise<Map<number, PessoaDesenvolvimento>> {
+  const unicos = [...new Set(ids.filter(Boolean))];
+  if (unicos.length === 0) return new Map();
+  const { data, error } = await supabase.from("colaboradores").select("id, nome, cargo, departamento").in("id", unicos);
+  if (error) falha("Colaboradores", error.message);
+  return new Map(
+    (data ?? []).map((r) => [Number(r.id), { id: Number(r.id), nome: r.nome as string, cargo: (r.cargo as string | null) ?? "", departamento: (r.departamento as string | null) ?? "" }]),
+  );
+}
+
+export async function listarParticipantes(treinamentoId: number): Promise<Participante[]> {
+  const { data, error } = await supabase
+    .from("peopleflow_dev_participantes")
+    .select(
+      "id, treinamento_id, colaborador_id, origem_inclusao, presenca_status, presenca_metodo, presenca_em, presenca_motivo, eficacia_resultado, eficacia_observacao, eficacia_em, removido_em, removido_motivo",
+    )
+    .eq("treinamento_id", treinamentoId)
+    .order("id")
+    .limit(1000);
+  if (error) falha("Participantes", error.message);
+  const linhas = (data ?? []) as Omit<Participante, "pessoa">[];
+  const nomes = await pessoasPorId(linhas.map((p) => p.colaborador_id));
+  return linhas
+    .map((p) => ({ ...p, pessoa: nomes.get(p.colaborador_id) ?? null }))
+    .sort((a, b) => (a.pessoa?.nome ?? "").localeCompare(b.pessoa?.nome ?? "", "pt-BR"));
+}
+
+export interface VinculoNecessidade {
+  id: number;
+  necessidade_id: number;
+  vinculado_em: string;
+  necessidade: Pick<Necessidade, "id" | "colaborador_id" | "descricao" | "status" | "categoria" | "prioridade" | "origem"> | null;
+}
+
+/** Somente RH e Gestor (RLS). */
+export async function listarVinculos(treinamentoId: number): Promise<VinculoNecessidade[]> {
+  const { data, error } = await supabase
+    .from("peopleflow_dev_treinamento_necessidades")
+    .select("id, necessidade_id, vinculado_em, necessidade:peopleflow_dev_necessidades(id, colaborador_id, descricao, status, categoria, prioridade, origem)")
+    .eq("treinamento_id", treinamentoId)
+    .eq("ativo", true)
+    .order("id")
+    .limit(1000);
+  if (error) falha("Necessidades vinculadas", error.message);
+  return (data ?? []) as unknown as VinculoNecessidade[];
+}
+
+export type TipoEvidencia = "lista_presenca" | "certificado" | "material" | "ata" | "foto" | "comprovante" | "avaliacao" | "outro";
+
+export interface Evidencia {
+  id: number;
+  participante_id: number | null;
+  tipo: TipoEvidencia;
+  file_name: string;
+  mime: string | null;
+  tamanho_bytes: number | null;
+  observacao: string;
+  enviado_em: string;
+  substituida_em: string | null;
+  substituida_motivo: string | null;
+}
+
+export async function listarEvidencias(treinamentoId: number): Promise<Evidencia[]> {
+  const { data, error } = await supabase
+    .from("peopleflow_dev_evidencias")
+    .select("id, participante_id, tipo, file_name, mime, tamanho_bytes, observacao, enviado_em, substituida_em, substituida_motivo")
+    .eq("treinamento_id", treinamentoId)
+    .order("enviado_em", { ascending: false })
+    .limit(500);
+  if (error) falha("Evidências", error.message);
+  return (data ?? []) as Evidencia[];
+}
+
+const BUCKET_EVIDENCIAS = "desenvolvimento-evidencias";
+
+/** Envio em 3 passos: o servidor emite a URL assinada → o arquivo vai direto ao bucket privado → o servidor confere e registra. */
+export async function enviarEvidencia(treinamentoId: number, arquivo: File, tipo: TipoEvidencia, participanteId: number | null, observacao: string): Promise<Evidencia> {
+  const alvo = await gravar<{ path: string; token: string }>("evidencia_upload_url", {
+    treinamento_id: treinamentoId,
+    tipo,
+    file_name: arquivo.name,
+    mime: arquivo.type,
+    tamanho_bytes: arquivo.size,
+  });
+  const { error } = await supabase.storage.from(BUCKET_EVIDENCIAS).uploadToSignedUrl(alvo.path, alvo.token, arquivo, { contentType: arquivo.type });
+  if (error) falha("Envio do arquivo", error.message);
+  return gravar<Evidencia>("evidencia_registrar", { treinamento_id: treinamentoId, participante_id: participanteId, path: alvo.path, tipo, file_name: arquivo.name, mime: arquivo.type, observacao });
 }
 
 // ── LNT ─────────────────────────────────────────────────────────────────
@@ -449,7 +607,25 @@ export type AcaoGravacao =
   | "necessidade_consolidar"
   | "necessidade_desagrupar"
   | "pdi_sugestao_aceitar"
-  | "pdi_sugestao_dispensar";
+  | "pdi_sugestao_dispensar"
+  | "treinamento_salvar"
+  | "treinamento_realizacao"
+  | "treinamento_planejar"
+  | "treinamento_iniciar"
+  | "treinamento_concluir"
+  | "treinamento_cancelar"
+  | "participantes_adicionar"
+  | "participante_remover"
+  | "necessidades_vincular"
+  | "necessidade_desvincular"
+  | "presenca_manual"
+  | "qr_gerar"
+  | "qr_encerrar"
+  | "evidencia_upload_url"
+  | "evidencia_registrar"
+  | "evidencia_url"
+  | "evidencia_substituir"
+  | "eficacia_registrar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {

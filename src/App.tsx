@@ -25,6 +25,7 @@ const DesenvolvimentoLayout = lazy(() => import("./features/desenvolvimento/Dese
 const HabilidadesPage = lazy(() => import("./features/desenvolvimento/HabilidadesPage"));
 const LntPage = lazy(() => import("./features/desenvolvimento/LntPage"));
 const TreinamentosPage = lazy(() => import("./features/desenvolvimento/TreinamentosPage"));
+const TreinamentoPage = lazy(() => import("./features/desenvolvimento/TreinamentoPage"));
 
 function SobDemanda({ children }: { children: ReactNode }) {
   return <Suspense fallback={null}>{children}</Suspense>;
@@ -71,6 +72,7 @@ function App() {
                   <Route path="habilidades/:aba?" element={<SobDemanda><HabilidadesPage /></SobDemanda>} />
                   <Route path="lnt/:aba?" element={<SobDemanda><LntPage /></SobDemanda>} />
                   <Route path="treinamentos/:aba?" element={<SobDemanda><TreinamentosPage /></SobDemanda>} />
+                  <Route path="treinamento/:id" element={<SobDemanda><TreinamentoPage /></SobDemanda>} />
                   <Route path="*" element={<Navigate to="habilidades" replace />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

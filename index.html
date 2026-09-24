@@ -14,6 +14,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Presença por QR: se o link de login do e-mail cair na raiz (Redirect URL não
+      // liberada no Supabase), volta para /participar/:token com a sessão da URL.
+      try {
+        var pend = JSON.parse(localStorage.getItem("pf_participar_pendente") || "null");
+        if (pend && Date.now() - pend.ts < 3600000 && location.pathname === "/" && /access_token|code=/.test(location.hash + location.search)) {
+          localStorage.removeItem("pf_participar_pendente");
+          location.replace("/participar/" + encodeURIComponent(pend.token) + location.search + location.hash);
+        }
+      } catch (e) {}
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

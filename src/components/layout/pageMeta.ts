@@ -20,6 +20,7 @@ const PAGE_META: Record<string, PageMeta> = {
   "desenvolvimento/habilidades": { eyebrow: "Desenvolvimento", title: "Habilidades" },
   "desenvolvimento/lnt": { eyebrow: "Desenvolvimento", title: "Necessidades de Desenvolvimento" },
   "desenvolvimento/treinamentos": { eyebrow: "Desenvolvimento", title: "Treinamentos" },
+  "desenvolvimento/treinamento": { eyebrow: "Desenvolvimento", title: "Treinamento" },
 };
 
 /** Procura primeiro "segmento/subsegmento" (só o módulo Desenvolvimento usa)

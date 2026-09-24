@@ -1,16 +1,31 @@
-import { Navigate, useParams } from "react-router-dom";
-import { CalendarDays, CheckCircle2 } from "lucide-react";
+import { useState } from "react";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { CalendarDays, CheckCircle2, Plus } from "lucide-react";
 import { Header } from "../../components/layout/Header";
-import { Card, tableStyles } from "../../components/ui";
-import { listarTreinamentos, type StatusTreinamento } from "./devRepository";
+import { Button, Card, FilterChips, tableStyles } from "../../components/ui";
+import { listarTreinamentos, type OrigemTreinamento, type StatusTreinamento } from "./devRepository";
 import { useDesenvolvimento } from "./contexto";
 import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, type AbaDef } from "./componentes";
 import { usePaginado } from "./hooks";
-import { formatarCarga, formatarData, STATUS_TREINAMENTO } from "./rotulos";
+import { formatarCarga, formatarData, ORIGEM_TREINAMENTO, STATUS_TREINAMENTO } from "./rotulos";
 import { ListaMestraAba } from "./ListaMestraAba";
+import { TreinamentoDrawer } from "./TreinamentoForm";
 import styles from "./Desenvolvimento.module.css";
 
 type AbaTreinamentos = "agenda" | "concluidos" | "lista-mestra";
+
+const FILTROS: Record<"agenda" | "concluidos", { rotulo: string; status: StatusTreinamento[] }[]> = {
+  agenda: [
+    { rotulo: "Todos", status: ["solicitado", "planejado", "em_andamento"] },
+    { rotulo: "Solicitados", status: ["solicitado"] },
+    { rotulo: "Planejados", status: ["planejado"] },
+    { rotulo: "Em andamento", status: ["em_andamento"] },
+  ],
+  concluidos: [
+    { rotulo: "Concluídos", status: ["concluido"] },
+    { rotulo: "Cancelados", status: ["cancelado"] },
+  ],
+};
 
 export default function TreinamentosPage() {
   const { perfil } = useDesenvolvimento();
@@ -27,60 +42,92 @@ export default function TreinamentosPage() {
     <>
       <Header />
       <Abas base="/desenvolvimento/treinamentos" abas={abas} atual={atual} />
-      {atual === "agenda" && (
-        <ListaTreinamentos
-          key="agenda"
-          titulo="Agenda de treinamentos"
-          subtitulo="Treinamentos planejados e em andamento"
-          status={["planejado", "em_andamento"]}
-          recentesPrimeiro={false}
-          vazio="Não há treinamentos agendados."
-          icone={<CalendarDays size={26} strokeWidth={1.6} />}
-        />
-      )}
-      {atual === "concluidos" && (
-        <ListaTreinamentos
-          key="concluidos"
-          titulo="Treinamentos concluídos"
-          subtitulo="Realizados e encerrados, do mais recente para o mais antigo"
-          status={["concluido"]}
-          recentesPrimeiro
-          vazio="Não há treinamentos concluídos."
-          icone={<CheckCircle2 size={26} strokeWidth={1.6} />}
-        />
-      )}
+      {atual === "agenda" && <ListaTreinamentos key="agenda" aba="agenda" />}
+      {atual === "concluidos" && <ListaTreinamentos key="concluidos" aba="concluidos" />}
       {atual === "lista-mestra" && <ListaMestraAba />}
     </>
   );
 }
 
-function ListaTreinamentos(props: {
-  titulo: string;
-  subtitulo: string;
-  status: StatusTreinamento[];
-  recentesPrimeiro: boolean;
-  vazio: string;
-  icone: React.ReactNode;
-}) {
-  const { perfil } = useDesenvolvimento();
-  const { dados, erro, carregando, pagina, setPagina } = usePaginado((p) => listarTreinamentos(p, props.status, props.recentesPrimeiro), [props.status.join()]);
+function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
+  const { perfil, colaboradorId } = useDesenvolvimento();
+  const navigate = useNavigate();
+  const filtros = FILTROS[aba];
+  const [filtro, setFiltro] = useState(filtros[0].rotulo);
+  const [busca, setBusca] = useState("");
+  const [termo, setTermo] = useState("");
+  const [origem, setOrigem] = useState("");
+  const [soConduzo, setSoConduzo] = useState(false);
+  const [novo, setNovo] = useState(false);
+  const status = filtros.find((f) => f.rotulo === filtro)!.status;
+  const lista = usePaginado(
+    (p) =>
+      listarTreinamentos(p, {
+        status,
+        busca: termo,
+        origem: (origem || null) as OrigemTreinamento | null,
+        recentesPrimeiro: aba === "concluidos",
+        conduzidosPor: soConduzo ? colaboradorId : undefined,
+      }),
+    [filtro, termo, origem, soConduzo],
+  );
+  const podeSolicitar = perfil === "RH" || perfil === "Gestor";
+  const subtitulo =
+    perfil === "Responsavel"
+      ? "Treinamentos em que você é responsável ou instrutor"
+      : perfil === "Gestor"
+        ? "Da sua equipe, os que você solicitou e os que você conduz"
+        : aba === "agenda"
+          ? "Solicitados, planejados e em andamento"
+          : "Realizados e encerrados, do mais recente para o mais antigo";
+
   return (
     <Card>
       <div className={styles.cardHeader}>
         <div>
-          <h3 className={styles.cardTitle}>{props.titulo}</h3>
-          <p className={styles.cardSubtitle}>
-            {props.subtitulo}
-            {perfil === "Gestor" ? " com participantes da sua equipe" : ""}
-          </p>
+          <h3 className={styles.cardTitle}>{aba === "agenda" ? "Agenda de treinamentos" : "Treinamentos encerrados"}</h3>
+          <p className={styles.cardSubtitle}>{subtitulo}</p>
         </div>
+        {podeSolicitar && aba === "agenda" && (
+          <Button variant="primary" icon={<Plus size={16} />} onClick={() => setNovo(true)}>
+            Solicitar treinamento
+          </Button>
+        )}
       </div>
-      {erro ? (
-        <Erro mensagem={erro} />
-      ) : carregando || !dados ? (
+      <div className={styles.toolbar}>
+        <form
+          className={styles.filtros}
+          onSubmit={(e) => {
+            e.preventDefault();
+            setTermo(busca);
+          }}
+        >
+          <input className={styles.input} type="search" placeholder="Buscar por título, código ou documento" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
+          <select className={styles.select} style={{ minWidth: 160 }} value={origem} onChange={(e) => setOrigem(e.target.value)} aria-label="Origem">
+            <option value="">Todas as origens</option>
+            {(Object.keys(ORIGEM_TREINAMENTO) as OrigemTreinamento[]).map((o) => (
+              <option key={o} value={o}>
+                {ORIGEM_TREINAMENTO[o]}
+              </option>
+            ))}
+          </select>
+          {perfil !== "Responsavel" && (
+            <label className={styles.check}>
+              <input type="checkbox" checked={soConduzo} onChange={(e) => setSoConduzo(e.target.checked)} /> Só os que conduzo
+            </label>
+          )}
+        </form>
+        <FilterChips options={filtros.map((f) => f.rotulo)} value={filtro} onChange={setFiltro} />
+      </div>
+      {lista.erro ? (
+        <Erro mensagem={lista.erro} />
+      ) : lista.carregando || !lista.dados ? (
         <Carregando />
-      ) : dados.itens.length === 0 ? (
-        <EstadoVazio icone={props.icone} titulo={props.vazio} />
+      ) : lista.dados.itens.length === 0 ? (
+        <EstadoVazio
+          icone={aba === "agenda" ? <CalendarDays size={26} strokeWidth={1.6} /> : <CheckCircle2 size={26} strokeWidth={1.6} />}
+          titulo={aba === "agenda" ? "Não há treinamentos na agenda." : "Não há treinamentos encerrados."}
+        />
       ) : (
         <>
           <div className={tableStyles.wrap}>
@@ -89,37 +136,48 @@ function ListaTreinamentos(props: {
                 <tr>
                   <th>Código</th>
                   <th>Treinamento</th>
-                  <th>Tipo</th>
+                  <th>Origem</th>
                   <th>Data</th>
                   <th>Carga</th>
+                  <th>Participantes</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {dados.itens.map((t) => (
-                  <tr key={t.id}>
-                    <td className={styles.mono}>{t.codigo}</td>
-                    <td>
-                      {t.titulo}
-                      {t.lista_mestra_codigo && <div className={styles.secundario}>{t.lista_mestra_codigo}</div>}
-                    </td>
-                    <td className={styles.secundario}>{t.tipo === "interno" ? "Interno" : "Externo"}</td>
-                    <td className={styles.mono}>
-                      {formatarData(t.data_inicio)}
-                      {t.data_fim && t.data_fim !== t.data_inicio ? ` a ${formatarData(t.data_fim)}` : ""}
-                    </td>
-                    <td className={styles.mono}>{formatarCarga(t.carga_horaria_min)}</td>
-                    <td>
-                      <Selo tom={STATUS_TREINAMENTO[t.status].tom}>{STATUS_TREINAMENTO[t.status].rotulo}</Selo>
-                    </td>
-                  </tr>
-                ))}
+                {lista.dados.itens.map((t) => {
+                  const data = aba === "concluidos" ? (t.data_realizacao ?? t.data_inicio) : t.data_inicio;
+                  return (
+                    <tr key={t.id} className={[styles.linhaClicavel, t.status === "cancelado" ? styles.linhaInativa : ""].join(" ")} onClick={() => navigate(`/desenvolvimento/treinamento/${t.id}`)}>
+                      <td className={styles.mono}>{t.codigo}</td>
+                      <td>
+                        {t.titulo}
+                        {t.lista_mestra_codigo && (
+                          <div className={styles.secundario}>
+                            {t.lista_mestra_codigo} rev. {t.lista_mestra_revisao}
+                          </div>
+                        )}
+                        {t.tipo === "externo" && <div className={styles.secundario}>Externo</div>}
+                      </td>
+                      <td className={styles.secundario}>{ORIGEM_TREINAMENTO[t.origem_tipo]}</td>
+                      <td className={styles.mono}>
+                        {formatarData(data)}
+                        {aba === "agenda" && t.data_fim && t.data_fim !== t.data_inicio ? ` a ${formatarData(t.data_fim)}` : ""}
+                      </td>
+                      <td className={styles.mono}>{formatarCarga(t.carga_realizada_min ?? t.carga_horaria_min)}</td>
+                      <td className={styles.mono}>{t.participantes?.[0]?.count ?? 0}</td>
+                      <td>
+                        <Selo tom={STATUS_TREINAMENTO[t.status].tom}>{STATUS_TREINAMENTO[t.status].rotulo}</Selo>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          <Paginacao pagina={pagina} total={dados.total} onChange={setPagina} />
+          <Paginacao pagina={lista.pagina} total={lista.dados.total} onChange={lista.setPagina} />
         </>
       )}
+      {novo && <TreinamentoDrawer item={null} onFechar={() => setNovo(false)} onSalvo={(t) => navigate(`/desenvolvimento/treinamento/${t.id}`)} />}
     </Card>
   );
 }

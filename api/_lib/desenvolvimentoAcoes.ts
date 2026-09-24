@@ -10,7 +10,9 @@
 //   • nunca grava em tabelas existentes do PeopleFlow.
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
+import { emailOf } from "../../src/domain/hierarquia.js";
 
 export interface ContaDev {
   userId: string;
@@ -746,6 +748,701 @@ async function pdiSugestaoDispensar(conta: ContaDev, corpo: Corpo) {
   return data;
 }
 
+// ══ Fase 5 — Gestão de Treinamentos ═════════════════════════════════════
+const COLS_TRE =
+  "id, codigo, titulo, origem_tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, tipo, modalidade, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, created_at, updated_at";
+const COLS_PART =
+  "id, treinamento_id, colaborador_id, origem_inclusao, presenca_status, presenca_metodo, presenca_em, presenca_motivo, eficacia_resultado, eficacia_observacao, eficacia_em, eficacia_por_colaborador_id, removido_em, removido_motivo";
+const ORIGENS_TREINAMENTO = ["desenvolvimento", "pop_it", "revisao_documental", "integracao", "requisito_regulatorio", "reciclagem", "operacional", "outro"] as const;
+const ORIGENS_COM_DOCUMENTO = new Set(["pop_it", "revisao_documental"]);
+const STATUS_ATIVOS = ["planejado", "em_andamento"];
+type Treinamento = Record<string, any>;
+
+async function lerTreinamento(id: number): Promise<Treinamento> {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select(COLS_TRE).eq("id", id).maybeSingle();
+  if (error) erroBanco(error, "Treinamento");
+  if (!data) throw new ErroHttp(404, "Treinamento não encontrado.");
+  return data;
+}
+
+function ehResponsavel(conta: ContaDev, t: Treinamento): boolean {
+  return [t.responsavel_colaborador_id, t.instrutor_colaborador_id].some((v) => v != null && Number(v) === conta.colaboradorId);
+}
+function ehSolicitante(conta: ContaDev, t: Treinamento): boolean {
+  return t.solicitado_por_colaborador_id != null && Number(t.solicitado_por_colaborador_id) === conta.colaboradorId;
+}
+/** Solicitante que não é RH só mexe na própria solicitação enquanto ela está SOLICITADA. */
+function podeEditarSolicitacao(conta: ContaDev, t: Treinamento): boolean {
+  return conta.perfil === "RH" || (t.status === "solicitado" && ehSolicitante(conta, t));
+}
+function exigirRHouResponsavel(conta: ContaDev, t: Treinamento) {
+  if (conta.perfil !== "RH" && !ehResponsavel(conta, t)) throw new ErroHttp(403, "Somente o RH ou o responsável/instrutor deste treinamento.");
+}
+
+async function idsNoEscopo(conta: ContaDev): Promise<Set<number>> {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_escopo").select("colaborador_id").eq("gestor_colaborador_id", conta.colaboradorId);
+  if (error) erroBanco(error, "Escopo");
+  return new Set((data ?? []).map((r) => Number(r.colaborador_id)));
+}
+
+async function exigirColaboradoresAtivos(ids: number[]) {
+  if (ids.length === 0) return;
+  const { data, error } = await supabaseAdmin.from("colaboradores").select("id, desligado").in("id", ids);
+  if (error) erroBanco(error, "Colaborador");
+  const ativos = new Set((data ?? []).filter((c) => !c.desligado).map((c) => Number(c.id)));
+  const faltando = ids.filter((i) => !ativos.has(i));
+  if (faltando.length) throw new ErroHttp(422, "Há colaborador inexistente ou desligado na seleção.");
+}
+
+/** Fotografia do documento no momento do vínculo — nunca atualizada retroativamente. */
+async function fotografiaDocumento(codigo: string) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_lista_mestra").select("codigo, titulo, revisao_atual, situacao").eq("codigo", codigo).maybeSingle();
+  if (error) erroBanco(error, "Lista Mestra");
+  if (!data) throw new ErroHttp(422, "Documento não encontrado na Lista Mestra.");
+  if (data.situacao !== "vigente") throw new ErroHttp(422, "Documento obsoleto na Lista Mestra.");
+  return { lista_mestra_codigo: data.codigo, lista_mestra_titulo: data.titulo, lista_mestra_revisao: data.revisao_atual };
+}
+
+function lerCamposTreinamento(corpo: Corpo) {
+  const tipo = umDe(texto(corpo, "tipo") || "interno", ["interno", "externo"] as const, "Modalidade");
+  const inicio = dataOpcional(corpo, "data_inicio", "Data prevista");
+  const fim = dataOpcional(corpo, "data_fim", "Data final") ;
+  if (inicio && fim && fim < inicio) throw new ErroHttp(422, "A data final não pode ser anterior à data prevista.");
+  const exigeEficacia = corpo.exige_eficacia === true;
+  return {
+    titulo: texto(corpo, "titulo", { max: 300 }),
+    origem_tipo: umDe(texto(corpo, "origem_tipo") || "desenvolvimento", ORIGENS_TREINAMENTO, "Origem"),
+    justificativa: texto(corpo, "justificativa", { max: 2000 }),
+    tipo,
+    modalidade: (texto(corpo, "modalidade") || null) as string | null,
+    data_inicio: inicio,
+    data_fim: fim,
+    carga_horaria_min: inteiroOpcional(corpo, "carga_horaria_min", "Carga horária (minutos)", 1, 100000),
+    local_link: texto(corpo, "local_link", { max: 500 }),
+    observacao: texto(corpo, "observacao", { max: 2000 }),
+    exige_eficacia: exigeEficacia,
+    eficacia_prazo: exigeEficacia ? dataOpcional(corpo, "eficacia_prazo", "Prazo da eficácia") : null,
+    responsavel_colaborador_id: corpo.responsavel_colaborador_id ? idObrigatorio(corpo, "responsavel_colaborador_id", "Responsável") : null,
+    instrutor_colaborador_id: corpo.instrutor_colaborador_id ? idObrigatorio(corpo, "instrutor_colaborador_id", "Instrutor") : null,
+    instrutor_externo: texto(corpo, "instrutor_externo", { max: 200 }) || null,
+    lista_mestra_codigo: texto(corpo, "lista_mestra_codigo", { max: 40 }) || null,
+  };
+}
+
+function exigirMinimoPlanejamento(t: Record<string, unknown>) {
+  if (!String(t.titulo ?? "").trim()) throw new ErroHttp(422, "Informe o título do treinamento.");
+  if (!t.data_inicio) throw new ErroHttp(422, "Informe a data prevista.");
+  if (!t.responsavel_colaborador_id) throw new ErroHttp(422, "Defina o responsável pelo treinamento.");
+  if (ORIGENS_COM_DOCUMENTO.has(String(t.origem_tipo)) && !t.lista_mestra_codigo) throw new ErroHttp(422, "Selecione o documento da Lista Mestra (POP/IT/revisão documental).");
+}
+
+// ── Necessidades ligadas ao treinamento: regras de status ───────────────
+async function vinculosAtivos(treinamentoId: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").select("id, necessidade_id").eq("treinamento_id", treinamentoId).eq("ativo", true);
+  if (error) erroBanco(error, "Vínculos");
+  return (data ?? []) as { id: number; necessidade_id: number }[];
+}
+
+async function temOutroTreinamentoAtivo(necessidadeId: number, exceto: number): Promise<boolean> {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").select("treinamento_id").eq("necessidade_id", necessidadeId).eq("ativo", true);
+  if (error) erroBanco(error, "Vínculos");
+  const outros = (data ?? []).map((r) => Number(r.treinamento_id)).filter((id) => id !== exceto);
+  if (outros.length === 0) return false;
+  const { data: ts, error: tErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("id, status").in("id", outros);
+  if (tErro) erroBanco(tErro, "Treinamento");
+  return (ts ?? []).some((t) => STATUS_ATIVOS.includes(t.status as string));
+}
+
+async function mudarStatusNecessidade(conta: ContaDev, necessidadeId: number, de: string[], para: string, extra: Record<string, unknown>, motivo: string, treinamentoId: number) {
+  const { data: n, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, status").eq("id", necessidadeId).maybeSingle();
+  if (error) erroBanco(error, "Necessidade");
+  if (!n || !de.includes(n.status as string)) return;
+  const { error: uErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").update({ status: para, ...extra, updated_by: conta.userId }).eq("id", necessidadeId);
+  if (uErro) erroBanco(uErro, "Necessidade");
+  await auditar(conta, `necessidade_${para}`, "peopleflow_dev_necessidades", String(necessidadeId), { status: { antes: n.status, depois: para }, treinamento_id: treinamentoId, motivo });
+}
+
+/** Treinamento passou a PLANEJADO/EM ANDAMENTO: VALIDADA → PLANEJADA. */
+async function planejarNecessidadesDoTreinamento(conta: ContaDev, treinamentoId: number) {
+  for (const v of await vinculosAtivos(treinamentoId)) await mudarStatusNecessidade(conta, v.necessidade_id, ["validada"], "planejada", {}, "Treinamento planejado", treinamentoId);
+}
+
+/** Volta PLANEJADA → VALIDADA se não houver outro treinamento ativo para a necessidade. */
+async function devolverNecessidade(conta: ContaDev, necessidadeId: number, treinamentoId: number, motivo: string) {
+  if (await temOutroTreinamentoAtivo(necessidadeId, treinamentoId)) return;
+  await mudarStatusNecessidade(conta, necessidadeId, ["planejada"], "validada", {}, motivo, treinamentoId);
+}
+
+/** Após conclusão (ou eficácia registrada depois): decide, por colaborador, se a necessidade foi ATENDIDA. */
+async function processarNecessidadesDoParticipante(conta: ContaDev, t: Treinamento, participante: Record<string, any>) {
+  if (t.status !== "concluido") return;
+  const vinculos = await vinculosAtivos(t.id);
+  if (vinculos.length === 0) return;
+  const { data: nec, error } = await supabaseAdmin
+    .from("peopleflow_dev_necessidades")
+    .select("id, colaborador_id, status")
+    .in("id", vinculos.map((v) => v.necessidade_id))
+    .eq("colaborador_id", participante.colaborador_id);
+  if (error) erroBanco(error, "Necessidade");
+  for (const n of nec ?? []) {
+    const realizou = participante.presenca_status === "presente" && !participante.removido_em;
+    if (realizou && (!t.exige_eficacia || participante.eficacia_resultado === "eficaz")) {
+      await mudarStatusNecessidade(conta, n.id as number, ["planejada", "validada"], "atendida", { atendida_em: new Date().toISOString(), atendida_treinamento_id: t.id }, "Ação realizada pelo colaborador", t.id);
+    } else if (realizou && t.exige_eficacia && !participante.eficacia_resultado) {
+      // aguardando a avaliação de eficácia: permanece PLANEJADA
+    } else {
+      const motivo = !realizou ? "Colaborador não realizou o treinamento" : "Eficácia não comprovada";
+      await devolverNecessidade(conta, n.id as number, t.id, motivo);
+    }
+  }
+}
+
+// ── Solicitação / edição ───────────────────────────────────────────────
+async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
+  const id = corpo.id == null || corpo.id === "" ? null : idObrigatorio(corpo, "id", "Treinamento");
+  const campos = lerCamposTreinamento(corpo);
+  const pessoas = [campos.responsavel_colaborador_id, campos.instrutor_colaborador_id].filter((x): x is number => x != null);
+  await exigirColaboradoresAtivos(pessoas);
+  if (campos.modalidade) umDe(campos.modalidade, ["presencial", "ead", "hibrido"] as const, "Formato");
+
+  if (!id) {
+    const doc = campos.lista_mestra_codigo ? await fotografiaDocumento(campos.lista_mestra_codigo) : {};
+    const titulo = campos.titulo || (doc as { lista_mestra_titulo?: string }).lista_mestra_titulo || "";
+    if (!titulo) throw new ErroHttp(422, "Informe o título do treinamento.");
+    const planejar = conta.perfil === "RH" && corpo.planejar === true;
+    const linha = { ...campos, ...doc, titulo, lista_mestra_codigo: campos.lista_mestra_codigo };
+    if (planejar) exigirMinimoPlanejamento(linha);
+    const agora = new Date().toISOString();
+    const { data, error } = await supabaseAdmin
+      .from("peopleflow_dev_treinamentos")
+      .insert({
+        ...linha,
+        status: planejar ? "planejado" : "solicitado",
+        planejado_em: planejar ? agora : null,
+        planejado_por: planejar ? conta.userId : null,
+        solicitado_por_colaborador_id: conta.colaboradorId,
+        origem_registro: "sistema",
+        created_by: conta.userId,
+        updated_by: conta.userId,
+      })
+      .select(COLS_TRE)
+      .single();
+    if (error) erroBanco(error, "Treinamento");
+    await auditar(conta, planejar ? "treinamento_planejado" : "treinamento_solicitado", "peopleflow_dev_treinamentos", String(data.id), { depois: data });
+    return data;
+  }
+
+  const antes = await lerTreinamento(id);
+  if (antes.status === "cancelado") throw new ErroHttp(422, "Treinamento cancelado não pode ser editado.");
+  if (!podeEditarSolicitacao(conta, antes)) throw new ErroHttp(403, "Somente o RH (ou o solicitante, enquanto SOLICITADO) pode editar.");
+  const motivo = texto(corpo, "motivo", { max: 1000 });
+  if (antes.status === "concluido" && !motivo) throw new ErroHttp(422, "Alteração em treinamento concluído exige justificativa.");
+  // Documento: só refotografa quando o código muda — a revisão treinada nunca é atualizada retroativamente.
+  let doc: Record<string, unknown> = { lista_mestra_codigo: antes.lista_mestra_codigo, lista_mestra_titulo: antes.lista_mestra_titulo, lista_mestra_revisao: antes.lista_mestra_revisao };
+  if (campos.lista_mestra_codigo !== antes.lista_mestra_codigo) {
+    if (antes.status === "concluido") throw new ErroHttp(422, "O documento de um treinamento concluído não pode ser trocado.");
+    doc = campos.lista_mestra_codigo ? await fotografiaDocumento(campos.lista_mestra_codigo) : { lista_mestra_codigo: null, lista_mestra_titulo: null, lista_mestra_revisao: null };
+  }
+  const atualizacao = { ...campos, ...doc, titulo: campos.titulo || antes.titulo };
+  if (antes.status !== "solicitado") exigirMinimoPlanejamento(atualizacao);
+  const mudou = diferencas(antes, atualizacao);
+  if (Object.keys(mudou).length === 0) return antes;
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").update({ ...atualizacao, updated_by: conta.userId }).eq("id", id).select(COLS_TRE).single();
+  if (error) erroBanco(error, "Treinamento");
+  await auditar(conta, antes.status === "concluido" ? "treinamento_retificado" : "treinamento_editado", "peopleflow_dev_treinamentos", String(id), { alteracoes: mudou, motivo });
+  return data;
+}
+
+async function treinamentoRealizacao(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
+  exigirRHouResponsavel(conta, t);
+  if (!["planejado", "em_andamento"].includes(t.status)) throw new ErroHttp(422, "Realização só pode ser registrada em treinamento planejado ou em andamento.");
+  const campos = {
+    data_realizacao: dataOpcional(corpo, "data_realizacao", "Data de realização"),
+    carga_realizada_min: inteiroOpcional(corpo, "carga_realizada_min", "Carga realizada (minutos)", 1, 100000),
+  };
+  const mudou = diferencas(t, campos);
+  if (Object.keys(mudou).length === 0) return t;
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").update({ ...campos, updated_by: conta.userId }).eq("id", t.id).select(COLS_TRE).single();
+  if (error) erroBanco(error, "Treinamento");
+  await auditar(conta, "treinamento_realizacao", "peopleflow_dev_treinamentos", String(t.id), { alteracoes: mudou });
+  return data;
+}
+
+// ── Situação ────────────────────────────────────────────────────────────
+async function treinamentoPlanejar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
+  if (t.status !== "solicitado") throw new ErroHttp(422, "Só treinamentos SOLICITADOS podem ser planejados.");
+  exigirMinimoPlanejamento(t);
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_treinamentos")
+    .update({ status: "planejado", planejado_em: new Date().toISOString(), planejado_por: conta.userId, updated_by: conta.userId })
+    .eq("id", t.id)
+    .select(COLS_TRE)
+    .single();
+  if (error) erroBanco(error, "Treinamento");
+  await auditar(conta, "treinamento_planejado", "peopleflow_dev_treinamentos", String(t.id), { status: { antes: "solicitado", depois: "planejado" } });
+  await planejarNecessidadesDoTreinamento(conta, t.id);
+  return data;
+}
+
+async function treinamentoIniciar(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
+  exigirRHouResponsavel(conta, t);
+  if (t.status !== "planejado") throw new ErroHttp(422, "Só treinamentos PLANEJADOS podem ser iniciados.");
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_treinamentos")
+    .update({ status: "em_andamento", iniciado_em: new Date().toISOString(), iniciado_por: conta.userId, updated_by: conta.userId })
+    .eq("id", t.id)
+    .select(COLS_TRE)
+    .single();
+  if (error) erroBanco(error, "Treinamento");
+  await auditar(conta, "treinamento_iniciado", "peopleflow_dev_treinamentos", String(t.id), { status: { antes: "planejado", depois: "em_andamento" } });
+  return data;
+}
+
+async function participantesAtivos(treinamentoId: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_participantes").select(COLS_PART).eq("treinamento_id", treinamentoId);
+  if (error) erroBanco(error, "Participantes");
+  return (data ?? []).filter((p) => !p.removido_em) as Record<string, any>[];
+}
+
+async function encerrarQr(conta: ContaDev, treinamentoId: number) {
+  const { data } = await supabaseAdmin.from("peopleflow_dev_qr_tokens").select("ativo").eq("treinamento_id", treinamentoId).maybeSingle();
+  if (!data?.ativo) return false;
+  const { error } = await supabaseAdmin.from("peopleflow_dev_qr_tokens").update({ ativo: false, encerrado_em: new Date().toISOString(), encerrado_por: conta.userId }).eq("treinamento_id", treinamentoId);
+  if (error) erroBanco(error, "QR");
+  return true;
+}
+
+async function treinamentoConcluir(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
+  const externo = t.tipo === "externo";
+  if (!(t.status === "em_andamento" || (externo && t.status === "planejado"))) {
+    throw new ErroHttp(422, externo ? "Treinamento externo precisa estar planejado ou em andamento." : "Inicie o treinamento antes de concluir.");
+  }
+  exigirMinimoPlanejamento(t);
+  const participantes = await participantesAtivos(t.id);
+  if (participantes.length === 0) throw new ErroHttp(422, "O treinamento não tem participantes.");
+  const pendentes = participantes.filter((p) => p.presenca_status === "pendente").length;
+  if (pendentes) throw new ErroHttp(422, `Registre a presença/realização de todos os participantes (${pendentes} pendente${pendentes > 1 ? "s" : ""}).`);
+  if (!participantes.some((p) => p.presenca_status === "presente")) throw new ErroHttp(422, "Nenhum participante realizou o treinamento — cancele em vez de concluir.");
+  const dataRealizacao = t.data_realizacao ?? t.data_fim ?? t.data_inicio;
+  if (!dataRealizacao) throw new ErroHttp(422, "Informe a data de realização.");
+  if (externo) {
+    const { data: ev, error } = await supabaseAdmin.from("peopleflow_dev_evidencias").select("id").eq("treinamento_id", t.id).is("substituida_em", null).limit(1);
+    if (error) erroBanco(error, "Evidências");
+    if (!ev || ev.length === 0) throw new ErroHttp(422, "Treinamento externo precisa de evidência (certificado, comprovante…) antes da conclusão.");
+  }
+  const agora = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_treinamentos")
+    .update({ status: "concluido", concluido_em: agora, concluido_por: conta.userId, data_realizacao: dataRealizacao, carga_realizada_min: t.carga_realizada_min ?? t.carga_horaria_min, updated_by: conta.userId })
+    .eq("id", t.id)
+    .select(COLS_TRE)
+    .single();
+  if (error) erroBanco(error, "Treinamento");
+  await encerrarQr(conta, t.id);
+  await auditar(conta, "treinamento_concluido", "peopleflow_dev_treinamentos", String(t.id), {
+    status: { antes: t.status, depois: "concluido" },
+    realizaram: participantes.filter((p) => p.presenca_status === "presente").length,
+    ausentes: participantes.filter((p) => p.presenca_status === "ausente").length,
+  });
+  for (const p of participantes) await processarNecessidadesDoParticipante(conta, data, p);
+  return data;
+}
+
+async function treinamentoCancelar(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
+  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "a justificativa do cancelamento" });
+  if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento já encerrado.");
+  if (!podeEditarSolicitacao(conta, t)) throw new ErroHttp(403, "Somente o RH (ou o solicitante, enquanto SOLICITADO) pode cancelar.");
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").update({ status: "cancelado", status_motivo: motivo, updated_by: conta.userId }).eq("id", t.id).select(COLS_TRE).single();
+  if (error) erroBanco(error, "Treinamento");
+  await encerrarQr(conta, t.id);
+  await auditar(conta, "treinamento_cancelado", "peopleflow_dev_treinamentos", String(t.id), { status: { antes: t.status, depois: "cancelado" }, motivo });
+  for (const v of await vinculosAtivos(t.id)) await devolverNecessidade(conta, v.necessidade_id, t.id, "Treinamento cancelado");
+  return data;
+}
+
+// ── Participantes ───────────────────────────────────────────────────────
+async function participantesAdicionar(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
+  if (!podeEditarSolicitacao(conta, t)) throw new ErroHttp(403, "Somente o RH (ou o solicitante, enquanto SOLICITADO) pode incluir participantes.");
+  const ids = Array.isArray(corpo.colaborador_ids) ? [...new Set(corpo.colaborador_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
+  if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos um colaborador.");
+  if (ids.length > 500) throw new ErroHttp(422, "No máximo 500 por vez.");
+  if (conta.perfil !== "RH") {
+    const escopo = await idsNoEscopo(conta);
+    if (ids.some((i) => !escopo.has(i))) throw new ErroHttp(403, "Há colaborador fora da sua equipe.");
+  }
+  await exigirColaboradoresAtivos(ids);
+  const { data: existentes, error } = await supabaseAdmin.from("peopleflow_dev_participantes").select("id, colaborador_id, removido_em").eq("treinamento_id", t.id).in("colaborador_id", ids);
+  if (error) erroBanco(error, "Participantes");
+  const porColab = new Map((existentes ?? []).map((p) => [Number(p.colaborador_id), p]));
+  let incluidos = 0, restaurados = 0;
+  const novos = ids.filter((i) => !porColab.has(i));
+  if (novos.length) {
+    const { error: iErro } = await supabaseAdmin.from("peopleflow_dev_participantes").insert(
+      novos.map((c) => ({ treinamento_id: t.id, colaborador_id: c, origem_inclusao: corpo.origem_inclusao === "criterio" ? "criterio" : "manual", origem_registro: "sistema", created_by: conta.userId, updated_by: conta.userId })),
+    );
+    if (iErro) erroBanco(iErro, "Participantes");
+    incluidos = novos.length;
+  }
+  for (const p of (existentes ?? []).filter((x) => x.removido_em)) {
+    const { error: rErro } = await supabaseAdmin.from("peopleflow_dev_participantes").update({ removido_em: null, removido_por: null, removido_motivo: null, updated_by: conta.userId }).eq("id", p.id);
+    if (rErro) erroBanco(rErro, "Participantes");
+    restaurados++;
+  }
+  await auditar(conta, "participantes_incluidos", "peopleflow_dev_treinamentos", String(t.id), { colaboradores: ids, incluidos, restaurados });
+  return { incluidos, restaurados, ja_existiam: ids.length - incluidos - restaurados };
+}
+
+async function lerParticipante(id: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_participantes").select(COLS_PART).eq("id", id).maybeSingle();
+  if (error) erroBanco(error, "Participante");
+  if (!data) throw new ErroHttp(404, "Participante não encontrado.");
+  return data as Record<string, any>;
+}
+
+async function participanteRemover(conta: ContaDev, corpo: Corpo) {
+  const p = await lerParticipante(idObrigatorio(corpo, "participante_id", "Participante"));
+  const t = await lerTreinamento(p.treinamento_id);
+  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
+  if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
+  if (!podeEditarSolicitacao(conta, t)) throw new ErroHttp(403, "Somente o RH (ou o solicitante, enquanto SOLICITADO) pode retirar participantes.");
+  if (p.removido_em) throw new ErroHttp(422, "Participante já retirado.");
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .update({ removido_em: new Date().toISOString(), removido_por: conta.userId, removido_motivo: motivo, updated_by: conta.userId })
+    .eq("id", p.id)
+    .select(COLS_PART)
+    .single();
+  if (error) erroBanco(error, "Participante");
+  await auditar(conta, "participante_retirado", "peopleflow_dev_participantes", String(p.id), { treinamento_id: t.id, colaborador_id: p.colaborador_id, motivo });
+  // Necessidades desse colaborador ligadas a este treinamento deixam de ser atendidas por ele.
+  const vinculos = await vinculosAtivos(t.id);
+  if (vinculos.length) {
+    const { data: nec } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id").in("id", vinculos.map((v) => v.necessidade_id)).eq("colaborador_id", p.colaborador_id);
+    for (const n of nec ?? []) {
+      const v = vinculos.find((x) => x.necessidade_id === Number(n.id))!;
+      await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").update({ ativo: false, desvinculado_em: new Date().toISOString(), desvinculado_por: conta.userId, desvinculado_motivo: "Participante retirado do treinamento" }).eq("id", v.id);
+      await devolverNecessidade(conta, Number(n.id), t.id, "Participante retirado do treinamento");
+    }
+  }
+  return data;
+}
+
+// ── Vínculo com a Base de Necessidades ─────────────────────────────────
+async function necessidadesVincular(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
+  const ids = Array.isArray(corpo.necessidade_ids) ? [...new Set(corpo.necessidade_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
+  if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos uma necessidade.");
+  const { data: nec, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, status, colaborador_id").in("id", ids);
+  if (error) erroBanco(error, "Necessidade");
+  const invalidas = (nec ?? []).filter((n) => !["validada", "planejada"].includes(n.status as string) || !n.colaborador_id);
+  if ((nec ?? []).length !== ids.length || invalidas.length) throw new ErroHttp(422, "Só necessidades VALIDADAS (ou já PLANEJADAS) de um colaborador podem ser vinculadas.");
+  const ja = new Set((await vinculosAtivos(t.id)).map((v) => v.necessidade_id));
+  const novas = ids.filter((i) => !ja.has(i));
+  if (novas.length) {
+    const { error: iErro } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").insert(novas.map((n) => ({ treinamento_id: t.id, necessidade_id: n, vinculado_por: conta.userId })));
+    if (iErro) erroBanco(iErro, "Vínculo");
+  }
+  // O colaborador da necessidade entra como participante (se ainda não estiver).
+  const colabs = [...new Set((nec ?? []).filter((n) => novas.includes(Number(n.id))).map((n) => Number(n.colaborador_id)))];
+  if (colabs.length) await participantesAdicionar({ ...conta }, { treinamento_id: t.id, colaborador_ids: colabs, origem_inclusao: "manual" }).catch((e) => {
+    if (!(e instanceof ErroHttp && e.status === 422)) throw e;
+  });
+  if (colabs.length) await supabaseAdmin.from("peopleflow_dev_participantes").update({ origem_inclusao: "lnt" }).eq("treinamento_id", t.id).in("colaborador_id", colabs).eq("origem_inclusao", "manual");
+  await auditar(conta, "necessidades_vinculadas", "peopleflow_dev_treinamentos", String(t.id), { necessidades: novas });
+  if (STATUS_ATIVOS.includes(t.status)) for (const n of novas) await mudarStatusNecessidade(conta, n, ["validada"], "planejada", {}, "Vinculada a treinamento planejado", t.id);
+  return { vinculadas: novas.length, ja_vinculadas: ids.length - novas.length };
+}
+
+async function necessidadeDesvincular(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  const necessidadeId = idObrigatorio(corpo, "necessidade_id", "Necessidade");
+  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
+  if (t.status === "concluido") throw new ErroHttp(422, "Vínculos de treinamento concluído são históricos.");
+  const v = (await vinculosAtivos(t.id)).find((x) => x.necessidade_id === necessidadeId);
+  if (!v) throw new ErroHttp(404, "Vínculo não encontrado.");
+  const { error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").update({ ativo: false, desvinculado_em: new Date().toISOString(), desvinculado_por: conta.userId, desvinculado_motivo: motivo }).eq("id", v.id);
+  if (error) erroBanco(error, "Vínculo");
+  await auditar(conta, "necessidade_desvinculada", "peopleflow_dev_treinamentos", String(t.id), { necessidade_id: necessidadeId, motivo });
+  await devolverNecessidade(conta, necessidadeId, t.id, "Desvinculada do treinamento");
+  return { ok: true };
+}
+
+// ── Presença ────────────────────────────────────────────────────────────
+async function presencaManual(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  exigirRHouResponsavel(conta, t);
+  const presenca = umDe(texto(corpo, "presenca"), ["presente", "ausente", "pendente"] as const, "Presença");
+  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "a origem/justificativa do registro" });
+  const retificacao = t.status === "concluido";
+  if (retificacao && conta.perfil !== "RH") throw new ErroHttp(403, "Após a conclusão, só o RH retifica presença.");
+  if (!(t.status === "em_andamento" || retificacao || (t.tipo === "externo" && t.status === "planejado"))) throw new ErroHttp(422, "Presença só pode ser registrada com o treinamento em andamento.");
+  if (retificacao && presenca === "pendente") throw new ErroHttp(422, "Treinamento concluído não aceita presença pendente.");
+  const ids = Array.isArray(corpo.participante_ids) ? [...new Set(corpo.participante_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
+  if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos um participante.");
+  const { data: parts, error } = await supabaseAdmin.from("peopleflow_dev_participantes").select(COLS_PART).in("id", ids).eq("treinamento_id", t.id);
+  if (error) erroBanco(error, "Participantes");
+  if ((parts ?? []).length !== ids.length || (parts ?? []).some((p) => p.removido_em)) throw new ErroHttp(422, "Participante inválido para este treinamento.");
+  const agora = new Date().toISOString();
+  const alterados: Record<string, any>[] = [];
+  for (const p of parts ?? []) {
+    if (p.presenca_status === presenca) continue;
+    const { data, error: uErro } = await supabaseAdmin
+      .from("peopleflow_dev_participantes")
+      .update({ presenca_status: presenca, presenca_metodo: presenca === "pendente" ? null : "manual", presenca_em: presenca === "pendente" ? null : agora, presenca_por: conta.userId, presenca_motivo: motivo, updated_by: conta.userId })
+      .eq("id", p.id)
+      .select(COLS_PART)
+      .single();
+    if (uErro) erroBanco(uErro, "Presença");
+    alterados.push(data);
+    await auditar(conta, retificacao ? "presenca_retificada" : "presenca_manual", "peopleflow_dev_participantes", String(p.id), {
+      treinamento_id: t.id, colaborador_id: p.colaborador_id, presenca: { antes: p.presenca_status, depois: presenca }, metodo_anterior: p.presenca_metodo, motivo,
+    });
+    if (retificacao) await processarNecessidadesDoParticipante(conta, t, data);
+  }
+  return { alterados: alterados.length };
+}
+
+// ── QR de presença (token aleatório, com validade; só o servidor o lê) ──
+async function qrGerar(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  exigirRHouResponsavel(conta, t);
+  if (t.status !== "em_andamento") throw new ErroHttp(422, "Inicie o treinamento para gerar o QR de presença.");
+  const { data: atual } = await supabaseAdmin.from("peopleflow_dev_qr_tokens").select("token, ativo, expira_em").eq("treinamento_id", t.id).maybeSingle();
+  const renovar = corpo.renovar === true;
+  if (atual?.ativo && new Date(atual.expira_em as string).getTime() > Date.now() && !renovar) return { token: atual.token, expira_em: atual.expira_em };
+  const token = randomBytes(32).toString("base64url");
+  const expira = new Date(Date.now() + 12 * 3600 * 1000).toISOString();
+  const linha = { treinamento_id: t.id, token, ativo: true, expira_em: expira, criado_em: new Date().toISOString(), criado_por: conta.userId, encerrado_em: null, encerrado_por: null };
+  const { error } = atual
+    ? await supabaseAdmin.from("peopleflow_dev_qr_tokens").update(linha).eq("treinamento_id", t.id)
+    : await supabaseAdmin.from("peopleflow_dev_qr_tokens").insert(linha);
+  if (error) erroBanco(error, "QR");
+  await auditar(conta, "qr_gerado", "peopleflow_dev_treinamentos", String(t.id), { expira_em: expira, renovado: Boolean(atual) });
+  return { token, expira_em: expira };
+}
+
+async function qrEncerrarAcao(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  exigirRHouResponsavel(conta, t);
+  const encerrou = await encerrarQr(conta, t.id);
+  if (encerrou) await auditar(conta, "qr_encerrado", "peopleflow_dev_treinamentos", String(t.id), {});
+  return { encerrado: encerrou };
+}
+
+// ── Evidências (bucket privado; só URL assinada emitida aqui) ──────────
+const BUCKET = "desenvolvimento-evidencias";
+const MIMES = new Set([
+  "application/pdf", "image/jpeg", "image/png", "image/webp", "application/msword", "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]);
+const TIPOS_EVID = ["lista_presenca", "certificado", "material", "ata", "foto", "comprovante", "avaliacao", "outro"] as const;
+
+async function exigirPodeAnexar(conta: ContaDev, t: Treinamento) {
+  exigirRHouResponsavel(conta, t);
+  if (t.status === "cancelado") throw new ErroHttp(422, "Treinamento cancelado.");
+  if (t.status === "concluido" && conta.perfil !== "RH") throw new ErroHttp(403, "Após a conclusão, só o RH anexa evidências.");
+}
+
+async function evidenciaUploadUrl(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  await exigirPodeAnexar(conta, t);
+  const mime = texto(corpo, "mime", { obrigatorio: true, max: 120, rotulo: "o tipo do arquivo" });
+  if (!MIMES.has(mime)) throw new ErroHttp(422, "Formato não aceito (use PDF, imagem, Word, Excel ou PowerPoint).");
+  const tamanho = inteiroOpcional(corpo, "tamanho_bytes", "Tamanho", 1, 20 * 1024 * 1024);
+  if (!tamanho) throw new ErroHttp(422, "Arquivo vazio ou maior que 20 MB.");
+  const nome = texto(corpo, "file_name", { obrigatorio: true, max: 200, rotulo: "o nome do arquivo" });
+  const seguro = nome.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9._-]+/g, "_").slice(-120);
+  const caminho = `treinamentos/${t.id}/${randomUUID()}-${seguro}`;
+  const { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUploadUrl(caminho);
+  if (error || !data) throw new ErroHttp(500, `Storage: ${error?.message ?? "sem URL"}`);
+  return { path: caminho, token: data.token };
+}
+
+async function evidenciaRegistrar(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  await exigirPodeAnexar(conta, t);
+  const caminho = texto(corpo, "path", { obrigatorio: true, max: 400, rotulo: "o arquivo" });
+  if (!caminho.startsWith(`treinamentos/${t.id}/`)) throw new ErroHttp(422, "Arquivo não pertence a este treinamento.");
+  const participanteId = corpo.participante_id ? idObrigatorio(corpo, "participante_id", "Participante") : null;
+  if (participanteId) {
+    const p = await lerParticipante(participanteId);
+    if (Number(p.treinamento_id) !== t.id) throw new ErroHttp(422, "Participante não pertence a este treinamento.");
+  }
+  const pasta = caminho.slice(0, caminho.lastIndexOf("/"));
+  const arquivo = caminho.slice(caminho.lastIndexOf("/") + 1);
+  const { data: lista, error: lErro } = await supabaseAdmin.storage.from(BUCKET).list(pasta, { search: arquivo, limit: 5 });
+  if (lErro) throw new ErroHttp(500, `Storage: ${lErro.message}`);
+  const obj = (lista ?? []).find((o: { name: string }) => o.name === arquivo) as { name: string; metadata?: { size?: number; mimetype?: string } } | undefined;
+  if (!obj) throw new ErroHttp(422, "O envio do arquivo não foi concluído.");
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_evidencias")
+    .insert({
+      treinamento_id: t.id,
+      participante_id: participanteId,
+      tipo: umDe(texto(corpo, "tipo") || "outro", TIPOS_EVID, "Tipo de evidência"),
+      storage_path: caminho,
+      file_name: texto(corpo, "file_name", { obrigatorio: true, max: 200, rotulo: "o nome do arquivo" }),
+      mime: obj.metadata?.mimetype ?? texto(corpo, "mime", { max: 120 }),
+      tamanho_bytes: obj.metadata?.size ?? null,
+      observacao: texto(corpo, "observacao", { max: 1000 }),
+      enviado_por: conta.userId,
+    })
+    .select("id, treinamento_id, participante_id, tipo, file_name, mime, tamanho_bytes, observacao, enviado_em")
+    .single();
+  if (error) erroBanco(error, "Evidência");
+  await auditar(conta, "evidencia_anexada", "peopleflow_dev_evidencias", String(data.id), { treinamento_id: t.id, participante_id: participanteId, tipo: data.tipo, arquivo: data.file_name });
+  return data;
+}
+
+async function lerEvidencia(id: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_evidencias").select("id, treinamento_id, participante_id, storage_path, file_name, substituida_em").eq("id", id).maybeSingle();
+  if (error) erroBanco(error, "Evidência");
+  if (!data) throw new ErroHttp(404, "Evidência não encontrada.");
+  return data as Record<string, any>;
+}
+
+async function evidenciaUrl(conta: ContaDev, corpo: Corpo) {
+  const ev = await lerEvidencia(idObrigatorio(corpo, "id", "Evidência"));
+  const t = await lerTreinamento(ev.treinamento_id);
+  let pode = conta.perfil === "RH" || ehResponsavel(conta, t);
+  if (!pode && conta.perfil === "Gestor") {
+    const escopo = await idsNoEscopo(conta);
+    if (ev.participante_id) pode = escopo.has(Number((await lerParticipante(ev.participante_id)).colaborador_id));
+    else pode = (await participantesAtivos(t.id)).some((p) => escopo.has(Number(p.colaborador_id))) || ehSolicitante(conta, t);
+  }
+  if (!pode) throw new ErroHttp(403, "Sem acesso a esta evidência.");
+  const { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(ev.storage_path, 300, { download: ev.file_name });
+  if (error || !data) throw new ErroHttp(500, `Storage: ${error?.message ?? "sem URL"}`);
+  return { url: data.signedUrl };
+}
+
+async function evidenciaSubstituir(conta: ContaDev, corpo: Corpo) {
+  const ev = await lerEvidencia(idObrigatorio(corpo, "id", "Evidência"));
+  const t = await lerTreinamento(ev.treinamento_id);
+  await exigirPodeAnexar(conta, t);
+  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
+  if (ev.substituida_em) throw new ErroHttp(422, "Evidência já substituída.");
+  const { error } = await supabaseAdmin.from("peopleflow_dev_evidencias").update({ substituida_em: new Date().toISOString(), substituida_por: conta.userId, substituida_motivo: motivo }).eq("id", ev.id);
+  if (error) erroBanco(error, "Evidência");
+  await auditar(conta, "evidencia_substituida", "peopleflow_dev_evidencias", String(ev.id), { treinamento_id: t.id, motivo });
+  return { ok: true };
+}
+
+// ── Eficácia (simples, individual; não é avaliação de desempenho) ──────
+async function eficaciaRegistrar(conta: ContaDev, corpo: Corpo) {
+  const p = await lerParticipante(idObrigatorio(corpo, "participante_id", "Participante"));
+  const t = await lerTreinamento(p.treinamento_id);
+  if (!t.exige_eficacia) throw new ErroHttp(422, "Este treinamento não exige avaliação de eficácia.");
+  if (!["em_andamento", "concluido"].includes(t.status)) throw new ErroHttp(422, "A eficácia é avaliada depois da realização.");
+  if (p.removido_em || p.presenca_status !== "presente") throw new ErroHttp(422, "Só participantes que realizaram o treinamento são avaliados.");
+  if (conta.perfil !== "RH") {
+    if (conta.perfil !== "Gestor" || Number(p.colaborador_id) === conta.colaboradorId || !(await idsNoEscopo(conta)).has(Number(p.colaborador_id))) {
+      throw new ErroHttp(403, "A eficácia é avaliada pelo RH ou pelo gestor do participante.");
+    }
+  }
+  const resultado = umDe(texto(corpo, "resultado"), ["eficaz", "parcialmente_eficaz", "nao_eficaz"] as const, "Resultado");
+  const observacao = texto(corpo, "observacao", { obrigatorio: resultado !== "eficaz", max: 2000, rotulo: "a observação" });
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .update({ eficacia_resultado: resultado, eficacia_observacao: observacao, eficacia_em: new Date().toISOString(), eficacia_por: conta.userId, eficacia_por_colaborador_id: conta.colaboradorId, updated_by: conta.userId })
+    .eq("id", p.id)
+    .select(COLS_PART)
+    .single();
+  if (error) erroBanco(error, "Eficácia");
+  await auditar(conta, "eficacia_registrada", "peopleflow_dev_participantes", String(p.id), { treinamento_id: t.id, resultado: { antes: p.eficacia_resultado, depois: resultado }, observacao });
+  await processarNecessidadesDoParticipante(conta, t, data);
+  return data;
+}
+
+// ── Página /participar/:token (qualquer conta do PeopleFlow; sem sessão do módulo) ──
+async function identificarParticipante(req: VercelRequest) {
+  const raw = Array.isArray(req.headers.authorization) ? req.headers.authorization[0] : req.headers.authorization;
+  const token = raw?.replace(/^Bearer\s+/i, "").trim();
+  if (!token) throw new ErroHttp(401, "Entre com seu e-mail corporativo para confirmar a presença.");
+  const { data: u, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !u.user?.email) throw new ErroHttp(401, "Sessão inválida ou expirada.");
+  const { data: acesso } = await supabaseAdmin.from("module_access").select("modulo").eq("user_id", u.user.id).eq("modulo", "peopleflow").maybeSingle();
+  if (!acesso) throw new ErroHttp(403, "Conta sem acesso ao PeopleFlow. Procure o responsável pelo treinamento.");
+  const email = u.user.email.toLowerCase();
+  const { data: colabs, error: cErro } = await supabaseAdmin.from("colaboradores").select("id, nome").eq("desligado", false);
+  if (cErro) erroBanco(cErro, "Colaborador");
+  const meus = (colabs ?? []).filter((c) => emailOf(c.nome as string) === email);
+  if (meus.length !== 1) throw new ErroHttp(409, "Não foi possível identificar você no cadastro. Procure o responsável pelo treinamento.");
+  return { userId: u.user.id, colaboradorId: Number(meus[0].id), primeiroNome: String(meus[0].nome).split(" ")[0] };
+}
+
+async function treinamentoPorToken(tokenQr: string) {
+  if (!/^[A-Za-z0-9_-]{32,100}$/.test(tokenQr)) throw new ErroHttp(404, "QR inválido ou expirado.");
+  const { data: qr, error } = await supabaseAdmin.from("peopleflow_dev_qr_tokens").select("treinamento_id, ativo, expira_em").eq("token", tokenQr).maybeSingle();
+  if (error) erroBanco(error, "QR");
+  if (!qr || !qr.ativo || new Date(qr.expira_em as string).getTime() < Date.now()) throw new ErroHttp(404, "QR inválido ou expirado. Procure o responsável pelo treinamento.");
+  const t = await lerTreinamento(Number(qr.treinamento_id));
+  if (t.status !== "em_andamento") throw new ErroHttp(404, "Este treinamento não está com presença aberta.");
+  return t;
+}
+
+async function presencaViaQr(acao: "presenca_info" | "presenca_confirmar", req: VercelRequest) {
+  const corpo = (typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {})) as Corpo;
+  const tokenQr = texto(corpo, "token", { obrigatorio: true, max: 100, rotulo: "o código" });
+  const quem = await identificarParticipante(req);
+  const t = await treinamentoPorToken(tokenQr);
+  const { data: p, error } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .select("id, presenca_status, presenca_em, removido_em")
+    .eq("treinamento_id", t.id)
+    .eq("colaborador_id", quem.colaboradorId)
+    .maybeSingle();
+  if (error) erroBanco(error, "Participante");
+  // Só o necessário para a pessoa: nada de ids internos nem dados de outros participantes.
+  const info = { titulo: t.titulo, documento: t.lista_mestra_codigo ? `${t.lista_mestra_codigo} rev. ${t.lista_mestra_revisao}` : null, data: t.data_inicio, primeiro_nome: quem.primeiroNome };
+  if (!p || p.removido_em) return { ...info, situacao: "nao_inscrito" };
+  if (p.presenca_status === "presente") return { ...info, situacao: "confirmada", confirmada_em: p.presenca_em };
+  if (acao === "presenca_info") return { ...info, situacao: "pendente" };
+  const agora = new Date().toISOString();
+  const { data: atualizado, error: uErro } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .update({ presenca_status: "presente", presenca_metodo: "qr", presenca_em: agora, presenca_por: quem.userId, presenca_motivo: null, updated_by: quem.userId })
+    .eq("id", p.id)
+    .neq("presenca_status", "presente")
+    .select("id")
+    .maybeSingle();
+  if (uErro) erroBanco(uErro, "Presença");
+  if (atualizado) {
+    await supabaseAdmin.from("peopleflow_dev_auditoria").insert({ user_id: quem.userId, colaborador_id: quem.colaboradorId, acao: "presenca_qr", entidade: "peopleflow_dev_participantes", entidade_id: String(p.id), detalhe: { treinamento_id: t.id } });
+  }
+  return { ...info, situacao: "confirmada", confirmada_em: agora };
+}
+
+export function ehAcaoDePresencaQr(acao: string): acao is "presenca_info" | "presenca_confirmar" {
+  return acao === "presenca_info" || acao === "presenca_confirmar";
+}
+
+export async function executarPresencaQr(acao: "presenca_info" | "presenca_confirmar", req: VercelRequest, res: VercelResponse) {
+  try {
+    res.status(200).json({ ok: true, dados: await presencaViaQr(acao, req) });
+  } catch (err) {
+    if (err instanceof ErroHttp) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
 // ── Roteamento ──────────────────────────────────────────────────────────
 const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>> = {
   lista_mestra_salvar: listaMestraSalvar,
@@ -763,6 +1460,24 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   necessidade_desagrupar: necessidadeDesagrupar,
   pdi_sugestao_aceitar: pdiSugestaoAceitar,
   pdi_sugestao_dispensar: pdiSugestaoDispensar,
+  treinamento_salvar: treinamentoSalvar,
+  treinamento_realizacao: treinamentoRealizacao,
+  treinamento_planejar: treinamentoPlanejar,
+  treinamento_iniciar: treinamentoIniciar,
+  treinamento_concluir: treinamentoConcluir,
+  treinamento_cancelar: treinamentoCancelar,
+  participantes_adicionar: participantesAdicionar,
+  participante_remover: participanteRemover,
+  necessidades_vincular: necessidadesVincular,
+  necessidade_desvincular: necessidadeDesvincular,
+  presenca_manual: presencaManual,
+  qr_gerar: qrGerar,
+  qr_encerrar: qrEncerrarAcao,
+  evidencia_upload_url: evidenciaUploadUrl,
+  evidencia_registrar: evidenciaRegistrar,
+  evidencia_url: evidenciaUrl,
+  evidencia_substituir: evidenciaSubstituir,
+  eficacia_registrar: eficaciaRegistrar,
 };
 
 export function ehAcaoDeGravacao(acao: string): boolean {

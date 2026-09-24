@@ -56,7 +56,9 @@ export function AppShell() {
   // centralizado aqui em vez de espalhar guarda em cada página, pra nenhuma
   // tela nova esquecer de bloquear esse perfil (ver README > "Gestão de
   // Desempenho").
-  if (conta.perfil === "Colaborador" && !location.pathname.startsWith("/desempenho")) {
+  // Exceção: Treinamentos do módulo Desenvolvimento, para quem é responsável/
+  // instrutor de um treinamento (o servidor confere; os demais recebem "sem acesso").
+  if (conta.perfil === "Colaborador" && !location.pathname.startsWith("/desempenho") && !/^\/desenvolvimento\/treinamentos?(\/|$)/.test(location.pathname)) {
     return <Navigate to="/desempenho" replace />;
   }
 
