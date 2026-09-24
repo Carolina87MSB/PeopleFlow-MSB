@@ -750,11 +750,16 @@ async function pdiSugestaoDispensar(conta: ContaDev, corpo: Corpo) {
 
 // ══ Fase 5 — Gestão de Treinamentos ═════════════════════════════════════
 const COLS_TRE =
-  "id, codigo, titulo, origem_tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, tipo, modalidade, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, created_at, updated_at";
+  "id, codigo, titulo, tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, modalidade, formato, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, reposicao_de_id, reposicao_raiz_id, reposicao_numero, created_at, updated_at";
 const COLS_PART =
   "id, treinamento_id, colaborador_id, origem_inclusao, presenca_status, presenca_metodo, presenca_em, presenca_motivo, eficacia_resultado, eficacia_observacao, eficacia_em, eficacia_por_colaborador_id, removido_em, removido_motivo";
-const ORIGENS_TREINAMENTO = ["desenvolvimento", "pop_it", "revisao_documental", "integracao", "requisito_regulatorio", "reciclagem", "operacional", "outro"] as const;
-const ORIGENS_COM_DOCUMENTO = new Set(["pop_it", "revisao_documental"]);
+// Tipo (classificação) ≠ Modalidade (interno/externo) ≠ Formato (presencial/online/híbrido).
+const TIPOS_TREINAMENTO = [
+  "novo_pop", "revisao_pop", "instrucao_trabalho", "integracao", "reciclagem", "capacitacao_tecnica",
+  "desenvolvimento", "qualidade_regulatorio", "saude_seguranca", "sistemas_ferramentas", "outro",
+] as const;
+/** Novo POP, Revisão de POP e Instrução de Trabalho: documento da Lista Mestra obrigatório. */
+const TIPOS_COM_DOCUMENTO = new Set(["novo_pop", "revisao_pop", "instrucao_trabalho"]);
 const STATUS_ATIVOS = ["planejado", "em_andamento"];
 type Treinamento = Record<string, any>;
 
@@ -774,6 +779,11 @@ function ehSolicitante(conta: ContaDev, t: Treinamento): boolean {
 /** Solicitante que não é RH só mexe na própria solicitação enquanto ela está SOLICITADA. */
 function podeEditarSolicitacao(conta: ContaDev, t: Treinamento): boolean {
   return conta.perfil === "RH" || (t.status === "solicitado" && ehSolicitante(conta, t));
+}
+/** Quem monta a turma: RH, responsável/instrutor do treinamento ou quem o solicitou (Gestor). */
+function podeGerirParticipantes(conta: ContaDev, t: Treinamento): boolean {
+  if (t.status === "concluido" || t.status === "cancelado") return false;
+  return conta.perfil === "RH" || ehResponsavel(conta, t) || ehSolicitante(conta, t);
 }
 function exigirRHouResponsavel(conta: ContaDev, t: Treinamento) {
   if (conta.perfil !== "RH" && !ehResponsavel(conta, t)) throw new ErroHttp(403, "Somente o RH ou o responsável/instrutor deste treinamento.");
@@ -804,17 +814,21 @@ async function fotografiaDocumento(codigo: string) {
 }
 
 function lerCamposTreinamento(corpo: Corpo) {
-  const tipo = umDe(texto(corpo, "tipo") || "interno", ["interno", "externo"] as const, "Modalidade");
+  if (!texto(corpo, "tipo")) throw new ErroHttp(422, "Selecione o tipo de treinamento.");
+  if (!texto(corpo, "modalidade")) throw new ErroHttp(422, "Selecione a modalidade (Interno ou Externo).");
+  const tipo = umDe(texto(corpo, "tipo"), TIPOS_TREINAMENTO, "Tipo de treinamento");
+  const modalidade = umDe(texto(corpo, "modalidade"), ["interno", "externo"] as const, "Modalidade");
+  const formato = texto(corpo, "formato") ? umDe(texto(corpo, "formato"), ["presencial", "online", "hibrido"] as const, "Formato") : null;
   const inicio = dataOpcional(corpo, "data_inicio", "Data prevista");
   const fim = dataOpcional(corpo, "data_fim", "Data final") ;
   if (inicio && fim && fim < inicio) throw new ErroHttp(422, "A data final não pode ser anterior à data prevista.");
   const exigeEficacia = corpo.exige_eficacia === true;
   return {
     titulo: texto(corpo, "titulo", { max: 300 }),
-    origem_tipo: umDe(texto(corpo, "origem_tipo") || "desenvolvimento", ORIGENS_TREINAMENTO, "Origem"),
-    justificativa: texto(corpo, "justificativa", { max: 2000 }),
     tipo,
-    modalidade: (texto(corpo, "modalidade") || null) as string | null,
+    modalidade,
+    formato,
+    justificativa: texto(corpo, "justificativa", { max: 2000 }),
     data_inicio: inicio,
     data_fim: fim,
     carga_horaria_min: inteiroOpcional(corpo, "carga_horaria_min", "Carga horária (minutos)", 1, 100000),
@@ -833,7 +847,7 @@ function exigirMinimoPlanejamento(t: Record<string, unknown>) {
   if (!String(t.titulo ?? "").trim()) throw new ErroHttp(422, "Informe o título do treinamento.");
   if (!t.data_inicio) throw new ErroHttp(422, "Informe a data prevista.");
   if (!t.responsavel_colaborador_id) throw new ErroHttp(422, "Defina o responsável pelo treinamento.");
-  if (ORIGENS_COM_DOCUMENTO.has(String(t.origem_tipo)) && !t.lista_mestra_codigo) throw new ErroHttp(422, "Selecione o documento da Lista Mestra (POP/IT/revisão documental).");
+  if (TIPOS_COM_DOCUMENTO.has(String(t.tipo)) && !t.lista_mestra_codigo) throw new ErroHttp(422, "Selecione o documento da Lista Mestra (Novo POP, Revisão de POP ou Instrução de Trabalho).");
 }
 
 // ── Necessidades ligadas ao treinamento: regras de status ───────────────
@@ -888,11 +902,11 @@ async function processarNecessidadesDoParticipante(conta: ContaDev, t: Treinamen
     const realizou = participante.presenca_status === "presente" && !participante.removido_em;
     if (realizou && (!t.exige_eficacia || participante.eficacia_resultado === "eficaz")) {
       await mudarStatusNecessidade(conta, n.id as number, ["planejada", "validada"], "atendida", { atendida_em: new Date().toISOString(), atendida_treinamento_id: t.id }, "Ação realizada pelo colaborador", t.id);
-    } else if (realizou && t.exige_eficacia && !participante.eficacia_resultado) {
-      // aguardando a avaliação de eficácia: permanece PLANEJADA
+    } else if (!realizou || !participante.eficacia_resultado) {
+      // Ausente: obrigação continua pendente (PLANEJADA) até realizar numa reposição.
+      // Presente com eficácia a avaliar: permanece PLANEJADA até o resultado.
     } else {
-      const motivo = !realizou ? "Colaborador não realizou o treinamento" : "Eficácia não comprovada";
-      await devolverNecessidade(conta, n.id as number, t.id, motivo);
+      await devolverNecessidade(conta, n.id as number, t.id, "Eficácia não comprovada");
     }
   }
 }
@@ -903,7 +917,6 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
   const campos = lerCamposTreinamento(corpo);
   const pessoas = [campos.responsavel_colaborador_id, campos.instrutor_colaborador_id].filter((x): x is number => x != null);
   await exigirColaboradoresAtivos(pessoas);
-  if (campos.modalidade) umDe(campos.modalidade, ["presencial", "ead", "hibrido"] as const, "Formato");
 
   if (!id) {
     const doc = campos.lista_mestra_codigo ? await fotografiaDocumento(campos.lista_mestra_codigo) : {};
@@ -1019,7 +1032,7 @@ async function encerrarQr(conta: ContaDev, treinamentoId: number) {
 async function treinamentoConcluir(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
   const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
-  const externo = t.tipo === "externo";
+  const externo = t.modalidade === "externo";
   if (!(t.status === "em_andamento" || (externo && t.status === "planejado"))) {
     throw new ErroHttp(422, externo ? "Treinamento externo precisa estar planejado ou em andamento." : "Inicie o treinamento antes de concluir.");
   }
@@ -1071,14 +1084,12 @@ async function treinamentoCancelar(conta: ContaDev, corpo: Corpo) {
 async function participantesAdicionar(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
   if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
-  if (!podeEditarSolicitacao(conta, t)) throw new ErroHttp(403, "Somente o RH (ou o solicitante, enquanto SOLICITADO) pode incluir participantes.");
+  if (!podeGerirParticipantes(conta, t)) throw new ErroHttp(403, "Somente o RH, o responsável/instrutor ou o solicitante deste treinamento inclui participantes.");
   const ids = Array.isArray(corpo.colaborador_ids) ? [...new Set(corpo.colaborador_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
   if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos um colaborador.");
   if (ids.length > 500) throw new ErroHttp(422, "No máximo 500 por vez.");
-  if (conta.perfil !== "RH") {
-    const escopo = await idsNoEscopo(conta);
-    if (ids.some((i) => !escopo.has(i))) throw new ErroHttp(403, "Há colaborador fora da sua equipe.");
-  }
+  // Treinamentos podem ser transversais: qualquer colaborador ATIVO da empresa pode ser incluído
+  // (a exceção vale só para montar a turma — não amplia o acesso a outros dados).
   await exigirColaboradoresAtivos(ids);
   const { data: existentes, error } = await supabaseAdmin.from("peopleflow_dev_participantes").select("id, colaborador_id, removido_em").eq("treinamento_id", t.id).in("colaborador_id", ids);
   if (error) erroBanco(error, "Participantes");
@@ -1087,7 +1098,7 @@ async function participantesAdicionar(conta: ContaDev, corpo: Corpo) {
   const novos = ids.filter((i) => !porColab.has(i));
   if (novos.length) {
     const { error: iErro } = await supabaseAdmin.from("peopleflow_dev_participantes").insert(
-      novos.map((c) => ({ treinamento_id: t.id, colaborador_id: c, origem_inclusao: corpo.origem_inclusao === "criterio" ? "criterio" : "manual", origem_registro: "sistema", created_by: conta.userId, updated_by: conta.userId })),
+      novos.map((c) => ({ treinamento_id: t.id, colaborador_id: c, origem_inclusao: ["criterio", "reposicao"].includes(String(corpo.origem_inclusao)) ? corpo.origem_inclusao : "manual", origem_registro: "sistema", created_by: conta.userId, updated_by: conta.userId })),
     );
     if (iErro) erroBanco(iErro, "Participantes");
     incluidos = novos.length;
@@ -1113,7 +1124,7 @@ async function participanteRemover(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(p.treinamento_id);
   const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
   if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
-  if (!podeEditarSolicitacao(conta, t)) throw new ErroHttp(403, "Somente o RH (ou o solicitante, enquanto SOLICITADO) pode retirar participantes.");
+  if (!podeGerirParticipantes(conta, t)) throw new ErroHttp(403, "Somente o RH, o responsável/instrutor ou o solicitante deste treinamento retira participantes.");
   if (p.removido_em) throw new ErroHttp(422, "Participante já retirado.");
   const { data, error } = await supabaseAdmin
     .from("peopleflow_dev_participantes")
@@ -1134,6 +1145,133 @@ async function participanteRemover(conta: ContaDev, corpo: Corpo) {
     }
   }
   return data;
+}
+
+/** Lista para MONTAR A TURMA: todos os colaboradores ativos, só nome/cargo/departamento.
+ * Liberada apenas a quem gere os participantes deste treinamento — não é uma
+ * consulta geral de colaboradores. */
+async function participantesOpcoes(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  if (!podeGerirParticipantes(conta, t)) throw new ErroHttp(403, "Sem permissão para montar a turma deste treinamento.");
+  const { data, error } = await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento, desligado");
+  if (error) erroBanco(error, "Colaboradores");
+  return (data ?? [])
+    .filter((c) => !c.desligado)
+    .map((c) => ({ id: Number(c.id), nome: String(c.nome), cargo: (c.cargo as string | null) ?? "", departamento: (c.departamento as string | null) ?? "" }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+// ── Reposição para faltantes ───────────────────────────────────────────
+/** Ausentes de um treinamento concluído que ainda não estão numa reposição (não cancelada) dele. */
+async function faltantesDe(t: Treinamento) {
+  const ausentes = (await participantesAtivos(t.id)).filter((p) => p.presenca_status === "ausente");
+  if (ausentes.length === 0) return [];
+  const { data: filhos, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("id, status").eq("reposicao_de_id", t.id);
+  if (error) erroBanco(error, "Reposições");
+  const ativos = (filhos ?? []).filter((f) => f.status !== "cancelado").map((f) => Number(f.id));
+  const jaRepondo = new Set<number>();
+  if (ativos.length) {
+    const { data: ps, error: pErro } = await supabaseAdmin.from("peopleflow_dev_participantes").select("colaborador_id, removido_em").in("treinamento_id", ativos);
+    if (pErro) erroBanco(pErro, "Participantes");
+    for (const p of ps ?? []) if (!p.removido_em) jaRepondo.add(Number(p.colaborador_id));
+  }
+  return ausentes.filter((p) => !jaRepondo.has(Number(p.colaborador_id)));
+}
+
+function exigirPodeRepor(conta: ContaDev, t: Treinamento) {
+  exigirRHouResponsavel(conta, t);
+  if (t.status !== "concluido") throw new ErroHttp(422, "A reposição é agendada a partir de um treinamento concluído com faltantes.");
+}
+
+async function reposicaoFaltantes(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  exigirPodeRepor(conta, t);
+  const faltantes = await faltantesDe(t);
+  const { data: pessoas, error } = faltantes.length
+    ? await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento").in("id", faltantes.map((p) => Number(p.colaborador_id)))
+    : { data: [], error: null };
+  if (error) erroBanco(error, "Colaboradores");
+  const porId = new Map((pessoas ?? []).map((c) => [Number(c.id), c]));
+  return faltantes.map((p) => {
+    const c = porId.get(Number(p.colaborador_id));
+    return { participante_id: p.id, colaborador_id: Number(p.colaborador_id), nome: c?.nome ?? "", cargo: c?.cargo ?? "", departamento: c?.departamento ?? "" };
+  });
+}
+
+/** Cria a reposição: novo treinamento (o original não é reaberto) só com os faltantes,
+ * pré-preenchido pelo original; a data é definida por quem agenda. */
+async function treinamentoReposicao(conta: ContaDev, corpo: Corpo) {
+  const origem = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento de origem"));
+  exigirPodeRepor(conta, origem);
+  const faltantes = await faltantesDe(origem);
+  if (faltantes.length === 0) throw new ErroHttp(422, "Não há faltantes pendentes de reposição neste treinamento.");
+  let escolhidos = faltantes;
+  if (Array.isArray(corpo.colaborador_ids)) {
+    const pedidos = new Set(corpo.colaborador_ids.map(Number));
+    escolhidos = faltantes.filter((p) => pedidos.has(Number(p.colaborador_id)));
+    if (escolhidos.length !== pedidos.size) throw new ErroHttp(422, "A reposição só pode incluir faltantes deste treinamento.");
+    if (escolhidos.length === 0) throw new ErroHttp(422, "Selecione ao menos um faltante.");
+  }
+  const campos = lerCamposTreinamento({ tipo: origem.tipo, modalidade: origem.modalidade, ...corpo });
+  await exigirColaboradoresAtivos([campos.responsavel_colaborador_id, campos.instrutor_colaborador_id].filter((x): x is number => x != null));
+  // Mesmo documento: mantém a fotografia do original (mesma revisão treinada).
+  const doc =
+    campos.lista_mestra_codigo && campos.lista_mestra_codigo !== origem.lista_mestra_codigo
+      ? await fotografiaDocumento(campos.lista_mestra_codigo)
+      : { lista_mestra_codigo: origem.lista_mestra_codigo, lista_mestra_titulo: origem.lista_mestra_titulo, lista_mestra_revisao: origem.lista_mestra_revisao };
+  const raiz = Number(origem.reposicao_raiz_id ?? origem.id);
+  const { data: irmaos, error: iErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("id").eq("reposicao_raiz_id", raiz);
+  if (iErro) erroBanco(iErro, "Reposições");
+  const planejar = conta.perfil === "RH" && corpo.planejar === true;
+  const linha = { ...campos, ...doc, titulo: campos.titulo || origem.titulo };
+  if (planejar) exigirMinimoPlanejamento(linha);
+  const agora = new Date().toISOString();
+  const { data: nova, error } = await supabaseAdmin
+    .from("peopleflow_dev_treinamentos")
+    .insert({
+      ...linha,
+      status: planejar ? "planejado" : "solicitado",
+      planejado_em: planejar ? agora : null,
+      planejado_por: planejar ? conta.userId : null,
+      solicitado_por_colaborador_id: conta.colaboradorId,
+      reposicao_de_id: origem.id,
+      reposicao_raiz_id: raiz,
+      reposicao_numero: (irmaos ?? []).length + 1,
+      origem_registro: "sistema",
+      created_by: conta.userId,
+      updated_by: conta.userId,
+    })
+    .select(COLS_TRE)
+    .single();
+  if (error) erroBanco(error, "Reposição");
+  const colabs = escolhidos.map((p) => Number(p.colaborador_id));
+  const { error: pErro } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .insert(colabs.map((c) => ({ treinamento_id: nova.id, colaborador_id: c, origem_inclusao: "reposicao", origem_registro: "sistema", created_by: conta.userId, updated_by: conta.userId })));
+  if (pErro) erroBanco(pErro, "Participantes");
+  // Necessidades dos faltantes ainda em aberto passam a ser atendidas também pela reposição.
+  const vinculos = await vinculosAtivos(origem.id);
+  let necessidades: number[] = [];
+  if (vinculos.length) {
+    const { data: nec, error: nErro } = await supabaseAdmin
+      .from("peopleflow_dev_necessidades")
+      .select("id, colaborador_id, status")
+      .in("id", vinculos.map((v) => v.necessidade_id))
+      .in("colaborador_id", colabs);
+    if (nErro) erroBanco(nErro, "Necessidade");
+    necessidades = (nec ?? []).filter((n) => ["validada", "planejada"].includes(n.status as string)).map((n) => Number(n.id));
+    if (necessidades.length) {
+      const { error: vErro } = await supabaseAdmin
+        .from("peopleflow_dev_treinamento_necessidades")
+        .insert(necessidades.map((n) => ({ treinamento_id: nova.id, necessidade_id: n, vinculado_por: conta.userId })));
+      if (vErro) erroBanco(vErro, "Vínculo");
+    }
+  }
+  await auditar(conta, "reposicao_criada", "peopleflow_dev_treinamentos", String(nova.id), {
+    reposicao_de: origem.id, raiz, numero: nova.reposicao_numero, faltantes: colabs, necessidades, depois: nova,
+  });
+  if (planejar) await planejarNecessidadesDoTreinamento(conta, nova.id);
+  return nova;
 }
 
 // ── Vínculo com a Base de Necessidades ─────────────────────────────────
@@ -1187,7 +1325,7 @@ async function presencaManual(conta: ContaDev, corpo: Corpo) {
   const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "a origem/justificativa do registro" });
   const retificacao = t.status === "concluido";
   if (retificacao && conta.perfil !== "RH") throw new ErroHttp(403, "Após a conclusão, só o RH retifica presença.");
-  if (!(t.status === "em_andamento" || retificacao || (t.tipo === "externo" && t.status === "planejado"))) throw new ErroHttp(422, "Presença só pode ser registrada com o treinamento em andamento.");
+  if (!(t.status === "em_andamento" || retificacao || (t.modalidade === "externo" && t.status === "planejado"))) throw new ErroHttp(422, "Presença só pode ser registrada com o treinamento em andamento.");
   if (retificacao && presenca === "pendente") throw new ErroHttp(422, "Treinamento concluído não aceita presença pendente.");
   const ids = Array.isArray(corpo.participante_ids) ? [...new Set(corpo.participante_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
   if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos um participante.");
@@ -1462,6 +1600,9 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   pdi_sugestao_dispensar: pdiSugestaoDispensar,
   treinamento_salvar: treinamentoSalvar,
   treinamento_realizacao: treinamentoRealizacao,
+  treinamento_reposicao: treinamentoReposicao,
+  reposicao_faltantes: reposicaoFaltantes,
+  participantes_opcoes: participantesOpcoes,
   treinamento_planejar: treinamentoPlanejar,
   treinamento_iniciar: treinamentoIniciar,
   treinamento_concluir: treinamentoConcluir,

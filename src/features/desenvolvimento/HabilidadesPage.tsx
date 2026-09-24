@@ -14,7 +14,7 @@ import {
 import { useDesenvolvimento } from "./contexto";
 import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, type AbaDef } from "./componentes";
 import { useConsulta, usePaginado } from "./hooks";
-import { formatarCarga, formatarData, SITUACAO } from "./rotulos";
+import { formatarCarga, formatarData, SITUACAO, SITUACAO_PARTICIPACAO } from "./rotulos";
 import { RequisitosCargoAba } from "./RequisitosCargoAba";
 import { CatalogoHabilidadesAba } from "./CatalogoHabilidadesAba";
 import styles from "./Desenvolvimento.module.css";
@@ -223,12 +223,13 @@ function PorColaboradorAba() {
                         <th>Data</th>
                         <th>Treinamento</th>
                         <th>Carga</th>
+                        <th>Situação</th>
                       </tr>
                     </thead>
                     <tbody>
                       {historico.dados.map((h) => (
                         <tr key={h.participante_id}>
-                          <td className={styles.mono}>{formatarData(h.data_realizacao)}</td>
+                          <td className={styles.mono}>{formatarData(h.data_referencia)}</td>
                           <td>
                             {h.titulo}
                             {h.lista_mestra_codigo && (
@@ -240,6 +241,13 @@ function PorColaboradorAba() {
                             )}
                           </td>
                           <td className={styles.mono}>{formatarCarga(h.carga_horaria_min)}</td>
+                          <td>
+                            <Selo tom={SITUACAO_PARTICIPACAO[h.situacao].tom}>
+                              {SITUACAO_PARTICIPACAO[h.situacao].rotulo}
+                              {h.situacao === "realizado_reposicao" && h.reposicao_numero ? ` ${h.reposicao_numero}` : ""}
+                            </Selo>
+                            {h.reposto_em_treinamento_id && <div className={styles.secundario}>Realizado depois em reposição</div>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

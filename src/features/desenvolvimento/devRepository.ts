@@ -199,24 +199,34 @@ export async function conformidadeDoColaborador(colaboradorId: number): Promise<
   return (data ?? []) as LinhaConformidade[];
 }
 
+/** previsto: inscrito, ainda não realizado (NUNCA conta como concluído); ausente: faltou (obrigação segue pendente). */
+export type SituacaoParticipacao = "previsto" | "realizado" | "ausente" | "realizado_reposicao";
+
 export interface LinhaHistorico {
   participante_id: number;
+  treinamento_id: number;
   treinamento_codigo: string;
   titulo: string;
-  tipo: "interno" | "externo";
+  tipo: TipoTreinamento;
+  modalidade: "interno" | "externo";
   lista_mestra_codigo: string | null;
   lista_mestra_revisao: string | null;
-  data_realizacao: string | null;
+  data_referencia: string | null;
   carga_horaria_min: number | null;
-  validade_ate: string | null;
+  situacao: SituacaoParticipacao;
+  reposicao_numero: number | null;
+  reposto_em_treinamento_id: number | null;
 }
 
+/** Histórico individual: todas as participações (previsto, realizado, ausente, reposição). */
 export async function historicoDoColaborador(colaboradorId: number): Promise<LinhaHistorico[]> {
   const { data, error } = await supabase
-    .from("peopleflow_dev_v_historico")
-    .select("participante_id, treinamento_codigo, titulo, tipo, lista_mestra_codigo, lista_mestra_revisao, data_realizacao, carga_horaria_min, validade_ate")
+    .from("peopleflow_dev_v_participacoes")
+    .select(
+      "participante_id, treinamento_id, treinamento_codigo, titulo, tipo, modalidade, lista_mestra_codigo, lista_mestra_revisao, data_referencia, carga_horaria_min, situacao, reposicao_numero, reposto_em_treinamento_id",
+    )
     .eq("colaborador_id", colaboradorId)
-    .order("data_realizacao", { ascending: false, nullsFirst: false })
+    .order("data_referencia", { ascending: false, nullsFirst: true })
     .limit(500);
   if (error) falha("Histórico", error.message);
   return (data ?? []) as LinhaHistorico[];
@@ -224,18 +234,32 @@ export async function historicoDoColaborador(colaboradorId: number): Promise<Lin
 
 // ── Treinamentos (Fase 5) ───────────────────────────────────────────────
 export type StatusTreinamento = "solicitado" | "planejado" | "em_andamento" | "concluido" | "cancelado";
-export type OrigemTreinamento = "desenvolvimento" | "pop_it" | "revisao_documental" | "integracao" | "requisito_regulatorio" | "reciclagem" | "operacional" | "outro";
+/** Tipo (classificação) ≠ Modalidade (interno/externo) ≠ Formato (presencial/online/híbrido). */
+export type TipoTreinamento =
+  | "novo_pop"
+  | "revisao_pop"
+  | "instrucao_trabalho"
+  | "integracao"
+  | "reciclagem"
+  | "capacitacao_tecnica"
+  | "desenvolvimento"
+  | "qualidade_regulatorio"
+  | "saude_seguranca"
+  | "sistemas_ferramentas"
+  | "outro";
+export type Modalidade = "interno" | "externo";
+export type Formato = "presencial" | "online" | "hibrido";
 
 export interface Treinamento {
   id: number;
   codigo: string;
   titulo: string;
-  origem_tipo: OrigemTreinamento;
+  tipo: TipoTreinamento;
   lista_mestra_codigo: string | null;
   lista_mestra_revisao: string | null;
   lista_mestra_titulo: string | null;
-  tipo: "interno" | "externo";
-  modalidade: "presencial" | "ead" | "hibrido" | null;
+  modalidade: Modalidade;
+  formato: Formato | null;
   data_inicio: string | null;
   data_fim: string | null;
   carga_horaria_min: number | null;
@@ -255,19 +279,22 @@ export interface Treinamento {
   planejado_em: string | null;
   iniciado_em: string | null;
   concluido_em: string | null;
+  reposicao_de_id: number | null;
+  reposicao_raiz_id: number | null;
+  reposicao_numero: number | null;
   created_at: string;
   updated_at: string;
 }
 
 const COLUNAS_TREINAMENTO =
-  "id, codigo, titulo, origem_tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, tipo, modalidade, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, created_at, updated_at";
+  "id, codigo, titulo, tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, modalidade, formato, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, reposicao_de_id, reposicao_raiz_id, reposicao_numero, created_at, updated_at";
 
 export type TreinamentoNaLista = Treinamento & { participantes: { count: number }[] };
 
 export interface FiltroTreinamentos {
   status: StatusTreinamento[];
   busca: string;
-  origem: OrigemTreinamento | null;
+  tipo: TipoTreinamento | null;
   recentesPrimeiro: boolean;
   /** Só os que a pessoa conduz (responsável ou instrutor). */
   conduzidosPor?: number;
@@ -285,7 +312,7 @@ export async function listarTreinamentos(pagina: number, f: FiltroTreinamentos):
     .range(...faixa(pagina));
   const termo = f.busca.trim().replace(/[%,()]/g, " ");
   if (termo) q = q.or(`titulo.ilike.%${termo}%,codigo.ilike.%${termo}%,lista_mestra_codigo.ilike.%${termo}%`);
-  if (f.origem) q = q.eq("origem_tipo", f.origem);
+  if (f.tipo) q = q.eq("tipo", f.tipo);
   if (f.conduzidosPor) q = q.or(`responsavel_colaborador_id.eq.${f.conduzidosPor},instrutor_colaborador_id.eq.${f.conduzidosPor}`);
   const { data, error, count } = await q;
   if (error) falha("Treinamentos", error.message);
@@ -298,13 +325,36 @@ export async function obterTreinamento(id: number): Promise<Treinamento | null> 
   return (data as Treinamento | null) ?? null;
 }
 
+/** Reposições agendadas a partir deste treinamento (faltantes). */
+export async function listarReposicoes(treinamentoId: number): Promise<Treinamento[]> {
+  const { data, error } = await supabase.from("peopleflow_dev_treinamentos").select(COLUNAS_TREINAMENTO).eq("reposicao_de_id", treinamentoId).order("id").limit(100);
+  if (error) falha("Reposições", error.message);
+  return (data ?? []) as Treinamento[];
+}
+
+export interface OpcaoParticipante extends PessoaDesenvolvimento {}
+
+/** Colaboradores ativos para montar a turma (servidor; só nome/cargo/departamento). */
+export function opcoesParticipantes(treinamentoId: number): Promise<OpcaoParticipante[]> {
+  return gravar<OpcaoParticipante[]>("participantes_opcoes", { treinamento_id: treinamentoId });
+}
+
+export interface Faltante extends PessoaDesenvolvimento {
+  participante_id: number;
+  colaborador_id: number;
+}
+
+export function faltantesParaReposicao(treinamentoId: number): Promise<Faltante[]> {
+  return gravar<Faltante[]>("reposicao_faltantes", { treinamento_id: treinamentoId });
+}
+
 export type ResultadoEficacia = "eficaz" | "parcialmente_eficaz" | "nao_eficaz";
 
 export interface Participante {
   id: number;
   treinamento_id: number;
   colaborador_id: number;
-  origem_inclusao: "manual" | "criterio" | "lnt";
+  origem_inclusao: "manual" | "criterio" | "lnt" | "reposicao";
   presenca_status: "pendente" | "presente" | "ausente";
   presenca_metodo: "manual" | "qr" | "login" | "importacao" | null;
   presenca_em: string | null;
@@ -625,7 +675,10 @@ export type AcaoGravacao =
   | "evidencia_registrar"
   | "evidencia_url"
   | "evidencia_substituir"
-  | "eficacia_registrar";
+  | "eficacia_registrar"
+  | "participantes_opcoes"
+  | "reposicao_faltantes"
+  | "treinamento_reposicao";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {

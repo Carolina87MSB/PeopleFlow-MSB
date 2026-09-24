@@ -3,11 +3,11 @@ import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, Plus } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { Button, Card, FilterChips, tableStyles } from "../../components/ui";
-import { listarTreinamentos, type OrigemTreinamento, type StatusTreinamento } from "./devRepository";
+import { listarTreinamentos, type StatusTreinamento, type TipoTreinamento } from "./devRepository";
 import { useDesenvolvimento } from "./contexto";
 import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, type AbaDef } from "./componentes";
 import { usePaginado } from "./hooks";
-import { formatarCarga, formatarData, ORIGEM_TREINAMENTO, STATUS_TREINAMENTO } from "./rotulos";
+import { FORMATO, formatarCarga, formatarData, MODALIDADE, STATUS_TREINAMENTO, TIPO_TREINAMENTO } from "./rotulos";
 import { ListaMestraAba } from "./ListaMestraAba";
 import { TreinamentoDrawer } from "./TreinamentoForm";
 import styles from "./Desenvolvimento.module.css";
@@ -56,7 +56,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
   const [filtro, setFiltro] = useState(filtros[0].rotulo);
   const [busca, setBusca] = useState("");
   const [termo, setTermo] = useState("");
-  const [origem, setOrigem] = useState("");
+  const [tipo, setTipo] = useState("");
   const [soConduzo, setSoConduzo] = useState(false);
   const [novo, setNovo] = useState(false);
   const status = filtros.find((f) => f.rotulo === filtro)!.status;
@@ -65,11 +65,11 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
       listarTreinamentos(p, {
         status,
         busca: termo,
-        origem: (origem || null) as OrigemTreinamento | null,
+        tipo: (tipo || null) as TipoTreinamento | null,
         recentesPrimeiro: aba === "concluidos",
         conduzidosPor: soConduzo ? colaboradorId : undefined,
       }),
-    [filtro, termo, origem, soConduzo],
+    [filtro, termo, tipo, soConduzo],
   );
   const podeSolicitar = perfil === "RH" || perfil === "Gestor";
   const subtitulo =
@@ -103,11 +103,11 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
           }}
         >
           <input className={styles.input} type="search" placeholder="Buscar por título, código ou documento" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
-          <select className={styles.select} style={{ minWidth: 160 }} value={origem} onChange={(e) => setOrigem(e.target.value)} aria-label="Origem">
-            <option value="">Todas as origens</option>
-            {(Object.keys(ORIGEM_TREINAMENTO) as OrigemTreinamento[]).map((o) => (
+          <select className={styles.select} style={{ minWidth: 160 }} value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Tipo">
+            <option value="">Todos os tipos</option>
+            {(Object.keys(TIPO_TREINAMENTO) as TipoTreinamento[]).map((o) => (
               <option key={o} value={o}>
-                {ORIGEM_TREINAMENTO[o]}
+                {TIPO_TREINAMENTO[o]}
               </option>
             ))}
           </select>
@@ -136,7 +136,8 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
                 <tr>
                   <th>Código</th>
                   <th>Treinamento</th>
-                  <th>Origem</th>
+                  <th>Tipo</th>
+                  <th>Modalidade</th>
                   <th>Data</th>
                   <th>Carga</th>
                   <th>Participantes</th>
@@ -156,9 +157,13 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
                             {t.lista_mestra_codigo} rev. {t.lista_mestra_revisao}
                           </div>
                         )}
-                        {t.tipo === "externo" && <div className={styles.secundario}>Externo</div>}
+                        {t.reposicao_numero && <div className={styles.secundario}>Reposição {t.reposicao_numero}</div>}
                       </td>
-                      <td className={styles.secundario}>{ORIGEM_TREINAMENTO[t.origem_tipo]}</td>
+                      <td className={styles.secundario}>{TIPO_TREINAMENTO[t.tipo]}</td>
+                      <td className={styles.secundario}>
+                        {MODALIDADE[t.modalidade]}
+                        {t.formato && <div>{FORMATO[t.formato]}</div>}
+                      </td>
                       <td className={styles.mono}>
                         {formatarData(data)}
                         {aba === "agenda" && t.data_fim && t.data_fim !== t.data_inicio ? ` a ${formatarData(t.data_fim)}` : ""}

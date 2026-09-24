@@ -5,7 +5,8 @@
 -- objeto do PeopleFlow (PDI/AVD incluídos), do Portal SST ou do antigo Portal
 -- de Treinamentos.
 --
--- ATENÇÃO: remove as colunas/tabelas da Fase 5 — os dados nelas se perdem.
+-- ATENÇÃO: remove as colunas/tabelas da Fase 5 — os dados nelas se perdem
+-- (inclusive a classificação "tipo" e os vínculos de reposição).
 -- Com o módulo em uso, faça antes o backup lógico
 -- (_fase0_desenvolvimento/scripts/baseline.mjs) e baixe os arquivos do bucket.
 -- O bucket desenvolvimento-evidencias só é removido se estiver VAZIO.
@@ -14,9 +15,49 @@
 
 begin;
 
--- Histórico volta à definição da Fase 1 (drop + create: colunas diferentes).
+-- Views saem antes das colunas (dependem delas) e voltam no fim com a definição da Fase 1.
+drop view if exists public.peopleflow_dev_v_participacoes;
 drop view if exists public.peopleflow_dev_v_conformidade;
 drop view if exists public.peopleflow_dev_v_historico;
+
+-- Colunas voltam aos nomes da Fase 1: "tipo" = interno/externo, "modalidade" = formato.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'peopleflow_dev_treinamentos' and column_name = 'formato'
+  ) then
+    alter table public.peopleflow_dev_treinamentos
+      drop constraint if exists peopleflow_dev_trein_tipo_chk,
+      drop constraint if exists peopleflow_dev_trein_modalidade_chk,
+      drop constraint if exists peopleflow_dev_trein_formato_chk,
+      drop constraint if exists peopleflow_dev_trein_documento_chk;
+    alter table public.peopleflow_dev_treinamentos drop column if exists tipo;
+    alter table public.peopleflow_dev_treinamentos rename column modalidade to tipo;
+    alter table public.peopleflow_dev_treinamentos rename column formato to modalidade;
+  end if;
+end $$;
+update public.peopleflow_dev_treinamentos set modalidade = 'ead' where modalidade = 'online';
+alter table public.peopleflow_dev_treinamentos alter column tipo set default 'interno';
+alter table public.peopleflow_dev_treinamentos
+  drop constraint if exists peopleflow_dev_treinamentos_tipo_check,
+  drop constraint if exists peopleflow_dev_treinamentos_modalidade_check;
+alter table public.peopleflow_dev_treinamentos
+  add constraint peopleflow_dev_treinamentos_tipo_check check (tipo in ('interno', 'externo')) not valid,
+  add constraint peopleflow_dev_treinamentos_modalidade_check check (modalidade in ('presencial', 'ead', 'hibrido')) not valid;
+
+-- Participantes: visibilidade volta à regra da Fase 1.
+drop policy if exists dev_participantes_leitura on public.peopleflow_dev_participantes;
+create policy dev_participantes_leitura on public.peopleflow_dev_participantes for select to authenticated
+  using (public.peopleflow_dev_pode_ver_colaborador(colaborador_id) or public.peopleflow_dev_responsavel_por(treinamento_id));
+create or replace function public.peopleflow_dev_participante_visivel(p_participante_id bigint)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.peopleflow_dev_participantes p
+    where p.id = p_participante_id
+      and (public.peopleflow_dev_pode_ver_colaborador(p.colaborador_id) or public.peopleflow_dev_responsavel_por(p.treinamento_id)))
+$$;
+
 create view public.peopleflow_dev_v_historico with (security_invoker = true) as
 select p.id as participante_id, p.colaborador_id, t.id as treinamento_id, t.codigo as treinamento_codigo, t.titulo, t.tipo,
   t.lista_mestra_codigo, t.lista_mestra_revisao, coalesce(t.data_fim, t.data_inicio) as data_realizacao, t.carga_horaria_min,
@@ -74,10 +115,11 @@ returns boolean language sql stable security definer set search_path = public as
       where p.treinamento_id = p_treinamento_id and p.removido_em is null)
     else false end
 $$;
+drop function if exists public.peopleflow_dev_gere_treinamento(bigint);
 
 -- Contas "Responsavel" são cópias derivadas (recriadas ao abrir o módulo): podem sair.
 delete from public.peopleflow_dev_contas where perfil = 'Responsavel';
-alter table public.peopleflow_dev_contas drop constraint if exists peopleflow_dev_contas_perfil_chk;
+alter table public.peopleflow_dev_contas drop constraint if exists peopleflow_dev_contas_perfil_chk, drop constraint if exists peopleflow_dev_contas_perfil_check;
 alter table public.peopleflow_dev_contas add constraint peopleflow_dev_contas_perfil_check check (perfil in ('RH', 'Gestor'));
 
 drop table if exists public.peopleflow_dev_qr_tokens;
@@ -87,12 +129,18 @@ alter table public.peopleflow_dev_necessidades
   drop column if exists atendida_em,
   drop column if exists atendida_treinamento_id;
 
-alter table public.peopleflow_dev_evidencias drop constraint if exists peopleflow_dev_evid_tipo_chk;
+alter table public.peopleflow_dev_evidencias drop constraint if exists peopleflow_dev_evid_tipo_chk, drop constraint if exists peopleflow_dev_evidencias_tipo_check;
 alter table public.peopleflow_dev_evidencias drop column if exists observacao;
 alter table public.peopleflow_dev_evidencias
   add constraint peopleflow_dev_evidencias_tipo_check check (tipo in ('lista_presenca', 'certificado', 'material', 'outro')) not valid;
 
-alter table public.peopleflow_dev_participantes drop constraint if exists peopleflow_dev_part_eficacia_chk;
+alter table public.peopleflow_dev_participantes
+  drop constraint if exists peopleflow_dev_part_eficacia_chk,
+  drop constraint if exists peopleflow_dev_part_origem_chk,
+  drop constraint if exists peopleflow_dev_participantes_origem_inclusao_check;
+update public.peopleflow_dev_participantes set origem_inclusao = 'manual' where origem_inclusao = 'reposicao';
+alter table public.peopleflow_dev_participantes
+  add constraint peopleflow_dev_participantes_origem_inclusao_check check (origem_inclusao in ('manual', 'criterio', 'lnt')) not valid;
 alter table public.peopleflow_dev_participantes
   drop column if exists eficacia_resultado,
   drop column if exists eficacia_observacao,
@@ -100,14 +148,16 @@ alter table public.peopleflow_dev_participantes
   drop column if exists eficacia_por_colaborador_id;
 
 drop index if exists public.peopleflow_dev_trein_solicitante_idx;
+drop index if exists public.peopleflow_dev_trein_repos_de_idx;
+drop index if exists public.peopleflow_dev_trein_repos_raiz_idx;
 alter table public.peopleflow_dev_treinamentos
   drop constraint if exists peopleflow_dev_trein_status_chk,
-  drop constraint if exists peopleflow_dev_trein_origem_chk,
+  drop constraint if exists peopleflow_dev_treinamentos_status_check,
+  drop constraint if exists peopleflow_dev_trein_reposicao_chk,
   drop constraint if exists peopleflow_dev_trein_carga_real_chk,
   drop constraint if exists peopleflow_dev_trein_concluido_chk;
 update public.peopleflow_dev_treinamentos set status = 'planejado' where status = 'solicitado';
 alter table public.peopleflow_dev_treinamentos
-  drop column if exists origem_tipo,
   drop column if exists lista_mestra_titulo,
   drop column if exists local_link,
   drop column if exists observacao,
@@ -119,7 +169,10 @@ alter table public.peopleflow_dev_treinamentos
   drop column if exists planejado_em,
   drop column if exists planejado_por,
   drop column if exists iniciado_em,
-  drop column if exists iniciado_por;
+  drop column if exists iniciado_por,
+  drop column if exists reposicao_de_id,
+  drop column if exists reposicao_raiz_id,
+  drop column if exists reposicao_numero;
 alter table public.peopleflow_dev_treinamentos alter column status set default 'planejado';
 alter table public.peopleflow_dev_treinamentos
   add constraint peopleflow_dev_treinamentos_status_check check (status in ('planejado', 'em_andamento', 'concluido', 'cancelado')) not valid;

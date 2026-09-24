@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, FileText, Link2, Plus, QrCode, SearchX, Upload, Users } from "lucide-react";
+import { ArrowLeft, CalendarPlus, FileText, Link2, Plus, QrCode, SearchX, Upload, Users } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { Header } from "../../components/layout/Header";
 import { Button, Card, Drawer, tableStyles } from "../../components/ui";
@@ -11,8 +11,10 @@ import {
   listarEvidencias,
   listarNecessidades,
   listarParticipantes,
+  listarReposicoes,
   listarVinculos,
   obterTreinamento,
+  opcoesParticipantes,
   pessoasPorId,
   type AcaoGravacao,
   type Participante,
@@ -28,8 +30,10 @@ import {
   EFICACIA,
   formatarCarga,
   formatarData,
+  FORMATO,
   METODO_PRESENCA,
-  ORIGEM_TREINAMENTO,
+  MODALIDADE,
+  TIPO_TREINAMENTO,
   PRESENCA,
   PRIORIDADE,
   STATUS_NECESSIDADE,
@@ -37,6 +41,7 @@ import {
   TIPO_EVIDENCIA,
 } from "./rotulos";
 import { TreinamentoDrawer } from "./TreinamentoForm";
+import { alternar as alternarSelecao, departamentosDe, desmarcarTodos, filtrarOpcoes, selecionarTodos, TODOS_DEPARTAMENTOS } from "./selecaoParticipantes";
 import styles from "./Desenvolvimento.module.css";
 
 function formatarDataHora(iso: string | null | undefined): string {
@@ -55,16 +60,18 @@ function permissoes(t: Treinamento, perfil: string, colaboradorId: number) {
   const conduz = t.responsavel_colaborador_id === colaboradorId || t.instrutor_colaborador_id === colaboradorId;
   const solicitante = t.solicitado_por_colaborador_id === colaboradorId;
   const encerrado = t.status === "concluido" || t.status === "cancelado";
-  const externo = t.tipo === "externo";
+  const externo = t.modalidade === "externo";
   return {
     ehRH,
     conduz,
     podeEditar: t.status !== "cancelado" && (ehRH || (t.status === "solicitado" && solicitante)),
-    podeParticipantes: !encerrado && (ehRH || (t.status === "solicitado" && solicitante)),
+    // Montar a turma: RH, quem conduz ou quem solicitou (qualquer colaborador ativo, de qualquer área).
+    podeParticipantes: !encerrado && (ehRH || conduz || solicitante),
     podeCancelar: !encerrado && (ehRH || (t.status === "solicitado" && solicitante)),
     podePresenca: ((ehRH || conduz) && (t.status === "em_andamento" || (externo && t.status === "planejado"))) || (ehRH && t.status === "concluido"),
     podeRealizacao: (ehRH || conduz) && (t.status === "planejado" || t.status === "em_andamento"),
     podeQr: (ehRH || conduz) && !externo && t.status === "em_andamento",
+    podeRepor: (ehRH || conduz) && t.status === "concluido",
     podeAnexar: (ehRH || conduz) && t.status !== "cancelado" && (t.status !== "concluido" || ehRH),
     veNecessidades: ehRH || perfil === "Gestor",
   };
@@ -137,7 +144,8 @@ export default function TreinamentoPage() {
           <div className={styles.cardHeader}>
             <div>
               <div className={styles.drawerEyebrow}>
-                {t.codigo} · {ORIGEM_TREINAMENTO[t.origem_tipo]}
+                {t.codigo} · {TIPO_TREINAMENTO[t.tipo]}
+                {t.reposicao_numero ? ` · Reposição ${t.reposicao_numero}` : ""}
               </div>
               <h3 className={styles.cardTitle}>{t.titulo}</h3>
               <p className={styles.cardSubtitle}>
@@ -156,10 +164,21 @@ export default function TreinamentoPage() {
               <dt>Documento</dt>
               <dd>{t.lista_mestra_codigo ? `${t.lista_mestra_codigo} rev. ${t.lista_mestra_revisao} — ${t.lista_mestra_titulo ?? ""}` : "—"}</dd>
               <dt>Tipo</dt>
-              <dd>
-                {t.tipo === "interno" ? "Interno" : "Externo"}
-                {t.modalidade ? ` · ${{ presencial: "Presencial", ead: "EAD / online", hibrido: "Híbrido" }[t.modalidade]}` : ""}
-              </dd>
+              <dd>{TIPO_TREINAMENTO[t.tipo]}</dd>
+              <dt>Modalidade</dt>
+              <dd>{MODALIDADE[t.modalidade]}</dd>
+              <dt>Formato</dt>
+              <dd>{t.formato ? FORMATO[t.formato] : "—"}</dd>
+              {t.reposicao_de_id && (
+                <>
+                  <dt>Reposição de</dt>
+                  <dd>
+                    <Button variant="ghost" onClick={() => navigate(`/desenvolvimento/treinamento/${t.reposicao_de_id}`)}>
+                      Abrir treinamento de origem
+                    </Button>
+                  </dd>
+                </>
+              )}
               <dt>Data prevista</dt>
               <dd>
                 {formatarData(t.data_inicio)}
@@ -210,7 +229,7 @@ export default function TreinamentoPage() {
                 Iniciar realização
               </Button>
             )}
-            {p.ehRH && (t.status === "em_andamento" || (t.tipo === "externo" && t.status === "planejado")) && (
+            {p.ehRH && (t.status === "em_andamento" || (t.modalidade === "externo" && t.status === "planejado")) && (
               <Button variant="success" onClick={() => void acao("treinamento_concluir", { id: t.id }, "Treinamento concluído.").catch(() => undefined)}>
                 Concluir
               </Button>
@@ -223,6 +242,8 @@ export default function TreinamentoPage() {
         {p.podeQr && <QrPresenca t={t} onAtualizarLista={participantes.recarregar} />}
 
         <Participantes t={t} p={p} lista={participantes.dados} erro={participantes.erro} carregando={participantes.carregando} acao={acao} />
+
+        <Reposicoes t={t} podeRepor={p.podeRepor} ausentes={ativos.filter((x) => x.presenca_status === "ausente").length} />
 
         <Evidencias t={t} podeAnexar={p.podeAnexar} participantes={ativos} />
       </div>
@@ -318,7 +339,7 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
       ) : vinculos.carregando && !vinculos.dados ? (
         <Carregando />
       ) : (vinculos.dados ?? []).length === 0 ? (
-        <p className={styles.secundario}>Nenhuma necessidade vinculada{podeEditar ? " — treinamentos de POP/IT e obrigatórios podem seguir sem necessidade." : "."}</p>
+        <p className={styles.secundario}>Nenhuma necessidade vinculada{podeEditar ? " — treinamentos de POP, Instrução de Trabalho e obrigatórios podem seguir sem necessidade." : "."}</p>
       ) : (
         <div className={tableStyles.wrap}>
           <table className={tableStyles.table}>
@@ -695,7 +716,7 @@ function Participantes(props: {
                       {x.pessoa?.departamento ? ` · ${x.pessoa.departamento}` : ""}
                     </div>
                   </td>
-                  <td className={styles.secundario}>{{ manual: "Manual", criterio: "Critério", lnt: "Necessidade" }[x.origem_inclusao]}</td>
+                  <td className={styles.secundario}>{{ manual: "Manual", criterio: "Critério", lnt: "Necessidade", reposicao: "Reposição" }[x.origem_inclusao]}</td>
                   <td>
                     <Selo tom={PRESENCA[x.presenca_status].tom}>{PRESENCA[x.presenca_status].rotulo}</Selo>
                     {x.presenca_metodo && (
@@ -771,41 +792,60 @@ function Participantes(props: {
 }
 
 function IncluirDrawer({ t, jaInscritos, onFechar, onIncluir }: { t: Treinamento; jaInscritos: Set<number>; onFechar: () => void; onIncluir: (ids: number[]) => Promise<void> }) {
-  const { perfil, pessoas } = useDesenvolvimento();
+  // Todos os colaboradores ativos (treinamentos podem ser transversais) — o servidor só
+  // libera esta lista para quem monta a turma, e só com nome, cargo e departamento.
+  const opcoes = useConsulta(() => opcoesParticipantes(t.id), [t.id]);
   const [busca, setBusca] = useState("");
+  const [departamento, setDepartamento] = useState(TODOS_DEPARTAMENTOS);
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const termo = busca.trim().toLocaleLowerCase("pt-BR");
-  const filtradas = pessoas.filter((x) => !jaInscritos.has(x.id) && (!termo || `${x.nome} ${x.cargo} ${x.departamento}`.toLocaleLowerCase("pt-BR").includes(termo)));
+  const todas = useMemo(() => opcoes.dados ?? [], [opcoes.dados]);
+  const departamentos = useMemo(() => departamentosDe(todas), [todas]);
+  const visiveis = useMemo(() => filtrarOpcoes(todas, busca, departamento, jaInscritos), [todas, busca, departamento, jaInscritos]);
+  const todosVisiveisMarcados = visiveis.length > 0 && visiveis.every((o) => marcados.has(o.id));
   return (
-    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow={t.codigo} titulo="Incluir participantes" sub={perfil === "RH" ? "Colaboradores ativos do PeopleFlow" : "Colaboradores ativos da sua equipe"} />}>
+    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow={t.codigo} titulo="Incluir participantes" sub="Colaboradores ativos de qualquer área" />}>
       <div className={styles.secao}>
-        <input className={styles.input} style={{ width: "100%" }} type="search" placeholder="Buscar por nome, cargo ou departamento" value={busca} onChange={(e) => setBusca(e.target.value)} />
-        {filtradas.length === 0 ? (
-          <p className={styles.secundario}>Ninguém disponível para incluir.</p>
+        <div className={styles.filtros}>
+          <input className={styles.input} type="search" placeholder="Buscar por nome" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          <select className={styles.select} value={departamento} onChange={(e) => setDepartamento(e.target.value)} aria-label="Departamento">
+            <option value={TODOS_DEPARTAMENTOS}>Todos os departamentos</option>
+            {departamentos.map((d) => (
+              <option key={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+        {opcoes.erro ? (
+          <Erro mensagem={opcoes.erro} />
+        ) : opcoes.carregando ? (
+          <Carregando />
         ) : (
           <>
-            {filtradas.slice(0, 200).map((x) => (
-              <label key={x.id} className={styles.check} style={{ fontWeight: 500 }}>
+            <div className={styles.toolbar} style={{ marginBottom: 0 }}>
+              <label className={styles.check}>
                 <input
                   type="checkbox"
-                  checked={marcados.has(x.id)}
-                  onChange={() =>
-                    setMarcados((m) => {
-                      const s = new Set(m);
-                      if (s.has(x.id)) s.delete(x.id);
-                      else s.add(x.id);
-                      return s;
-                    })
-                  }
+                  disabled={visiveis.length === 0}
+                  checked={todosVisiveisMarcados}
+                  onChange={() => setMarcados((m) => (todosVisiveisMarcados ? desmarcarTodos(m, visiveis) : selecionarTodos(m, visiveis)))}
                 />
-                <span>
-                  <strong>{x.nome}</strong> <span className={styles.dica}>{[x.cargo, x.departamento].filter(Boolean).join(" · ")}</span>
-                </span>
+                Selecionar todos{departamento ? ` de ${departamento}` : ""} ({visiveis.length})
               </label>
-            ))}
-            {filtradas.length > 200 && <span className={styles.dica}>Mostrando 200 de {filtradas.length} — refine a busca.</span>}
+              <strong className={styles.secundario}>{marcados.size} selecionado(s)</strong>
+            </div>
+            {visiveis.length === 0 ? (
+              <p className={styles.secundario}>Ninguém disponível com esse filtro.</p>
+            ) : (
+              visiveis.map((x) => (
+                <label key={x.id} className={styles.check} style={{ fontWeight: 500 }}>
+                  <input type="checkbox" checked={marcados.has(x.id)} onChange={() => setMarcados((m) => alternarSelecao(m, x.id))} />
+                  <span>
+                    <strong>{x.nome}</strong> <span className={styles.dica}>{[x.cargo, x.departamento].filter(Boolean).join(" · ")}</span>
+                  </span>
+                </label>
+              ))
+            )}
           </>
         )}
         {erro && <Erro mensagem={erro} />}
@@ -830,6 +870,73 @@ function IncluirDrawer({ t, jaInscritos, onFechar, onIncluir }: { t: Treinamento
         </div>
       </div>
     </Drawer>
+  );
+}
+
+// ── Reposição para faltantes ───────────────────────────────────────────
+function Reposicoes({ t, podeRepor, ausentes }: { t: Treinamento; podeRepor: boolean; ausentes: number }) {
+  const navigate = useNavigate();
+  const lista = useConsulta(() => listarReposicoes(t.id), [t.id]);
+  const [agendando, setAgendando] = useState(false);
+  const reposicoes = lista.dados ?? [];
+  if (t.status !== "concluido" || (ausentes === 0 && reposicoes.length === 0)) return null;
+  return (
+    <Card>
+      <div className={styles.cardHeader}>
+        <div>
+          <h3 className={styles.cardTitle}>Faltantes e reposições</h3>
+          <p className={styles.cardSubtitle}>
+            {ausentes} ausente(s): não são considerados treinados e seguem pendentes até realizarem uma reposição. Este treinamento não é reaberto.
+          </p>
+        </div>
+        {podeRepor && ausentes > 0 && (
+          <Button variant="primary" icon={<CalendarPlus size={16} />} onClick={() => setAgendando(true)}>
+            Agendar treinamento para faltantes
+          </Button>
+        )}
+      </div>
+      {lista.erro ? (
+        <Erro mensagem={lista.erro} />
+      ) : reposicoes.length === 0 ? (
+        <p className={styles.secundario}>Nenhuma reposição agendada.</p>
+      ) : (
+        <div className={tableStyles.wrap}>
+          <table className={tableStyles.table}>
+            <thead>
+              <tr>
+                <th>Reposição</th>
+                <th>Código</th>
+                <th>Data</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reposicoes.map((r) => (
+                <tr key={r.id} className={styles.linhaClicavel} onClick={() => navigate(`/desenvolvimento/treinamento/${r.id}`)}>
+                  <td>Reposição {r.reposicao_numero}</td>
+                  <td className={styles.mono}>{r.codigo}</td>
+                  <td className={styles.mono}>{formatarData(r.data_realizacao ?? r.data_inicio)}</td>
+                  <td>
+                    <Selo tom={STATUS_TREINAMENTO[r.status].tom}>{STATUS_TREINAMENTO[r.status].rotulo}</Selo>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {agendando && (
+        <TreinamentoDrawer
+          item={t}
+          modo="reposicao"
+          onFechar={() => setAgendando(false)}
+          onSalvo={(nova) => {
+            setAgendando(false);
+            navigate(`/desenvolvimento/treinamento/${nova.id}`);
+          }}
+        />
+      )}
+    </Card>
   );
 }
 
@@ -886,7 +993,7 @@ function Evidencias({ t, podeAnexar, participantes }: { t: Treinamento; podeAnex
   const { flash } = useToast();
   const lista = useConsulta(() => listarEvidencias(t.id), [t.id]);
   const [arquivo, setArquivo] = useState<File | null>(null);
-  const [tipo, setTipo] = useState<TipoEvidencia>(t.tipo === "externo" ? "certificado" : "lista_presenca");
+  const [tipo, setTipo] = useState<TipoEvidencia>(t.modalidade === "externo" ? "certificado" : "lista_presenca");
   const [participante, setParticipante] = useState("");
   const [obs, setObs] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -909,7 +1016,7 @@ function Evidencias({ t, podeAnexar, participantes }: { t: Treinamento; podeAnex
       <div className={styles.cardHeader}>
         <div>
           <h3 className={styles.cardTitle}>Evidências</h3>
-          <p className={styles.cardSubtitle}>{t.tipo === "externo" ? "Treinamento externo: anexe certificado ou comprovante antes de concluir." : "Lista de presença, material, ata, fotos…"} Arquivos em área privada, abertos por link temporário.</p>
+          <p className={styles.cardSubtitle}>{t.modalidade === "externo" ? "Treinamento externo: anexe certificado ou comprovante antes de concluir." : "Lista de presença, material, ata, fotos…"} Arquivos em área privada, abertos por link temporário.</p>
         </div>
       </div>
       {erro && <Erro mensagem={erro} />}

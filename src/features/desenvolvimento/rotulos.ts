@@ -1,7 +1,10 @@
 import type {
   CategoriaNecessidade,
   OrigemNecessidade,
-  OrigemTreinamento,
+  Formato,
+  Modalidade,
+  SituacaoParticipacao,
+  TipoTreinamento,
   Prioridade,
   ResultadoEficacia,
   Situacao,
@@ -56,20 +59,37 @@ export const STATUS_TREINAMENTO: Record<StatusTreinamento, { rotulo: string; tom
   cancelado: { rotulo: "Cancelado", tom: "neutral" },
 };
 
-export const ORIGEM_TREINAMENTO: Record<OrigemTreinamento, string> = {
-  desenvolvimento: "Necessidade de desenvolvimento",
-  pop_it: "POP / IT",
-  revisao_documental: "Revisão documental",
+export const TIPO_TREINAMENTO: Record<TipoTreinamento, string> = {
+  novo_pop: "Novo POP",
+  revisao_pop: "Revisão de POP",
+  instrucao_trabalho: "Instrução de Trabalho",
   integracao: "Integração",
-  requisito_regulatorio: "Requisito regulatório",
   reciclagem: "Reciclagem",
-  operacional: "Operacional",
+  capacitacao_tecnica: "Capacitação Técnica",
+  desenvolvimento: "Desenvolvimento",
+  qualidade_regulatorio: "Qualidade / Regulatório",
+  saude_seguranca: "Saúde e Segurança",
+  sistemas_ferramentas: "Sistemas e Ferramentas",
   outro: "Outro",
+};
+
+/** Tipos que exigem documento da Lista Mestra (código + revisão fotografados). */
+export const TIPOS_COM_DOCUMENTO: TipoTreinamento[] = ["novo_pop", "revisao_pop", "instrucao_trabalho"];
+
+export const MODALIDADE: Record<Modalidade, string> = { interno: "Interno", externo: "Externo" };
+
+export const FORMATO: Record<Formato, string> = { presencial: "Presencial", online: "Online", hibrido: "Híbrido" };
+
+export const SITUACAO_PARTICIPACAO: Record<SituacaoParticipacao, { rotulo: string; tom: Tom }> = {
+  previsto: { rotulo: "Previsto", tom: "neutral" },
+  realizado: { rotulo: "Realizado", tom: "success" },
+  ausente: { rotulo: "Ausente", tom: "danger" },
+  realizado_reposicao: { rotulo: "Realizado em reposição", tom: "success" },
 };
 
 export const PRESENCA: Record<"pendente" | "presente" | "ausente", { rotulo: string; tom: Tom }> = {
   pendente: { rotulo: "Pendente", tom: "neutral" },
-  presente: { rotulo: "Realizou", tom: "success" },
+  presente: { rotulo: "Presente", tom: "success" },
   ausente: { rotulo: "Ausente", tom: "danger" },
 };
 
