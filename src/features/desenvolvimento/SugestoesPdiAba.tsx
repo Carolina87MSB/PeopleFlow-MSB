@@ -159,7 +159,8 @@ export function SugestoesPdiAba() {
 function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada }: { sugestao: Sugestao; onFechar: () => void; onTratada: () => void }) {
   const { flash } = useToast();
   const [form, setForm] = useState({
-    categoria: sugestao.tipo === "Comportamental" ? "comportamental" : "tecnica",
+    // A competência/KPI que originou o PDI não define a categoria da capacitação: o RH escolhe.
+    categoria: "",
     prioridade: "media",
     justificativa: `PDI ${sugestao.ciclo} — ${sugestao.tipo === "Tecnica" ? "KPI" : "competência"} "${sugestao.competencia}"`,
     sugestao_capacitacao: "",
@@ -192,6 +193,7 @@ function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada }: { sugestao: 
           <label className={styles.campo}>
             Categoria *
             <select value={form.categoria} onChange={set("categoria")} required>
+              <option value="">Selecione</option>
               {(Object.keys(CATEGORIA_NECESSIDADE) as CategoriaNecessidade[]).map((c) => (
                 <option key={c} value={c}>
                   {CATEGORIA_NECESSIDADE[c]}
