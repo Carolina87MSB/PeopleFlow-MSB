@@ -50,6 +50,9 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
   const exigeDoc = TIPOS_COM_DOCUMENTO.includes(form.tipo as TipoTreinamento);
   const docTravado = modo === "editar" && item?.status === "concluido";
   const doc = (documentos.dados ?? []).find((d) => d.codigo === form.lista_mestra_codigo);
+  // Novo POP / Revisão de POP / Instrução de Trabalho: título = título oficial do documento (somente leitura).
+  const tituloDoc = item?.lista_mestra_codigo && item.lista_mestra_codigo === form.lista_mestra_codigo ? (item.lista_mestra_titulo ?? "") : (doc?.titulo ?? "");
+  const tituloEfetivo = exigeDoc ? tituloDoc : form.titulo;
   // Responsável/instrutor: pessoas do escopo + quem já está no treinamento de origem.
   const opcoesPessoa = [...pessoas];
   for (const id of [item?.responsavel_colaborador_id, item?.instrutor_colaborador_id]) {
@@ -63,8 +66,10 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
       const carga = form.carga_h.trim() ? Math.round(Number(form.carga_h.replace(",", ".")) * 60) : null;
       if (carga !== null && !(carga > 0)) throw new Error("Carga horária inválida.");
       if (modo === "reposicao" && !form.data_inicio) throw new Error("Defina a nova data da reposição.");
+      if (exigeDoc && !tituloDoc) throw new Error("Selecione um documento vigente da Lista Mestra.");
       const corpo = {
         ...form,
+        titulo: tituloEfetivo,
         carga_horaria_min: carga,
         responsavel_colaborador_id: form.responsavel_colaborador_id || null,
         instrutor_colaborador_id: form.instrutor_colaborador_id || null,
@@ -166,6 +171,7 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
               onChange={(e) => setForm((f) => ({ ...f, lista_mestra_codigo: e.target.value.trim().toUpperCase() }))}
               placeholder={documentos.carregando ? "Carregando..." : "Código do documento"}
               disabled={docTravado}
+              required={exigeDoc}
             />
             <datalist id="dev-docs-lm">
               {(documentos.dados ?? []).map((d) => (
@@ -187,8 +193,13 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
             )}
           </label>
           <label className={[styles.campo, styles.cheio].join(" ")}>
-            Título{exigeDoc ? " (vazio = título do documento)" : " *"}
-            <input value={form.titulo} onChange={set("titulo")} maxLength={300} required={!exigeDoc} />
+            Título do treinamento *
+            {exigeDoc ? (
+              <input value={tituloDoc} readOnly aria-readonly="true" tabIndex={-1} placeholder="Preenchido pelo documento selecionado" />
+            ) : (
+              <input value={form.titulo} onChange={set("titulo")} maxLength={300} required />
+            )}
+            {exigeDoc && <span className={styles.dica}>Título oficial do documento na Lista Mestra.</span>}
           </label>
           <label className={styles.campo}>
             {modo === "reposicao" ? "Nova data *" : "Data prevista"}
