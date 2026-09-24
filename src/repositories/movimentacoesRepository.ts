@@ -41,6 +41,7 @@ interface MovimentacaoRow {
   historico: EventoHistoricoMovimentacao[] | null;
   carta_movimentacao: CartaMovimentacao | null;
   legado: boolean;
+  pedido_demissao: boolean | null;
 }
 
 function fromRow(row: MovimentacaoRow): Movimentacao {
@@ -66,6 +67,7 @@ function fromRow(row: MovimentacaoRow): Movimentacao {
     historico: row.historico ?? undefined,
     cartaMovimentacao: row.carta_movimentacao ?? null,
     legado: row.legado,
+    pedidoDemissao: row.pedido_demissao ?? false,
   };
 }
 
@@ -92,6 +94,7 @@ function toRow(m: Movimentacao): Omit<MovimentacaoRow, "legado"> & { legado: boo
     historico: m.historico ?? [],
     carta_movimentacao: m.cartaMovimentacao ?? null,
     legado: m.legado ?? false,
+    pedido_demissao: m.pedidoDemissao ?? false,
   };
 }
 

@@ -1485,3 +1485,17 @@ alter table public.peopleflow_descricoes_cargo
 
 comment on column public.peopleflow_descricoes_cargo.obsoleto is
   'RH-only. true = cargo fora de uso, não aparece mais no seletor de "Cargo solicitado" de novas Admissões. Descrição e histórico permanecem intactos; reversível.';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 35) Desligamento — "Pedido de demissão" (RH, 2026-09). Quando o gestor
+--    marca que o colaborador solicitou o próprio desligamento, a etapa
+--    "Diretoria" é dispensada (Gestor Solicitante → RH direto, ver
+--    montarEtapas() em domain/workflow.ts) — não existe decisão de
+--    Diretoria a tomar sobre um pedido do próprio colaborador. Fixado na
+--    criação da movimentação, nunca muda depois.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_movimentacoes
+  add column if not exists pedido_demissao boolean not null default false;
+
+comment on column public.peopleflow_movimentacoes.pedido_demissao is
+  'Só tipo_cod = DES. true = colaborador pediu o próprio desligamento — etapa "Diretoria" dispensada. Fixado na criação, nunca muda depois.';

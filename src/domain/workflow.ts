@@ -54,9 +54,15 @@ export function montarEtapas(
   solicitanteNome: string,
   colaboradores: Colaborador[],
   depto: string,
+  /** true só para Desligamento por "Pedido de demissão" (RH, 2026-09) —
+   * dispensa a etapa "Diretoria", que nunca existe pra decidir sobre pedido
+   * do próprio colaborador. Sem efeito quando `ehCEO()` já reduz a matriz
+   * a só "RH". */
+  pularDiretoria = false,
 ): Etapa[] {
   const solicitanteColab = colaboradores.find((c) => c.nome === solicitanteNome);
-  const papeis = ehCEO(solicitanteColab) ? ["RH"] : tipo.etapas;
+  const papeisBase = ehCEO(solicitanteColab) ? ["RH"] : tipo.etapas;
+  const papeis = pularDiretoria ? papeisBase.filter((p) => p !== "Diretoria") : papeisBase;
   return papeis.map((papel, i) => ({
     papel,
     aprovador: roleApprover(papel, { solicitanteGestor, depto }),

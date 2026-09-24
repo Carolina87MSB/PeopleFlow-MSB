@@ -288,6 +288,11 @@ export interface Movimentacao {
    * a "Data prevista" (atualizacaoInfo.dataPrevistaIso) chegar. */
   sincronizadoEm?: string | null;
   legado?: boolean;
+  /** Só `tipoCod === "DES"` (RH, 2026-09) — colaborador pediu o próprio
+   * desligamento: a etapa "Diretoria" é dispensada (ver montarEtapas() em
+   * domain/workflow.ts), a movimentação vai direto de "Gestor Solicitante"
+   * para "RH". Fixado na criação, nunca muda depois. */
+  pedidoDemissao?: boolean;
   /** Trilha de reaberturas/edições pós-criação — ver EventoHistoricoMovimentacao. */
   historico?: EventoHistoricoMovimentacao[];
   /** null/undefined = carta ainda não emitida. Só existe pra PRO/TRF/SAL já
@@ -326,6 +331,9 @@ export interface NovaMovimentacaoForm {
   desUltimoDia: string;
   desSubst: "Sim" | "Não";
   desObs: string;
+  /** "Pedido de demissão" — colaborador solicitou o próprio desligamento;
+   * dispensa a etapa de aprovação da Diretoria (ver montarEtapas()). */
+  desPedidoDemissao: boolean;
 }
 
 export interface DepartamentoAgregado {

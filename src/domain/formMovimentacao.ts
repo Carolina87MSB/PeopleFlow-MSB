@@ -1,7 +1,16 @@
-import { formatarDataAtual, formatarDataIso } from "./dates";
+import { formatarDataAtual, formatarDataIso, formatarHoraAtual } from "./dates";
 import { ehGestorDoDepartamento, gestorDoDepartamento } from "./hierarquia";
 import { calcularPercentual, montarEtapas, nextId } from "./workflow";
-import type { CargoCustom, Colaborador, DadoField, DescricaoCargo, Movimentacao, NovaMovimentacaoForm, TipoMovimentacao } from "../types/domain";
+import type {
+  CargoCustom,
+  Colaborador,
+  DadoField,
+  DescricaoCargo,
+  EventoHistoricoMovimentacao,
+  Movimentacao,
+  NovaMovimentacaoForm,
+  TipoMovimentacao,
+} from "../types/domain";
 
 /** true só quando `nomeCargo` é um cargo "novo" (criado pelo botão Novo
  * Cargo, ainda 0 ocupantes) SEM Descrição de Cargo aprovada — nunca pra um
@@ -47,6 +56,7 @@ export function blankForm(): NovaMovimentacaoForm {
     desUltimoDia: "",
     desSubst: "Não",
     desObs: "",
+    desPedidoDemissao: false,
   };
 }
 
@@ -213,8 +223,9 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
       { label: "Data prevista", value: f.trfData ? formatarDataIso(f.trfData) : "A definir" },
     ];
   } else if (f.tipo === "DES") {
-    resumo = "Desligamento — " + (f.desMotivo || "") + " · " + cargoAtual;
+    resumo = (f.desPedidoDemissao ? "Pedido de Demissão — " : "Desligamento — ") + (f.desMotivo || "") + " · " + cargoAtual;
     dados = [
+      { label: "Tipo de solicitação", value: f.desPedidoDemissao ? "Pedido de demissão (colaborador)" : "Desligamento pela empresa" },
       { label: "Motivo do desligamento", value: f.desMotivo || "—" },
       { label: "Data prevista", value: f.desData ? formatarDataIso(f.desData) : "A definir" },
       { label: "Último dia trabalhado", value: f.desUltimoDia ? formatarDataIso(f.desUltimoDia) : "A definir" },
@@ -223,7 +234,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     ];
   }
 
-  const etapas = montarEtapas(tipo, solic, me, colaboradores, depto);
+  const etapas = montarEtapas(tipo, solic, me, colaboradores, depto, f.tipo === "DES" && f.desPedidoDemissao);
 
   let atualizacaoInfo: Movimentacao["atualizacaoInfo"];
   let desligamentoInfo: Movimentacao["desligamentoInfo"];
@@ -242,6 +253,19 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     desligamentoInfo = { nome: f.colab, motivo: f.desMotivo.trim(), dataIso: f.desUltimoDia || f.desData };
   }
 
+  const historico: EventoHistoricoMovimentacao[] | undefined =
+    f.tipo === "DES" && f.desPedidoDemissao
+      ? [
+          {
+            data: dataSolicitacao,
+            hora: formatarHoraAtual(),
+            autor: me,
+            acao: "Pedido de demissão registrado",
+            detalhe: `${f.colab} solicitou o próprio desligamento — etapa "Diretoria" dispensada, segue direto para o RH.`,
+          },
+        ]
+      : undefined;
+
   return base({
     tipo: tipo.nome,
     tipoCod: tipo.cod,
@@ -252,5 +276,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     dados,
     atualizacaoInfo,
     desligamentoInfo,
+    pedidoDemissao: f.tipo === "DES" ? f.desPedidoDemissao : undefined,
+    historico,
   });
 }

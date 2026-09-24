@@ -45,6 +45,42 @@
   min-width: 0;
 }
 
+.pedidoDemissaoBox {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Sobrescreve `.field input { width:100% }` (compartilhada) — sem isso o
+ * checkbox herda largura total e vira uma caixa esticada em vez do controle
+ * pequeno normal. */
+.pedidoDemissaoBox input[type="checkbox"] {
+  margin-top: 2px;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.pedidoDemissaoBox span {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.pedidoDemissaoBox span b {
+  color: var(--color-navy);
+}
+
 .fieldHint {
   font-size: 10.5px;
   font-weight: 400;

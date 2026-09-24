@@ -74,7 +74,8 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
       setErro(result.error ?? "Preencha todos os campos obrigatórios antes de enviar.");
       return;
     }
-    flash(`Movimentação ${result.movimentacao.id} enviada para aprovação.`);
+    const destinoMsg = form.tipo === "DES" && form.desPedidoDemissao ? "enviada diretamente para o RH." : "enviada para aprovação.";
+    flash(`Movimentação ${result.movimentacao.id} ${destinoMsg}`);
     onClose();
     navigate("/workflow");
   }
@@ -125,7 +126,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             Cancelar
           </Button>
           <Button variant="primary" icon={<Check size={16} />} onClick={handleSubmit} disabled={enviando}>
-            {enviando ? "Enviando..." : "Enviar para aprovação"}
+            {enviando ? "Enviando..." : tipo === "DES" && form.desPedidoDemissao ? "Enviar para o RH" : "Enviar para aprovação"}
           </Button>
         </>
       }
@@ -350,6 +351,17 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
 
         {tipo === "DES" && (
           <>
+            <label className={[styles.field, styles.full, styles.pedidoDemissaoBox].join(" ")}>
+              <input
+                type="checkbox"
+                checked={form.desPedidoDemissao}
+                onChange={(e) => set("desPedidoDemissao", e.target.checked)}
+              />
+              <span>
+                <b>Pedido de demissão</b>
+                <br />O colaborador solicitou seu desligamento — dispensa a aprovação da Diretoria, segue direto para o RH.
+              </span>
+            </label>
             <label className={styles.field}>
               <span>Motivo do desligamento</span>
               <input value={form.desMotivo} onChange={(e) => set("desMotivo", e.target.value)} />
