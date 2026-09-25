@@ -495,19 +495,52 @@ function VincularDrawer({ t, jaVinculadas, onFechar, onConcluido }: { t: Treinam
 }
 
 // ── QR de presença ──────────────────────────────────────────────────────
+/** QR em PNG de alta resolução (para projetar ou colar em slides), do MESMO link/token exibido — não gera token novo. */
+function qrPng(url: string, lado = 1024): HTMLCanvasElement {
+  const q = qrcode(0, "M");
+  q.addData(url);
+  q.make();
+  const modulos = q.getModuleCount();
+  const margem = 4; // zona de silêncio padrão do QR
+  const escala = Math.max(1, Math.floor(lado / (modulos + margem * 2)));
+  const total = escala * (modulos + margem * 2);
+  const canvas = document.createElement("canvas");
+  canvas.width = total;
+  canvas.height = total;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, total, total);
+  ctx.fillStyle = "#000000";
+  for (let r = 0; r < modulos; r++) for (let c = 0; c < modulos; c++) if (q.isDark(r, c)) ctx.fillRect((c + margem) * escala, (r + margem) * escala, escala, escala);
+  return canvas;
+}
+
 function QrPresenca({ t, onAtualizarLista }: { t: Treinamento; onAtualizarLista: () => void }) {
   const { flash } = useToast();
   const [qr, setQr] = useState<{ token: string; expira_em: string } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const url = qr ? `${window.location.origin}/participar/${qr.token}` : "";
-  const imagem = useMemo(() => {
-    if (!url) return "";
-    const q = qrcode(0, "M");
-    q.addData(url);
-    q.make();
-    return q.createDataURL(8, 16);
-  }, [url]);
+  const canvas = useMemo(() => (url ? qrPng(url) : null), [url]);
+  const imagem = useMemo(() => canvas?.toDataURL("image/png") ?? "", [canvas]);
+
+  async function copiarImagem() {
+    try {
+      if (!canvas || typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) throw new Error("sem suporte");
+      const blob = await new Promise<Blob>((ok, falha) => canvas.toBlob((b) => (b ? ok(b) : falha(new Error("png"))), "image/png"));
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      flash("QR Code copiado — cole no PowerPoint com Ctrl+V.");
+    } catch {
+      setErro("Este navegador não permite copiar imagem. Use Baixar PNG.");
+    }
+  }
+
+  function baixarPng() {
+    const a = document.createElement("a");
+    a.href = imagem;
+    a.download = `QR-presenca-${t.codigo}.png`;
+    a.click();
+  }
   // Com o QR aberto, a lista de presença se atualiza sozinha.
   useEffect(() => {
     if (!qr) return;
@@ -531,7 +564,7 @@ function QrPresenca({ t, onAtualizarLista }: { t: Treinamento; onAtualizarLista:
     <Card>
       <div className={styles.cardHeader}>
         <div>
-          <h3 className={styles.cardTitle}>Presença por QR</h3>
+          <h3 className={styles.cardTitle}>QR Code de presença</h3>
           <p className={styles.cardSubtitle}>O participante lê o código e confirma com o e-mail corporativo. Quem não conseguir: presença manual abaixo.</p>
         </div>
         <div className={styles.acoes}>
@@ -570,10 +603,23 @@ function QrPresenca({ t, onAtualizarLista }: { t: Treinamento; onAtualizarLista:
       {erro && <Erro mensagem={erro} />}
       {qr && (
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
-          <img src={imagem} alt="QR de presença" style={{ width: 260, height: 260, imageRendering: "pixelated", background: "#fff", borderRadius: 8 }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+            <img src={imagem} alt="QR Code de presença" style={{ width: 260, height: 260, imageRendering: "pixelated", background: "#fff", borderRadius: 8 }} />
+            <div className={styles.acoes} style={{ justifyContent: "center" }}>
+              <Button variant="secondary" onClick={() => void copiarImagem()}>
+                Copiar QR Code
+              </Button>
+              <Button variant="secondary" onClick={baixarPng}>
+                Baixar PNG
+              </Button>
+            </div>
+          </div>
           <dl className={styles.detalhe}>
             <dt>Válido até</dt>
-            <dd>{formatarDataHora(qr.expira_em)}</dd>
+            <dd>
+              {formatarDataHora(qr.expira_em)}
+              <div className={styles.dica}>Depois disso, ao encerrar ou ao gerar novo código, este QR — inclusive o já colado em apresentações — deixa de registrar presença.</div>
+            </dd>
             <dt>Link</dt>
             <dd style={{ wordBreak: "break-all" }}>{url}</dd>
             <dt />
