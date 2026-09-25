@@ -74,6 +74,14 @@
   gap: 8px;
 }
 
+/* Sem isso, o item flex não encolhe abaixo da largura intrínseca do texto
+ * (mesmo problema de grid/flex já visto em outras telas) — um subtítulo mais
+ * longo ("Gestão e Desenvolvimento de Pessoas") vazaria pra fora da sidebar
+ * em vez de quebrar linha dentro dela. */
+.brandText {
+  min-width: 0;
+}
+
 .brandDot {
   width: 6px;
   height: 6px;
@@ -94,7 +102,8 @@
   font-size: 10.5px;
   font-weight: 500;
   color: var(--color-muted-light);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
 }
 
 .nav {

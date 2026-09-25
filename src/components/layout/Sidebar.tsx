@@ -117,9 +117,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <img src="/assets/msb-logo.png" alt="MSB — Medical System do Brasil" className={styles.logo} />
         <div className={styles.brandRow}>
           <span className={styles.brandDot} />
-          <div>
+          <div className={styles.brandText}>
             <div className={styles.brandName}>Portal PeopleFlow</div>
-            <div className={styles.brandSub}>Movimentações de Pessoal</div>
+            <div className={styles.brandSub}>Gestão e Desenvolvimento de Pessoas</div>
           </div>
         </div>
         <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Fechar menu">
