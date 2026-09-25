@@ -34,7 +34,11 @@ export interface DadosListaPresenca {
   geradoEm: string;
   geradoPor: string;
   codigoVerificacao: string;
+  /** Treinamento de homologação/teste: faixa de aviso no topo e no rodapé. */
+  homologacao?: boolean;
 }
+
+const AVISO_TESTE = "TREINAMENTO DE HOMOLOGAÇÃO/TESTE — SEM VALIDADE COMO REGISTRO OFICIAL DE CAPACITAÇÃO";
 
 const A4: [number, number] = [595.28, 841.89];
 const M = 40;
@@ -111,6 +115,11 @@ export async function gerarPdfListaPresenca(d: DadosListaPresenca): Promise<Uint
   y -= 30;
   texto("Gerada automaticamente pelo PeopleFlow a partir dos registros individuais de presença.", M, y, 8.5, normal, COR_SUAVE);
   y -= 18;
+  if (d.homologacao) {
+    page.drawRectangle({ x: M, y: y - 8, width: LARGURA, height: 22, color: rgb(1, 0.95, 0.85), borderColor: rgb(0.8, 0.5, 0.1), borderWidth: 1 });
+    texto(caber(AVISO_TESTE, LARGURA - 16, 9, negrito), M + 8, y, 9, negrito, rgb(0.55, 0.3, 0.02));
+    y -= 26;
+  }
 
   // ── Identificação
   const campo = (rotulo: string, valor: string, x: number, largura: number) => {
@@ -212,9 +221,12 @@ export async function gerarPdfListaPresenca(d: DadosListaPresenca): Promise<Uint
   // ── Rodapé em todas as páginas
   const paginas = pdf.getPages();
   paginas.forEach((pg, i) => {
-    const rodape = `Lista de Presença ${d.codigo} · versão ${d.versao} · gerada em ${d.geradoEm} por ${d.geradoPor} · verificação ${d.codigoVerificacao}`;
-    pg.drawLine({ start: { x: M, y: M + 14 }, end: { x: M + LARGURA, y: M + 14 }, thickness: 0.5, color: COR_LINHA });
-    pg.drawText(caber(rodape, LARGURA - 70, 7, normal), { x: M, y: M + 4, size: 7, font: normal, color: COR_SUAVE });
+    // Linha 1: identificação + código de verificação (nunca truncados). Linha 2: quem/quando gerou.
+    const ident = `${d.homologacao ? "HOMOLOGAÇÃO/TESTE · " : ""}Lista de Presença ${d.codigo} · versão ${d.versao} · verificação ${d.codigoVerificacao}`;
+    const geracao = `Gerada em ${d.geradoEm} por ${d.geradoPor}`;
+    pg.drawLine({ start: { x: M, y: M + 22 }, end: { x: M + LARGURA, y: M + 22 }, thickness: 0.5, color: COR_LINHA });
+    pg.drawText(seguro(ident), { x: M, y: M + 12, size: 7, font: d.homologacao ? negrito : normal, color: COR_SUAVE });
+    pg.drawText(caber(geracao, LARGURA - 70, 7, normal), { x: M, y: M + 3, size: 7, font: normal, color: COR_SUAVE });
     const num = `Página ${i + 1} de ${paginas.length}`;
     pg.drawText(num, { x: M + LARGURA - normal.widthOfTextAtSize(num, 7), y: M + 4, size: 7, font: normal, color: COR_SUAVE });
   });

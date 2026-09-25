@@ -751,7 +751,7 @@ async function pdiSugestaoDispensar(conta: ContaDev, corpo: Corpo) {
 
 // ══ Fase 5 — Gestão de Treinamentos ═════════════════════════════════════
 const COLS_TRE =
-  "id, codigo, titulo, tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, modalidade, formato, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, reposicao_de_id, reposicao_raiz_id, reposicao_numero, created_at, updated_at";
+  "id, codigo, titulo, tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, modalidade, formato, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, reposicao_de_id, reposicao_raiz_id, reposicao_numero, homologacao, created_at, updated_at";
 const COLS_PART =
   "id, treinamento_id, colaborador_id, origem_inclusao, presenca_status, presenca_metodo, presenca_em, presenca_por, presenca_motivo, eficacia_resultado, eficacia_observacao, eficacia_em, eficacia_por_colaborador_id, removido_em, removido_motivo";
 // Tipo (classificação) ≠ Modalidade (interno/externo) ≠ Formato (presencial/online/híbrido).
@@ -901,6 +901,7 @@ async function devolverNecessidade(conta: ContaDev, necessidadeId: number, trein
 /** Após conclusão (ou eficácia registrada depois): decide, por colaborador, se a necessidade foi ATENDIDA. */
 async function processarNecessidadesDoParticipante(conta: ContaDev, t: Treinamento, participante: Record<string, any>) {
   if (t.status !== "concluido") return;
+  if (t.homologacao) return; // teste nunca atende Necessidade de Desenvolvimento
   const vinculos = await vinculosAtivos(t.id);
   if (vinculos.length === 0) return;
   const { data: nec, error } = await supabaseAdmin
@@ -934,7 +935,10 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
     const titulo = tituloDoTreinamento(campos.tipo, campos.titulo, doc as { lista_mestra_titulo?: string });
     if (!titulo) throw new ErroHttp(422, "Informe o título do treinamento.");
     const planejar = conta.perfil === "RH" && corpo.planejar === true;
-    const linha = { ...campos, ...doc, titulo, lista_mestra_codigo: campos.lista_mestra_codigo };
+    // Homologação/teste: só o RH marca (flag administrativa, não é Tipo).
+    const homologacao = corpo.homologacao === true;
+    if (homologacao && conta.perfil !== "RH") throw new ErroHttp(403, "Somente o RH marca treinamento de homologação/teste.");
+    const linha = { ...campos, ...doc, titulo, lista_mestra_codigo: campos.lista_mestra_codigo, homologacao };
     if (planejar) exigirMinimoPlanejamento(linha);
     const agora = new Date().toISOString();
     const { data, error } = await supabaseAdmin
@@ -969,6 +973,14 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
   }
   const atualizacao = { ...campos, ...doc, titulo: TIPOS_COM_DOCUMENTO.has(campos.tipo) ? tituloDoTreinamento(campos.tipo, "", doc as { lista_mestra_titulo?: string }) : caixaAlta(campos.titulo || antes.titulo) };
   if (antes.status !== "solicitado") exigirMinimoPlanejamento(atualizacao);
+  const homologacao = typeof corpo.homologacao === "boolean" ? corpo.homologacao : Boolean(antes.homologacao);
+  if (homologacao !== Boolean(antes.homologacao)) {
+    if (conta.perfil !== "RH") throw new ErroHttp(403, "Somente o RH altera a condição de homologação/teste.");
+    if (!["solicitado", "planejado"].includes(antes.status) || antes.iniciado_em) throw new ErroHttp(422, "A condição de homologação/teste não pode ser alterada depois do início da realização.");
+    if (!homologacao && antes.reposicao_de_id && (await lerTreinamento(Number(antes.reposicao_de_id))).homologacao) throw new ErroHttp(422, "Reposição de treinamento de homologação/teste também é homologação/teste.");
+    if (homologacao && (await vinculosAtivos(id)).length) throw new ErroHttp(422, "Desvincule as Necessidades de Desenvolvimento antes de marcar como homologação/teste.");
+  }
+  (atualizacao as Record<string, unknown>).homologacao = homologacao;
   const mudou = diferencas(antes, atualizacao);
   if (Object.keys(mudou).length === 0) return antes;
   const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").update({ ...atualizacao, updated_by: conta.userId }).eq("id", id).select(COLS_TRE).single();
@@ -1253,6 +1265,7 @@ async function treinamentoReposicao(conta: ContaDev, corpo: Corpo) {
       reposicao_de_id: origem.id,
       reposicao_raiz_id: raiz,
       reposicao_numero: (irmaos ?? []).length + 1,
+      homologacao: Boolean(origem.homologacao), // herdado; não pode ser retirado
       origem_registro: "sistema",
       created_by: conta.userId,
       updated_by: conta.userId,
@@ -1295,6 +1308,7 @@ async function necessidadesVincular(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
   if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
+  if (t.homologacao) throw new ErroHttp(422, "Treinamento de homologação/teste não pode ser vinculado a Necessidades de Desenvolvimento.");
   const ids = Array.isArray(corpo.necessidade_ids) ? [...new Set(corpo.necessidade_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
   if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos uma necessidade.");
   const { data: nec, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, status, colaborador_id").in("id", ids);
@@ -1582,6 +1596,7 @@ async function prepararListaPresenca(conta: ContaDev, t: Treinamento, participan
     geradoEm: dataHoraBR(new Date().toISOString())!,
     geradoPor: nomeDe(conta.colaboradorId) ?? "PeopleFlow",
     codigoVerificacao,
+    homologacao: Boolean(t.homologacao),
   });
   const path = `treinamentos/${t.id}/sistema/lista-presenca-v${versao}-${Date.now()}.pdf`;
   const { error: uErro } = await supabaseAdmin.storage.from(BUCKET).upload(path, bytes, { contentType: "application/pdf", upsert: false });
@@ -1749,7 +1764,7 @@ async function presencaViaQr(acao: "presenca_info" | "presenca_confirmar", req: 
     .maybeSingle();
   if (error) erroBanco(error, "Participante");
   // Só o necessário para a pessoa: nada de ids internos nem dados de outros participantes.
-  const info = { titulo: t.titulo, documento: t.lista_mestra_codigo ? `${t.lista_mestra_codigo} rev. ${t.lista_mestra_revisao}` : null, data: t.data_inicio, primeiro_nome: quem.primeiroNome };
+  const info = { titulo: t.titulo, documento: t.lista_mestra_codigo ? `${t.lista_mestra_codigo} rev. ${t.lista_mestra_revisao}` : null, data: t.data_inicio, primeiro_nome: quem.primeiroNome, homologacao: Boolean(t.homologacao) };
   if (!p || p.removido_em) return { ...info, situacao: "nao_inscrito" };
   if (p.presenca_status === "presente") return { ...info, situacao: "confirmada", confirmada_em: p.presenca_em };
   if (acao === "presenca_info") return { ...info, situacao: "pendente" };

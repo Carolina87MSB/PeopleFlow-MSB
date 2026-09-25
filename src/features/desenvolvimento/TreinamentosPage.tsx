@@ -5,7 +5,7 @@ import { Header } from "../../components/layout/Header";
 import { Button, Card, FilterChips, tableStyles } from "../../components/ui";
 import { listarTreinamentos, type StatusTreinamento, type TipoTreinamento } from "./devRepository";
 import { useDesenvolvimento } from "./contexto";
-import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, type AbaDef } from "./componentes";
+import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, TagTeste, type AbaDef } from "./componentes";
 import { usePaginado } from "./hooks";
 import { FORMATO, formatarCarga, formatarData, MODALIDADE, STATUS_TREINAMENTO, TIPO_TREINAMENTO } from "./rotulos";
 import { ListaMestraAba } from "./ListaMestraAba";
@@ -152,6 +152,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
                       <td className={styles.mono}>{t.codigo}</td>
                       <td>
                         {t.titulo}
+                        {t.homologacao && <TagTeste />}
                         {t.lista_mestra_codigo && (
                           <div className={styles.secundario}>
                             {t.lista_mestra_codigo} rev. {t.lista_mestra_revisao}

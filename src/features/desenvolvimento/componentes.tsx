@@ -36,6 +36,15 @@ export function Selo({ tom, children }: { tom: Tom; children: ReactNode }) {
   return <span className={[styles.selo, styles[`tom_${tom}`]].join(" ")}>{children}</span>;
 }
 
+/** Etiqueta de treinamento de homologação/teste (sem validade oficial). */
+export function TagTeste() {
+  return (
+    <span title="Treinamento de homologação/teste — sem validade como registro oficial de capacitação" style={{ marginLeft: 6, verticalAlign: "middle" }}>
+      <Selo tom="warning">TESTE</Selo>
+    </span>
+  );
+}
+
 export function EstadoVazio({ titulo, descricao, icone }: { titulo: string; descricao?: string; icone: ReactNode }) {
   return (
     <div className={styles.estado}>

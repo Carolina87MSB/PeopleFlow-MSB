@@ -23,7 +23,7 @@ import {
   type Treinamento,
 } from "./devRepository";
 import { useDesenvolvimento } from "./contexto";
-import { CabecalhoDrawer, Carregando, ConfirmarComMotivo, Erro, EstadoVazio, Paginacao, Selo } from "./componentes";
+import { CabecalhoDrawer, Carregando, ConfirmarComMotivo, Erro, EstadoVazio, Paginacao, Selo, TagTeste } from "./componentes";
 import { useConsulta, usePaginado } from "./hooks";
 import {
   CATEGORIA_NECESSIDADE,
@@ -147,7 +147,15 @@ export default function TreinamentoPage() {
                 {t.codigo} · {TIPO_TREINAMENTO[t.tipo]}
                 {t.reposicao_numero ? ` · Reposição ${t.reposicao_numero}` : ""}
               </div>
-              <h3 className={styles.cardTitle}>{t.titulo}</h3>
+              <h3 className={styles.cardTitle}>
+                {t.titulo}
+                {t.homologacao && <TagTeste />}
+              </h3>
+              {t.homologacao && (
+                <p className={styles.dica}>
+                  Treinamento de homologação/teste: percorre o fluxo real, mas não conta como capacitação oficial, conformidade, indicadores ou atendimento de Necessidades de Desenvolvimento.
+                </p>
+              )}
               <p className={styles.cardSubtitle}>
                 <Selo tom={STATUS_TREINAMENTO[t.status].tom}>{STATUS_TREINAMENTO[t.status].rotulo}</Selo>
                 {t.status_motivo && t.status === "cancelado" ? ` — ${t.status_motivo}` : ""}
@@ -237,7 +245,15 @@ export default function TreinamentoPage() {
           </div>
         </Card>
 
-        {p.veNecessidades && <NecessidadesVinculadas t={t} podeEditar={p.ehRH && t.status !== "concluido" && t.status !== "cancelado"} versao={versaoVinculos} onAlterado={recarregarTudo} />}
+        {p.veNecessidades && t.homologacao && (
+          <Card>
+            <h3 className={styles.cardTitle}>
+              Necessidades de Desenvolvimento <TagTeste />
+            </h3>
+            <p className={styles.secundario}>Treinamento de homologação/teste não é vinculado a Necessidades de Desenvolvimento.</p>
+          </Card>
+        )}
+        {p.veNecessidades && !t.homologacao && <NecessidadesVinculadas t={t} podeEditar={p.ehRH && t.status !== "concluido" && t.status !== "cancelado"} versao={versaoVinculos} onAlterado={recarregarTudo} />}
 
         {p.podeQr && <QrPresenca t={t} onAtualizarLista={participantes.recarregar} />}
 
@@ -564,7 +580,10 @@ function QrPresenca({ t, onAtualizarLista }: { t: Treinamento; onAtualizarLista:
     <Card>
       <div className={styles.cardHeader}>
         <div>
-          <h3 className={styles.cardTitle}>QR Code de presença</h3>
+          <h3 className={styles.cardTitle}>
+            QR Code de presença
+            {t.homologacao && <TagTeste />}
+          </h3>
           <p className={styles.cardSubtitle}>O participante lê o código e confirma com o e-mail corporativo. Quem não conseguir: presença manual abaixo.</p>
         </div>
         <div className={styles.acoes}>
@@ -959,7 +978,10 @@ function Reposicoes({ t, podeRepor, ausentes }: { t: Treinamento; podeRepor: boo
             <tbody>
               {reposicoes.map((r) => (
                 <tr key={r.id} className={styles.linhaClicavel} onClick={() => navigate(`/desenvolvimento/treinamento/${r.id}`)}>
-                  <td>Reposição {r.reposicao_numero}</td>
+                  <td>
+                    Reposição {r.reposicao_numero}
+                    {r.homologacao && <TagTeste />}
+                  </td>
                   <td className={styles.mono}>{r.codigo}</td>
                   <td className={styles.mono}>{formatarData(r.data_realizacao ?? r.data_inicio)}</td>
                   <td>
@@ -1070,7 +1092,10 @@ function Evidencias({ t, podeAnexar, participantes, versao }: { t: Treinamento; 
     <Card>
       <div className={styles.cardHeader}>
         <div>
-          <h3 className={styles.cardTitle}>Evidências</h3>
+          <h3 className={styles.cardTitle}>
+            Evidências
+            {t.homologacao && <TagTeste />}
+          </h3>
           <p className={styles.cardSubtitle}>
             {interno
               ? "Material, ata, fotos, certificados… A Lista de Presença é gerada pelo PeopleFlow."

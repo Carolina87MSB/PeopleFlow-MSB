@@ -282,12 +282,14 @@ export interface Treinamento {
   reposicao_de_id: number | null;
   reposicao_raiz_id: number | null;
   reposicao_numero: number | null;
+  /** Homologação/teste: fluxo real, sem efeito oficial (histórico, conformidade, necessidades). */
+  homologacao: boolean;
   created_at: string;
   updated_at: string;
 }
 
 const COLUNAS_TREINAMENTO =
-  "id, codigo, titulo, tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, modalidade, formato, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, reposicao_de_id, reposicao_raiz_id, reposicao_numero, created_at, updated_at";
+  "id, codigo, titulo, tipo, lista_mestra_codigo, lista_mestra_revisao, lista_mestra_titulo, modalidade, formato, data_inicio, data_fim, carga_horaria_min, instrutor_colaborador_id, instrutor_externo, responsavel_colaborador_id, justificativa, local_link, observacao, exige_eficacia, eficacia_prazo, data_realizacao, carga_realizada_min, status, status_motivo, solicitado_por_colaborador_id, planejado_em, iniciado_em, concluido_em, reposicao_de_id, reposicao_raiz_id, reposicao_numero, homologacao, created_at, updated_at";
 
 export type TreinamentoNaLista = Treinamento & { participantes: { count: number }[] };
 

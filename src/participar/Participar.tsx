@@ -17,6 +17,7 @@ interface Info {
   data: string | null;
   primeiro_nome: string;
   situacao: "pendente" | "confirmada" | "nao_inscrito";
+  homologacao?: boolean;
   confirmada_em?: string;
 }
 
@@ -154,6 +155,7 @@ export function Participar() {
           <>
             <p className={styles.texto}>Olá, {estado.info.primeiro_nome}.</p>
             <h1 className={styles.titulo}>{estado.info.titulo}</h1>
+            {estado.info.homologacao && <p className={styles.eyebrow}>TESTE — treinamento de homologação, sem validade oficial</p>}
             <p className={styles.texto}>
               {estado.info.documento && <>{estado.info.documento} · </>}
               {formatarData(estado.info.data)}

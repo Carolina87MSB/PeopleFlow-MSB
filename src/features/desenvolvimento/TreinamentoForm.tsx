@@ -30,6 +30,7 @@ function paraForm(t: Treinamento | null, modo: Modo) {
     justificativa: reposicao ? `Reposição para faltantes de ${t?.codigo ?? ""}` : (t?.justificativa ?? ""),
     observacao: reposicao ? "" : (t?.observacao ?? ""),
     exige_eficacia: t?.exige_eficacia ?? false,
+    homologacao: t?.homologacao ?? false,
     eficacia_prazo: reposicao ? "" : (t?.eficacia_prazo ?? ""),
     motivo: "",
   };
@@ -49,6 +50,8 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
     setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
   const exigeDoc = TIPOS_COM_DOCUMENTO.includes(form.tipo as TipoTreinamento);
   const docTravado = modo === "editar" && item?.status === "concluido";
+  // Homologação/teste: só RH; travada após o início da realização; reposição herda do original.
+  const homologacaoTravada = modo === "reposicao" || (modo === "editar" && (!["solicitado", "planejado"].includes(item?.status ?? "") || Boolean(item?.iniciado_em)));
   const doc = (documentos.dados ?? []).find((d) => d.codigo === form.lista_mestra_codigo);
   // Novo POP / Revisão de POP / Instrução de Trabalho: título = título oficial do documento (somente leitura).
   const tituloDoc = item?.lista_mestra_codigo && item.lista_mestra_codigo === form.lista_mestra_codigo ? (item.lista_mestra_titulo ?? "") : (doc?.titulo ?? "");
@@ -255,6 +258,17 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
           <label className={styles.check}>
             <input type="checkbox" checked={form.exige_eficacia} onChange={set("exige_eficacia")} /> Exige avaliação de eficácia
           </label>
+          {ehRH && (
+            <label className={[styles.campo, styles.cheio].join(" ")}>
+              <span className={styles.check}>
+                <input type="checkbox" checked={form.homologacao} onChange={set("homologacao")} disabled={homologacaoTravada} /> Treinamento de homologação/teste
+              </span>
+              <span className={styles.dica}>
+                Utilizado exclusivamente para testes do fluxo. Não será considerado como capacitação oficial, conformidade ou atendimento de Necessidades de Desenvolvimento.
+                {homologacaoTravada && (modo === "reposicao" ? " Na reposição, a condição é herdada do treinamento original." : " Não pode ser alterada depois do início da realização.")}
+              </span>
+            </label>
+          )}
           {form.exige_eficacia && (
             <label className={styles.campo}>
               Prazo da eficácia
