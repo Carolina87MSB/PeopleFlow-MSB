@@ -12,7 +12,7 @@ type AbaLnt = "necessidades" | "sugestoes";
 export default function LntPage() {
   const { perfil } = useDesenvolvimento();
   const { aba } = useParams<{ aba?: string }>();
-  const abas: AbaDef<AbaLnt>[] = [{ id: "necessidades", rotulo: "Necessidades" }, ...(perfil === "RH" ? [{ id: "sugestoes" as const, rotulo: "Sugestões" }] : [])];
+  const abas: AbaDef<AbaLnt>[] = [{ id: "necessidades", rotulo: "Necessidades de Desenvolvimento" }, ...(perfil === "RH" ? [{ id: "sugestoes" as const, rotulo: "Sugestões" }] : [])];
   const atual = abas.find((a) => a.id === aba)?.id;
   if (!atual) return <Navigate to="/desenvolvimento/lnt/necessidades" replace />;
   return (

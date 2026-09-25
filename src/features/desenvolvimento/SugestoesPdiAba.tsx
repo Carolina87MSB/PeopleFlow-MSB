@@ -86,7 +86,7 @@ export function SugestoesPdiAba() {
       <div className={styles.cardHeader}>
         <div>
           <h3 className={styles.cardTitle}>Sugestões a partir do PDI</h3>
-          <p className={styles.cardSubtitle}>Ações de PDI em aberto que podem representar necessidade de capacitação. Confirme para incluir na Base de Necessidades.</p>
+          <p className={styles.cardSubtitle}>Ações de PDI em aberto que podem representar uma Necessidade de Desenvolvimento. Confirme para incluir na Base de Necessidades de Desenvolvimento.</p>
         </div>
         <FilterChips options={["Relacionadas a capacitação", "Todas as ações em aberto"]} value={modo} onChange={setModo} />
       </div>
@@ -179,7 +179,7 @@ function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada }: { sugestao: 
           setSalvando(true);
           try {
             await gravar("pdi_sugestao_aceitar", { pdi_acao_id: sugestao.acaoId, ...form });
-            flash("Incluída na Base de Necessidades (origem PDI).");
+            flash("Incluída na Base de Necessidades de Desenvolvimento (origem PDI).");
             onTratada();
           } catch (err) {
             setErro(err instanceof Error ? err.message : String(err));
@@ -188,7 +188,7 @@ function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada }: { sugestao: 
           }
         }}
       >
-        <h4 className={styles.secaoTitulo}>Confirmar como necessidade de desenvolvimento</h4>
+        <h4 className={styles.secaoTitulo}>Confirmar como Necessidade de Desenvolvimento</h4>
         <div className={styles.grid}>
           <label className={styles.campo}>
             Categoria *
@@ -218,16 +218,16 @@ function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada }: { sugestao: 
             <input value={form.sugestao_capacitacao} onChange={set("sugestao_capacitacao")} maxLength={500} />
           </label>
         </div>
-        <span className={styles.dica}>A necessidade guarda a referência ao PDI de origem. O PDI não é alterado.</span>
+        <span className={styles.dica}>A Necessidade de Desenvolvimento guarda a referência ao PDI de origem. O PDI não é alterado.</span>
         {erro && <Erro mensagem={erro} />}
         <div className={styles.acoes}>
-          <Button type="submit" variant="primary" disabled={salvando}>
-            {salvando ? "Salvando..." : "Confirmar necessidade"}
+          <Button type="submit" variant="primary" className={styles.botaoLongo} disabled={salvando}>
+            {salvando ? "Salvando..." : "Confirmar Necessidade de Desenvolvimento"}
           </Button>
         </div>
       </form>
       <div className={styles.secao}>
-        <h4 className={styles.secaoTitulo}>Não é necessidade de capacitação?</h4>
+        <h4 className={styles.secaoTitulo}>Não é Necessidade de Desenvolvimento?</h4>
         <div className={styles.acoes} style={{ justifyContent: "flex-start" }}>
           <ConfirmarComMotivo
             rotulo="Dispensar sugestão"

@@ -413,7 +413,7 @@ export async function listarVinculos(treinamentoId: number): Promise<VinculoNece
     .eq("ativo", true)
     .order("id")
     .limit(1000);
-  if (error) falha("Necessidades vinculadas", error.message);
+  if (error) falha("Necessidades de Desenvolvimento vinculadas", error.message);
   return (data ?? []) as unknown as VinculoNecessidade[];
 }
 
@@ -528,13 +528,13 @@ export async function listarNecessidades(pagina: number, f: FiltroNecessidades):
   if (f.departamento) q = q.eq("departamento", f.departamento);
   if (f.grupoId) q = q.eq("grupo_id", f.grupoId);
   const { data, error, count } = await q;
-  if (error) falha("Necessidades", error.message);
+  if (error) falha("Necessidades de Desenvolvimento", error.message);
   return { itens: (data ?? []) as Necessidade[], total: count ?? 0 };
 }
 
 export async function obterNecessidade(id: number): Promise<Necessidade | null> {
   const { data, error } = await supabase.from("peopleflow_dev_necessidades").select(COLUNAS_NECESSIDADE).eq("id", id).maybeSingle();
-  if (error) falha("Necessidade", error.message);
+  if (error) falha("Necessidade de Desenvolvimento", error.message);
   return (data as Necessidade | null) ?? null;
 }
 
@@ -557,7 +557,7 @@ export async function acoesPdiJaTratadas(): Promise<Set<string>> {
     supabase.from("peopleflow_dev_necessidades").select("pdi_acao_id").not("pdi_acao_id", "is", null).limit(5000),
     supabase.from("peopleflow_dev_pdi_sugestoes_dispensadas").select("pdi_acao_id").limit(5000),
   ]);
-  if (nec.error) falha("Necessidades", nec.error.message);
+  if (nec.error) falha("Necessidades de Desenvolvimento", nec.error.message);
   if (disp.error) falha("Sugestões dispensadas", disp.error.message);
   return new Set([...(nec.data ?? []), ...(disp.data ?? [])].map((r) => r.pdi_acao_id as string));
 }

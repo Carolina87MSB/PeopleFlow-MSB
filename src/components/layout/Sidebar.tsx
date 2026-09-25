@@ -25,9 +25,9 @@ import { usePortalData } from "../../store/usePortalData";
 import { Avatar } from "../ui/Avatar";
 import styles from "./Sidebar.module.css";
 
-function NavItem({ to, icon, label, badge, badgeTone }: { to: string; icon: React.ReactNode; label: string; badge?: number; badgeTone?: "warning" | "success" | "neutral" }) {
+function NavItem({ to, icon, label, badge, badgeTone, duasLinhas }: { to: string; icon: React.ReactNode; label: string; badge?: number; badgeTone?: "warning" | "success" | "neutral"; duasLinhas?: boolean }) {
   return (
-    <NavLink to={to} className={({ isActive }) => [styles.navItem, isActive ? styles.active : ""].join(" ")}>
+    <NavLink to={to} className={({ isActive }) => [styles.navItem, duasLinhas ? styles.navItemDuasLinhas : "", isActive ? styles.active : ""].join(" ")}>
       {icon}
       <span className={styles.navLabel}>{label}</span>
       {typeof badge === "number" && badge > 0 && (
@@ -175,7 +175,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <>
             <div className={styles.sectionLabel}>Desenvolvimento</div>
             <NavItem to="/desenvolvimento/habilidades" icon={<Puzzle size={18} strokeWidth={1.9} />} label="Habilidades" />
-            <NavItem to="/desenvolvimento/lnt" icon={<ListChecks size={18} strokeWidth={1.9} />} label="Necessidades" />
+            <NavItem to="/desenvolvimento/lnt" icon={<ListChecks size={18} strokeWidth={1.9} />} label="Necessidades de Desenvolvimento" duasLinhas />
             <NavItem to="/desenvolvimento/treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Treinamentos" />
           </>
         )}

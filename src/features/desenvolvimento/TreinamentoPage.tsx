@@ -340,12 +340,12 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
     <Card>
       <div className={styles.cardHeader}>
         <div>
-          <h3 className={styles.cardTitle}>Necessidades atendidas por este treinamento</h3>
-          <p className={styles.cardSubtitle}>Base de Necessidades — cada uma só é ATENDIDA para quem realizou o treinamento{t.exige_eficacia ? " e teve eficácia comprovada" : ""}</p>
+          <h3 className={styles.cardTitle}>Necessidades de Desenvolvimento relacionadas</h3>
+          <p className={styles.cardSubtitle}>Cada necessidade será considerada atendida somente para os participantes que concluírem os critérios aplicáveis do treinamento{t.exige_eficacia ? " (inclusive eficácia comprovada)" : ""}.</p>
         </div>
         {podeEditar && (
-          <Button variant="secondary" icon={<Link2 size={16} />} onClick={() => setVinculando(true)}>
-            Vincular necessidades
+          <Button variant="secondary" className={styles.botaoLongo} icon={<Link2 size={16} />} onClick={() => setVinculando(true)}>
+            Vincular Necessidades de Desenvolvimento
           </Button>
         )}
       </div>
@@ -355,14 +355,14 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
       ) : vinculos.carregando && !vinculos.dados ? (
         <Carregando />
       ) : (vinculos.dados ?? []).length === 0 ? (
-        <p className={styles.secundario}>Nenhuma necessidade vinculada{podeEditar ? " — treinamentos de POP, Instrução de Trabalho e obrigatórios podem seguir sem necessidade." : "."}</p>
+        <p className={styles.secundario}>Nenhuma Necessidade de Desenvolvimento vinculada{podeEditar ? " — treinamentos de POP, Instrução de Trabalho e obrigatórios podem seguir sem Necessidade de Desenvolvimento vinculada." : "."}</p>
       ) : (
         <div className={tableStyles.wrap}>
           <table className={tableStyles.table}>
             <thead>
               <tr>
                 <th>Colaborador</th>
-                <th>Necessidade</th>
+                <th>Necessidade de Desenvolvimento</th>
                 <th>Prioridade</th>
                 <th>Status</th>
                 {podeEditar && <th />}
@@ -373,7 +373,7 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
                 <tr key={v.id}>
                   <td>{nomeDe(v.necessidade?.colaborador_id)}</td>
                   <td>
-                    {v.necessidade?.descricao ?? `Necessidade #${v.necessidade_id}`}
+                    {v.necessidade?.descricao ?? `Necessidade de Desenvolvimento #${v.necessidade_id}`}
                     {v.necessidade?.categoria && <div className={styles.secundario}>{CATEGORIA_NECESSIDADE[v.necessidade.categoria]}</div>}
                   </td>
                   <td>{v.necessidade?.prioridade ? <Selo tom={PRIORIDADE[v.necessidade.prioridade].tom}>{PRIORIDADE[v.necessidade.prioridade].rotulo}</Selo> : "—"}</td>
@@ -389,7 +389,7 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
                           setErro(null);
                           try {
                             await gravar("necessidade_desvincular", { treinamento_id: t.id, necessidade_id: v.necessidade_id, motivo });
-                            flash("Necessidade desvinculada.");
+                            flash("Necessidade de Desenvolvimento desvinculada.");
                             onAlterado();
                           } catch (e) {
                             setErro(mensagem(e));
@@ -433,7 +433,7 @@ function VincularDrawer({ t, jaVinculadas, onFechar, onConcluido }: { t: Treinam
     [termo],
   );
   return (
-    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow={t.codigo} titulo="Vincular necessidades" sub="Somente necessidades VALIDADAS (ou já planejadas). O colaborador entra como participante." />}>
+    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow={t.codigo} titulo="Vincular Necessidades de Desenvolvimento" sub="Somente Necessidades de Desenvolvimento VALIDADAS (ou já planejadas). O colaborador entra como participante." />}>
       <div className={styles.secao}>
         <form
           onSubmit={(e) => {
@@ -441,14 +441,14 @@ function VincularDrawer({ t, jaVinculadas, onFechar, onConcluido }: { t: Treinam
             setTermo(busca);
           }}
         >
-          <input className={styles.input} style={{ width: "100%" }} type="search" placeholder="Buscar necessidade" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
+          <input className={styles.input} style={{ width: "100%" }} type="search" placeholder="Buscar Necessidade de Desenvolvimento" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
         </form>
         {lista.erro ? (
           <Erro mensagem={lista.erro} />
         ) : lista.carregando || !lista.dados ? (
           <Carregando />
         ) : lista.dados.itens.length === 0 ? (
-          <p className={styles.secundario}>Nenhuma necessidade validada encontrada.</p>
+          <p className={styles.secundario}>Nenhuma Necessidade de Desenvolvimento validada encontrada.</p>
         ) : (
           <>
             {lista.dados.itens.map((n) => {
@@ -493,7 +493,7 @@ function VincularDrawer({ t, jaVinculadas, onFechar, onConcluido }: { t: Treinam
               setSalvando(true);
               try {
                 const r = await gravar<{ vinculadas: number }>("necessidades_vincular", { treinamento_id: t.id, necessidade_ids: [...marcadas] });
-                flash(`${r.vinculadas} necessidade(s) vinculada(s).`);
+                flash(r.vinculadas === 1 ? "1 Necessidade de Desenvolvimento vinculada." : `${r.vinculadas} Necessidades de Desenvolvimento vinculadas.`);
                 onConcluido();
               } catch (e) {
                 setErro(mensagem(e));
@@ -743,7 +743,7 @@ function Participantes(props: {
       ) : props.carregando && !lista ? (
         <Carregando />
       ) : ativos.length === 0 ? (
-        <EstadoVazio icone={<Users size={26} strokeWidth={1.6} />} titulo="Nenhum participante." descricao="Inclua colaboradores do PeopleFlow ou vincule necessidades." />
+        <EstadoVazio icone={<Users size={26} strokeWidth={1.6} />} titulo="Nenhum participante." descricao="Inclua colaboradores do PeopleFlow ou vincule Necessidades de Desenvolvimento." />
       ) : (
         <div className={tableStyles.wrap}>
           <table className={tableStyles.table}>
@@ -781,7 +781,7 @@ function Participantes(props: {
                       {x.pessoa?.departamento ? ` · ${x.pessoa.departamento}` : ""}
                     </div>
                   </td>
-                  <td className={styles.secundario}>{{ manual: "Manual", criterio: "Critério", lnt: "Necessidade", reposicao: "Reposição" }[x.origem_inclusao]}</td>
+                  <td className={styles.secundario}>{{ manual: "Manual", criterio: "Critério", lnt: "Necessidade de Desenvolvimento", reposicao: "Reposição" }[x.origem_inclusao]}</td>
                   <td>
                     <Selo tom={PRESENCA[x.presenca_status].tom}>{PRESENCA[x.presenca_status].rotulo}</Selo>
                     {x.presenca_metodo && (
@@ -1044,7 +1044,7 @@ function EficaciaDrawer({ participante, onFechar, onSalvar }: { participante: Pa
           Observação{resultado !== "eficaz" ? " *" : ""}
           <textarea value={obs} onChange={(e) => setObs(e.target.value)} maxLength={2000} required={resultado !== "eficaz"} />
         </label>
-        <span className={styles.dica}>Somente “Eficaz” encerra a necessidade vinculada como atendida.</span>
+        <span className={styles.dica}>Somente “Eficaz” encerra a Necessidade de Desenvolvimento vinculada como atendida.</span>
         {erro && <Erro mensagem={erro} />}
         <div className={styles.acoes}>
           <Button type="submit" variant="primary" disabled={salvando}>

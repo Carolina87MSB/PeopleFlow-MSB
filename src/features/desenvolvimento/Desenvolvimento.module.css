@@ -408,3 +408,17 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Botões com rótulo longo ("… Necessidade(s) de Desenvolvimento"): largura do
+   conteúdo quando cabe; se o espaço faltar (card estreito, celular), quebra em
+   até duas linhas em vez de estourar. Mesma fonte/cores do Button do PeopleFlow. */
+.botaoLongo {
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.botaoLongo svg {
+  flex-shrink: 0;
+}

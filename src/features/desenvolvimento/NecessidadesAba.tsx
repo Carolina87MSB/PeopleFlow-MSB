@@ -87,11 +87,11 @@ export function NecessidadesAba() {
         <div>
           <h3 className={styles.cardTitle}>Base de Necessidades de Desenvolvimento</h3>
           <p className={styles.cardSubtitle}>
-            {ehRH ? "Todas as necessidades registradas — insumo para a LNT 2027" : "Necessidades dos seus liderados e as que você registrou"}
+            {ehRH ? "Todas as Necessidades de Desenvolvimento registradas — insumo para a LNT 2027" : "Necessidades de Desenvolvimento dos seus liderados e as que você registrou"}
           </p>
         </div>
-        <Button variant="primary" icon={<Plus size={16} />} onClick={() => setSelecao({ modo: "novo" })}>
-          Registrar necessidade
+        <Button variant="primary" className={styles.botaoLongo} icon={<Plus size={16} />} onClick={() => setSelecao({ modo: "novo" })}>
+          Registrar Necessidade de Desenvolvimento
         </Button>
       </div>
 
@@ -103,7 +103,7 @@ export function NecessidadesAba() {
             setTermo(busca);
           }}
         >
-          <input className={styles.input} type="search" placeholder="Buscar na necessidade, justificativa ou sugestão" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
+          <input className={styles.input} type="search" placeholder="Buscar por descrição, justificativa ou sugestão" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
         </form>
         <FilterChips options={FILTROS_STATUS.map((f) => f.rotulo)} value={filtroStatus} onChange={setFiltroStatus} />
       </div>
@@ -173,7 +173,7 @@ export function NecessidadesAba() {
       {ehRH && marcadas.size > 0 && (
         <div className={styles.toolbar} style={{ background: "var(--color-surface-alt)", padding: "10px 12px", borderRadius: "var(--radius-md)" }}>
           <span className={styles.secundario}>
-            {marcadas.size} necessidade{marcadas.size > 1 ? "s" : ""} selecionada{marcadas.size > 1 ? "s" : ""}
+            {marcadas.size} {marcadas.size > 1 ? "Necessidades de Desenvolvimento selecionadas" : "Necessidade de Desenvolvimento selecionada"}
           </span>
           <div className={styles.acoes}>
             <Button variant="ghost" onClick={() => setMarcadas(new Set())}>
@@ -191,7 +191,7 @@ export function NecessidadesAba() {
       ) : lista.carregando || !lista.dados ? (
         <Carregando />
       ) : lista.dados.itens.length === 0 ? (
-        <EstadoVazio icone={<ListChecks size={26} strokeWidth={1.6} />} titulo="Nenhuma necessidade registrada." />
+        <EstadoVazio icone={<ListChecks size={26} strokeWidth={1.6} />} titulo="Nenhuma Necessidade de Desenvolvimento registrada." />
       ) : (
         <>
           <div className={tableStyles.wrap}>
@@ -200,7 +200,7 @@ export function NecessidadesAba() {
                 <tr>
                   {ehRH && <th style={{ width: 32 }} />}
                   <th>Colaborador</th>
-                  <th>Necessidade</th>
+                  <th>Necessidade de Desenvolvimento</th>
                   <th>Categoria</th>
                   <th>Origem</th>
                   <th>Prioridade</th>
@@ -288,7 +288,7 @@ function CamposNecessidade(props: {
   return (
     <>
       <label className={[styles.campo, styles.cheio].join(" ")}>
-        Necessidade *
+        Necessidade de Desenvolvimento *
         <input value={form.descricao} onChange={set("descricao")} maxLength={500} required placeholder="Ex.: Aprofundar Excel para análise de indicadores" />
       </label>
       <label className={styles.campo}>
@@ -336,7 +336,7 @@ function RegistrarNecessidadeDrawer({ onFechar, onSalvo }: { onFechar: () => voi
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   return (
-    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow="Base de Necessidades" titulo="Registrar necessidade" sub={ehRH ? "Registrada pelo RH entra como Validada" : "Entra como Sugerida e é validada pelo RH"} />}>
+    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow="Base de Necessidades de Desenvolvimento" titulo="Registrar Necessidade de Desenvolvimento" sub={ehRH ? "Registrada pelo RH entra como Validada" : "Entra como Sugerida e é validada pelo RH"} />}>
       <form
         className={styles.secao}
         onSubmit={async (e) => {
@@ -345,7 +345,7 @@ function RegistrarNecessidadeDrawer({ onFechar, onSalvo }: { onFechar: () => voi
           setSalvando(true);
           try {
             const salvo = await gravar<Necessidade>("necessidade_registrar", { ...form, requisito_id: form.requisito_id || null });
-            flash("Necessidade registrada.");
+            flash("Necessidade de Desenvolvimento registrada.");
             onSalvo((await obterNecessidade(salvo.id)) ?? salvo);
           } catch (err) {
             setErro(err instanceof Error ? err.message : String(err));
@@ -369,7 +369,7 @@ function RegistrarNecessidadeDrawer({ onFechar, onSalvo }: { onFechar: () => voi
           <CamposNecessidade form={form} set={set} />
           <label className={[styles.campo, styles.cheio].join(" ")}>
             Justificativa *
-            <textarea value={form.justificativa} onChange={set("justificativa")} maxLength={2000} required placeholder="Por que essa necessidade existe?" />
+            <textarea value={form.justificativa} onChange={set("justificativa")} maxLength={2000} required placeholder="Por que essa Necessidade de Desenvolvimento existe?" />
           </label>
           {ehRH && (
             <>
@@ -445,7 +445,7 @@ function NecessidadeDrawer({ item, nomeGrupo, onFechar, onSalvo }: { item: Neces
   }
 
   return (
-    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow="Necessidade de desenvolvimento" titulo={item.descricao} sub={nome(item.colaborador_id)} />}>
+    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow="Necessidade de Desenvolvimento" titulo={item.descricao} sub={nome(item.colaborador_id)} />}>
       <div className={styles.secao}>
         <dl className={styles.detalhe}>
           <dt>Status</dt>
@@ -513,7 +513,7 @@ function NecessidadeDrawer({ item, nomeGrupo, onFechar, onSalvo }: { item: Neces
           className={styles.secao}
           onSubmit={(e) => {
             e.preventDefault();
-            void executar(() => gravar("necessidade_editar", { id: item.id, ...form }), "Necessidade atualizada.").catch(() => undefined);
+            void executar(() => gravar("necessidade_editar", { id: item.id, ...form }), "Necessidade de Desenvolvimento atualizada.").catch(() => undefined);
           }}
         >
           <h4 className={styles.secaoTitulo}>Classificação</h4>
@@ -561,7 +561,7 @@ function NecessidadeDrawer({ item, nomeGrupo, onFechar, onSalvo }: { item: Neces
                 confirmar="Validar"
                 variante="success"
                 motivoObrigatorio={false}
-                onConfirmar={(motivo) => executar(() => gravar("necessidade_status", { id: item.id, status: "validada", motivo }), "Necessidade validada.")}
+                onConfirmar={(motivo) => executar(() => gravar("necessidade_status", { id: item.id, status: "validada", motivo }), "Necessidade de Desenvolvimento validada.")}
               />
             )}
             {(item.status === "sugerida" || item.status === "validada") && (
@@ -570,7 +570,7 @@ function NecessidadeDrawer({ item, nomeGrupo, onFechar, onSalvo }: { item: Neces
                 confirmar="Confirmar"
                 variante="danger"
                 motivoObrigatorio
-                onConfirmar={(motivo) => executar(() => gravar("necessidade_status", { id: item.id, status: "cancelada", motivo }), "Necessidade cancelada.")}
+                onConfirmar={(motivo) => executar(() => gravar("necessidade_status", { id: item.id, status: "cancelada", motivo }), "Necessidade de Desenvolvimento cancelada.")}
               />
             )}
             {item.status === "cancelada" && (
@@ -579,7 +579,7 @@ function NecessidadeDrawer({ item, nomeGrupo, onFechar, onSalvo }: { item: Neces
                 confirmar="Reabrir"
                 variante="secondary"
                 motivoObrigatorio={false}
-                onConfirmar={(motivo) => executar(() => gravar("necessidade_status", { id: item.id, status: "sugerida", motivo }), "Necessidade reaberta.")}
+                onConfirmar={(motivo) => executar(() => gravar("necessidade_status", { id: item.id, status: "sugerida", motivo }), "Necessidade de Desenvolvimento reaberta.")}
               />
             )}
             {item.grupo_id && (
@@ -604,7 +604,7 @@ function ConsolidarDrawer({ ids, grupos, onFechar, onConcluido }: { ids: number[
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   return (
-    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow="Consolidação" titulo={`Consolidar ${ids.length} necessidade${ids.length > 1 ? "s" : ""}`} sub="Cada necessidade individual é preservada" />}>
+    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow="Consolidação" titulo={`Consolidar ${ids.length} ${ids.length > 1 ? "Necessidades de Desenvolvimento" : "Necessidade de Desenvolvimento"}`} sub="Cada Necessidade de Desenvolvimento individual é preservada" />}>
       <form
         className={styles.secao}
         onSubmit={async (e) => {
@@ -659,7 +659,7 @@ function ConsolidarDrawer({ ids, grupos, onFechar, onConcluido }: { ids: number[
             </>
           )}
         </div>
-        <span className={styles.dica}>O grupo reúne necessidades semelhantes para a futura LNT, mantendo colaborador, origem, gestor, justificativa, PDI e departamento de cada uma.</span>
+        <span className={styles.dica}>O grupo reúne Necessidades de Desenvolvimento semelhantes para a futura LNT, mantendo colaborador, origem, gestor, justificativa, PDI e departamento de cada uma.</span>
         {erro && <Erro mensagem={erro} />}
         <div className={styles.acoes}>
           <Button type="submit" variant="primary" disabled={salvando}>

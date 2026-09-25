@@ -491,7 +491,7 @@ async function lerColaboradorParaNecessidade(colaboradorId: number) {
 
 async function exigirColaboradorNaEquipe(conta: ContaDev, colaboradorId: number) {
   if (conta.perfil === "RH") return;
-  if (colaboradorId === conta.colaboradorId) throw new ErroHttp(422, "Registre necessidades para os seus liderados.");
+  if (colaboradorId === conta.colaboradorId) throw new ErroHttp(422, "Registre Necessidades de Desenvolvimento para os seus liderados.");
   const { data, error } = await supabaseAdmin
     .from("peopleflow_dev_escopo")
     .select("colaborador_id")
@@ -504,7 +504,7 @@ async function exigirColaboradorNaEquipe(conta: ContaDev, colaboradorId: number)
 
 function lerCamposNecessidade(corpo: Corpo) {
   return {
-    descricao: texto(corpo, "descricao", { obrigatorio: true, max: 500, rotulo: "a necessidade" }),
+    descricao: texto(corpo, "descricao", { obrigatorio: true, max: 500, rotulo: "a Necessidade de Desenvolvimento" }),
     categoria: umDe(texto(corpo, "categoria"), CATEGORIAS_NEC, "Categoria"),
     prioridade: umDe(texto(corpo, "prioridade") || "media", PRIORIDADES, "Prioridade"),
     sugestao_capacitacao: texto(corpo, "sugestao_capacitacao", { max: 500 }),
@@ -533,7 +533,7 @@ async function necessidadeRegistrar(conta: ContaDev, corpo: Corpo) {
         .eq("id", requisitoId)
         .maybeSingle();
       if (error) erroBanco(error, "Requisito");
-      if (!req || req.status !== "vigente") throw new ErroHttp(422, "Somente requisito VIGENTE pode originar necessidade.");
+      if (!req || req.status !== "vigente") throw new ErroHttp(422, "Somente requisito VIGENTE pode originar Necessidade de Desenvolvimento.");
       if (req.cargo_nome !== colab.cargo) throw new ErroHttp(422, "O requisito não é do cargo atual do colaborador.");
       origem = req.tipo_requisito === "habilidade" ? "habilidade" : "treinamento_obrigatorio";
       vinculoRequisito = { requisito_id: req.id, habilidade_id: req.habilidade_id, lista_mestra_codigo: req.lista_mestra_codigo };
@@ -560,35 +560,35 @@ async function necessidadeRegistrar(conta: ContaDev, corpo: Corpo) {
     })
     .select(COLS_NEC)
     .single();
-  if (error) erroBanco(error, "Necessidade");
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
   await auditar(conta, "necessidade_registrada", "peopleflow_dev_necessidades", String(data.id), { depois: data });
   return data;
 }
 
 async function lerNecessidade(id: number) {
   const { data, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").select(COLS_NEC).eq("id", id).maybeSingle();
-  if (error) erroBanco(error, "Necessidade");
-  if (!data) throw new ErroHttp(404, "Necessidade não encontrada.");
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
+  if (!data) throw new ErroHttp(404, "Necessidade de Desenvolvimento não encontrada.");
   return data;
 }
 
 async function necessidadeEditar(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
-  const id = idObrigatorio(corpo, "id", "Necessidade");
+  const id = idObrigatorio(corpo, "id", "Necessidade de Desenvolvimento");
   const antes = await lerNecessidade(id);
-  if (antes.status === "cancelada") throw new ErroHttp(422, "Reabra a necessidade antes de editar.");
+  if (antes.status === "cancelada") throw new ErroHttp(422, "Reabra a Necessidade de Desenvolvimento antes de editar.");
   const campos = lerCamposNecessidade(corpo);
   const mudou = diferencas(antes, campos);
   if (Object.keys(mudou).length === 0) return antes;
   const { data, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").update({ ...campos, updated_by: conta.userId }).eq("id", id).select(COLS_NEC).single();
-  if (error) erroBanco(error, "Necessidade");
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
   await auditar(conta, "necessidade_editada", "peopleflow_dev_necessidades", String(id), { alteracoes: mudou });
   return data;
 }
 
 async function necessidadeStatus(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
-  const id = idObrigatorio(corpo, "id", "Necessidade");
+  const id = idObrigatorio(corpo, "id", "Necessidade de Desenvolvimento");
   const status = umDe(texto(corpo, "status"), ["validada", "cancelada", "sugerida"] as const, "Status");
   const motivo = texto(corpo, "motivo", { obrigatorio: status === "cancelada", max: 1000, rotulo: "a justificativa" });
   const antes = await lerNecessidade(id);
@@ -608,7 +608,7 @@ async function necessidadeStatus(conta: ContaDev, corpo: Corpo) {
     .eq("id", id)
     .select(COLS_NEC)
     .single();
-  if (error) erroBanco(error, "Necessidade");
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
   const acao = status === "validada" ? "necessidade_validada" : status === "cancelada" ? "necessidade_cancelada" : "necessidade_reaberta";
   await auditar(conta, acao, "peopleflow_dev_necessidades", String(id), { status: { antes: antes.status, depois: status }, motivo });
   return data;
@@ -617,8 +617,8 @@ async function necessidadeStatus(conta: ContaDev, corpo: Corpo) {
 async function necessidadeConsolidar(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
   const ids = Array.isArray(corpo.ids) ? [...new Set(corpo.ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
-  if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos uma necessidade.");
-  if (ids.length > 500) throw new ErroHttp(422, "Selecione no máximo 500 necessidades por vez.");
+  if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos uma Necessidade de Desenvolvimento.");
+  if (ids.length > 500) throw new ErroHttp(422, "Selecione no máximo 500 Necessidades de Desenvolvimento por vez.");
   let grupoId = corpo.grupo_id ? idObrigatorio(corpo, "grupo_id", "Grupo") : null;
   if (grupoId) {
     const { data: g, error } = await supabaseAdmin.from("peopleflow_dev_necessidade_grupos").select("id, ativo").eq("id", grupoId).maybeSingle();
@@ -641,9 +641,9 @@ async function necessidadeConsolidar(conta: ContaDev, corpo: Corpo) {
     await auditar(conta, "grupo_necessidades_criado", "peopleflow_dev_necessidade_grupos", String(grupoId), { depois: g });
   }
   const { data: alvo, error: lerErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, status, grupo_id").in("id", ids);
-  if (lerErro) erroBanco(lerErro, "Necessidade");
+  if (lerErro) erroBanco(lerErro, "Necessidade de Desenvolvimento");
   const validos = (alvo ?? []).filter((n) => n.status !== "cancelada").map((n) => n.id as number);
-  if (validos.length === 0) throw new ErroHttp(422, "Nenhuma das necessidades selecionadas pode ser consolidada (canceladas não entram).");
+  if (validos.length === 0) throw new ErroHttp(422, "Nenhuma das Necessidades de Desenvolvimento selecionadas pode ser consolidada (canceladas não entram).");
   const { error } = await supabaseAdmin.from("peopleflow_dev_necessidades").update({ grupo_id: grupoId, updated_by: conta.userId }).in("id", validos);
   if (error) erroBanco(error, "Consolidação");
   await auditar(conta, "necessidades_consolidadas", "peopleflow_dev_necessidade_grupos", String(grupoId), {
@@ -655,11 +655,11 @@ async function necessidadeConsolidar(conta: ContaDev, corpo: Corpo) {
 
 async function necessidadeDesagrupar(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
-  const id = idObrigatorio(corpo, "id", "Necessidade");
+  const id = idObrigatorio(corpo, "id", "Necessidade de Desenvolvimento");
   const antes = await lerNecessidade(id);
-  if (!antes.grupo_id) throw new ErroHttp(422, "A necessidade não está consolidada.");
+  if (!antes.grupo_id) throw new ErroHttp(422, "A Necessidade de Desenvolvimento não está consolidada.");
   const { data, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").update({ grupo_id: null, updated_by: conta.userId }).eq("id", id).select(COLS_NEC).single();
-  if (error) erroBanco(error, "Necessidade");
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
   await auditar(conta, "necessidade_desagrupada", "peopleflow_dev_necessidades", String(id), { grupo_anterior: antes.grupo_id });
   return data;
 }
@@ -724,8 +724,8 @@ async function pdiSugestaoAceitar(conta: ContaDev, corpo: Corpo) {
     .select(COLS_NEC)
     .single();
   if (error) {
-    if (error.code === "23505") throw new ErroHttp(409, "Esta ação do PDI já está na Base de Necessidades.");
-    erroBanco(error, "Necessidade");
+    if (error.code === "23505") throw new ErroHttp(409, "Esta ação do PDI já está na Base de Necessidades de Desenvolvimento.");
+    erroBanco(error, "Necessidade de Desenvolvimento");
   }
   await auditar(conta, "necessidade_do_pdi", "peopleflow_dev_necessidades", String(data.id), { pdi_id: pdi.id, pdi_item_id: item.id, pdi_acao_id: acao.id, depois: data });
   return data;
@@ -880,10 +880,10 @@ async function temOutroTreinamentoAtivo(necessidadeId: number, exceto: number): 
 
 async function mudarStatusNecessidade(conta: ContaDev, necessidadeId: number, de: string[], para: string, extra: Record<string, unknown>, motivo: string, treinamentoId: number) {
   const { data: n, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, status").eq("id", necessidadeId).maybeSingle();
-  if (error) erroBanco(error, "Necessidade");
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
   if (!n || !de.includes(n.status as string)) return;
   const { error: uErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").update({ status: para, ...extra, updated_by: conta.userId }).eq("id", necessidadeId);
-  if (uErro) erroBanco(uErro, "Necessidade");
+  if (uErro) erroBanco(uErro, "Necessidade de Desenvolvimento");
   await auditar(conta, `necessidade_${para}`, "peopleflow_dev_necessidades", String(necessidadeId), { status: { antes: n.status, depois: para }, treinamento_id: treinamentoId, motivo });
 }
 
@@ -909,7 +909,7 @@ async function processarNecessidadesDoParticipante(conta: ContaDev, t: Treinamen
     .select("id, colaborador_id, status")
     .in("id", vinculos.map((v) => v.necessidade_id))
     .eq("colaborador_id", participante.colaborador_id);
-  if (error) erroBanco(error, "Necessidade");
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
   for (const n of nec ?? []) {
     const realizou = participante.presenca_status === "presente" && !participante.removido_em;
     if (realizou && (!t.exige_eficacia || participante.eficacia_resultado === "eficaz")) {
@@ -1287,7 +1287,7 @@ async function treinamentoReposicao(conta: ContaDev, corpo: Corpo) {
       .select("id, colaborador_id, status")
       .in("id", vinculos.map((v) => v.necessidade_id))
       .in("colaborador_id", colabs);
-    if (nErro) erroBanco(nErro, "Necessidade");
+    if (nErro) erroBanco(nErro, "Necessidade de Desenvolvimento");
     necessidades = (nec ?? []).filter((n) => ["validada", "planejada"].includes(n.status as string)).map((n) => Number(n.id));
     if (necessidades.length) {
       const { error: vErro } = await supabaseAdmin
@@ -1310,11 +1310,11 @@ async function necessidadesVincular(conta: ContaDev, corpo: Corpo) {
   if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
   if (t.homologacao) throw new ErroHttp(422, "Treinamento de homologação/teste não pode ser vinculado a Necessidades de Desenvolvimento.");
   const ids = Array.isArray(corpo.necessidade_ids) ? [...new Set(corpo.necessidade_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
-  if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos uma necessidade.");
+  if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos uma Necessidade de Desenvolvimento.");
   const { data: nec, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, status, colaborador_id").in("id", ids);
-  if (error) erroBanco(error, "Necessidade");
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
   const invalidas = (nec ?? []).filter((n) => !["validada", "planejada"].includes(n.status as string) || !n.colaborador_id);
-  if ((nec ?? []).length !== ids.length || invalidas.length) throw new ErroHttp(422, "Só necessidades VALIDADAS (ou já PLANEJADAS) de um colaborador podem ser vinculadas.");
+  if ((nec ?? []).length !== ids.length || invalidas.length) throw new ErroHttp(422, "Só Necessidades de Desenvolvimento VALIDADAS (ou já PLANEJADAS) de um colaborador podem ser vinculadas.");
   const ja = new Set((await vinculosAtivos(t.id)).map((v) => v.necessidade_id));
   const novas = ids.filter((i) => !ja.has(i));
   if (novas.length) {
@@ -1335,7 +1335,7 @@ async function necessidadesVincular(conta: ContaDev, corpo: Corpo) {
 async function necessidadeDesvincular(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
-  const necessidadeId = idObrigatorio(corpo, "necessidade_id", "Necessidade");
+  const necessidadeId = idObrigatorio(corpo, "necessidade_id", "Necessidade de Desenvolvimento");
   const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
   if (t.status === "concluido") throw new ErroHttp(422, "Vínculos de treinamento concluído são históricos.");
   const v = (await vinculosAtivos(t.id)).find((x) => x.necessidade_id === necessidadeId);

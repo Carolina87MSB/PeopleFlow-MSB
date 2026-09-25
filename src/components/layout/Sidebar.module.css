@@ -160,6 +160,18 @@
   flex: 1;
 }
 
+/* Rótulo longo (ex.: "Necessidades de Desenvolvimento"): quebra limpa em até
+   duas linhas, mesma fonte dos demais itens e altura total próxima da padrão. */
+.navItemDuasLinhas {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  line-height: 1.25;
+}
+
+.navItemDuasLinhas svg {
+  flex-shrink: 0;
+}
+
 .badge {
   background: var(--color-neutral-bg);
   color: var(--color-neutral-fg);
