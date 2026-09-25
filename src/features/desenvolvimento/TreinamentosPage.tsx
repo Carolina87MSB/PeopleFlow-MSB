@@ -183,7 +183,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
           <Paginacao pagina={lista.pagina} total={lista.dados.total} onChange={lista.setPagina} />
         </>
       )}
-      {novo && <TreinamentoDrawer item={null} onFechar={() => setNovo(false)} onSalvo={(t) => navigate(`/desenvolvimento/treinamento/${t.id}`)} />}
+      {novo && <TreinamentoDrawer item={null} onFechar={() => setNovo(false)} onSalvo={(t) => navigate(`/desenvolvimento/treinamento/${t.id}?participantes=1`)} />}
     </Card>
   );
 }

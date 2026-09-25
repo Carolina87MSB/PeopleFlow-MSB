@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CalendarPlus, FileText, Link2, Plus, QrCode, SearchX, Upload, Users } from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, CalendarDays, CalendarPlus, Clock, FileText, Laptop, Link2, MapPin, Pencil, Plus, QrCode, SearchX, Upload, UserRound, Users } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { Header } from "../../components/layout/Header";
 import { Button, Card, Drawer, tableStyles } from "../../components/ui";
@@ -93,6 +93,13 @@ export default function TreinamentoPage() {
   const [editando, setEditando] = useState(false);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
   const [versaoVinculos, setVersaoVinculos] = useState(0);
+  // Vindo de "Salvar como planejado"/"Registrar solicitação": abre a seleção de participantes como próximo passo.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [abrirInclusao] = useState(() => searchParams.get("participantes") === "1");
+  useEffect(() => {
+    if (searchParams.has("participantes")) setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!Number.isInteger(tid) || tid <= 0) return <SemTreinamento />;
   if (treino.erro) return <Erro mensagem={treino.erro} />;
@@ -130,19 +137,77 @@ export default function TreinamentoPage() {
     }
   }
 
+  const ausentes = ativos.filter((x) => x.presenca_status === "ausente").length;
+  const presentes = ativos.filter((x) => x.presenca_status === "presente").length;
+  const externoPlanejado = t.modalidade === "externo" && t.status === "planejado";
+  const instrutor = t.instrutor_colaborador_id ? nome(t.instrutor_colaborador_id) : t.instrutor_externo;
+
+  // Seções na ordem do que precisa ser feito AGORA, conforme o status.
+  const secoes: Record<string, React.ReactNode> = {
+    qr: p.podeQr ? <QrPresenca key="qr" t={t} onAtualizarLista={participantes.recarregar} /> : null,
+    participantes: (
+      <Participantes
+        key="participantes"
+        t={t}
+        p={p}
+        lista={participantes.dados}
+        erro={participantes.erro}
+        carregando={participantes.carregando}
+        acao={acao}
+        abrirInclusao={abrirInclusao}
+      />
+    ),
+    resultado:
+      t.status === "concluido" ? (
+        <Card key="resultado">
+          <h3 className={styles.cardTitle}>Resultado</h3>
+          <ul className={styles.resumo} style={{ marginTop: 10 }}>
+            <li>
+              <CalendarDays size={15} /> Realizado em {formatarData(t.data_realizacao ?? t.data_fim ?? t.data_inicio)}
+            </li>
+            <li>
+              <Clock size={15} /> {formatarCarga(t.carga_realizada_min ?? t.carga_horaria_min)}
+            </li>
+            <li>
+              <Users size={15} /> {presentes} presente{presentes === 1 ? "" : "s"} · {ausentes} ausente{ausentes === 1 ? "" : "s"}
+            </li>
+          </ul>
+        </Card>
+      ) : null,
+    reposicoes: <Reposicoes key="reposicoes" t={t} podeRepor={p.podeRepor} ausentes={ausentes} />,
+    evidencias: <Evidencias key="evidencias" t={t} podeAnexar={p.podeAnexar} participantes={ativos} versao={versaoVinculos} />,
+    necessidades: !p.veNecessidades ? null : t.homologacao ? (
+      <Card key="necessidades">
+        <h3 className={styles.cardTitle}>
+          Necessidades de Desenvolvimento relacionadas <TagTeste />
+        </h3>
+        <p className={styles.secundario}>Treinamento de homologação/teste não é vinculado a Necessidades de Desenvolvimento.</p>
+      </Card>
+    ) : (
+      <NecessidadesVinculadas key="necessidades" t={t} podeEditar={p.ehRH && t.status !== "concluido" && t.status !== "cancelado"} versao={versaoVinculos} onAlterado={recarregarTudo} />
+    ),
+  };
+  const ordem =
+    t.status === "em_andamento"
+      ? ["qr", "participantes", "evidencias", "necessidades"]
+      : t.status === "concluido"
+        ? ["resultado", "reposicoes", "participantes", "evidencias", "necessidades"]
+        : ["participantes", "evidencias", "necessidades"];
+
   return (
     <>
       <Header />
-      <div className={styles.pilha}>
+      <div className={styles.pilhaCompacta}>
         <div>
           <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={() => navigate(`/desenvolvimento/treinamentos/${t.status === "concluido" || t.status === "cancelado" ? "concluidos" : "agenda"}`)}>
             Treinamentos
           </Button>
         </div>
 
+        {/* ── Resumo compacto + ação principal ─────────────────────────── */}
         <Card>
-          <div className={styles.cardHeader}>
-            <div>
+          <div className={styles.resumoTopo}>
+            <div style={{ minWidth: 0 }}>
               <div className={styles.drawerEyebrow}>
                 {t.codigo} · {TIPO_TREINAMENTO[t.tipo]}
                 {t.reposicao_numero ? ` · Reposição ${t.reposicao_numero}` : ""}
@@ -151,82 +216,52 @@ export default function TreinamentoPage() {
                 {t.titulo}
                 {t.homologacao && <TagTeste />}
               </h3>
-              {t.homologacao && (
-                <p className={styles.dica}>
-                  Treinamento de homologação/teste: percorre o fluxo real, mas não conta como capacitação oficial, conformidade, indicadores ou atendimento de Necessidades de Desenvolvimento.
-                </p>
-              )}
-              <p className={styles.cardSubtitle}>
+              <div style={{ marginTop: 6 }}>
                 <Selo tom={STATUS_TREINAMENTO[t.status].tom}>{STATUS_TREINAMENTO[t.status].rotulo}</Selo>
-                {t.status_motivo && t.status === "cancelado" ? ` — ${t.status_motivo}` : ""}
-              </p>
+                {t.status_motivo && t.status === "cancelado" ? <span className={styles.secundario}> — {t.status_motivo}</span> : null}
+              </div>
             </div>
             {p.podeEditar && (
-              <Button variant="secondary" onClick={() => setEditando(true)}>
+              <Button variant="ghost" icon={<Pencil size={15} />} onClick={() => setEditando(true)}>
                 {t.status === "concluido" ? "Retificar" : "Editar"}
               </Button>
             )}
           </div>
-          <div className={styles.duasColunas}>
-            <dl className={styles.detalhe}>
-              <dt>Documento</dt>
-              <dd>{t.lista_mestra_codigo ? `${t.lista_mestra_codigo} rev. ${t.lista_mestra_revisao} — ${t.lista_mestra_titulo ?? ""}` : "—"}</dd>
-              <dt>Tipo</dt>
-              <dd>{TIPO_TREINAMENTO[t.tipo]}</dd>
-              <dt>Modalidade</dt>
-              <dd>{MODALIDADE[t.modalidade]}</dd>
-              <dt>Formato</dt>
-              <dd>{t.formato ? FORMATO[t.formato] : "—"}</dd>
-              {t.reposicao_de_id && (
-                <>
-                  <dt>Reposição de</dt>
-                  <dd>
-                    <Button variant="ghost" onClick={() => navigate(`/desenvolvimento/treinamento/${t.reposicao_de_id}`)}>
-                      Abrir treinamento de origem
-                    </Button>
-                  </dd>
-                </>
-              )}
-              <dt>Data prevista</dt>
-              <dd>
-                {formatarData(t.data_inicio)}
-                {t.data_fim && t.data_fim !== t.data_inicio ? ` a ${formatarData(t.data_fim)}` : ""}
-              </dd>
-              <dt>Carga prevista</dt>
-              <dd>{formatarCarga(t.carga_horaria_min)}</dd>
-              <dt>Realização</dt>
-              <dd>
-                {t.data_realizacao ? formatarData(t.data_realizacao) : "—"}
-                {t.carga_realizada_min ? ` · ${formatarCarga(t.carga_realizada_min)}` : ""}
-              </dd>
-              <dt>Local / link</dt>
-              <dd>{t.local_link || "—"}</dd>
-            </dl>
-            <dl className={styles.detalhe}>
-              <dt>Responsável</dt>
-              <dd>{nome(t.responsavel_colaborador_id)}</dd>
-              <dt>Instrutor</dt>
-              <dd>{t.instrutor_colaborador_id ? nome(t.instrutor_colaborador_id) : (t.instrutor_externo ?? "—")}</dd>
-              <dt>Solicitado por</dt>
-              <dd>
-                {nome(t.solicitado_por_colaborador_id)} · {formatarData(t.created_at)}
-              </dd>
-              <dt>Eficácia</dt>
-              <dd>{t.exige_eficacia ? `Exigida${t.eficacia_prazo ? ` até ${formatarData(t.eficacia_prazo)}` : ""}` : "Não exigida"}</dd>
-              <dt>Justificativa</dt>
-              <dd>{t.justificativa || "—"}</dd>
-              <dt>Observação</dt>
-              <dd>{t.observacao || "—"}</dd>
-            </dl>
-          </div>
+          {t.homologacao && <p className={styles.dica}>Homologação/teste: fluxo real, sem validade como capacitação oficial, conformidade, indicadores ou Necessidades de Desenvolvimento.</p>}
+          <ul className={styles.resumo}>
+            <li>
+              <CalendarDays size={15} /> {formatarData(t.data_inicio)}
+              {t.data_fim && t.data_fim !== t.data_inicio ? ` a ${formatarData(t.data_fim)}` : ""}
+            </li>
+            <li>
+              <Clock size={15} /> {formatarCarga(t.carga_horaria_min)}
+            </li>
+            <li>
+              <Laptop size={15} /> {MODALIDADE[t.modalidade]}
+              {t.formato ? ` · ${FORMATO[t.formato]}` : ""}
+            </li>
+            {t.local_link && (
+              <li>
+                <MapPin size={15} /> {t.local_link}
+              </li>
+            )}
+            <li>
+              <UserRound size={15} /> {nome(t.responsavel_colaborador_id)}
+              {instrutor && instrutor !== nome(t.responsavel_colaborador_id) ? ` · Instrutor: ${instrutor}` : ""}
+            </li>
+            {t.lista_mestra_codigo && (
+              <li>
+                <FileText size={15} /> {t.lista_mestra_codigo} · Rev. {t.lista_mestra_revisao}
+              </li>
+            )}
+          </ul>
 
-          {p.podeRealizacao && <Realizacao t={t} onSalvar={(corpo) => acao("treinamento_realizacao", { id: t.id, ...corpo }, "Realização registrada.")} />}
+          {(t.status === "em_andamento" || externoPlanejado) && (
+            <RealizacaoResumo t={t} podeAlterar={p.podeRealizacao} onSalvar={(corpo) => acao("treinamento_realizacao", { id: t.id, ...corpo }, "Dados da realização atualizados.")} />
+          )}
 
           {erroAcao && <Erro mensagem={erroAcao} />}
-          <div className={styles.acoes} style={{ marginTop: 14 }}>
-            {p.podeCancelar && (
-              <ConfirmarComMotivo rotulo="Cancelar treinamento" confirmar="Confirmar cancelamento" variante="danger" motivoObrigatorio onConfirmar={(motivo) => acao("treinamento_cancelar", { id: t.id, motivo }, "Treinamento cancelado.")} />
-            )}
+          <div className={styles.acoesResumo}>
             {p.ehRH && t.status === "solicitado" && (
               <Button variant="primary" onClick={() => void acao("treinamento_planejar", { id: t.id }, "Treinamento planejado.").catch(() => undefined)}>
                 Planejar
@@ -237,31 +272,54 @@ export default function TreinamentoPage() {
                 Iniciar realização
               </Button>
             )}
-            {p.ehRH && (t.status === "em_andamento" || (t.modalidade === "externo" && t.status === "planejado")) && (
+            {p.ehRH && (t.status === "em_andamento" || externoPlanejado) && (
               <Button variant="success" onClick={() => void acao("treinamento_concluir", { id: t.id }, "Treinamento concluído.").catch(() => undefined)}>
-                Concluir
+                Concluir treinamento
               </Button>
             )}
           </div>
+
+          <details className={styles.maisDetalhes}>
+            <summary>Mais detalhes</summary>
+            <dl className={styles.detalhe}>
+              {t.lista_mestra_codigo && (
+                <>
+                  <dt>Documento</dt>
+                  <dd>
+                    {t.lista_mestra_codigo} rev. {t.lista_mestra_revisao} — {t.lista_mestra_titulo ?? ""}
+                  </dd>
+                </>
+              )}
+              <dt>Solicitado por</dt>
+              <dd>
+                {nome(t.solicitado_por_colaborador_id)} · {formatarData(t.created_at)}
+              </dd>
+              <dt>Eficácia</dt>
+              <dd>{t.exige_eficacia ? `Exigida${t.eficacia_prazo ? ` até ${formatarData(t.eficacia_prazo)}` : ""}` : "Não exigida"}</dd>
+              <dt>Justificativa</dt>
+              <dd>{t.justificativa || "—"}</dd>
+              <dt>Observação</dt>
+              <dd>{t.observacao || "—"}</dd>
+              {t.reposicao_de_id && (
+                <>
+                  <dt>Reposição de</dt>
+                  <dd>
+                    <Button variant="ghost" onClick={() => navigate(`/desenvolvimento/treinamento/${t.reposicao_de_id}`)}>
+                      Abrir treinamento de origem
+                    </Button>
+                  </dd>
+                </>
+              )}
+            </dl>
+            {p.podeCancelar && (
+              <div className={styles.acoes} style={{ justifyContent: "flex-start", marginTop: 10 }}>
+                <ConfirmarComMotivo rotulo="Cancelar treinamento" confirmar="Confirmar cancelamento" variante="danger" motivoObrigatorio onConfirmar={(motivo) => acao("treinamento_cancelar", { id: t.id, motivo }, "Treinamento cancelado.")} />
+              </div>
+            )}
+          </details>
         </Card>
 
-        {p.veNecessidades && t.homologacao && (
-          <Card>
-            <h3 className={styles.cardTitle}>
-              Necessidades de Desenvolvimento <TagTeste />
-            </h3>
-            <p className={styles.secundario}>Treinamento de homologação/teste não é vinculado a Necessidades de Desenvolvimento.</p>
-          </Card>
-        )}
-        {p.veNecessidades && !t.homologacao && <NecessidadesVinculadas t={t} podeEditar={p.ehRH && t.status !== "concluido" && t.status !== "cancelado"} versao={versaoVinculos} onAlterado={recarregarTudo} />}
-
-        {p.podeQr && <QrPresenca t={t} onAtualizarLista={participantes.recarregar} />}
-
-        <Participantes t={t} p={p} lista={participantes.dados} erro={participantes.erro} carregando={participantes.carregando} acao={acao} />
-
-        <Reposicoes t={t} podeRepor={p.podeRepor} ausentes={ativos.filter((x) => x.presenca_status === "ausente").length} />
-
-        <Evidencias t={t} podeAnexar={p.podeAnexar} participantes={ativos} versao={versaoVinculos} />
+        {ordem.map((k) => secoes[k])}
       </div>
 
       {editando && (
@@ -289,14 +347,46 @@ function SemTreinamento() {
   );
 }
 
-function Realizacao({ t, onSalvar }: { t: Treinamento; onSalvar: (corpo: Record<string, unknown>) => Promise<void> }) {
+/** Realização = planejado, salvo exceção: só pede dados quando o treinamento ocorreu diferente do planejado. */
+function RealizacaoResumo({ t, podeAlterar, onSalvar }: { t: Treinamento; podeAlterar: boolean; onSalvar: (corpo: Record<string, unknown>) => Promise<void> }) {
+  const [alterando, setAlterando] = useState(false);
+  const alterada = Boolean(t.data_realizacao || t.carga_realizada_min);
+  return (
+    <div className={styles.realizacao}>
+      <div>
+        <strong>Realização</strong>
+        <span className={styles.secundario}>{alterada ? " · informada" : " · conforme o planejado"}</span>
+        <div>
+          Data: {formatarData(t.data_realizacao ?? t.data_fim ?? t.data_inicio)} · Carga horária: {formatarCarga(t.carga_realizada_min ?? t.carga_horaria_min)}
+        </div>
+      </div>
+      {podeAlterar && !alterando && (
+        <button type="button" className={styles.linkAcao} onClick={() => setAlterando(true)}>
+          Alterar dados da realização
+        </button>
+      )}
+      {alterando && (
+        <Realizacao
+          t={t}
+          onCancelar={() => setAlterando(false)}
+          onSalvar={async (corpo) => {
+            await onSalvar(corpo);
+            setAlterando(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function Realizacao({ t, onSalvar, onCancelar }: { t: Treinamento; onSalvar: (corpo: Record<string, unknown>) => Promise<void>; onCancelar: () => void }) {
   const [data, setData] = useState(t.data_realizacao ?? "");
   const [carga, setCarga] = useState(t.carga_realizada_min ? String(t.carga_realizada_min / 60) : "");
   const [salvando, setSalvando] = useState(false);
   return (
     <form
       className={styles.filtros}
-      style={{ marginTop: 16, alignItems: "flex-end" }}
+      style={{ marginTop: 10, alignItems: "flex-end", width: "100%" }}
       onSubmit={async (e) => {
         e.preventDefault();
         setSalvando(true);
@@ -310,15 +400,21 @@ function Realizacao({ t, onSalvar }: { t: Treinamento; onSalvar: (corpo: Record<
       }}
     >
       <label className={styles.campo}>
-        Data de realização
+        Data realizada
         <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
       </label>
       <label className={styles.campo}>
         Carga realizada (horas)
-        <input inputMode="decimal" value={carga} onChange={(e) => setCarga(e.target.value)} placeholder="Ex.: 2" />
+        <input inputMode="decimal" value={carga} onChange={(e) => setCarga(e.target.value)} placeholder={t.carga_horaria_min ? String(t.carga_horaria_min / 60) : "Ex.: 2"} />
       </label>
+      <span className={styles.dica} style={{ flexBasis: "100%" }}>
+        Deixe em branco o que ocorreu conforme o planejado.
+      </span>
+      <Button type="button" variant="ghost" onClick={onCancelar} disabled={salvando}>
+        Cancelar
+      </Button>
       <Button type="submit" variant="secondary" disabled={salvando}>
-        {salvando ? "Salvando..." : "Salvar realização"}
+        {salvando ? "Salvando..." : "Salvar"}
       </Button>
     </form>
   );
@@ -345,7 +441,7 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
         </div>
         {podeEditar && (
           <Button variant="secondary" className={styles.botaoLongo} icon={<Link2 size={16} />} onClick={() => setVinculando(true)}>
-            Vincular Necessidades de Desenvolvimento
+            Vincular Necessidade de Desenvolvimento
           </Button>
         )}
       </div>
@@ -355,7 +451,7 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
       ) : vinculos.carregando && !vinculos.dados ? (
         <Carregando />
       ) : (vinculos.dados ?? []).length === 0 ? (
-        <p className={styles.secundario}>Nenhuma Necessidade de Desenvolvimento vinculada{podeEditar ? " — treinamentos de POP, Instrução de Trabalho e obrigatórios podem seguir sem Necessidade de Desenvolvimento vinculada." : "."}</p>
+        <p className={styles.secundario}>Nenhuma Necessidade de Desenvolvimento vinculada.</p>
       ) : (
         <div className={tableStyles.wrap}>
           <table className={tableStyles.table}>
@@ -668,10 +764,11 @@ function Participantes(props: {
   erro: string | null;
   carregando: boolean;
   acao: (a: AcaoGravacao, corpo: Record<string, unknown>, ok: string) => Promise<void>;
+  abrirInclusao?: boolean;
 }) {
   const { t, p, lista, acao } = props;
   const { perfil, colaboradorId, pessoaPorId } = useDesenvolvimento();
-  const [adicionando, setAdicionando] = useState(false);
+  const [adicionando, setAdicionando] = useState(Boolean(props.abrirInclusao) && p.podeParticipantes);
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const [presenca, setPresenca] = useState<"presente" | "ausente" | "pendente">("presente");
   const [motivo, setMotivo] = useState("");
@@ -699,7 +796,7 @@ function Participantes(props: {
         <div>
           <h3 className={styles.cardTitle}>Participantes ({ativos.length})</h3>
           <p className={styles.cardSubtitle}>
-            {resumo.presente} realizaram · {resumo.ausente} ausentes · {resumo.pendente} pendentes
+            {resumo.presente} presente{resumo.presente === 1 ? "" : "s"} · {resumo.ausente} ausente{resumo.ausente === 1 ? "" : "s"} · {resumo.pendente} pendente{resumo.pendente === 1 ? "" : "s"}
             {perfil === "Gestor" ? " — você vê os participantes da sua equipe" : ""}
           </p>
         </div>
@@ -914,7 +1011,8 @@ function IncluirDrawer({ t, jaInscritos, onFechar, onIncluir }: { t: Treinamento
           </>
         )}
         {erro && <Erro mensagem={erro} />}
-        <div className={styles.acoes}>
+        {/* Fixo no rodapé do drawer: com turmas grandes, a ação não fica no fim da lista. */}
+        <div className={[styles.acoes, styles.rodapeFixo].join(" ")}>
           <Button
             variant="primary"
             disabled={salvando || marcados.size === 0}
@@ -930,7 +1028,7 @@ function IncluirDrawer({ t, jaInscritos, onFechar, onIncluir }: { t: Treinamento
               }
             }}
           >
-            {salvando ? "Incluindo..." : `Incluir ${marcados.size || ""}`}
+            {salvando ? "Incluindo..." : marcados.size ? `Incluir ${marcados.size} participante${marcados.size > 1 ? "s" : ""}` : "Incluir"}
           </Button>
         </div>
       </div>
@@ -951,7 +1049,7 @@ function Reposicoes({ t, podeRepor, ausentes }: { t: Treinamento; podeRepor: boo
         <div>
           <h3 className={styles.cardTitle}>Faltantes e reposições</h3>
           <p className={styles.cardSubtitle}>
-            {ausentes} ausente(s): não são considerados treinados e seguem pendentes até realizarem uma reposição. Este treinamento não é reaberto.
+            {ausentes === 1 ? "1 ausente: não é considerado treinado e segue pendente" : `${ausentes} ausentes: não são considerados treinados e seguem pendentes`} até realizar uma reposição. Este treinamento não é reaberto.
           </p>
         </div>
         {podeRepor && ausentes > 0 && (
