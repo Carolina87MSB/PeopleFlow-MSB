@@ -9,10 +9,10 @@ import {
   enviarEvidencia,
   gravar,
   listarEvidencias,
-  listarNecessidades,
   listarParticipantes,
   listarReposicoes,
-  listarVinculos,
+  listarVinculosTreinamento,
+  opcoesNecessidades,
   obterTreinamento,
   opcoesParticipantes,
   pessoasPorId,
@@ -23,8 +23,8 @@ import {
   type Treinamento,
 } from "./devRepository";
 import { useDesenvolvimento } from "./contexto";
-import { CabecalhoDrawer, Carregando, ConfirmarComMotivo, Erro, EstadoVazio, Paginacao, Selo, TagTeste } from "./componentes";
-import { useConsulta, usePaginado } from "./hooks";
+import { CabecalhoDrawer, Carregando, ConfirmarComMotivo, Erro, EstadoVazio, Selo, TagTeste } from "./componentes";
+import { useConsulta } from "./hooks";
 import {
   CATEGORIA_NECESSIDADE,
   EFICACIA,
@@ -55,32 +55,34 @@ function mensagem(e: unknown) {
 }
 
 /** Permissões exibidas na tela — espelho das regras do servidor, que sempre confere de novo. */
-function permissoes(t: Treinamento, perfil: string, colaboradorId: number) {
+function permissoes(t: Treinamento, perfil: string, colaboradorId: number, daGestao: boolean) {
   const ehRH = perfil === "RH";
   const conduz = t.responsavel_colaborador_id === colaboradorId || t.instrutor_colaborador_id === colaboradorId;
-  const solicitante = t.solicitado_por_colaborador_id === colaboradorId;
   const encerrado = t.status === "concluido" || t.status === "cancelado";
   const externo = t.modalidade === "externo";
+  // Planejamento (editar/cancelar): a gestão até o início da realização; RH sempre (retificação após concluído).
+  const antesDoInicio = (t.status === "solicitado" || t.status === "planejado") && !t.iniciado_em;
   return {
     ehRH,
     conduz,
-    podeEditar: t.status !== "cancelado" && (ehRH || (t.status === "solicitado" && solicitante)),
-    // Montar a turma: RH, quem conduz ou quem solicitou (qualquer colaborador ativo, de qualquer área).
-    podeParticipantes: !encerrado && (ehRH || conduz || solicitante),
-    podeCancelar: !encerrado && (ehRH || (t.status === "solicitado" && solicitante)),
+    daGestao,
+    podeEditar: t.status !== "cancelado" && (ehRH || (antesDoInicio && daGestao)),
+    // Montar a turma: RH, quem conduz ou a gestão que registrou (qualquer colaborador ativo, de qualquer área).
+    podeParticipantes: !encerrado && (ehRH || conduz || daGestao),
+    podeCancelar: !encerrado && (ehRH || (antesDoInicio && daGestao)),
     podePresenca: ((ehRH || conduz) && (t.status === "em_andamento" || (externo && t.status === "planejado"))) || (ehRH && t.status === "concluido"),
     podeRealizacao: (ehRH || conduz) && (t.status === "planejado" || t.status === "em_andamento"),
     podeQr: (ehRH || conduz) && !externo && t.status === "em_andamento",
-    podeRepor: (ehRH || conduz) && t.status === "concluido",
+    podeRepor: (ehRH || conduz || daGestao) && t.status === "concluido",
     podeAnexar: (ehRH || conduz) && t.status !== "cancelado" && (t.status !== "concluido" || ehRH),
-    veNecessidades: ehRH || perfil === "Gestor",
+    veNecessidades: ehRH || perfil === "Gestor" || daGestao,
   };
 }
 
 export default function TreinamentoPage() {
   const { id } = useParams<{ id: string }>();
   const tid = Number(id);
-  const { perfil, colaboradorId } = useDesenvolvimento();
+  const { perfil, colaboradorId, pessoaPorId } = useDesenvolvimento();
   const navigate = useNavigate();
   const { flash } = useToast();
   const treino = useConsulta(() => obterTreinamento(tid), [tid]);
@@ -93,7 +95,7 @@ export default function TreinamentoPage() {
   const [editando, setEditando] = useState(false);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
   const [versaoVinculos, setVersaoVinculos] = useState(0);
-  // Vindo de "Salvar como planejado"/"Registrar solicitação": abre a seleção de participantes como próximo passo.
+  // Vindo de "Registrar treinamento": abre a seleção de participantes como próximo passo.
   const [searchParams, setSearchParams] = useSearchParams();
   const [abrirInclusao] = useState(() => searchParams.get("participantes") === "1");
   useEffect(() => {
@@ -115,7 +117,9 @@ export default function TreinamentoPage() {
   }
   if (!t) return <SemTreinamento />;
 
-  const p = permissoes(t, perfil, colaboradorId);
+  // Gestão: registrado por mim ou por alguém do meu escopo (Gestor ou Responsável indicado).
+  const daGestao = t.solicitado_por_colaborador_id === colaboradorId || (perfil !== "RH" && t.solicitado_por_colaborador_id != null && pessoaPorId.has(t.solicitado_por_colaborador_id));
+  const p = permissoes(t, perfil, colaboradorId, daGestao);
   const nome = (cid: number | null) => (cid ? (pessoasDoTreino.dados?.get(cid)?.nome ?? `#${cid}`) : "—");
   const ativos = (participantes.dados ?? []).filter((x) => !x.removido_em);
 
@@ -184,7 +188,7 @@ export default function TreinamentoPage() {
         <p className={styles.secundario}>Treinamento de homologação/teste não é vinculado a Necessidades de Desenvolvimento.</p>
       </Card>
     ) : (
-      <NecessidadesVinculadas key="necessidades" t={t} podeEditar={p.ehRH && t.status !== "concluido" && t.status !== "cancelado"} versao={versaoVinculos} onAlterado={recarregarTudo} />
+      <NecessidadesVinculadas key="necessidades" t={t} podeIndicar={!p.ehRH && (p.daGestao || p.conduz)} versao={versaoVinculos} onAlterado={recarregarTudo} />
     ),
   };
   const ordem =
@@ -420,28 +424,50 @@ function Realizacao({ t, onSalvar, onCancelar }: { t: Treinamento; onSalvar: (co
   );
 }
 
-// ── Necessidades vinculadas ────────────────────────────────────────────
-function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Treinamento; podeEditar: boolean; versao: number; onAlterado: () => void }) {
-  const { pessoaPorId } = useDesenvolvimento();
+// ── Necessidades de Desenvolvimento relacionadas (indicar → validar pelo RH) ──
+const SITUACAO_ASSOCIACAO: Record<string, { rotulo: string; tom: "warning" | "success" | "neutral" }> = {
+  indicada: { rotulo: "Aguardando validação do RH", tom: "warning" },
+  validada: { rotulo: "Validada pelo RH", tom: "success" },
+  rejeitada: { rotulo: "Não validada pelo RH", tom: "neutral" },
+};
+
+function NecessidadesVinculadas({ t, podeIndicar, versao, onAlterado }: { t: Treinamento; podeIndicar: boolean; versao: number; onAlterado: () => void }) {
+  const { perfil } = useDesenvolvimento();
   const { flash } = useToast();
-  const vinculos = useConsulta(() => listarVinculos(t.id), [t.id, versao]);
+  const ehRH = perfil === "RH";
+  const encerrado = t.status === "concluido" || t.status === "cancelado";
+  const vinculos = useConsulta(() => listarVinculosTreinamento(t.id), [t.id, versao]);
   const [vinculando, setVinculando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const nomes = useConsulta(
-    () => pessoasPorId((vinculos.dados ?? []).map((v) => v.necessidade?.colaborador_id ?? 0).filter((i) => i && !pessoaPorId.has(i))),
-    [vinculos.dados],
-  );
-  const nomeDe = (cid: number | null | undefined) => (cid ? (pessoaPorId.get(cid)?.nome ?? nomes.dados?.get(cid)?.nome ?? `#${cid}`) : "—");
+  const podeAdicionar = !encerrado && (ehRH || podeIndicar);
+
+  async function executar(acao: AcaoGravacao, corpo: Record<string, unknown>, ok: string) {
+    setErro(null);
+    try {
+      await gravar(acao, { treinamento_id: t.id, ...corpo });
+      flash(ok);
+      onAlterado();
+    } catch (e) {
+      setErro(mensagem(e));
+      throw e;
+    }
+  }
+
+  const ativos = (vinculos.dados ?? []).filter((v) => v.situacao !== "rejeitada");
+  const rejeitados = (vinculos.dados ?? []).filter((v) => v.situacao === "rejeitada");
   return (
     <Card>
       <div className={styles.cardHeader}>
         <div>
           <h3 className={styles.cardTitle}>Necessidades de Desenvolvimento relacionadas</h3>
-          <p className={styles.cardSubtitle}>Cada necessidade será considerada atendida somente para os participantes que concluírem os critérios aplicáveis do treinamento{t.exige_eficacia ? " (inclusive eficácia comprovada)" : ""}.</p>
+          <p className={styles.cardSubtitle}>
+            {ehRH ? "Você valida as associações indicadas pela gestão. " : "A associação é validada pelo RH. "}Cada necessidade será considerada atendida somente para os participantes que concluírem os critérios aplicáveis do treinamento
+            {t.exige_eficacia ? " (inclusive eficácia comprovada)" : ""}.
+          </p>
         </div>
-        {podeEditar && (
+        {podeAdicionar && (
           <Button variant="secondary" className={styles.botaoLongo} icon={<Link2 size={16} />} onClick={() => setVinculando(true)}>
-            Vincular Necessidade de Desenvolvimento
+            {ehRH ? "Vincular Necessidade de Desenvolvimento" : "Indicar Necessidade de Desenvolvimento"}
           </Button>
         )}
       </div>
@@ -450,61 +476,61 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
         <Erro mensagem={vinculos.erro} />
       ) : vinculos.carregando && !vinculos.dados ? (
         <Carregando />
-      ) : (vinculos.dados ?? []).length === 0 ? (
+      ) : ativos.length === 0 ? (
         <p className={styles.secundario}>Nenhuma Necessidade de Desenvolvimento vinculada.</p>
       ) : (
-        <div className={tableStyles.wrap}>
-          <table className={tableStyles.table}>
-            <thead>
-              <tr>
-                <th>Colaborador</th>
-                <th>Necessidade de Desenvolvimento</th>
-                <th>Prioridade</th>
-                <th>Status</th>
-                {podeEditar && <th />}
-              </tr>
-            </thead>
-            <tbody>
-              {(vinculos.dados ?? []).map((v) => (
-                <tr key={v.id}>
-                  <td>{nomeDe(v.necessidade?.colaborador_id)}</td>
-                  <td>
-                    {v.necessidade?.descricao ?? `Necessidade de Desenvolvimento #${v.necessidade_id}`}
-                    {v.necessidade?.categoria && <div className={styles.secundario}>{CATEGORIA_NECESSIDADE[v.necessidade.categoria]}</div>}
-                  </td>
-                  <td>{v.necessidade?.prioridade ? <Selo tom={PRIORIDADE[v.necessidade.prioridade].tom}>{PRIORIDADE[v.necessidade.prioridade].rotulo}</Selo> : "—"}</td>
-                  <td>{v.necessidade ? <Selo tom={STATUS_NECESSIDADE[v.necessidade.status].tom}>{STATUS_NECESSIDADE[v.necessidade.status].rotulo}</Selo> : "—"}</td>
-                  {podeEditar && (
-                    <td style={{ minWidth: 150 }}>
-                      <ConfirmarComMotivo
-                        rotulo="Desvincular"
-                        confirmar="Desvincular"
-                        variante="secondary"
-                        motivoObrigatorio
-                        onConfirmar={async (motivo) => {
-                          setErro(null);
-                          try {
-                            await gravar("necessidade_desvincular", { treinamento_id: t.id, necessidade_id: v.necessidade_id, motivo });
-                            flash("Necessidade de Desenvolvimento desvinculada.");
-                            onAlterado();
-                          } catch (e) {
-                            setErro(mensagem(e));
-                            throw e;
-                          }
-                        }}
-                      />
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className={styles.historico}>
+          {ativos.map((v) => (
+            <li key={v.id} className={styles.itemAssociacao}>
+              <div style={{ minWidth: 0 }}>
+                <strong>{v.necessidade?.colaborador_nome ?? `#${v.necessidade?.colaborador_id ?? ""}`}</strong> — {v.necessidade?.descricao ?? `Necessidade de Desenvolvimento #${v.necessidade_id}`}
+                <div className={styles.secundario}>
+                  {v.necessidade?.categoria ? `${CATEGORIA_NECESSIDADE[v.necessidade.categoria]} · ` : ""}
+                  {v.necessidade?.prioridade ? `Prioridade ${PRIORIDADE[v.necessidade.prioridade].rotulo.toLowerCase()} · ` : ""}
+                  {v.necessidade ? STATUS_NECESSIDADE[v.necessidade.status].rotulo : ""}
+                  {v.indicado_por ? ` · indicada por ${v.indicado_por}` : ""}
+                </div>
+              </div>
+              <div className={styles.acoes} style={{ alignItems: "center" }}>
+                <Selo tom={SITUACAO_ASSOCIACAO[v.situacao].tom}>{SITUACAO_ASSOCIACAO[v.situacao].rotulo}</Selo>
+                {ehRH && v.situacao === "indicada" && !t.homologacao && (
+                  <Button variant="success" onClick={() => void executar("necessidade_associacao_validar", { necessidade_id: v.necessidade_id }, "Associação validada.").catch(() => undefined)}>
+                    Validar associação
+                  </Button>
+                )}
+                {ehRH && v.situacao === "indicada" && (
+                  <ConfirmarComMotivo rotulo="Não validar" confirmar="Não validar" variante="secondary" motivoObrigatorio onConfirmar={(motivo) => executar("necessidade_associacao_rejeitar", { necessidade_id: v.necessidade_id, motivo }, "Associação não validada.")} />
+                )}
+                {t.status !== "concluido" && (ehRH || (podeIndicar && v.situacao === "indicada")) && (
+                  <ConfirmarComMotivo
+                    rotulo={ehRH ? "Desvincular" : "Retirar indicação"}
+                    confirmar={ehRH ? "Desvincular" : "Retirar"}
+                    variante="secondary"
+                    motivoObrigatorio
+                    onConfirmar={(motivo) => executar("necessidade_desvincular", { necessidade_id: v.necessidade_id, motivo }, ehRH ? "Necessidade de Desenvolvimento desvinculada." : "Indicação retirada.")}
+                  />
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {rejeitados.length > 0 && (
+        <details className={styles.maisDetalhes}>
+          <summary>Não validadas pelo RH ({rejeitados.length})</summary>
+          <ul className={styles.historico}>
+            {rejeitados.map((v) => (
+              <li key={v.id} className={styles.secundario}>
+                {v.necessidade?.colaborador_nome} — {v.necessidade?.descricao}. Motivo: {v.analise_motivo}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {vinculando && (
         <VincularDrawer
           t={t}
-          jaVinculadas={new Set((vinculos.dados ?? []).map((v) => v.necessidade_id))}
+          jaVinculadas={new Set(ativos.map((v) => v.necessidade_id))}
           onFechar={() => setVinculando(false)}
           onConcluido={() => {
             setVinculando(false);
@@ -517,19 +543,21 @@ function NecessidadesVinculadas({ t, podeEditar, versao, onAlterado }: { t: Trei
 }
 
 function VincularDrawer({ t, jaVinculadas, onFechar, onConcluido }: { t: Treinamento; jaVinculadas: Set<number>; onFechar: () => void; onConcluido: () => void }) {
-  const { pessoaPorId } = useDesenvolvimento();
+  const { perfil } = useDesenvolvimento();
   const { flash } = useToast();
+  const ehRH = perfil === "RH";
   const [busca, setBusca] = useState("");
   const [termo, setTermo] = useState("");
   const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const lista = usePaginado(
-    (pg) => listarNecessidades(pg, { status: ["validada", "planejada"], busca: termo, origem: null, categoria: null, prioridade: null, colaboradorId: null, gestorId: null, departamento: null, grupoId: null }),
-    [termo],
-  );
+  const opcoes = useConsulta(() => opcoesNecessidades(t.id, termo), [t.id, termo]);
+  const titulo = ehRH ? "Vincular Necessidades de Desenvolvimento" : "Indicar Necessidades de Desenvolvimento";
+  const sub = ehRH
+    ? "Somente Necessidades de Desenvolvimento VALIDADAS (ou já planejadas). Vinculadas pelo RH já entram validadas."
+    : "Da sua gestão. A associação fica aguardando validação do RH; o colaborador entra como participante.";
   return (
-    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow={t.codigo} titulo="Vincular Necessidades de Desenvolvimento" sub="Somente Necessidades de Desenvolvimento VALIDADAS (ou já planejadas). O colaborador entra como participante." />}>
+    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow={t.codigo} titulo={titulo} sub={sub} />}>
       <div className={styles.secao}>
         <form
           onSubmit={(e) => {
@@ -537,50 +565,35 @@ function VincularDrawer({ t, jaVinculadas, onFechar, onConcluido }: { t: Treinam
             setTermo(busca);
           }}
         >
-          <input className={styles.input} style={{ width: "100%" }} type="search" placeholder="Buscar Necessidade de Desenvolvimento" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
+          <input className={styles.input} style={{ width: "100%" }} type="search" placeholder="Buscar por colaborador ou Necessidade de Desenvolvimento" value={busca} onChange={(e) => setBusca(e.target.value)} onBlur={() => setTermo(busca)} />
         </form>
-        {lista.erro ? (
-          <Erro mensagem={lista.erro} />
-        ) : lista.carregando || !lista.dados ? (
+        {opcoes.erro ? (
+          <Erro mensagem={opcoes.erro} />
+        ) : opcoes.carregando || !opcoes.dados ? (
           <Carregando />
-        ) : lista.dados.itens.length === 0 ? (
+        ) : opcoes.dados.length === 0 ? (
           <p className={styles.secundario}>Nenhuma Necessidade de Desenvolvimento validada encontrada.</p>
         ) : (
-          <>
-            {lista.dados.itens.map((n) => {
-              const ja = jaVinculadas.has(n.id);
-              return (
-                <label key={n.id} className={styles.check} style={{ alignItems: "flex-start", fontWeight: 500 }}>
-                  <input
-                    type="checkbox"
-                    disabled={ja}
-                    checked={ja || marcadas.has(n.id)}
-                    onChange={() =>
-                      setMarcadas((m) => {
-                        const x = new Set(m);
-                        if (x.has(n.id)) x.delete(n.id);
-                        else x.add(n.id);
-                        return x;
-                      })
-                    }
-                  />
-                  <span>
-                    <strong>{n.colaborador_id ? (pessoaPorId.get(n.colaborador_id)?.nome ?? `#${n.colaborador_id}`) : n.cargo_nome}</strong> — {n.descricao}
-                    <span className={styles.dica}>
-                      {" "}
-                      · {STATUS_NECESSIDADE[n.status].rotulo}
-                      {n.prioridade ? ` · ${PRIORIDADE[n.prioridade].rotulo}` : ""}
-                      {ja ? " · já vinculada" : ""}
-                    </span>
+          opcoes.dados.map((n) => {
+            const ja = jaVinculadas.has(n.id);
+            return (
+              <label key={n.id} className={styles.check} style={{ alignItems: "flex-start", fontWeight: 500 }}>
+                <input type="checkbox" disabled={ja} checked={ja || marcadas.has(n.id)} onChange={() => setMarcadas((m) => alternarSelecao(m, n.id))} />
+                <span>
+                  <strong>{n.colaborador_nome}</strong> — {n.descricao}
+                  <span className={styles.dica}>
+                    {" "}
+                    · {STATUS_NECESSIDADE[n.status].rotulo}
+                    {n.prioridade ? ` · ${PRIORIDADE[n.prioridade].rotulo}` : ""}
+                    {ja ? " · já relacionada" : ""}
                   </span>
-                </label>
-              );
-            })}
-            <Paginacao pagina={lista.pagina} total={lista.dados.total} onChange={lista.setPagina} />
-          </>
+                </span>
+              </label>
+            );
+          })
         )}
         {erro && <Erro mensagem={erro} />}
-        <div className={styles.acoes}>
+        <div className={[styles.acoes, styles.rodapeFixo].join(" ")}>
           <Button
             variant="primary"
             disabled={salvando || marcadas.size === 0}
@@ -589,7 +602,7 @@ function VincularDrawer({ t, jaVinculadas, onFechar, onConcluido }: { t: Treinam
               setSalvando(true);
               try {
                 const r = await gravar<{ vinculadas: number }>("necessidades_vincular", { treinamento_id: t.id, necessidade_ids: [...marcadas] });
-                flash(r.vinculadas === 1 ? "1 Necessidade de Desenvolvimento vinculada." : `${r.vinculadas} Necessidades de Desenvolvimento vinculadas.`);
+                flash(ehRH ? (r.vinculadas === 1 ? "1 Necessidade de Desenvolvimento vinculada." : `${r.vinculadas} Necessidades de Desenvolvimento vinculadas.`) : "Indicação enviada para validação do RH.");
                 onConcluido();
               } catch (e) {
                 setErro(mensagem(e));
@@ -598,7 +611,7 @@ function VincularDrawer({ t, jaVinculadas, onFechar, onConcluido }: { t: Treinam
               }
             }}
           >
-            {salvando ? "Vinculando..." : `Vincular ${marcadas.size || ""}`}
+            {salvando ? "Salvando..." : ehRH ? `Vincular ${marcadas.size || ""}` : `Indicar ${marcadas.size || ""}`}
           </Button>
         </div>
       </div>

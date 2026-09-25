@@ -40,7 +40,7 @@ export default function DesenvolvimentoLayout() {
           else
             setEstado({
               tipo: "ok",
-              ctx: { perfil: s.perfil, colaboradorId: s.colaboradorId, pessoas: s.pessoas, pessoaPorId: new Map(s.pessoas.map((p) => [p.id, p])) },
+              ctx: { perfil: s.perfil, colaboradorId: s.colaboradorId, pessoas: s.pessoas, pessoaPorId: new Map(s.pessoas.map((p) => [p.id, p])), podeRegistrar: s.podeRegistrar ?? s.perfil !== "Responsavel" },
             });
         })
         .catch((e: unknown) => {

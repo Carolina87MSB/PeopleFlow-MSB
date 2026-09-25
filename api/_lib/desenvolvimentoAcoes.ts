@@ -18,7 +18,7 @@ import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPd
 export interface ContaDev {
   userId: string;
   colaboradorId: number;
-  perfil: "RH" | "Gestor";
+  perfil: "RH" | "Gestor" | "Responsavel";
 }
 
 class ErroHttp extends Error {
@@ -777,14 +777,39 @@ function ehResponsavel(conta: ContaDev, t: Treinamento): boolean {
 function ehSolicitante(conta: ContaDev, t: Treinamento): boolean {
   return t.solicitado_por_colaborador_id != null && Number(t.solicitado_por_colaborador_id) === conta.colaboradorId;
 }
-/** Solicitante que não é RH só mexe na própria solicitação enquanto ela está SOLICITADA. */
-function podeEditarSolicitacao(conta: ContaDev, t: Treinamento): boolean {
-  return conta.perfil === "RH" || (t.status === "solicitado" && ehSolicitante(conta, t));
+/** Treinamento da minha GESTÃO: registrado por mim ou por alguém do meu escopo
+ * (Gestor → sua equipe, incluindo os Responsáveis que indicou; Responsável indicado → a gestão que o indicou). */
+async function ehDaGestao(conta: ContaDev, t: Treinamento): Promise<boolean> {
+  if (ehSolicitante(conta, t)) return true;
+  if ((conta.perfil !== "Gestor" && conta.perfil !== "Responsavel") || t.solicitado_por_colaborador_id == null) return false;
+  return (await idsNoEscopo(conta)).has(Number(t.solicitado_por_colaborador_id));
 }
-/** Quem monta a turma: RH, responsável/instrutor do treinamento ou quem o solicitou (Gestor). */
-function podeGerirParticipantes(conta: ContaDev, t: Treinamento): boolean {
+/** Planejamento (editar/cancelar): RH sempre; a gestão enquanto a realização não começou. Sem aprovação do RH. */
+async function podeEditarTreinamento(conta: ContaDev, t: Treinamento): Promise<boolean> {
+  if (conta.perfil === "RH") return true;
+  return ["solicitado", "planejado"].includes(t.status) && !t.iniciado_em && (await ehDaGestao(conta, t));
+}
+/** Quem monta a turma: RH, responsável/instrutor do treinamento ou a gestão que o registrou. */
+async function podeGerirParticipantes(conta: ContaDev, t: Treinamento): Promise<boolean> {
   if (t.status === "concluido" || t.status === "cancelado") return false;
-  return conta.perfil === "RH" || ehResponsavel(conta, t) || ehSolicitante(conta, t);
+  return conta.perfil === "RH" || ehResponsavel(conta, t) || (await ehDaGestao(conta, t));
+}
+/** Visualização (espelho do RLS): RH; quem conduz; a gestão; Gestor com liderado na turma. */
+async function podeVerTreinamento(conta: ContaDev, t: Treinamento): Promise<boolean> {
+  if (conta.perfil === "RH" || ehResponsavel(conta, t) || (await ehDaGestao(conta, t))) return true;
+  if (conta.perfil !== "Gestor") return false;
+  const escopo = await idsNoEscopo(conta);
+  return (await participantesAtivos(t.id)).some((p) => escopo.has(Number(p.colaborador_id)));
+}
+/** Registrar treinamento: RH, Gestor ou Responsável por Treinamentos indicado por um Gestor. */
+async function exigirPodeRegistrar(conta: ContaDev) {
+  if (conta.perfil === "RH" || conta.perfil === "Gestor") return;
+  if (conta.perfil === "Responsavel") {
+    const { data, error } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("id").eq("colaborador_id", conta.colaboradorId).eq("ativo", true).limit(1);
+    if (error) erroBanco(error, "Responsáveis da gestão");
+    if ((data ?? []).length) return;
+  }
+  throw new ErroHttp(403, "Registrar treinamento: RH, Gestor ou Responsável por Treinamentos indicado pelo Gestor.");
 }
 function exigirRHouResponsavel(conta: ContaDev, t: Treinamento) {
   if (conta.perfil !== "RH" && !ehResponsavel(conta, t)) throw new ErroHttp(403, "Somente o RH ou o responsável/instrutor deste treinamento.");
@@ -862,14 +887,15 @@ function exigirMinimoPlanejamento(t: Record<string, unknown>) {
 }
 
 // ── Necessidades ligadas ao treinamento: regras de status ───────────────
+/** Associações VALIDADAS pelo RH — as únicas com efeito oficial (planejar/atender/devolver). */
 async function vinculosAtivos(treinamentoId: number) {
-  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").select("id, necessidade_id").eq("treinamento_id", treinamentoId).eq("ativo", true);
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").select("id, necessidade_id").eq("treinamento_id", treinamentoId).eq("ativo", true).eq("situacao", "validada");
   if (error) erroBanco(error, "Vínculos");
   return (data ?? []) as { id: number; necessidade_id: number }[];
 }
 
 async function temOutroTreinamentoAtivo(necessidadeId: number, exceto: number): Promise<boolean> {
-  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").select("treinamento_id").eq("necessidade_id", necessidadeId).eq("ativo", true);
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").select("treinamento_id").eq("necessidade_id", necessidadeId).eq("ativo", true).eq("situacao", "validada");
   if (error) erroBanco(error, "Vínculos");
   const outros = (data ?? []).map((r) => Number(r.treinamento_id)).filter((id) => id !== exceto);
   if (outros.length === 0) return false;
@@ -934,20 +960,21 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
     const doc = campos.lista_mestra_codigo ? await fotografiaDocumento(campos.lista_mestra_codigo) : {};
     const titulo = tituloDoTreinamento(campos.tipo, campos.titulo, doc as { lista_mestra_titulo?: string });
     if (!titulo) throw new ErroHttp(422, "Informe o título do treinamento.");
-    const planejar = conta.perfil === "RH" && corpo.planejar === true;
+    // Registro único: quem registra planeja — o treinamento já nasce PLANEJADO (sem aprovação do RH).
+    await exigirPodeRegistrar(conta);
     // Homologação/teste: só o RH marca (flag administrativa, não é Tipo).
     const homologacao = corpo.homologacao === true;
     if (homologacao && conta.perfil !== "RH") throw new ErroHttp(403, "Somente o RH marca treinamento de homologação/teste.");
     const linha = { ...campos, ...doc, titulo, lista_mestra_codigo: campos.lista_mestra_codigo, homologacao };
-    if (planejar) exigirMinimoPlanejamento(linha);
+    exigirMinimoPlanejamento(linha);
     const agora = new Date().toISOString();
     const { data, error } = await supabaseAdmin
       .from("peopleflow_dev_treinamentos")
       .insert({
         ...linha,
-        status: planejar ? "planejado" : "solicitado",
-        planejado_em: planejar ? agora : null,
-        planejado_por: planejar ? conta.userId : null,
+        status: "planejado",
+        planejado_em: agora,
+        planejado_por: conta.userId,
         solicitado_por_colaborador_id: conta.colaboradorId,
         origem_registro: "sistema",
         created_by: conta.userId,
@@ -956,13 +983,13 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
       .select(COLS_TRE)
       .single();
     if (error) erroBanco(error, "Treinamento");
-    await auditar(conta, planejar ? "treinamento_planejado" : "treinamento_solicitado", "peopleflow_dev_treinamentos", String(data.id), { depois: data });
+    await auditar(conta, "treinamento_planejado", "peopleflow_dev_treinamentos", String(data.id), { registro: true, perfil: conta.perfil, depois: data });
     return data;
   }
 
   const antes = await lerTreinamento(id);
   if (antes.status === "cancelado") throw new ErroHttp(422, "Treinamento cancelado não pode ser editado.");
-  if (!podeEditarSolicitacao(conta, antes)) throw new ErroHttp(403, "Somente o RH (ou o solicitante, enquanto SOLICITADO) pode editar.");
+  if (!(await podeEditarTreinamento(conta, antes))) throw new ErroHttp(403, "Somente o RH ou a gestão que registrou o treinamento (antes do início da realização) pode editar.");
   const motivo = texto(corpo, "motivo", { max: 1000 });
   if (antes.status === "concluido" && !motivo) throw new ErroHttp(422, "Alteração em treinamento concluído exige justificativa.");
   // Documento: só refotografa quando o código muda — a revisão treinada nunca é atualizada retroativamente.
@@ -978,7 +1005,7 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
     if (conta.perfil !== "RH") throw new ErroHttp(403, "Somente o RH altera a condição de homologação/teste.");
     if (!["solicitado", "planejado"].includes(antes.status) || antes.iniciado_em) throw new ErroHttp(422, "A condição de homologação/teste não pode ser alterada depois do início da realização.");
     if (!homologacao && antes.reposicao_de_id && (await lerTreinamento(Number(antes.reposicao_de_id))).homologacao) throw new ErroHttp(422, "Reposição de treinamento de homologação/teste também é homologação/teste.");
-    if (homologacao && (await vinculosAtivos(id)).length) throw new ErroHttp(422, "Desvincule as Necessidades de Desenvolvimento antes de marcar como homologação/teste.");
+    if (homologacao && (await vinculosAtivosTodos(id)).length) throw new ErroHttp(422, "Desvincule as Necessidades de Desenvolvimento antes de marcar como homologação/teste.");
   }
   (atualizacao as Record<string, unknown>).homologacao = homologacao;
   const mudou = diferencas(antes, atualizacao);
@@ -1099,7 +1126,7 @@ async function treinamentoCancelar(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
   const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "a justificativa do cancelamento" });
   if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento já encerrado.");
-  if (!podeEditarSolicitacao(conta, t)) throw new ErroHttp(403, "Somente o RH (ou o solicitante, enquanto SOLICITADO) pode cancelar.");
+  if (!(await podeEditarTreinamento(conta, t))) throw new ErroHttp(403, "Somente o RH ou a gestão que registrou o treinamento (antes do início da realização) pode cancelar.");
   const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").update({ status: "cancelado", status_motivo: motivo, updated_by: conta.userId }).eq("id", t.id).select(COLS_TRE).single();
   if (error) erroBanco(error, "Treinamento");
   await encerrarQr(conta, t.id);
@@ -1112,7 +1139,7 @@ async function treinamentoCancelar(conta: ContaDev, corpo: Corpo) {
 async function participantesAdicionar(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
   if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
-  if (!podeGerirParticipantes(conta, t)) throw new ErroHttp(403, "Somente o RH, o responsável/instrutor ou o solicitante deste treinamento inclui participantes.");
+  if (!(await podeGerirParticipantes(conta, t))) throw new ErroHttp(403, "Somente o RH, o responsável/instrutor ou a gestão deste treinamento inclui participantes.");
   const ids = Array.isArray(corpo.colaborador_ids) ? [...new Set(corpo.colaborador_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
   if (ids.length === 0) throw new ErroHttp(422, "Selecione ao menos um colaborador.");
   if (ids.length > 500) throw new ErroHttp(422, "No máximo 500 por vez.");
@@ -1152,7 +1179,7 @@ async function participanteRemover(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(p.treinamento_id);
   const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
   if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
-  if (!podeGerirParticipantes(conta, t)) throw new ErroHttp(403, "Somente o RH, o responsável/instrutor ou o solicitante deste treinamento retira participantes.");
+  if (!(await podeGerirParticipantes(conta, t))) throw new ErroHttp(403, "Somente o RH, o responsável/instrutor ou a gestão deste treinamento retira participantes.");
   if (p.removido_em) throw new ErroHttp(422, "Participante já retirado.");
   const { data, error } = await supabaseAdmin
     .from("peopleflow_dev_participantes")
@@ -1162,8 +1189,8 @@ async function participanteRemover(conta: ContaDev, corpo: Corpo) {
     .single();
   if (error) erroBanco(error, "Participante");
   await auditar(conta, "participante_retirado", "peopleflow_dev_participantes", String(p.id), { treinamento_id: t.id, colaborador_id: p.colaborador_id, motivo });
-  // Necessidades desse colaborador ligadas a este treinamento deixam de ser atendidas por ele.
-  const vinculos = await vinculosAtivos(t.id);
+  // Necessidades desse colaborador ligadas a este treinamento (indicadas ou validadas) deixam de valer para ele.
+  const vinculos = await vinculosAtivosTodos(t.id);
   if (vinculos.length) {
     const { data: nec } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id").in("id", vinculos.map((v) => v.necessidade_id)).eq("colaborador_id", p.colaborador_id);
     for (const n of nec ?? []) {
@@ -1180,7 +1207,7 @@ async function participanteRemover(conta: ContaDev, corpo: Corpo) {
  * consulta geral de colaboradores. */
 async function participantesOpcoes(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
-  if (!podeGerirParticipantes(conta, t)) throw new ErroHttp(403, "Sem permissão para montar a turma deste treinamento.");
+  if (!(await podeGerirParticipantes(conta, t))) throw new ErroHttp(403, "Sem permissão para montar a turma deste treinamento.");
   const { data, error } = await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento, desligado");
   if (error) erroBanco(error, "Colaboradores");
   return (data ?? [])
@@ -1206,14 +1233,14 @@ async function faltantesDe(t: Treinamento) {
   return ausentes.filter((p) => !jaRepondo.has(Number(p.colaborador_id)));
 }
 
-function exigirPodeRepor(conta: ContaDev, t: Treinamento) {
-  exigirRHouResponsavel(conta, t);
+async function exigirPodeRepor(conta: ContaDev, t: Treinamento) {
+  if (conta.perfil !== "RH" && !ehResponsavel(conta, t) && !(await ehDaGestao(conta, t))) throw new ErroHttp(403, "Somente o RH, o responsável/instrutor ou a gestão deste treinamento.");
   if (t.status !== "concluido") throw new ErroHttp(422, "A reposição é agendada a partir de um treinamento concluído com faltantes.");
 }
 
 async function reposicaoFaltantes(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
-  exigirPodeRepor(conta, t);
+  await exigirPodeRepor(conta, t);
   const faltantes = await faltantesDe(t);
   const { data: pessoas, error } = faltantes.length
     ? await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento").in("id", faltantes.map((p) => Number(p.colaborador_id)))
@@ -1230,7 +1257,7 @@ async function reposicaoFaltantes(conta: ContaDev, corpo: Corpo) {
  * pré-preenchido pelo original; a data é definida por quem agenda. */
 async function treinamentoReposicao(conta: ContaDev, corpo: Corpo) {
   const origem = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento de origem"));
-  exigirPodeRepor(conta, origem);
+  await exigirPodeRepor(conta, origem);
   const faltantes = await faltantesDe(origem);
   if (faltantes.length === 0) throw new ErroHttp(422, "Não há faltantes pendentes de reposição neste treinamento.");
   let escolhidos = faltantes;
@@ -1250,17 +1277,16 @@ async function treinamentoReposicao(conta: ContaDev, corpo: Corpo) {
   const raiz = Number(origem.reposicao_raiz_id ?? origem.id);
   const { data: irmaos, error: iErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("id").eq("reposicao_raiz_id", raiz);
   if (iErro) erroBanco(iErro, "Reposições");
-  const planejar = conta.perfil === "RH" && corpo.planejar === true;
   const linha = { ...campos, ...doc, titulo: TIPOS_COM_DOCUMENTO.has(campos.tipo) ? tituloDoTreinamento(campos.tipo, "", doc) : caixaAlta(campos.titulo || origem.titulo) };
-  if (planejar) exigirMinimoPlanejamento(linha);
+  exigirMinimoPlanejamento(linha); // reposição também nasce PLANEJADA (a nova data é definida por quem agenda)
   const agora = new Date().toISOString();
   const { data: nova, error } = await supabaseAdmin
     .from("peopleflow_dev_treinamentos")
     .insert({
       ...linha,
-      status: planejar ? "planejado" : "solicitado",
-      planejado_em: planejar ? agora : null,
-      planejado_por: planejar ? conta.userId : null,
+      status: "planejado",
+      planejado_em: agora,
+      planejado_por: conta.userId,
       solicitado_por_colaborador_id: conta.colaboradorId,
       reposicao_de_id: origem.id,
       reposicao_raiz_id: raiz,
@@ -1292,21 +1318,30 @@ async function treinamentoReposicao(conta: ContaDev, corpo: Corpo) {
     if (necessidades.length) {
       const { error: vErro } = await supabaseAdmin
         .from("peopleflow_dev_treinamento_necessidades")
-        .insert(necessidades.map((n) => ({ treinamento_id: nova.id, necessidade_id: n, vinculado_por: conta.userId })));
+        .insert(necessidades.map((n) => ({ treinamento_id: nova.id, necessidade_id: n, vinculado_por: conta.userId, situacao: "validada", analisado_em: agora, analisado_por: conta.userId, analise_motivo: "Herdada do treinamento de origem (associação já validada pelo RH)" })));
       if (vErro) erroBanco(vErro, "Vínculo");
     }
   }
   await auditar(conta, "reposicao_criada", "peopleflow_dev_treinamentos", String(nova.id), {
     reposicao_de: origem.id, raiz, numero: nova.reposicao_numero, faltantes: colabs, necessidades, depois: nova,
   });
-  if (planejar) await planejarNecessidadesDoTreinamento(conta, nova.id);
+  await planejarNecessidadesDoTreinamento(conta, nova.id);
   return nova;
 }
 
 // ── Vínculo com a Base de Necessidades ─────────────────────────────────
+/** Todas as associações ativas (indicadas + validadas). */
+async function vinculosAtivosTodos(treinamentoId: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").select("id, necessidade_id, situacao").eq("treinamento_id", treinamentoId).eq("ativo", true);
+  if (error) erroBanco(error, "Vínculos");
+  return (data ?? []) as { id: number; necessidade_id: number; situacao: string }[];
+}
+
+/** Gestão/Responsável INDICA; o RH vincula já validado. Só a validada produz efeito oficial. */
 async function necessidadesVincular(conta: ContaDev, corpo: Corpo) {
-  exigirRH(conta);
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  const ehRH = conta.perfil === "RH";
+  if (!ehRH && !(await podeGerirParticipantes(conta, t))) throw new ErroHttp(403, "Somente o RH ou a gestão deste treinamento indica Necessidades de Desenvolvimento.");
   if (t.status === "concluido" || t.status === "cancelado") throw new ErroHttp(422, "Treinamento encerrado.");
   if (t.homologacao) throw new ErroHttp(422, "Treinamento de homologação/teste não pode ser vinculado a Necessidades de Desenvolvimento.");
   const ids = Array.isArray(corpo.necessidade_ids) ? [...new Set(corpo.necessidade_ids.map(Number))].filter((n) => Number.isInteger(n) && n > 0) : [];
@@ -1315,10 +1350,25 @@ async function necessidadesVincular(conta: ContaDev, corpo: Corpo) {
   if (error) erroBanco(error, "Necessidade de Desenvolvimento");
   const invalidas = (nec ?? []).filter((n) => !["validada", "planejada"].includes(n.status as string) || !n.colaborador_id);
   if ((nec ?? []).length !== ids.length || invalidas.length) throw new ErroHttp(422, "Só Necessidades de Desenvolvimento VALIDADAS (ou já PLANEJADAS) de um colaborador podem ser vinculadas.");
-  const ja = new Set((await vinculosAtivos(t.id)).map((v) => v.necessidade_id));
+  if (!ehRH) {
+    const escopo = await idsNoEscopo(conta);
+    if ((nec ?? []).some((n) => !escopo.has(Number(n.colaborador_id)))) throw new ErroHttp(403, "Há Necessidade de Desenvolvimento de colaborador fora da sua gestão.");
+  }
+  const ja = new Set((await vinculosAtivosTodos(t.id)).map((v) => v.necessidade_id));
   const novas = ids.filter((i) => !ja.has(i));
+  const agora = new Date().toISOString();
   if (novas.length) {
-    const { error: iErro } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").insert(novas.map((n) => ({ treinamento_id: t.id, necessidade_id: n, vinculado_por: conta.userId })));
+    const { error: iErro } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").insert(
+      novas.map((n) => ({
+        treinamento_id: t.id,
+        necessidade_id: n,
+        vinculado_por: conta.userId,
+        indicado_por_colaborador_id: conta.colaboradorId,
+        situacao: ehRH ? "validada" : "indicada",
+        analisado_em: ehRH ? agora : null,
+        analisado_por: ehRH ? conta.userId : null,
+      })),
+    );
     if (iErro) erroBanco(iErro, "Vínculo");
   }
   // O colaborador da necessidade entra como participante (se ainda não estiver).
@@ -1327,23 +1377,178 @@ async function necessidadesVincular(conta: ContaDev, corpo: Corpo) {
     if (!(e instanceof ErroHttp && e.status === 422)) throw e;
   });
   if (colabs.length) await supabaseAdmin.from("peopleflow_dev_participantes").update({ origem_inclusao: "lnt" }).eq("treinamento_id", t.id).in("colaborador_id", colabs).eq("origem_inclusao", "manual");
-  await auditar(conta, "necessidades_vinculadas", "peopleflow_dev_treinamentos", String(t.id), { necessidades: novas });
-  if (STATUS_ATIVOS.includes(t.status)) for (const n of novas) await mudarStatusNecessidade(conta, n, ["validada"], "planejada", {}, "Vinculada a treinamento planejado", t.id);
-  return { vinculadas: novas.length, ja_vinculadas: ids.length - novas.length };
+  await auditar(conta, ehRH ? "necessidades_vinculadas" : "necessidades_indicadas", "peopleflow_dev_treinamentos", String(t.id), { necessidades: novas, situacao: ehRH ? "validada" : "indicada" });
+  if (ehRH && STATUS_ATIVOS.includes(t.status)) for (const n of novas) await mudarStatusNecessidade(conta, n, ["validada"], "planejada", {}, "Vinculada a treinamento planejado", t.id);
+  return { vinculadas: novas.length, ja_vinculadas: ids.length - novas.length, situacao: ehRH ? "validada" : "indicada" };
 }
 
-async function necessidadeDesvincular(conta: ContaDev, corpo: Corpo) {
+async function lerVinculoAtivo(treinamentoId: number, necessidadeId: number) {
+  const v = (await vinculosAtivosTodos(treinamentoId)).find((x) => x.necessidade_id === necessidadeId);
+  if (!v) throw new ErroHttp(404, "Associação não encontrada.");
+  return v;
+}
+
+/** RH valida a associação indicada: a partir daqui ela produz efeito oficial. */
+async function necessidadeAssociacaoValidar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  const necessidadeId = idObrigatorio(corpo, "necessidade_id", "Necessidade de Desenvolvimento");
+  if (t.homologacao) throw new ErroHttp(422, "Treinamento de homologação/teste não pode ser vinculado a Necessidades de Desenvolvimento.");
+  const v = await lerVinculoAtivo(t.id, necessidadeId);
+  if (v.situacao !== "indicada") throw new ErroHttp(422, "Esta associação já foi analisada.");
+  const { error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").update({ situacao: "validada", analisado_em: new Date().toISOString(), analisado_por: conta.userId }).eq("id", v.id);
+  if (error) erroBanco(error, "Vínculo");
+  await auditar(conta, "necessidade_associacao_validada", "peopleflow_dev_treinamentos", String(t.id), { necessidade_id: necessidadeId });
+  if (STATUS_ATIVOS.includes(t.status)) await mudarStatusNecessidade(conta, necessidadeId, ["validada"], "planejada", {}, "Associação validada pelo RH", t.id);
+  if (t.status === "concluido") {
+    // Validada depois da conclusão: aplica as regras de atendimento a quem realizou.
+    const { data: n } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("colaborador_id").eq("id", necessidadeId).maybeSingle();
+    const p = (await participantesAtivos(t.id)).find((x) => Number(x.colaborador_id) === Number(n?.colaborador_id));
+    if (p) await processarNecessidadesDoParticipante(conta, t, p);
+  }
+  return { ok: true };
+}
+
+async function necessidadeAssociacaoRejeitar(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
   const necessidadeId = idObrigatorio(corpo, "necessidade_id", "Necessidade de Desenvolvimento");
   const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
+  const v = await lerVinculoAtivo(t.id, necessidadeId);
+  if (v.situacao !== "indicada") throw new ErroHttp(422, "Esta associação já foi analisada.");
+  const agora = new Date().toISOString();
+  const { error } = await supabaseAdmin
+    .from("peopleflow_dev_treinamento_necessidades")
+    .update({ situacao: "rejeitada", ativo: false, analisado_em: agora, analisado_por: conta.userId, analise_motivo: motivo, desvinculado_em: agora, desvinculado_por: conta.userId, desvinculado_motivo: `Não validada pelo RH: ${motivo}` })
+    .eq("id", v.id);
+  if (error) erroBanco(error, "Vínculo");
+  await auditar(conta, "necessidade_associacao_rejeitada", "peopleflow_dev_treinamentos", String(t.id), { necessidade_id: necessidadeId, motivo });
+  return { ok: true };
+}
+
+/** Lista as associações do treinamento (para quem pode vê-lo), com o resumo da necessidade. */
+async function vinculosListar(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  if (!(await podeVerTreinamento(conta, t))) throw new ErroHttp(403, "Sem acesso a este treinamento.");
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_treinamento_necessidades")
+    .select("id, necessidade_id, ativo, situacao, indicado_por_colaborador_id, vinculado_em, analisado_em, analise_motivo")
+    .eq("treinamento_id", t.id);
+  if (error) erroBanco(error, "Vínculos");
+  const linhas = (data ?? []).filter((v) => v.ativo || v.situacao === "rejeitada");
+  if (!linhas.length) return [];
+  const { data: nec, error: nErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, colaborador_id, descricao, categoria, prioridade, status").in("id", linhas.map((v) => Number(v.necessidade_id)));
+  if (nErro) erroBanco(nErro, "Necessidade de Desenvolvimento");
+  const porId = new Map((nec ?? []).map((n) => [Number(n.id), n]));
+  const ids = [...new Set([...(nec ?? []).map((n) => Number(n.colaborador_id)), ...linhas.map((v) => Number(v.indicado_por_colaborador_id)).filter(Boolean)])];
+  const { data: pessoas } = ids.length ? await supabaseAdmin.from("colaboradores").select("id, nome").in("id", ids) : { data: [] };
+  const nome = new Map((pessoas ?? []).map((c) => [Number(c.id), String(c.nome)]));
+  return linhas.map((v) => {
+    const n = porId.get(Number(v.necessidade_id));
+    return {
+      id: Number(v.id),
+      necessidade_id: Number(v.necessidade_id),
+      situacao: v.situacao,
+      indicado_por: v.indicado_por_colaborador_id ? (nome.get(Number(v.indicado_por_colaborador_id)) ?? null) : null,
+      vinculado_em: v.vinculado_em,
+      analisado_em: v.analisado_em,
+      analise_motivo: v.analise_motivo,
+      necessidade: n ? { id: Number(n.id), colaborador_id: Number(n.colaborador_id), colaborador_nome: nome.get(Number(n.colaborador_id)) ?? null, descricao: n.descricao, categoria: n.categoria, prioridade: n.prioridade, status: n.status } : null,
+    };
+  });
+}
+
+/** Necessidades de Desenvolvimento que podem ser indicadas/vinculadas: RH todas; gestão só as da sua equipe. */
+async function necessidadesOpcoes(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  const ehRH = conta.perfil === "RH";
+  if (!ehRH && !(await podeGerirParticipantes(conta, t))) throw new ErroHttp(403, "Sem permissão para indicar Necessidades de Desenvolvimento neste treinamento.");
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, colaborador_id, descricao, categoria, prioridade, status").in("status", ["validada", "planejada"]);
+  if (error) erroBanco(error, "Necessidade de Desenvolvimento");
+  let linhas = (data ?? []).filter((n) => n.colaborador_id);
+  if (!ehRH) {
+    const escopo = await idsNoEscopo(conta);
+    linhas = linhas.filter((n) => escopo.has(Number(n.colaborador_id)));
+  }
+  const busca = texto(corpo, "busca", { max: 100 }).toLocaleLowerCase("pt-BR");
+  const ids = [...new Set(linhas.map((n) => Number(n.colaborador_id)))];
+  const { data: pessoas } = ids.length ? await supabaseAdmin.from("colaboradores").select("id, nome").in("id", ids) : { data: [] };
+  const nome = new Map((pessoas ?? []).map((c) => [Number(c.id), String(c.nome)]));
+  return linhas
+    .map((n) => ({ id: Number(n.id), colaborador_id: Number(n.colaborador_id), colaborador_nome: nome.get(Number(n.colaborador_id)) ?? "", descricao: String(n.descricao), categoria: n.categoria, prioridade: n.prioridade, status: n.status }))
+    .filter((n) => !busca || `${n.colaborador_nome} ${n.descricao}`.toLocaleLowerCase("pt-BR").includes(busca))
+    .sort((a, b) => a.colaborador_nome.localeCompare(b.colaborador_nome, "pt-BR"))
+    .slice(0, 300);
+}
+
+// ── Responsáveis por Treinamentos da Gestão ─────────────────────────────
+async function responsaveisGestaoListar(conta: ContaDev) {
+  if (conta.perfil !== "RH" && conta.perfil !== "Gestor") throw new ErroHttp(403, "Somente RH e Gestores.");
+  let q = supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("id, gestor_colaborador_id, colaborador_id, indicado_em").eq("ativo", true);
+  if (conta.perfil === "Gestor") q = q.eq("gestor_colaborador_id", conta.colaboradorId);
+  const { data, error } = await q;
+  if (error) erroBanco(error, "Responsáveis da gestão");
+  const ids = [...new Set((data ?? []).flatMap((r) => [Number(r.gestor_colaborador_id), Number(r.colaborador_id)]))];
+  const { data: pessoas } = ids.length ? await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento").in("id", ids) : { data: [] };
+  const p = new Map((pessoas ?? []).map((c) => [Number(c.id), c]));
+  return (data ?? []).map((r) => ({
+    id: Number(r.id),
+    indicado_em: r.indicado_em,
+    gestor: { id: Number(r.gestor_colaborador_id), nome: String(p.get(Number(r.gestor_colaborador_id))?.nome ?? "") },
+    colaborador: { id: Number(r.colaborador_id), nome: String(p.get(Number(r.colaborador_id))?.nome ?? ""), cargo: String(p.get(Number(r.colaborador_id))?.cargo ?? ""), departamento: String(p.get(Number(r.colaborador_id))?.departamento ?? "") },
+  }));
+}
+
+/** Gestor indica alguém da SUA equipe. Não vira Gestor: só registra/acompanha treinamentos da gestão. */
+async function responsavelGestaoIndicar(conta: ContaDev, corpo: Corpo) {
+  if (conta.perfil !== "Gestor") throw new ErroHttp(403, "Somente o Gestor indica Responsáveis por Treinamentos da sua gestão.");
+  const colaboradorId = idObrigatorio(corpo, "colaborador_id", "Colaborador");
+  if (colaboradorId === conta.colaboradorId) throw new ErroHttp(422, "Indique outra pessoa da sua equipe.");
+  if (!(await idsNoEscopo(conta)).has(colaboradorId)) throw new ErroHttp(403, "Só é possível indicar pessoas da sua equipe.");
+  await exigirColaboradoresAtivos([colaboradorId]);
+  const { data: ja } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("id").eq("gestor_colaborador_id", conta.colaboradorId).eq("colaborador_id", colaboradorId).eq("ativo", true).limit(1);
+  if ((ja ?? []).length) throw new ErroHttp(409, "Esta pessoa já é Responsável por Treinamentos da sua gestão.");
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_responsaveis_gestao")
+    .insert({ gestor_colaborador_id: conta.colaboradorId, colaborador_id: colaboradorId, indicado_por: conta.userId })
+    .select("id, gestor_colaborador_id, colaborador_id, indicado_em")
+    .single();
+  if (error) erroBanco(error, "Responsáveis da gestão");
+  await auditar(conta, "responsavel_gestao_indicado", "peopleflow_dev_responsaveis_gestao", String(data.id), { gestor_colaborador_id: conta.colaboradorId, colaborador_id: colaboradorId });
+  return data;
+}
+
+async function responsavelGestaoRevogar(conta: ContaDev, corpo: Corpo) {
+  const id = idObrigatorio(corpo, "id", "Indicação");
+  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
+  const { data: r, error } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("id, gestor_colaborador_id, colaborador_id, ativo").eq("id", id).maybeSingle();
+  if (error) erroBanco(error, "Responsáveis da gestão");
+  if (!r || !r.ativo) throw new ErroHttp(404, "Indicação não encontrada.");
+  if (conta.perfil !== "RH" && !(conta.perfil === "Gestor" && Number(r.gestor_colaborador_id) === conta.colaboradorId)) throw new ErroHttp(403, "Somente o Gestor que indicou ou o RH revoga.");
+  const { error: uErro } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").update({ ativo: false, revogado_em: new Date().toISOString(), revogado_por: conta.userId, revogado_motivo: motivo }).eq("id", id);
+  if (uErro) erroBanco(uErro, "Responsáveis da gestão");
+  // Sem outra indicação ativa, o escopo derivado da pessoa cai na hora (não espera a próxima sessão).
+  const { data: outras } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("id").eq("colaborador_id", r.colaborador_id).eq("ativo", true).limit(1);
+  if (!(outras ?? []).length) {
+    const { data: contaDele } = await supabaseAdmin.from("peopleflow_dev_contas").select("perfil").eq("colaborador_id", r.colaborador_id).eq("perfil", "Responsavel").limit(1);
+    if ((contaDele ?? []).length) await supabaseAdmin.from("peopleflow_dev_escopo").delete().eq("gestor_colaborador_id", r.colaborador_id);
+  }
+  await auditar(conta, "responsavel_gestao_revogado", "peopleflow_dev_responsaveis_gestao", String(id), { gestor_colaborador_id: r.gestor_colaborador_id, colaborador_id: r.colaborador_id, motivo });
+  return { ok: true };
+}
+
+/** RH desvincula qualquer associação; a gestão só retira a própria INDICAÇÃO (ainda não validada). */
+async function necessidadeDesvincular(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  const necessidadeId = idObrigatorio(corpo, "necessidade_id", "Necessidade de Desenvolvimento");
+  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
   if (t.status === "concluido") throw new ErroHttp(422, "Vínculos de treinamento concluído são históricos.");
-  const v = (await vinculosAtivos(t.id)).find((x) => x.necessidade_id === necessidadeId);
-  if (!v) throw new ErroHttp(404, "Vínculo não encontrado.");
+  const v = await lerVinculoAtivo(t.id, necessidadeId);
+  if (conta.perfil !== "RH" && !(v.situacao === "indicada" && (await podeGerirParticipantes(conta, t)))) throw new ErroHttp(403, "Somente o RH desvincula uma associação validada.");
   const { error } = await supabaseAdmin.from("peopleflow_dev_treinamento_necessidades").update({ ativo: false, desvinculado_em: new Date().toISOString(), desvinculado_por: conta.userId, desvinculado_motivo: motivo }).eq("id", v.id);
   if (error) erroBanco(error, "Vínculo");
   await auditar(conta, "necessidade_desvinculada", "peopleflow_dev_treinamentos", String(t.id), { necessidade_id: necessidadeId, motivo });
-  await devolverNecessidade(conta, necessidadeId, t.id, "Desvinculada do treinamento");
+  if (v.situacao === "validada") await devolverNecessidade(conta, necessidadeId, t.id, "Desvinculada do treinamento");
   return { ok: true };
 }
 
@@ -1830,6 +2035,13 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   participante_remover: participanteRemover,
   necessidades_vincular: necessidadesVincular,
   necessidade_desvincular: necessidadeDesvincular,
+  necessidade_associacao_validar: necessidadeAssociacaoValidar,
+  necessidade_associacao_rejeitar: necessidadeAssociacaoRejeitar,
+  vinculos_listar: vinculosListar,
+  necessidades_opcoes: necessidadesOpcoes,
+  responsaveis_gestao_listar: responsaveisGestaoListar,
+  responsavel_gestao_indicar: responsavelGestaoIndicar,
+  responsavel_gestao_revogar: responsavelGestaoRevogar,
   presenca_manual: presencaManual,
   qr_gerar: qrGerar,
   qr_encerrar: qrEncerrarAcao,

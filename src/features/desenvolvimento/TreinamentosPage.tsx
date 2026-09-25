@@ -10,6 +10,7 @@ import { usePaginado } from "./hooks";
 import { FORMATO, formatarCarga, formatarData, MODALIDADE, STATUS_TREINAMENTO, TIPO_TREINAMENTO } from "./rotulos";
 import { ListaMestraAba } from "./ListaMestraAba";
 import { TreinamentoDrawer } from "./TreinamentoForm";
+import { ResponsaveisGestaoDrawer } from "./ResponsaveisGestao";
 import styles from "./Desenvolvimento.module.css";
 
 type AbaTreinamentos = "agenda" | "concluidos" | "lista-mestra";
@@ -50,9 +51,10 @@ export default function TreinamentosPage() {
 }
 
 function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
-  const { perfil, colaboradorId } = useDesenvolvimento();
+  const { perfil, colaboradorId, podeRegistrar } = useDesenvolvimento();
   const navigate = useNavigate();
   const filtros = FILTROS[aba];
+  const [responsaveis, setResponsaveis] = useState(false);
   const [filtro, setFiltro] = useState(filtros[0].rotulo);
   const [busca, setBusca] = useState("");
   const [termo, setTermo] = useState("");
@@ -71,14 +73,15 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
       }),
     [filtro, termo, tipo, soConduzo],
   );
-  const podeSolicitar = perfil === "RH" || perfil === "Gestor";
   const subtitulo =
     perfil === "Responsavel"
-      ? "Treinamentos em que você é responsável ou instrutor"
+      ? podeRegistrar
+        ? "Treinamentos da gestão que você acompanha e os que você conduz"
+        : "Treinamentos em que você é responsável ou instrutor"
       : perfil === "Gestor"
-        ? "Da sua equipe, os que você solicitou e os que você conduz"
+        ? "Da sua gestão, com participantes da sua equipe e os que você conduz"
         : aba === "agenda"
-          ? "Solicitados, planejados e em andamento"
+          ? "Planejados e em andamento"
           : "Realizados e encerrados, do mais recente para o mais antigo";
 
   return (
@@ -88,11 +91,18 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
           <h3 className={styles.cardTitle}>{aba === "agenda" ? "Agenda de treinamentos" : "Treinamentos encerrados"}</h3>
           <p className={styles.cardSubtitle}>{subtitulo}</p>
         </div>
-        {podeSolicitar && aba === "agenda" && (
-          <Button variant="primary" icon={<Plus size={16} />} onClick={() => setNovo(true)}>
-            Solicitar treinamento
-          </Button>
-        )}
+        <div className={styles.acoes}>
+          {(perfil === "Gestor" || perfil === "RH") && aba === "agenda" && (
+            <Button variant="ghost" onClick={() => setResponsaveis(true)}>
+              Responsáveis da gestão
+            </Button>
+          )}
+          {podeRegistrar && aba === "agenda" && (
+            <Button variant="primary" icon={<Plus size={16} />} onClick={() => setNovo(true)}>
+              Registrar treinamento
+            </Button>
+          )}
+        </div>
       </div>
       <div className={styles.toolbar}>
         <form
@@ -183,6 +193,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
           <Paginacao pagina={lista.pagina} total={lista.dados.total} onChange={lista.setPagina} />
         </>
       )}
+      {responsaveis && <ResponsaveisGestaoDrawer onFechar={() => setResponsaveis(false)} />}
       {novo && <TreinamentoDrawer item={null} onFechar={() => setNovo(false)} onSalvo={(t) => navigate(`/desenvolvimento/treinamento/${t.id}?participantes=1`)} />}
     </Card>
   );

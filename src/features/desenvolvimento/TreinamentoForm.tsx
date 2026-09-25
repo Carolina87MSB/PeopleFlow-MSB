@@ -8,7 +8,7 @@ import { useConsulta } from "./hooks";
 import { FORMATO, MODALIDADE, TIPO_TREINAMENTO, TIPOS_COM_DOCUMENTO } from "./rotulos";
 import styles from "./Desenvolvimento.module.css";
 
-/** novo: abrir solicitação · editar: alterar/retificar · reposicao: agendar para os faltantes de `item`. */
+/** novo: registrar treinamento (nasce PLANEJADO) · editar: alterar/retificar · reposicao: agendar para os faltantes de `item`. */
 type Modo = "novo" | "editar" | "reposicao";
 
 function paraForm(t: Treinamento | null, modo: Modo) {
@@ -63,7 +63,7 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
     if (id && !pessoaPorId.has(id)) opcoesPessoa.push({ id, nome: `Colaborador #${id}`, cargo: "", departamento: "" });
   }
 
-  async function salvar(planejar: boolean) {
+  async function salvar() {
     setErro(null);
     setSalvando(true);
     try {
@@ -79,13 +79,12 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
         instrutor_colaborador_id: form.instrutor_colaborador_id || null,
         lista_mestra_codigo: form.lista_mestra_codigo || null,
         formato: form.formato || null,
-        planejar,
       };
       const salvo =
         modo === "reposicao"
           ? await gravar<Treinamento>("treinamento_reposicao", { ...corpo, treinamento_id: item!.id })
           : await gravar<Treinamento>("treinamento_salvar", { ...corpo, id: modo === "editar" ? item!.id : null });
-      flash(modo === "reposicao" ? "Reposição agendada." : modo === "editar" ? "Treinamento atualizado." : planejar ? "Treinamento planejado." : "Solicitação registrada.");
+      flash(modo === "reposicao" ? "Reposição agendada." : modo === "editar" ? "Treinamento atualizado." : "Treinamento registrado como planejado.");
       onSalvo(salvo);
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
@@ -94,14 +93,12 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
     }
   }
 
-  const titulo = modo === "reposicao" ? "Agendar treinamento para faltantes" : modo === "editar" ? `Editar ${item?.codigo}` : "Solicitar treinamento";
+  const titulo = modo === "reposicao" ? "Agendar treinamento para faltantes" : modo === "editar" ? `Editar ${item?.codigo}` : "Registrar treinamento";
   const sub =
     modo === "reposicao"
       ? `Reposição de ${item?.codigo} — somente os faltantes; o treinamento original não é alterado`
       : modo === "novo"
-        ? ehRH
-          ? "Salve como solicitação ou já planejado"
-          : "A solicitação é analisada e planejada pelo RH"
+        ? "Preencha o planejamento: o treinamento entra como Planejado e, em seguida, você seleciona os participantes."
         : undefined;
 
   return (
@@ -110,7 +107,7 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
         className={styles.secao}
         onSubmit={(e) => {
           e.preventDefault();
-          void salvar(false);
+          void salvar();
         }}
       >
         {modo === "reposicao" && (
@@ -206,8 +203,8 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
             {exigeDoc && <span className={styles.dica}>Título oficial do documento na Lista Mestra.</span>}
           </label>
           <label className={styles.campo}>
-            {modo === "reposicao" ? "Nova data *" : "Data prevista"}
-            <input type="date" value={form.data_inicio} onChange={set("data_inicio")} required={modo === "reposicao"} />
+            {modo === "reposicao" ? "Nova data *" : "Data prevista *"}
+            <input type="date" value={form.data_inicio} onChange={set("data_inicio")} required={item?.status !== "solicitado"} />
           </label>
           <label className={styles.campo}>
             Data final
@@ -218,9 +215,9 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
             <input inputMode="decimal" value={form.carga_h} onChange={set("carga_h")} placeholder="Ex.: 1,5" />
           </label>
           <label className={styles.campo}>
-            Responsável
-            <select value={form.responsavel_colaborador_id} onChange={set("responsavel_colaborador_id")}>
-              <option value="">{ehRH ? "Selecione" : "Definido pelo RH"}</option>
+            Responsável *
+            <select value={form.responsavel_colaborador_id} onChange={set("responsavel_colaborador_id")} required={item?.status !== "solicitado"}>
+              <option value="">Selecione</option>
               {opcoesPessoa.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nome}
@@ -284,14 +281,9 @@ export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFec
         </div>
         {erro && <Erro mensagem={erro} />}
         <div className={styles.acoes}>
-          <Button type="submit" variant={modo === "editar" || !ehRH ? "primary" : "secondary"} disabled={salvando || (modo === "reposicao" && (faltantes.dados ?? []).length === 0)}>
-            {salvando ? "Salvando..." : modo === "editar" ? "Salvar" : modo === "reposicao" ? "Agendar como solicitação" : "Registrar solicitação"}
+          <Button type="submit" variant="primary" disabled={salvando || (modo === "reposicao" && (faltantes.dados ?? []).length === 0)}>
+            {salvando ? "Salvando..." : modo === "editar" ? "Salvar" : modo === "reposicao" ? "Agendar reposição" : "Registrar treinamento"}
           </Button>
-          {modo !== "editar" && ehRH && (
-            <Button type="button" variant="primary" disabled={salvando || (modo === "reposicao" && (faltantes.dados ?? []).length === 0)} onClick={() => void salvar(true)}>
-              Salvar como planejado
-            </Button>
-          )}
         </div>
       </form>
     </Drawer>

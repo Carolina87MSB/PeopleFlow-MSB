@@ -121,10 +121,13 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
   const ativos = linhas.filter((r) => !r.desligado);
 
   // RH e Gestor: regras do PeopleFlow. Demais perfis (Colaborador/Diretoria):
-  // acesso SOMENTE aos treinamentos que conduzem (responsável/instrutor),
-  // vinculado ao treinamento — não vira Gestor nem RH.
+  // perfil "Responsavel" — SOMENTE Gestão de Treinamentos — para quem foi
+  // indicado por um Gestor como Responsável por Treinamentos da gestão (escopo =
+  // equipe desse Gestor) ou conduz algum treinamento (responsável/instrutor).
+  // Não vira Gestor nem RH (sem AVD, PDI, salários, movimentações).
   let perfil: "RH" | "Gestor" | "Responsavel";
   let nomeConta: string;
+  let gestoresQueIndicaram: number[] = [];
   if (contaPrincipal && (contaPrincipal.perfil === "RH" || contaPrincipal.perfil === "Gestor")) {
     perfil = contaPrincipal.perfil;
     nomeConta = contaPrincipal.nome;
@@ -134,13 +137,20 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
       res.status(403).json({ error: "O módulo Desenvolvimento ainda não está liberado para este perfil.", codigo: "sem_acesso" });
       return;
     }
+    const { data: indicacoes, error: indErro } = await supabaseAdmin
+      .from("peopleflow_dev_responsaveis_gestao")
+      .select("gestor_colaborador_id")
+      .eq("colaborador_id", candidatos[0].id)
+      .eq("ativo", true);
+    if (!indErro) gestoresQueIndicaram = [...new Set((indicacoes ?? []).map((r) => Number(r.gestor_colaborador_id)))];
     const { data: conduz, error: conduzErro } = await supabaseAdmin
       .from("peopleflow_dev_treinamentos")
       .select("id")
       .or(`responsavel_colaborador_id.eq.${candidatos[0].id},instrutor_colaborador_id.eq.${candidatos[0].id}`)
       .in("status", ["planejado", "em_andamento", "concluido"])
       .limit(1);
-    if (tabelaInexistente(conduzErro) || conduzErro || !conduz || conduz.length === 0) {
+    const conduzAlgum = !tabelaInexistente(conduzErro) && !conduzErro && (conduz?.length ?? 0) > 0;
+    if (gestoresQueIndicaram.length === 0 && !conduzAlgum) {
       res.status(403).json({ error: "O módulo Desenvolvimento ainda não está liberado para este perfil.", codigo: "sem_acesso" });
       return;
     }
@@ -164,7 +174,15 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
     nomes.add(nomeConta);
     escopo = ativos.filter((r) => nomes.has(r.nome));
   } else {
-    escopo = [];
+    // Responsável indicado: a equipe de cada Gestor que o indicou (incluindo o próprio Gestor).
+    const nomes = new Set<string>();
+    for (const gid of gestoresQueIndicaram) {
+      const gestor = ativos.find((r) => r.id === gid);
+      if (!gestor) continue;
+      nomes.add(gestor.nome);
+      for (const n of descendants(colaboradores, gestor.nome)) nomes.add(n);
+    }
+    escopo = ativos.filter((r) => nomes.has(r.nome));
   }
   const conta = { perfil, nome: nomeConta };
 
@@ -198,7 +216,7 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: limparError.message });
     return;
   }
-  if (conta.perfil === "Gestor" && escopo.length > 0) {
+  if ((conta.perfil === "Gestor" || conta.perfil === "Responsavel") && escopo.length > 0) {
     const { error: escopoError } = await supabaseAdmin
       .from("peopleflow_dev_escopo")
       .insert(escopo.map((r) => ({ gestor_colaborador_id: eu.id, colaborador_id: r.id, atualizado_em: agora })));
@@ -224,7 +242,9 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
     .map((r) => ({ id: r.id, nome: r.nome, cargo: r.cargo ?? "", departamento: r.departamento ?? "" }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  res.status(200).json({ instalado: true, perfil: conta.perfil, colaboradorId: eu.id, pessoas });
+  // Registrar treinamento: RH, Gestor ou Responsável indicado por um Gestor.
+  const podeRegistrar = conta.perfil !== "Responsavel" || gestoresQueIndicaram.length > 0;
+  res.status(200).json({ instalado: true, perfil: conta.perfil, colaboradorId: eu.id, pessoas, podeRegistrar });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

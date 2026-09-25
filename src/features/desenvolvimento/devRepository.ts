@@ -20,7 +20,7 @@ export interface PessoaDesenvolvimento {
 
 export type SessaoDesenvolvimento =
   | { instalado: false; perfil: PerfilDesenvolvimento }
-  | { instalado: true; perfil: PerfilDesenvolvimento; colaboradorId: number; pessoas: PessoaDesenvolvimento[] };
+  | { instalado: true; perfil: PerfilDesenvolvimento; colaboradorId: number; pessoas: PessoaDesenvolvimento[]; podeRegistrar?: boolean };
 
 export class SemAcessoDesenvolvimentoError extends Error {}
 
@@ -417,6 +417,46 @@ export async function listarVinculos(treinamentoId: number): Promise<VinculoNece
   return (data ?? []) as unknown as VinculoNecessidade[];
 }
 
+/** Associação treinamento × Necessidade de Desenvolvimento: só "validada" (pelo RH) produz efeito oficial. */
+export interface VinculoTreinamento {
+  id: number;
+  necessidade_id: number;
+  situacao: "indicada" | "validada" | "rejeitada";
+  indicado_por: string | null;
+  vinculado_em: string;
+  analisado_em: string | null;
+  analise_motivo: string | null;
+  necessidade: {
+    id: number;
+    colaborador_id: number;
+    colaborador_nome: string | null;
+    descricao: string;
+    categoria: CategoriaNecessidade | null;
+    prioridade: Prioridade | null;
+    status: StatusNecessidade;
+  } | null;
+}
+
+/** Pelo servidor: quem vê o treinamento (inclusive Responsável da gestão) vê o resumo das necessidades relacionadas. */
+export function listarVinculosTreinamento(treinamentoId: number): Promise<VinculoTreinamento[]> {
+  return gravar<VinculoTreinamento[]>("vinculos_listar", { treinamento_id: treinamentoId });
+}
+
+export interface OpcaoNecessidade {
+  id: number;
+  colaborador_id: number;
+  colaborador_nome: string;
+  descricao: string;
+  categoria: CategoriaNecessidade | null;
+  prioridade: Prioridade | null;
+  status: StatusNecessidade;
+}
+
+/** RH: todas as validadas/planejadas; gestão: somente as da sua equipe. */
+export function opcoesNecessidades(treinamentoId: number, busca: string): Promise<OpcaoNecessidade[]> {
+  return gravar<OpcaoNecessidade[]>("necessidades_opcoes", { treinamento_id: treinamentoId, busca });
+}
+
 export type TipoEvidencia = "lista_presenca" | "certificado" | "material" | "ata" | "foto" | "comprovante" | "avaliacao" | "outro";
 
 export interface Evidencia {
@@ -683,7 +723,14 @@ export type AcaoGravacao =
   | "participantes_opcoes"
   | "reposicao_faltantes"
   | "treinamento_reposicao"
-  | "lista_presenca_gerar";
+  | "lista_presenca_gerar"
+  | "necessidade_associacao_validar"
+  | "necessidade_associacao_rejeitar"
+  | "vinculos_listar"
+  | "necessidades_opcoes"
+  | "responsaveis_gestao_listar"
+  | "responsavel_gestao_indicar"
+  | "responsavel_gestao_revogar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {
