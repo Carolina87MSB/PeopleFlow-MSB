@@ -9,26 +9,63 @@ import styles from "./Desenvolvimento.module.css";
 export interface AbaDef<T extends string> {
   id: T;
   rotulo: string;
+  /** Definição curta exibida pelo "?" ao lado da aba (hover no desktop, toque no celular). */
+  ajuda?: string;
 }
 
 /** Abas com sub-rota própria (/desenvolvimento/<tela>/<aba>), mesmo visual das abas de Gestão de Desempenho. */
 export function Abas<T extends string>({ base, abas, atual }: { base: string; abas: AbaDef<T>[]; atual: T }) {
   const navigate = useNavigate();
+  // Ajuda aberta por hover/foco (desktop) ou toque/clique (celular). Mostrada logo abaixo das abas:
+  // a barra rola na horizontal no celular, então um balão flutuante ficaria cortado.
+  const [ajuda, setAjuda] = useState<{ id: T; fixa: boolean } | null>(null);
+  const aberta = abas.find((a) => a.id === ajuda?.id);
+  const mostrar = (id: T) => setAjuda((x) => (x?.fixa ? x : { id, fixa: false }));
+  const esconder = () => setAjuda((x) => (x?.fixa ? x : null));
   return (
-    <div className={styles.abas} role="tablist">
-      {abas.map((a) => (
-        <button
-          key={a.id}
-          type="button"
-          role="tab"
-          aria-selected={a.id === atual}
-          className={a.id === atual ? styles.abaAtiva : styles.aba}
-          onClick={() => navigate(`${base}/${a.id}`)}
-        >
-          {a.rotulo}
-        </button>
-      ))}
-    </div>
+    <>
+      <div className={styles.abas} role="tablist">
+        {abas.map((a) => (
+          <span key={a.id} className={styles.abaComAjuda}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={a.id === atual}
+              className={a.id === atual ? styles.abaAtiva : styles.aba}
+              onClick={() => navigate(`${base}/${a.id}`)}
+            >
+              {a.rotulo}
+            </button>
+            {a.ajuda && (
+              <button
+                type="button"
+                className={styles.ajudaBotao}
+                aria-label={`O que é ${a.rotulo}?`}
+                aria-expanded={ajuda?.id === a.id}
+                aria-controls="ajuda-abas"
+                onMouseEnter={() => mostrar(a.id)}
+                onMouseLeave={esconder}
+                onFocus={() => mostrar(a.id)}
+                onBlur={esconder}
+                onClick={() => setAjuda((x) => (x?.id === a.id && x.fixa ? null : { id: a.id, fixa: true }))}
+              >
+                ?
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+      {aberta?.ajuda && (
+        <div id="ajuda-abas" role="tooltip" className={styles.ajudaTexto}>
+          <strong>{aberta.rotulo}:</strong> {aberta.ajuda}
+          {ajuda?.fixa && (
+            <button type="button" className={styles.linkAcao} style={{ marginLeft: 8 }} onClick={() => setAjuda(null)}>
+              Fechar
+            </button>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

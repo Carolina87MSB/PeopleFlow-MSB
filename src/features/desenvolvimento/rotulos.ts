@@ -113,11 +113,11 @@ export const TIPO_EVIDENCIA: Record<TipoEvidencia, string> = {
 };
 
 export const SITUACAO: Record<Situacao, { rotulo: string; tom: Tom }> = {
-  em_dia: { rotulo: "Em dia", tom: "success" },
+  em_dia: { rotulo: "Atendido", tom: "success" },
   a_vencer: { rotulo: "A vencer", tom: "warning" },
   vencido: { rotulo: "Vencido", tom: "danger" },
-  revisao_pendente: { rotulo: "Revisão pendente", tom: "warning" },
-  agendado: { rotulo: "Agendado", tom: "info" },
+  revisao_pendente: { rotulo: "Nova revisão", tom: "warning" },
+  agendado: { rotulo: "Treinamento agendado", tom: "info" },
   no_prazo_integracao: { rotulo: "No prazo de integração", tom: "neutral" },
   pendente: { rotulo: "Pendente", tom: "danger" },
 };

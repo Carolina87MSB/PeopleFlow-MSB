@@ -35,6 +35,9 @@ export function SugestoesPdiAba() {
   const { state } = usePortalStore();
   const tratadas = useConsulta(() => acoesPdiJaTratadas(), []);
   const [modo, setModo] = useState("Relacionadas a capacitação");
+  const [departamento, setDepartamento] = useState("");
+  // Departamento pelo cadastro oficial (colaboradores já carregados pelo PeopleFlow).
+  const deptoPorNome = useMemo(() => new Map(state.colaboradores.filter((c) => !c.desligado).map((c) => [c.nome, c.depto])), [state.colaboradores]);
   const [confirmando, setConfirmando] = useState<Sugestao | null>(null);
 
   const idPorNome = useMemo(() => {
@@ -76,8 +79,13 @@ export function SugestoesPdiAba() {
     return sugestoes
       .filter((s) => !ja.has(s.acaoId))
       .filter((s) => modo !== "Relacionadas a capacitação" || s.relacionada)
+      .filter((s) => !departamento || deptoPorNome.get(s.colaboradorNome) === departamento)
       .sort((a, b) => a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR"));
-  }, [sugestoes, tratadas.dados, modo]);
+  }, [sugestoes, tratadas.dados, modo, departamento, deptoPorNome]);
+  const departamentos = useMemo(
+    () => [...new Set(sugestoes.map((s) => deptoPorNome.get(s.colaboradorNome)).filter((d): d is string => Boolean(d)))].sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [sugestoes, deptoPorNome],
+  );
 
   const removerDaLista = (acaoId: string) => tratadas.mutar((s) => new Set([...s, acaoId]));
 
@@ -89,6 +97,14 @@ export function SugestoesPdiAba() {
           <p className={styles.cardSubtitle}>Ações de PDI em aberto que podem representar uma Necessidade de Desenvolvimento. Confirme para incluir na Base de Necessidades de Desenvolvimento.</p>
         </div>
         <FilterChips options={["Relacionadas a capacitação", "Todas as ações em aberto"]} value={modo} onChange={setModo} />
+      </div>
+      <div className={styles.filtros} style={{ marginBottom: 14 }}>
+        <select className={styles.select} style={{ minWidth: 200 }} value={departamento} onChange={(e) => setDepartamento(e.target.value)} aria-label="Departamento/Setor">
+          <option value="">Todos os departamentos</option>
+          {departamentos.map((d) => (
+            <option key={d}>{d}</option>
+          ))}
+        </select>
       </div>
 
       {tratadas.erro ? (

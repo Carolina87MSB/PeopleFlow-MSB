@@ -137,13 +137,13 @@ export interface RequisitoCargo {
   created_at: string;
   updated_at: string;
   habilidade: { nome: string; ativo: boolean } | null;
-  lista_mestra: { titulo: string; periodicidade_meses: number | null; situacao: string } | null;
+  lista_mestra: { titulo: string; periodicidade_meses: number | null; situacao: string; revisao_atual: string } | null;
 }
 
 export type StatusRequisito = "sugerido" | "vigente" | "inativo";
 
 const COLUNAS_REQUISITO =
-  "id, tipo_requisito, obrigatorio, periodicidade_meses, prazo_apos_admissao_dias, recicla_na_revisao, status, status_motivo, lista_mestra_codigo, habilidade_id, descricao_sugerida, observacao, justificativa, origem, sugerido_por_colaborador_id, validado_em, created_at, updated_at, habilidade:peopleflow_dev_habilidades(nome, ativo), lista_mestra:peopleflow_dev_lista_mestra(titulo, periodicidade_meses, situacao)";
+  "id, tipo_requisito, obrigatorio, periodicidade_meses, prazo_apos_admissao_dias, recicla_na_revisao, status, status_motivo, lista_mestra_codigo, habilidade_id, descricao_sugerida, observacao, justificativa, origem, sugerido_por_colaborador_id, validado_em, created_at, updated_at, habilidade:peopleflow_dev_habilidades(nome, ativo), lista_mestra:peopleflow_dev_lista_mestra(titulo, periodicidade_meses, situacao, revisao_atual)";
 
 /** O RLS decide o que cada perfil vê: RH tudo; Gestor só vigentes dos cargos da equipe + as próprias sugestões. */
 export async function listarRequisitosDoCargo(cargoNome: string, status: StatusRequisito[]): Promise<RequisitoCargo[]> {
@@ -176,15 +176,49 @@ export interface LinhaConformidade {
 
 const COLUNAS_CONFORMIDADE = "colaborador_id, requisito_id, cargo_nome, lista_mestra_codigo, revisao_atual, revisao_realizada, ultima_realizacao, validade_ate, situacao";
 
-export async function listarGaps(pagina: number, situacoes: Situacao[]): Promise<Pagina<LinhaConformidade>> {
-  const { data, error, count } = await supabase
+export interface FiltroGaps {
+  situacoes: Situacao[];
+  /** Colaboradores que passaram nos filtros de Departamento/Setor, Cargo e nome (null = sem filtro). */
+  colaboradorIds: number[] | null;
+  cargo: string | null;
+  /** Busca pelo requisito (código ou título do documento), combinada com a busca por colaborador. */
+  busca: string;
+  /** Ids de colaboradores cujo nome casa com a busca. */
+  idsPorNome: number[];
+}
+
+/** Códigos da Lista Mestra cujo código/título contém o termo (para a busca por requisito). */
+async function codigosPorTermo(termo: string): Promise<string[]> {
+  const t = termo.trim().replace(/[%,()]/g, " ");
+  if (!t) return [];
+  const { data, error } = await supabase.from("peopleflow_dev_lista_mestra").select("codigo").or(`codigo.ilike.%${t}%,titulo.ilike.%${t}%`).limit(300);
+  if (error) falha("Lista Mestra", error.message);
+  return (data ?? []).map((r) => r.codigo as string);
+}
+
+/** Gaps = requisitos vigentes × situação atual (o RLS limita ao escopo: RH toda a empresa; Gestor a equipe). */
+export async function listarGaps(pagina: number, f: FiltroGaps): Promise<Pagina<LinhaConformidade>> {
+  if (f.colaboradorIds && f.colaboradorIds.length === 0) return { itens: [], total: 0 };
+  let q = supabase
     .from("peopleflow_dev_v_conformidade")
     .select(COLUNAS_CONFORMIDADE, { count: "exact" })
-    .in("situacao", situacoes)
+    .in("situacao", f.situacoes)
     .order("validade_ate", { ascending: true, nullsFirst: true })
     .order("colaborador_id")
     .range(...faixa(pagina));
-  if (error) falha("Gaps", error.message);
+  if (f.colaboradorIds) q = q.in("colaborador_id", f.colaboradorIds);
+  if (f.cargo) q = q.eq("cargo_nome", f.cargo);
+  if (f.busca.trim()) {
+    const codigos = await codigosPorTermo(f.busca);
+    const partes = [
+      ...(f.idsPorNome.length ? [`colaborador_id.in.(${f.idsPorNome.join(",")})`] : []),
+      ...(codigos.length ? [`lista_mestra_codigo.in.(${codigos.map((c) => `"${c}"`).join(",")})`] : []),
+    ];
+    if (partes.length === 0) return { itens: [], total: 0 };
+    q = q.or(partes.join(","));
+  }
+  const { data, error, count } = await q;
+  if (error) falha("Gaps de requisitos", error.message);
   return { itens: (data ?? []) as LinhaConformidade[], total: count ?? 0 };
 }
 

@@ -555,3 +555,81 @@
 .itemAssociacao:last-child {
   border-bottom: 0;
 }
+
+/* ── Ajuda contextual das abas ── */
+.abaComAjuda {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ajudaBotao {
+  width: 18px;
+  height: 18px;
+  margin-left: -8px;
+  margin-right: 4px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font: 700 11px/1 var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ajudaBotao:hover,
+.ajudaBotao[aria-expanded="true"] {
+  color: var(--color-brand-dark);
+  border-color: var(--color-brand);
+}
+
+.ajudaTexto {
+  margin: -12px 0 16px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-pale);
+  color: var(--color-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+@media (max-width: 700px) {
+  /* Alvo de toque maior sem pesar o visual. */
+  .ajudaBotao {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* ── Lista responsiva (gaps / requisitos): linhas que viram cartões no celular ── */
+.linhaReq {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) auto;
+  gap: 6px 14px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 12.5px;
+}
+
+.linhaReq:last-child {
+  border-bottom: 0;
+}
+
+.linhaReqAcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+@media (max-width: 800px) {
+  .linhaReq {
+    grid-template-columns: 1fr;
+  }
+  .linhaReqAcoes {
+    justify-content: flex-start;
+  }
+}

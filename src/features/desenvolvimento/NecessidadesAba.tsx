@@ -322,13 +322,32 @@ function CamposNecessidade(props: {
   );
 }
 
-function RegistrarNecessidadeDrawer({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (n: Necessidade) => void }) {
+export function RegistrarNecessidadeDrawer({
+  inicial,
+  onFechar,
+  onSalvo,
+}: {
+  /** Pré-preenchimento (ex.: a partir de um gap). Nada é criado sem confirmação de quem registra. */
+  inicial?: { colaborador_id?: string; descricao?: string; requisito_id?: string };
+  onFechar: () => void;
+  onSalvo: (n: Necessidade) => void;
+}) {
   const { perfil, pessoas, colaboradorId } = useDesenvolvimento();
   const { flash } = useToast();
   const ehRH = perfil === "RH";
   // Gestor registra para os liderados (não para si mesmo).
   const opcoes = ehRH ? pessoas : pessoas.filter((p) => p.id !== colaboradorId);
-  const [form, setForm] = useState({ colaborador_id: "", descricao: "", categoria: "", prioridade: "media", justificativa: "", sugestao_capacitacao: "", observacao: "", origem: "rh", requisito_id: "" });
+  const [form, setForm] = useState({
+    colaborador_id: inicial?.colaborador_id ?? "",
+    descricao: inicial?.descricao ?? "",
+    categoria: "",
+    prioridade: "media",
+    justificativa: "",
+    sugestao_capacitacao: "",
+    observacao: "",
+    origem: "rh",
+    requisito_id: inicial?.requisito_id ?? "",
+  });
   const colab = opcoes.find((p) => String(p.id) === form.colaborador_id);
   const requisitos = useConsulta(() => (ehRH && colab ? requisitosVigentesDoCargo(colab.cargo) : Promise.resolve([])), [ehRH, colab?.cargo]);
   const [erro, setErro] = useState<string | null>(null);

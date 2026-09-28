@@ -296,7 +296,7 @@ async function habilidadeAtivo(conta: ContaDev, corpo: Corpo) {
 
 // ── Requisitos por cargo ────────────────────────────────────────────────
 const COLS_REQ =
-  "id, cargo_nome, tipo_requisito, habilidade_id, lista_mestra_codigo, descricao_sugerida, obrigatorio, periodicidade_meses, observacao, justificativa, origem, status, status_motivo, sugerido_por_colaborador_id, validado_em, created_at, updated_at";
+  "id, cargo_nome, tipo_requisito, habilidade_id, lista_mestra_codigo, descricao_sugerida, obrigatorio, periodicidade_meses, recicla_na_revisao, observacao, justificativa, origem, status, status_motivo, sugerido_por_colaborador_id, validado_em, created_at, updated_at";
 
 async function exigirCargoOficial(cargoNome: string, permitirObsoleto: boolean) {
   const { data, error } = await supabaseAdmin.from("peopleflow_descricoes_cargo").select("cargo_nome, obsoleto").eq("cargo_nome", cargoNome).maybeSingle();
@@ -343,6 +343,8 @@ function lerRequisito(corpo: Corpo) {
     descricao_sugerida: habilidadeId || codigo ? null : descricaoSugerida,
     obrigatorio: corpo.obrigatorio !== false,
     periodicidade_meses: tipo === "treinamento" ? inteiroOpcional(corpo, "periodicidade_meses", "Periodicidade (meses)") : null,
+    // Nova revisão do documento exige novo treinamento → gap "Nova revisão" até treinar na revisão vigente.
+    recicla_na_revisao: tipo === "treinamento" && corpo.recicla_na_revisao === true,
     observacao: texto(corpo, "observacao", { max: 2000 }),
     justificativa: texto(corpo, "justificativa", { max: 2000 }),
   };

@@ -174,7 +174,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         {(perfil === "RH" || perfil === "Gestor") && (
           <>
             <div className={styles.sectionLabel}>Desenvolvimento</div>
-            <NavItem to="/desenvolvimento/habilidades" icon={<Puzzle size={18} strokeWidth={1.9} />} label="Habilidades" />
+            <NavItem to="/desenvolvimento/habilidades" icon={<Puzzle size={18} strokeWidth={1.9} />} label="Habilidades e Requisitos" duasLinhas />
             <NavItem to="/desenvolvimento/lnt" icon={<ListChecks size={18} strokeWidth={1.9} />} label="Necessidades de Desenvolvimento" duasLinhas />
             <NavItem to="/desenvolvimento/treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Treinamentos" />
           </>

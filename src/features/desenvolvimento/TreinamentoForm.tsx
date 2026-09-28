@@ -37,11 +37,29 @@ function paraForm(t: Treinamento | null, modo: Modo) {
 }
 
 /** Solicitar, editar ou agendar reposição. Toda regra é conferida de novo no servidor. */
-export function TreinamentoDrawer({ item, modo = item ? "editar" : "novo", onFechar, onSalvo }: { item: Treinamento | null; modo?: Modo; onFechar: () => void; onSalvo: (t: Treinamento) => void }) {
+export function TreinamentoDrawer({
+  item,
+  modo = item ? "editar" : "novo",
+  inicial,
+  onFechar,
+  onSalvo,
+}: {
+  item: Treinamento | null;
+  modo?: Modo;
+  /** Pré-preenchimento seguro (ex.: a partir de um gap): documento, tipo. Quem registra confere e completa. */
+  inicial?: { lista_mestra_codigo?: string | null; tipo?: TipoTreinamento | "" };
+  onFechar: () => void;
+  onSalvo: (t: Treinamento) => void;
+}) {
   const { perfil, pessoas, pessoaPorId } = useDesenvolvimento();
   const { flash } = useToast();
   const ehRH = perfil === "RH";
-  const [form, setForm] = useState(() => paraForm(item, modo));
+  const [form, setForm] = useState(() => {
+    const f = paraForm(item, modo);
+    if (inicial?.lista_mestra_codigo) f.lista_mestra_codigo = inicial.lista_mestra_codigo;
+    if (inicial?.tipo) f.tipo = inicial.tipo;
+    return f;
+  });
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const documentos = useConsulta(() => opcoesListaMestra(), []);

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Briefcase, Lightbulb, Plus } from "lucide-react";
-import { Button, Card, Drawer, FilterChips, tableStyles } from "../../components/ui";
+import { Button, Card, Drawer, FilterChips } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import {
@@ -53,6 +53,11 @@ export function RequisitosCargoAba() {
       .sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [state.descricoesCargo, pessoas, ehRH]);
   const [cargo, setCargo] = useState("");
+  const [buscaCargo, setBuscaCargo] = useState("");
+  const cargosFiltrados = useMemo(() => {
+    const t = buscaCargo.trim().toLocaleLowerCase("pt-BR");
+    return t ? cargos.filter((c) => c.toLocaleLowerCase("pt-BR").includes(t)) : cargos;
+  }, [cargos, buscaCargo]);
   const selecionado = cargos.includes(cargo) ? cargo : "";
   const [filtro, setFiltro] = useState(FILTROS_RH[0].rotulo);
   const status: StatusRequisito[] = ehRH ? FILTROS_RH.find((f) => f.rotulo === filtro)!.status : ["vigente", "sugerido"];
@@ -65,7 +70,7 @@ export function RequisitosCargoAba() {
         <div>
           <h3 className={styles.cardTitle}>Requisitos por cargo</h3>
           <p className={styles.cardSubtitle}>
-            {ehRH ? "Habilidades técnicas e treinamentos/POPs exigidos pelo cargo" : "Requisitos vigentes dos cargos da sua equipe e as suas sugestões"}
+            {ehRH ? "Habilidades técnicas e requisitos obrigatórios/documentais exigidos por cargo — o Gestor sugere, o RH valida" : "Requisitos vigentes dos cargos da sua equipe e as suas sugestões (validadas pelo RH)"}
           </p>
         </div>
         <Button
@@ -80,9 +85,10 @@ export function RequisitosCargoAba() {
       </div>
       <div className={styles.toolbar}>
         <div className={styles.filtros}>
+          <input className={styles.input} type="search" placeholder="Buscar cargo" value={buscaCargo} onChange={(e) => setBuscaCargo(e.target.value)} />
           <select className={styles.select} value={selecionado} onChange={(e) => setCargo(e.target.value)} aria-label="Cargo">
-            <option value="">Selecione um cargo</option>
-            {cargos.map((c) => (
+            <option value="">{cargosFiltrados.length ? `Selecione um cargo (${cargosFiltrados.length})` : "Nenhum cargo encontrado"}</option>
+            {cargosFiltrados.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -104,40 +110,62 @@ export function RequisitosCargoAba() {
       ) : lista.dados.length === 0 ? (
         <EstadoVazio icone={<Briefcase size={26} strokeWidth={1.6} />} titulo="Nenhum requisito cadastrado para este cargo." />
       ) : (
-        <div className={tableStyles.wrap}>
-          <table className={tableStyles.table}>
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Requisito</th>
-                <th>Obrigatório</th>
-                <th>Periodicidade</th>
-                <th>Origem</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lista.dados.map((r) => {
-                const d = descricaoRequisito(r);
-                return (
-                  <tr key={r.id} className={[styles.linhaClicavel, r.status === "inativo" ? styles.linhaInativa : ""].join(" ")} onClick={() => setSelecao({ modo: "existente", item: r })}>
-                    <td className={styles.secundario}>{r.tipo_requisito === "habilidade" ? "Habilidade" : "Treinamento/POP"}</td>
-                    <td>
-                      {d.principal}
-                      {d.detalhe && <div className={styles.secundario}>{d.detalhe}</div>}
-                    </td>
-                    <td>{r.obrigatorio ? "Sim" : "Não"}</td>
-                    <td className={styles.secundario}>{r.tipo_requisito === "treinamento" ? formatarPeriodicidade(r.periodicidade_meses ?? r.lista_mestra?.periodicidade_meses) : "—"}</td>
-                    <td className={styles.secundario}>{ORIGEM[r.origem]}</td>
-                    <td>
-                      <Selo tom={STATUS[r.status].tom}>{STATUS[r.status].rotulo}</Selo>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {(
+            [
+              ["habilidade", "Habilidades técnicas", "Do catálogo padronizado. A avaliação de domínio (níveis) será definida em etapa posterior."],
+              ["treinamento", "Requisitos obrigatórios / regulatórios / documentais", "Treinamentos e documentos da Lista Mestra. Só os VIGENTES geram gaps para os colaboradores."],
+            ] as const
+          ).map(([tipo, titulo, sub]) => {
+            const itens = lista.dados!.filter((r) => r.tipo_requisito === tipo);
+            return (
+              <div key={tipo} className={styles.secao}>
+                <h4 className={styles.secaoTitulo}>
+                  {titulo} ({itens.length})
+                </h4>
+                <span className={styles.dica}>{sub}</span>
+                {itens.length === 0 ? (
+                  <p className={styles.secundario}>Nenhum requisito deste grupo.</p>
+                ) : (
+                  itens.map((r) => {
+                    const d = descricaoRequisito(r);
+                    return (
+                      <div
+                        key={r.id}
+                        className={[styles.linhaReq, styles.linhaClicavel, r.status === "inativo" ? styles.linhaInativa : ""].join(" ")}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelecao({ modo: "existente", item: r })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") setSelecao({ modo: "existente", item: r });
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          {d.principal}
+                          {d.detalhe && <div className={styles.secundario}>{d.detalhe}</div>}
+                        </div>
+                        <div className={styles.secundario}>
+                          {[
+                            r.obrigatorio ? "Obrigatório" : "Recomendado",
+                            r.tipo_requisito === "treinamento" ? formatarPeriodicidade(r.periodicidade_meses ?? r.lista_mestra?.periodicidade_meses) : null,
+                            r.tipo_requisito === "treinamento" && r.lista_mestra?.revisao_atual ? `Rev. aplicável ${r.lista_mestra.revisao_atual}` : null,
+                            r.tipo_requisito === "treinamento" && r.recicla_na_revisao ? "Nova revisão exige novo treinamento" : null,
+                            ORIGEM[r.origem],
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                        <div className={styles.linhaReqAcoes}>
+                          <Selo tom={STATUS[r.status].tom}>{STATUS[r.status].rotulo}</Selo>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            );
+          })}
+        </>
       )}
 
       {selecao && selecionado && (
@@ -173,6 +201,7 @@ function RequisitoDrawer({ cargo, item, onFechar, onSalvo }: { cargo: string; it
     fora_do_catalogo: Boolean(item && !item.habilidade_id && !item.lista_mestra_codigo),
     obrigatorio: item?.obrigatorio ?? true,
     periodicidade_meses: item?.periodicidade_meses?.toString() ?? "",
+    recicla_na_revisao: item?.recicla_na_revisao ?? false,
     observacao: item?.observacao ?? "",
     justificativa: item?.justificativa ?? "",
     status: "sugerido" as "sugerido" | "vigente",
@@ -210,6 +239,7 @@ function RequisitoDrawer({ cargo, item, onFechar, onSalvo }: { cargo: string; it
       descricao_sugerida: semCatalogo ? form.descricao_sugerida : null,
       obrigatorio: form.obrigatorio,
       periodicidade_meses: form.tipo_requisito === "treinamento" ? form.periodicidade_meses : null,
+      recicla_na_revisao: form.tipo_requisito === "treinamento" && form.recicla_na_revisao,
       observacao: form.observacao,
       justificativa: form.justificativa,
       ...(novo && ehRH ? { status: form.status } : {}),
@@ -339,6 +369,16 @@ function RequisitoDrawer({ cargo, item, onFechar, onSalvo }: { cargo: string; it
               <input type="checkbox" checked={form.obrigatorio} onChange={set("obrigatorio")} />
               Obrigatório para o cargo
             </label>
+            {form.tipo_requisito === "treinamento" && (
+              <label className={[styles.campo, styles.cheio].join(" ")}>
+                <span className={styles.check}>
+                  <input type="checkbox" checked={form.recicla_na_revisao} onChange={set("recicla_na_revisao")} /> Nova revisão do documento exige novo treinamento
+                </span>
+                <span className={styles.dica}>
+                  Marcado: quando a Lista Mestra passar para uma nova revisão, quem foi treinado na revisão anterior passa a ter gap “Nova revisão” até treinar na revisão vigente.
+                </span>
+              </label>
+            )}
             <label className={[styles.campo, styles.cheio].join(" ")}>
               {ehRH ? "Justificativa" : "Justificativa *"}
               <textarea value={form.justificativa} onChange={set("justificativa")} maxLength={2000} required={!ehRH} disabled={justificativaTravada} />
@@ -376,6 +416,13 @@ function RequisitoDrawer({ cargo, item, onFechar, onSalvo }: { cargo: string; it
               <>
                 <dt>Periodicidade</dt>
                 <dd>{formatarPeriodicidade(item.periodicidade_meses ?? item.lista_mestra?.periodicidade_meses)}</dd>
+                <dt>Documento</dt>
+                <dd>
+                  {item.lista_mestra_codigo ?? "—"}
+                  {item.lista_mestra?.revisao_atual ? ` · rev. aplicável ${item.lista_mestra.revisao_atual}` : ""}
+                </dd>
+                <dt>Nova revisão</dt>
+                <dd>{item.recicla_na_revisao ? "Exige novo treinamento" : "Não exige novo treinamento"}</dd>
               </>
             )}
             {item.observacao && (
