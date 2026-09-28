@@ -1499,3 +1499,99 @@ alter table public.peopleflow_movimentacoes
 
 comment on column public.peopleflow_movimentacoes.pedido_demissao is
   'Só tipo_cod = DES. true = colaborador pediu o próprio desligamento — etapa "Diretoria" dispensada. Fixado na criação, nunca muda depois.';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 36) Aviso Prévio Indenizado — geração automática (RH, 2026-09). Substitui
+--    o bloco "Documentos gerados" mockado (docsFor(), sempre "Gerado" sem
+--    nenhum arquivo real) por documentos de verdade: gerados no servidor
+--    (overlay com pdf-lib sobre o modelo institucional) quando a MP de
+--    Desligamento conclui todas as etapas (status "Aprovado"), guardados
+--    num bucket privado, com upload/substituição do documento assinado.
+--
+--    `colaborador_id`: PeopleFlow inteiro (movimentações, PDI, AVD) sempre
+--    identificou colaborador só por nome — `colaboradores.id` existe na
+--    tabela física (compartilhada com o Portal SST) mas nunca foi trazido
+--    pro código do PeopleFlow. Pedido explícito da RH: a partir daqui, a
+--    cadeia de geração do Aviso Prévio (localizar CPF, gerar o documento,
+--    gravar metadados, autorizar acesso) usa exclusivamente `colaborador_id`
+--    — nunca nome como chave, nem fallback por aproximação. Capturado uma
+--    única vez na criação da MP, a partir do colaborador já selecionado no
+--    formulário (ver construirMovimentacao() em domain/formMovimentacao.ts).
+--    Nullable de propósito: MPs criadas antes desta migration não têm esse
+--    dado e não devem quebrar — continuam abrindo normalmente, só ficam sem
+--    geração automática do Aviso Prévio (não há preenchimento retroativo).
+--    Escopo estritamente contido a esta funcionalidade — PDI/AVD/demais
+--    módulos continuam por nome, sem migração nenhuma nesta etapa.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_movimentacoes
+  add column if not exists colaborador_id bigint references public.colaboradores(id),
+  add column if not exists tipo_aviso_previo text;
+
+comment on column public.peopleflow_movimentacoes.colaborador_id is
+  'Id do colaborador (tabela física compartilhada com o Portal SST) capturado na criação da MP — chave usada por toda a cadeia do Aviso Prévio (CPF, geração, autorização). Nullable: MPs anteriores a esta migration não têm; nunca preenchido retroativamente por nome.';
+comment on column public.peopleflow_movimentacoes.tipo_aviso_previo is
+  'Só tipo_cod = DES. "indenizado" | "trabalhado" (texto livre, validado no app — não travado no banco pra permitir novos tipos futuros sem migration). Geração automática do PDF só ocorre para "indenizado".';
+
+-- Metadados dos documentos de uma movimentação (hoje só Desligamento usa,
+-- mas a tabela não é exclusiva de um tipo — qualquer MP poderá ganhar
+-- documentos gerados/anexados no futuro sem precisar de tabela nova).
+create table if not exists public.peopleflow_movimentacoes_documentos (
+  id bigint generated always as identity primary key,
+  movimentacao_id text not null references public.peopleflow_movimentacoes(id),
+  colaborador_id bigint not null references public.colaboradores(id),
+  colaborador_nome text not null,
+  tipo text not null,
+  versao integer not null default 1,
+  storage_path text not null,
+  file_name text not null,
+  mime text not null default 'application/pdf',
+  tamanho_bytes bigint,
+  origem text not null,
+  situacao text not null default 'ativo',
+  documento_original_id bigint references public.peopleflow_movimentacoes_documentos(id),
+  substituido_em timestamptz,
+  substituido_por text,
+  substituido_motivo text,
+  criado_por text not null,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_movimentacoes_documentos is
+  'Documentos (gerados pelo sistema ou anexados pelo RH) de uma movimentação. Nunca apaga versão anterior — substituir cria uma linha nova e marca a antiga situacao=substituido.';
+comment on column public.peopleflow_movimentacoes_documentos.colaborador_id is
+  'Chave de associação ao colaborador — sempre usada pra localizar/autorizar. colaborador_nome ao lado é só snapshot histórico (exibição), nunca usado pra busca.';
+comment on column public.peopleflow_movimentacoes_documentos.tipo is
+  'Ex.: "aviso_previo_indenizado_gerado" | "aviso_previo_indenizado_assinado". Um novo tipo de documento/modelo é só um novo valor aqui — sem alterar a estrutura da tabela.';
+comment on column public.peopleflow_movimentacoes_documentos.origem is
+  '"sistema" (gerado automaticamente no servidor) | "upload" (anexado manualmente pelo RH).';
+comment on column public.peopleflow_movimentacoes_documentos.situacao is
+  '"ativo" | "substituido" — nunca "excluido"; o arquivo permanece no Storage e a linha permanece na tabela, só marcada.';
+comment on column public.peopleflow_movimentacoes_documentos.documento_original_id is
+  'Pro documento "assinado", aponta pro registro do "gerado" correspondente — vínculo entre as duas versões do mesmo Aviso Prévio.';
+
+-- Idempotência: nunca mais de 1 documento ATIVO do mesmo tipo pra mesma MP
+-- (protege contra reprocessamento/refresh/chamada repetida do gatilho de
+-- geração automática gerando duplicata).
+create unique index if not exists peopleflow_mov_docs_ativo_unico
+  on public.peopleflow_movimentacoes_documentos (movimentacao_id, tipo)
+  where situacao = 'ativo';
+
+alter table public.peopleflow_movimentacoes_documentos enable row level security;
+
+drop policy if exists "authenticated_rw_movimentacoes_documentos" on public.peopleflow_movimentacoes_documentos;
+create policy "authenticated_rw_movimentacoes_documentos"
+  on public.peopleflow_movimentacoes_documentos
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- Bucket privado — deliberadamente SEM nenhuma policy de "authenticated" em
+-- storage.objects (diferente de pdi-evidencias, upload/leitura direto do
+-- navegador). O arquivo contém CPF; todo acesso (gerar, anexar, visualizar,
+-- substituir) passa por uma function serverless com supabaseAdmin, que checa
+-- RH ou Gestor-dentro-do-escopo antes de qualquer leitura/escrita no Storage
+-- — nunca signed URL pública nem permanente.
+insert into storage.buckets (id, name, public)
+values ('movimentacoes-documentos', 'movimentacoes-documentos', false)
+on conflict (id) do nothing;
