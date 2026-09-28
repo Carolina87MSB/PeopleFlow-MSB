@@ -881,6 +881,16 @@ function tituloDoTreinamento(tipo: string, titulo: string, doc: { lista_mestra_t
   return caixaAlta(doc.lista_mestra_titulo);
 }
 
+/** Data de hoje no fuso da empresa (YYYY-MM-DD). */
+const fmtDiaSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" });
+export const hojeSaoPaulo = () => fmtDiaSP.format(new Date());
+
+/** Novo registro (inclusive reposição): o treinamento é registrado ANTES da realização. Não se aplica a edições nem a dados históricos. */
+function exigirDataPrevistaNaoRetroativa(dataInicio: unknown) {
+  if (dataInicio && String(dataInicio) < hojeSaoPaulo())
+    throw new ErroHttp(422, "A data prevista não pode ser anterior à data de registro do treinamento. O treinamento deve ser registrado antes de sua realização.");
+}
+
 function exigirMinimoPlanejamento(t: Record<string, unknown>) {
   if (!String(t.titulo ?? "").trim()) throw new ErroHttp(422, "Informe o título do treinamento.");
   if (!t.data_inicio) throw new ErroHttp(422, "Informe a data prevista.");
@@ -969,6 +979,7 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
     if (homologacao && conta.perfil !== "RH") throw new ErroHttp(403, "Somente o RH marca treinamento de homologação/teste.");
     const linha = { ...campos, ...doc, titulo, lista_mestra_codigo: campos.lista_mestra_codigo, homologacao };
     exigirMinimoPlanejamento(linha);
+    exigirDataPrevistaNaoRetroativa(linha.data_inicio);
     const agora = new Date().toISOString();
     const { data, error } = await supabaseAdmin
       .from("peopleflow_dev_treinamentos")
@@ -1281,6 +1292,7 @@ async function treinamentoReposicao(conta: ContaDev, corpo: Corpo) {
   if (iErro) erroBanco(iErro, "Reposições");
   const linha = { ...campos, ...doc, titulo: TIPOS_COM_DOCUMENTO.has(campos.tipo) ? tituloDoTreinamento(campos.tipo, "", doc) : caixaAlta(campos.titulo || origem.titulo) };
   exigirMinimoPlanejamento(linha); // reposição também nasce PLANEJADA (a nova data é definida por quem agenda)
+  exigirDataPrevistaNaoRetroativa(linha.data_inicio);
   const agora = new Date().toISOString();
   const { data: nova, error } = await supabaseAdmin
     .from("peopleflow_dev_treinamentos")

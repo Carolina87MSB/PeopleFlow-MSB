@@ -5,7 +5,8 @@ import { faltantesParaReposicao, gravar, opcoesListaMestra, type Formato, type M
 import { useDesenvolvimento } from "./contexto";
 import { CabecalhoDrawer, Carregando, Erro } from "./componentes";
 import { useConsulta } from "./hooks";
-import { FORMATO, MODALIDADE, TIPO_TREINAMENTO, TIPOS_COM_DOCUMENTO } from "./rotulos";
+import { FORMATO, MODALIDADE, TIPO_TREINAMENTO, TIPOS_COM_DOCUMENTO, hojeISO, lerHorasMinutos, paraHorasMinutos } from "./rotulos";
+import { CampoDuracao } from "./CampoDuracao";
 import styles from "./Desenvolvimento.module.css";
 
 /** novo: registrar treinamento (nasce PLANEJADO) · editar: alterar/retificar · reposicao: agendar para os faltantes de `item`. */
@@ -22,7 +23,8 @@ function paraForm(t: Treinamento | null, modo: Modo) {
     // Reposição: a nova data é sempre definida por quem agenda.
     data_inicio: reposicao ? "" : (t?.data_inicio ?? ""),
     data_fim: reposicao ? "" : (t?.data_fim ?? ""),
-    carga_h: t?.carga_horaria_min ? String(t.carga_horaria_min / 60) : "",
+    carga_horas: paraHorasMinutos(t?.carga_horaria_min).horas,
+    carga_minutos: paraHorasMinutos(t?.carga_horaria_min).minutos,
     responsavel_colaborador_id: t?.responsavel_colaborador_id ? String(t.responsavel_colaborador_id) : "",
     instrutor_colaborador_id: t?.instrutor_colaborador_id ? String(t.instrutor_colaborador_id) : "",
     instrutor_externo: t?.instrutor_externo ?? "",
@@ -81,16 +83,20 @@ export function TreinamentoDrawer({
     if (id && !pessoaPorId.has(id)) opcoesPessoa.push({ id, nome: `Colaborador #${id}`, cargo: "", departamento: "" });
   }
 
+  // Novo registro e reposição: data prevista a partir de hoje (o servidor confere de novo). Edição não é travada.
+  const novoRegistro = modo !== "editar";
+
   async function salvar() {
     setErro(null);
     setSalvando(true);
     try {
-      const carga = form.carga_h.trim() ? Math.round(Number(form.carga_h.replace(",", ".")) * 60) : null;
-      if (carga !== null && !(carga > 0)) throw new Error("Carga horária inválida.");
+      const carga = lerHorasMinutos(form.carga_horas, form.carga_minutos);
+      if (novoRegistro && form.data_inicio && form.data_inicio < hojeISO()) throw new Error("A data prevista não pode ser anterior à data de registro do treinamento. O treinamento deve ser registrado antes de sua realização.");
       if (modo === "reposicao" && !form.data_inicio) throw new Error("Defina a nova data da reposição.");
       if (exigeDoc && !tituloDoc) throw new Error("Selecione um documento vigente da Lista Mestra.");
+      const { carga_horas: _h, carga_minutos: _m, ...resto } = form;
       const corpo = {
-        ...form,
+        ...resto,
         titulo: tituloEfetivo,
         carga_horaria_min: carga,
         responsavel_colaborador_id: form.responsavel_colaborador_id || null,
@@ -222,16 +228,19 @@ export function TreinamentoDrawer({
           </label>
           <label className={styles.campo}>
             {modo === "reposicao" ? "Nova data *" : "Data prevista *"}
-            <input type="date" value={form.data_inicio} onChange={set("data_inicio")} required={item?.status !== "solicitado"} />
+            <input type="date" value={form.data_inicio} onChange={set("data_inicio")} min={novoRegistro ? hojeISO() : undefined} required={item?.status !== "solicitado"} />
+            {novoRegistro && <span className={styles.dica}>O treinamento deve ser registrado antes de sua realização: hoje ou data futura.</span>}
           </label>
           <label className={styles.campo}>
             Data final
-            <input type="date" value={form.data_fim} onChange={set("data_fim")} />
+            <input type="date" value={form.data_fim} onChange={set("data_fim")} min={form.data_inicio || undefined} />
           </label>
-          <label className={styles.campo}>
-            Carga horária (horas)
-            <input inputMode="decimal" value={form.carga_h} onChange={set("carga_h")} placeholder="Ex.: 1,5" />
-          </label>
+          <CampoDuracao
+            rotulo="Carga horária"
+            horas={form.carga_horas}
+            minutos={form.carga_minutos}
+            onChange={(horas, minutos) => setForm((f) => ({ ...f, carga_horas: horas, carga_minutos: minutos }))}
+          />
           <label className={styles.campo}>
             Responsável *
             <select value={form.responsavel_colaborador_id} onChange={set("responsavel_colaborador_id")} required={item?.status !== "solicitado"}>

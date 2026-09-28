@@ -136,6 +136,31 @@ export function formatarCarga(minutos: number | null | undefined): string {
   return m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
 }
 
+/** Minutos gravados → campos Horas / Minutos do formulário. */
+export function paraHorasMinutos(minutos: number | null | undefined): { horas: string; minutos: string } {
+  if (!minutos) return { horas: "", minutos: "" };
+  return { horas: String(Math.floor(minutos / 60)), minutos: String(minutos % 60) };
+}
+
+/** Campos Horas / Minutos → minutos. Ambos vazios = não informado (null). Minutos de 0 a 59; total > 0. */
+export function lerHorasMinutos(horas: string, minutos: string, rotulo = "Carga horária"): number | null {
+  const h = horas.trim(), m = minutos.trim();
+  if (!h && !m) return null;
+  if ((h && !/^\d+$/.test(h)) || (m && !/^\d+$/.test(m))) throw new Error(`${rotulo}: informe horas e minutos em números inteiros.`);
+  const hh = h ? Number(h) : 0, mm = m ? Number(m) : 0;
+  if (mm > 59) throw new Error(`${rotulo}: os minutos devem estar entre 0 e 59.`);
+  const total = hh * 60 + mm;
+  if (total <= 0) throw new Error(`${rotulo}: a duração total precisa ser maior que zero.`);
+  if (total > 100000) throw new Error(`${rotulo}: duração acima do permitido.`);
+  return total;
+}
+
+/** Data de hoje (fuso local do navegador) em YYYY-MM-DD, para o mínimo do calendário. */
+export function hojeISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function formatarPeriodicidade(meses: number | null | undefined): string {
   if (!meses) return "Sem validade";
   if (meses % 12 === 0) return meses === 12 ? "Anual" : `A cada ${meses / 12} anos`;

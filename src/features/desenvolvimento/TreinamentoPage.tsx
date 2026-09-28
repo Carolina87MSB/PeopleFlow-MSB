@@ -30,6 +30,8 @@ import {
   EFICACIA,
   formatarCarga,
   formatarData,
+  lerHorasMinutos,
+  paraHorasMinutos,
   FORMATO,
   METODO_PRESENCA,
   MODALIDADE,
@@ -41,6 +43,7 @@ import {
   TIPO_EVIDENCIA,
 } from "./rotulos";
 import { TreinamentoDrawer } from "./TreinamentoForm";
+import { CampoDuracao } from "./CampoDuracao";
 import { alternar as alternarSelecao, departamentosDe, desmarcarTodos, filtrarOpcoes, selecionarTodos, TODOS_DEPARTAMENTOS } from "./selecaoParticipantes";
 import styles from "./Desenvolvimento.module.css";
 
@@ -385,17 +388,26 @@ function RealizacaoResumo({ t, podeAlterar, onSalvar }: { t: Treinamento; podeAl
 
 function Realizacao({ t, onSalvar, onCancelar }: { t: Treinamento; onSalvar: (corpo: Record<string, unknown>) => Promise<void>; onCancelar: () => void }) {
   const [data, setData] = useState(t.data_realizacao ?? "");
-  const [carga, setCarga] = useState(t.carga_realizada_min ? String(t.carga_realizada_min / 60) : "");
+  const [carga, setCarga] = useState(() => paraHorasMinutos(t.carga_realizada_min));
   const [salvando, setSalvando] = useState(false);
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
   return (
     <form
       className={styles.filtros}
       style={{ marginTop: 10, alignItems: "flex-end", width: "100%" }}
       onSubmit={async (e) => {
         e.preventDefault();
+        setErroCarga(null);
+        let minutos: number | null;
+        try {
+          minutos = lerHorasMinutos(carga.horas, carga.minutos, "Carga realizada");
+        } catch (err) {
+          setErroCarga(err instanceof Error ? err.message : String(err));
+          return;
+        }
         setSalvando(true);
         try {
-          await onSalvar({ data_realizacao: data || null, carga_realizada_min: carga.trim() ? Math.round(Number(carga.replace(",", ".")) * 60) : null });
+          await onSalvar({ data_realizacao: data || null, carga_realizada_min: minutos });
         } catch {
           // erro exibido pela tela
         } finally {
@@ -407,13 +419,11 @@ function Realizacao({ t, onSalvar, onCancelar }: { t: Treinamento; onSalvar: (co
         Data realizada
         <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
       </label>
-      <label className={styles.campo}>
-        Carga realizada (horas)
-        <input inputMode="decimal" value={carga} onChange={(e) => setCarga(e.target.value)} placeholder={t.carga_horaria_min ? String(t.carga_horaria_min / 60) : "Ex.: 2"} />
-      </label>
+      <CampoDuracao rotulo="Carga realizada" horas={carga.horas} minutos={carga.minutos} onChange={(horas, minutos) => setCarga({ horas, minutos })} />
       <span className={styles.dica} style={{ flexBasis: "100%" }}>
-        Deixe em branco o que ocorreu conforme o planejado.
+        Deixe em branco o que ocorreu conforme o planejado{t.carga_horaria_min ? ` (planejado: ${formatarCarga(t.carga_horaria_min)})` : ""}.
       </span>
+      {erroCarga && <span className={styles.erro} style={{ flexBasis: "100%" }}>{erroCarga}</span>}
       <Button type="button" variant="ghost" onClick={onCancelar} disabled={salvando}>
         Cancelar
       </Button>
