@@ -52,6 +52,7 @@ import {
 } from "../repositories/avaliacoesPotencialRepository";
 import { notificar } from "../repositories/notificacoesRepository";
 import { formatarDataIso, hojeIso, tempoDeEmpresa } from "../domain/dates";
+import { GRUPO_HABILIDADES_COMPETENCIAS } from "../domain/descricaoCargo";
 import { colaboradoresAtivosEmData } from "../domain/dashboardExecutivo";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import {
@@ -236,8 +237,8 @@ export interface PortalData {
    * deriva de `descricaoCargoCompetencias` (a relação Cargo × Competência),
    * nunca do texto legado (`descricao.habilidadesComportamentais`). */
   competenciasDoCargo: (cargoNome: string) => CompetenciaCargoCatalogo[];
-  /** Mesma regra de permissão do grupo "Competências e requisitos
-   * desejáveis" (`podeEditarSecaoDescricaoCargo`) — aplica direto, sem
+  /** Mesma regra de permissão do grupo "Habilidades e competências"
+   * (`podeEditarSecaoDescricaoCargo`) — aplica direto, sem
    * fluxo de proposta/aprovação do Gestor (diferente dos outros campos
    * desse grupo): a relação Cargo × Competência não tem hoje um "pendente"
    * próprio, decisão deliberada pra não replicar a complexidade do
@@ -1118,11 +1119,11 @@ export function usePortalData(): PortalData {
     [state.descricaoCargoCompetencias, state.catalogoCompetenciasCargo],
   );
 
-  /** Mesma permissão do grupo "Competências e requisitos desejáveis" —
+  /** Mesma permissão do grupo "Habilidades e competências" —
    * aplica direto (sem proposta/aprovação, ver comentário na interface). */
   const adicionarCompetenciaCargoFn = useCallback(
     async (cargoNome: string, competenciaId: string) => {
-      if (!podeEditarSecaoDescricaoCargoFn(cargoNome, "Competências e requisitos desejáveis")) {
+      if (!podeEditarSecaoDescricaoCargoFn(cargoNome, GRUPO_HABILIDADES_COMPETENCIAS)) {
         flash("Você não pode editar as competências deste cargo.");
         return { ok: false as const };
       }
@@ -1143,7 +1144,7 @@ export function usePortalData(): PortalData {
 
   const removerCompetenciaCargoFn = useCallback(
     async (cargoNome: string, competenciaId: string) => {
-      if (!podeEditarSecaoDescricaoCargoFn(cargoNome, "Competências e requisitos desejáveis")) {
+      if (!podeEditarSecaoDescricaoCargoFn(cargoNome, GRUPO_HABILIDADES_COMPETENCIAS)) {
         flash("Você não pode editar as competências deste cargo.");
         return { ok: false as const };
       }

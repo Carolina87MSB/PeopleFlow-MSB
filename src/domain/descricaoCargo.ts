@@ -37,6 +37,10 @@ export const NIVEIS_DESCRICAO_CARGO = ["Júnior", "Pleno", "Sênior"];
 export const LOCALIDADES_DESCRICAO_CARGO = ["Lauro de Freitas"];
 
 /** Ordem e agrupamento espelham as seções do formulário POP-RH-001 (Descrição de Cargo). */
+/** Seção da DC com Habilidades Técnicas (catálogo) e Competências Comportamentais (RH, 2026-09 —
+ * substitui "Competências e requisitos desejáveis"). Também é a chave de permissão da seção. */
+export const GRUPO_HABILIDADES_COMPETENCIAS = "Habilidades e competências";
+
 export const CAMPOS_DESCRICAO_CARGO: CampoMeta[] = [
   { key: "codigoFormulario", label: "Código do formulário", grupo: "Dados do formulário (auditoria)" },
   { key: "revisaoFormulario", label: "Revisão", grupo: "Dados do formulário (auditoria)" },
@@ -49,8 +53,8 @@ export const CAMPOS_DESCRICAO_CARGO: CampoMeta[] = [
   { key: "responsabilidades", label: "Principais responsabilidades", grupo: "Principais responsabilidades", multiline: true },
   { key: "escolaridade", label: "Escolaridade", grupo: "Requisitos do cargo", multiline: true },
   { key: "experiencia", label: "Experiência", grupo: "Requisitos do cargo", multiline: true },
-  { key: "habilidadesTecnicas", label: "Habilidades técnicas", grupo: "Competências e requisitos desejáveis", multiline: true },
-  { key: "habilidadesComportamentais", label: "Habilidades comportamentais", grupo: "Competências e requisitos desejáveis", multiline: true },
+  { key: "habilidadesTecnicas", label: "Habilidades técnicas", grupo: GRUPO_HABILIDADES_COMPETENCIAS, multiline: true },
+  { key: "habilidadesComportamentais", label: "Competências comportamentais", grupo: GRUPO_HABILIDADES_COMPETENCIAS, multiline: true },
   { key: "epis", label: "EPIs (Equipamentos de Proteção Individual)", grupo: "EPIs", multiline: true },
 ];
 
@@ -60,7 +64,7 @@ export const CAMPOS_DESCRICAO_CARGO: CampoMeta[] = [
  * formulário (auditoria)", "Informações do cargo" e "EPIs" continuam
  * RH-only, por serem dados de controle/segurança do documento, não conteúdo
  * do dia a dia da liderança. */
-const GRUPOS_EDITAVEIS_GESTOR = new Set(["Sumário do cargo", "Principais responsabilidades", "Requisitos do cargo", "Competências e requisitos desejáveis"]);
+const GRUPOS_EDITAVEIS_GESTOR = new Set(["Sumário do cargo", "Principais responsabilidades", "Requisitos do cargo", GRUPO_HABILIDADES_COMPETENCIAS]);
 
 export function podeGestorEditarGrupo(grupo: string): boolean {
   return GRUPOS_EDITAVEIS_GESTOR.has(grupo);

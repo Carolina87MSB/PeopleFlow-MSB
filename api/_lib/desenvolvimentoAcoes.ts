@@ -2021,8 +2021,9 @@ export async function executarPresencaQr(acao: "presenca_info" | "presenca_confi
 
 // ══ Descrição de Cargo × Catálogo de Habilidades Técnicas ═══════════════
 // A DC REFERENCIA o catálogo existente (peopleflow_dev_habilidades) pela mesma
-// estrutura de "Por cargo": requisito tipo habilidade (peopleflow_dev_cargo_requisitos),
-// sempre DESEJÁVEL (obrigatorio=false — seção "Competências e requisitos desejáveis").
+// estrutura de "Por cargo": requisito tipo habilidade (peopleflow_dev_cargo_requisitos) — seção
+// "Habilidades e competências". Obrigatória × Recomendada é característica da RELAÇÃO cargo ×
+// habilidade (obrigatorio), definida pelo RH; nova seleção nasce Recomendada.
 //   • RH seleciona → vigente (é quem valida).   • Gestor seleciona → sugerido (RH valida).
 //   • Gestor sugere habilidade inexistente → sugerido com descricao_sugerida (fora do
 //     catálogo); só vira habilidade oficial quando o RH valida. Não validar = inativo
@@ -2067,7 +2068,7 @@ async function dcHabilidadeAdicionar(conta: ContaDev, corpo: Corpo) {
     // Reaproveita a linha (unicidade cargo × habilidade): reativa — o histórico fica na auditoria.
     const r = await supabaseAdmin
       .from("peopleflow_dev_cargo_requisitos")
-      .update({ ...valores, ...(ehRH ? {} : { origem: "gestor", sugerido_por_colaborador_id: conta.colaboradorId, justificativa: "Selecionada na Descrição de Cargo" }), updated_by: conta.userId })
+      .update({ ...valores, ...(ehRH ? { obrigatorio: corpo.obrigatorio === true } : { origem: "gestor", sugerido_por_colaborador_id: conta.colaboradorId, justificativa: "Selecionada na Descrição de Cargo" }), updated_by: conta.userId })
       .eq("id", existente.id)
       .select(COLS_REQ)
       .single();
@@ -2080,7 +2081,7 @@ async function dcHabilidadeAdicionar(conta: ContaDev, corpo: Corpo) {
         cargo_nome: cargoNome,
         tipo_requisito: "habilidade",
         habilidade_id: hab.id,
-        obrigatorio: false,
+        obrigatorio: ehRH && corpo.obrigatorio === true,
         observacao: OBS_DC,
         justificativa: ehRH ? "" : "Selecionada na Descrição de Cargo",
         origem: ehRH ? "rh" : "gestor",
@@ -2150,6 +2151,27 @@ async function dcHabilidadeSugerir(conta: ContaDev, corpo: Corpo) {
 }
 
 /** RH remove qualquer uma; Gestor só retira a PRÓPRIA sugestão ainda pendente. Nunca exclusão física. */
+/** RH classifica a habilidade no cargo como Obrigatória ou Recomendada. Não gera gap: habilidade não é avaliada nesta etapa. */
+async function dcHabilidadeClassificar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const antes = await lerRequisitoPorId(idObrigatorio(corpo, "id", "Habilidade da Descrição de Cargo"));
+  if (antes.tipo_requisito !== "habilidade" || antes.status === "inativo") throw new ErroHttp(422, "A habilidade não está ativa nesta Descrição de Cargo.");
+  if (typeof corpo.obrigatorio !== "boolean") throw new ErroHttp(422, "Informe se a habilidade é Obrigatória ou Recomendada.");
+  if (antes.obrigatorio === corpo.obrigatorio) return antes;
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_cargo_requisitos")
+    .update({ obrigatorio: corpo.obrigatorio, updated_by: conta.userId })
+    .eq("id", antes.id)
+    .select(COLS_REQ)
+    .single();
+  if (error) erroBanco(error, "Requisito");
+  await auditar(conta, "dc_habilidade_classificada", "peopleflow_dev_cargo_requisitos", String(antes.id), {
+    cargo_nome: antes.cargo_nome,
+    obrigatorio: { antes: antes.obrigatorio, depois: corpo.obrigatorio },
+  });
+  return data;
+}
+
 async function dcHabilidadeRemover(conta: ContaDev, corpo: Corpo) {
   const r = await lerRequisitoPorId(idObrigatorio(corpo, "id", "Habilidade"));
   if (r.tipo_requisito !== "habilidade" || r.status === "inativo") throw new ErroHttp(422, "Esta habilidade não está ativa na Descrição de Cargo.");
@@ -2210,7 +2232,7 @@ async function dcHabilidadesDados(cargoNome: string) {
   const [req, cat, pend] = await Promise.all([
     supabaseAdmin
       .from("peopleflow_dev_cargo_requisitos")
-      .select("id, habilidade_id, descricao_sugerida, status, origem, observacao, sugerido_por_colaborador_id")
+      .select("id, habilidade_id, descricao_sugerida, status, origem, obrigatorio, observacao, sugerido_por_colaborador_id")
       .eq("cargo_nome", cargoNome)
       .eq("tipo_requisito", "habilidade")
       .in("status", ["vigente", "sugerido"]),
@@ -2229,6 +2251,7 @@ async function dcHabilidadesDados(cargoNome: string) {
       habilidade_id: r.habilidade_id == null ? null : Number(r.habilidade_id),
       nome: r.habilidade_id ? (nomes.get(Number(r.habilidade_id)) ?? "Habilidade") : String(r.descricao_sugerida ?? ""),
       status: r.status,
+      obrigatorio: Boolean(r.obrigatorio),
       nova: r.habilidade_id == null,
       descricao: r.habilidade_id == null ? (r.observacao ?? "") : "",
       sugerido_por_colaborador_id: r.sugerido_por_colaborador_id == null ? null : Number(r.sugerido_por_colaborador_id),
@@ -2288,6 +2311,7 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   dc_habilidade_adicionar: dcHabilidadeAdicionar,
   dc_habilidade_sugerir: dcHabilidadeSugerir,
   dc_habilidade_remover: dcHabilidadeRemover,
+  dc_habilidade_classificar: dcHabilidadeClassificar,
   habilidade_sugestao_validar: habilidadeSugestaoValidar,
   treinamento_planejar: treinamentoPlanejar,
   treinamento_iniciar: treinamentoIniciar,

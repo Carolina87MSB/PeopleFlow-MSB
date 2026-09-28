@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { ArrowDownUp, Plus, X } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { usePortalData } from "../../store/usePortalData";
 import { gravar, iniciarSessao } from "../desenvolvimento/devRepository";
@@ -12,6 +12,8 @@ interface Selecionada {
   habilidade_id: number | null;
   nome: string;
   status: "vigente" | "sugerido";
+  /** Característica da relação cargo × habilidade (definida pelo RH). */
+  obrigatorio: boolean;
   nova: boolean;
   descricao: string;
   sugerido_por_colaborador_id: number | null;
@@ -49,6 +51,7 @@ export default function HabilidadesTecnicasCargo({ cargoNome, textoLegado, texto
   const [sugerindo, setSugerindo] = useState(false);
   const [versao, setVersao] = useState(0);
   const [minhaColaboradorId, setMinhaColaboradorId] = useState<number | null>(null);
+  const [adicionarComo, setAdicionarComo] = useState<"obrigatoria" | "recomendada">("recomendada");
 
   // Quem pode editar precisa saber quais sugestões são dele (Gestor só retira as próprias).
   useEffect(() => {
@@ -91,11 +94,18 @@ export default function HabilidadesTecnicasCargo({ cargoNome, textoLegado, texto
 
   const adicionar = (habilidadeId: number) =>
     comSessao(async () => {
-      await gravar("dc_habilidade_adicionar", { cargo_nome: cargoNome, habilidade_id: habilidadeId });
+      await gravar("dc_habilidade_adicionar", { cargo_nome: cargoNome, habilidade_id: habilidadeId, obrigatorio: ehRH && adicionarComo === "obrigatoria" });
       setBusca("");
       setAberta(false);
     });
   const remover = (s: Selecionada) => comSessao(() => gravar("dc_habilidade_remover", { id: s.id }));
+  const classificar = (s: Selecionada) => comSessao(() => gravar("dc_habilidade_classificar", { id: s.id, obrigatorio: !s.obrigatorio }));
+  const selecionadas = dados?.selecionadas ?? [];
+  const grupos: { titulo: string; itens: Selecionada[]; dica: string }[] = [
+    { titulo: "Obrigatórias", itens: selecionadas.filter((s) => s.status === "vigente" && s.obrigatorio), dica: "Necessárias para executar as responsabilidades essenciais do cargo." },
+    { titulo: "Recomendadas", itens: selecionadas.filter((s) => s.status === "vigente" && !s.obrigatorio), dica: "Desejáveis: agregam desempenho ou desenvolvimento; não são requisito indispensável." },
+    { titulo: "Aguardando validação do RH", itens: selecionadas.filter((s) => s.status === "sugerido"), dica: "Sugestões ainda não oficiais." },
+  ];
   const podeRemover = (s: Selecionada) => operacional && (ehRH || (s.status === "sugerido" && minhaColaboradorId != null && s.sugerido_por_colaborador_id === minhaColaboradorId));
 
   return (
@@ -105,28 +115,64 @@ export default function HabilidadesTecnicasCargo({ cargoNome, textoLegado, texto
       </div>
 
       {erro && <div className={styles.erro}>{erro}</div>}
-      <div className={base.chips}>
-        {!dados ? (
+      {!dados ? (
+        <div className={base.chips}>
           <span className={base.vazio}>{erro ? "—" : "Carregando…"}</span>
-        ) : dados.selecionadas.length === 0 ? (
+        </div>
+      ) : selecionadas.length === 0 ? (
+        <div className={base.chips}>
           <span className={base.vazio}>Nenhuma habilidade técnica selecionada</span>
-        ) : (
-          dados.selecionadas.map((s) => (
-            <span key={s.id} className={s.status === "sugerido" ? `${base.chip} ${styles.chipPendente}` : base.chip} title={s.nova && s.descricao ? s.descricao : undefined}>
-              {s.nome}
-              {s.status === "sugerido" && <span className={styles.pendenteTag}>{s.nova ? "Nova · " : ""}Aguardando validação do RH</span>}
-              {podeRemover(s) && (
-                <button type="button" className={base.chipRemover} onClick={() => void remover(s)} disabled={ocupado} title={`Remover ${s.nome}`} aria-label={`Remover ${s.nome}`}>
-                  <X size={11} />
-                </button>
-              )}
-            </span>
+        </div>
+      ) : (
+        grupos
+          .filter((g) => g.itens.length > 0)
+          .map((g) => (
+            <div key={g.titulo} className={styles.grupoHab}>
+              <span className={styles.grupoRotulo} title={g.dica}>
+                {g.titulo} ({g.itens.length})
+              </span>
+              <div className={base.chips}>
+                {g.itens.map((s) => (
+                  <span key={s.id} className={s.status === "sugerido" ? `${base.chip} ${styles.chipPendente}` : base.chip} title={s.nova && s.descricao ? s.descricao : undefined}>
+                    {s.nome}
+                    {s.status === "sugerido" && s.nova && <span className={styles.pendenteTag}>Nova</span>}
+                    {ehRH && operacional && s.status === "vigente" && (
+                      <button
+                        type="button"
+                        className={base.chipRemover}
+                        onClick={() => void classificar(s)}
+                        disabled={ocupado}
+                        title={s.obrigatorio ? `Tornar ${s.nome} Recomendada` : `Tornar ${s.nome} Obrigatória`}
+                        aria-label={s.obrigatorio ? `Tornar ${s.nome} Recomendada` : `Tornar ${s.nome} Obrigatória`}
+                      >
+                        <ArrowDownUp size={11} />
+                      </button>
+                    )}
+                    {podeRemover(s) && (
+                      <button type="button" className={base.chipRemover} onClick={() => void remover(s)} disabled={ocupado} title={`Remover ${s.nome}`} aria-label={`Remover ${s.nome}`}>
+                        <X size={11} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
           ))
-        )}
-      </div>
+      )}
 
       {operacional && dados && (
         <div className={styles.seletor}>
+          {ehRH && (
+            <div className={styles.adicionarComo} role="radiogroup" aria-label="Classificação ao adicionar">
+              <span>Adicionar como:</span>
+              {(["recomendada", "obrigatoria"] as const).map((v) => (
+                <label key={v}>
+                  <input type="radio" name={`adicionar-como-${cargoNome}`} checked={adicionarComo === v} onChange={() => setAdicionarComo(v)} />
+                  {v === "obrigatoria" ? "Obrigatória" : "Recomendada"}
+                </label>
+              ))}
+            </div>
+          )}
           <input
             className={base.input}
             value={busca}
@@ -185,9 +231,10 @@ export default function HabilidadesTecnicasCargo({ cargoNome, textoLegado, texto
       )}
       {podeEditar && !operacional && <span className={styles.dica}>A seleção das habilidades técnicas é feita pelo RH ou pelo Gestor do cargo.</span>}
 
+      {/* O texto livre anterior é só histórico/rastreabilidade: a fonte oficial são os vínculos acima. */}
       {(textoLegado || textoPendente) && (
-        <div className={base.propostaPendente}>
-          <span className={base.propostaTag}>Texto anterior (legado, somente leitura)</span>
+        <details className={`${base.propostaPendente} ${styles.legado}`} open={Boolean(dados) && selecionadas.length === 0}>
+          <summary className={base.propostaTag}>Texto anterior (legado — histórico, somente leitura)</summary>
           <div className={base.propostaValor}>{textoLegado || "—"}</div>
           {textoPendente && textoPendente !== textoLegado && (
             <>
@@ -197,7 +244,7 @@ export default function HabilidadesTecnicasCargo({ cargoNome, textoLegado, texto
               <div className={base.propostaValor}>{textoPendente}</div>
             </>
           )}
-        </div>
+        </details>
       )}
     </div>
   );

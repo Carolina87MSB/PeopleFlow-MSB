@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { Badge, Button, Modal } from "../../components/ui";
-import { CAMPOS_DESCRICAO_CARGO, descricaoCargoVazia } from "../../domain/descricaoCargo";
+import { CAMPOS_DESCRICAO_CARGO, GRUPO_HABILIDADES_COMPETENCIAS, descricaoCargoVazia } from "../../domain/descricaoCargo";
 import type { CampoDescricaoCargo, CampoMeta } from "../../domain/descricaoCargo";
 import { statusDescricaoCargoMeta } from "../../domain/colors";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
@@ -21,7 +21,7 @@ interface DescricaoCargoModalProps {
 /** Ficha do formulário de descrição de cargo (POP-RH-001): todos os campos do
  * documento oficial, editáveis campo a campo — RH e Diretoria em todos os
  * grupos, Gestor só em "Sumário do cargo", "Principais responsabilidades",
- * "Requisitos do cargo" e "Competências e requisitos desejáveis", e só nos
+ * "Requisitos do cargo" e "Habilidades e competências", e só nos
  * cargos sob sua liderança (ver podeEditarSecaoDescricaoCargo em
  * usePortalData.ts).
  *
@@ -153,8 +153,10 @@ export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalP
         // "Habilidades técnicas" também virou seleção estruturada — no Catálogo de Habilidades
         // Técnicas (Desenvolvimento). O texto livre continua gravado, exibido como legado.
         const camposRenderizados = campos.filter((c) => c.key !== "habilidadesComportamentais" && c.key !== "habilidadesTecnicas");
-        const mostrarCompetencias = grupo === "Competências e requisitos desejáveis";
-        const totalColunas = camposRenderizados.length + (mostrarCompetencias ? 2 : 0);
+        // "Habilidades e competências": Habilidades Técnicas e Competências Comportamentais
+        // empilhadas (largura total), cada uma com seu subtítulo.
+        const mostrarCompetencias = grupo === GRUPO_HABILIDADES_COMPETENCIAS;
+        const totalColunas = mostrarCompetencias ? 1 : camposRenderizados.length;
         return (
           <div key={grupo} className={styles.grupo}>
             <h4 className={styles.sectionTitle}>{grupo}</h4>
@@ -454,7 +456,7 @@ function SeletorCompetenciasCargo({ cargoNome, textoLegado, podeEditar }: Seleto
   return (
     <div className={styles.campo}>
       <div className={styles.campoTopo}>
-        <span className={styles.campoLabel}>Habilidades comportamentais</span>
+        <span className={styles.campoLabel}>Competências comportamentais</span>
       </div>
 
       <div className={styles.chips}>

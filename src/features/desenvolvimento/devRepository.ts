@@ -768,6 +768,7 @@ export type AcaoGravacao =
   | "dc_habilidade_adicionar"
   | "dc_habilidade_sugerir"
   | "dc_habilidade_remover"
+  | "dc_habilidade_classificar"
   | "habilidade_sugestao_validar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
