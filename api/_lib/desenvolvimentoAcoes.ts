@@ -2006,6 +2006,250 @@ export async function executarPresencaQr(acao: "presenca_info" | "presenca_confi
   }
 }
 
+
+// ══ Descrição de Cargo × Catálogo de Habilidades Técnicas ═══════════════
+// A DC REFERENCIA o catálogo existente (peopleflow_dev_habilidades) pela mesma
+// estrutura de "Por cargo": requisito tipo habilidade (peopleflow_dev_cargo_requisitos),
+// sempre DESEJÁVEL (obrigatorio=false — seção "Competências e requisitos desejáveis").
+//   • RH seleciona → vigente (é quem valida).   • Gestor seleciona → sugerido (RH valida).
+//   • Gestor sugere habilidade inexistente → sugerido com descricao_sugerida (fora do
+//     catálogo); só vira habilidade oficial quando o RH valida. Não validar = inativo
+//     com motivo (decisão preservada). Nada disso cria gap: habilidade não é avaliada
+//     nesta etapa. O texto legado da DC nunca é alterado.
+const OBS_DC = "Habilidade técnica da Descrição de Cargo";
+
+async function lerRequisitoPorId(id: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_cargo_requisitos").select(COLS_REQ).eq("id", id).maybeSingle();
+  if (error) erroBanco(error, "Requisito");
+  if (!data) throw new ErroHttp(404, "Habilidade da Descrição de Cargo não encontrada.");
+  return data as Record<string, any>;
+}
+
+async function exigirHabilidadeTecnicaAtiva(id: number) {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_habilidades").select("id, nome, tipo, ativo").eq("id", id).maybeSingle();
+  if (error) erroBanco(error, "Habilidades");
+  if (!data || !data.ativo || data.tipo !== "tecnica") throw new ErroHttp(422, "Selecione uma habilidade técnica ativa do catálogo.");
+  return data;
+}
+
+async function dcHabilidadeAdicionar(conta: ContaDev, corpo: Corpo) {
+  const cargoNome = texto(corpo, "cargo_nome", { obrigatorio: true, max: 200, rotulo: "o cargo" });
+  await exigirCargoOficial(cargoNome, false);
+  await exigirCargoNaEquipe(conta, cargoNome);
+  const hab = await exigirHabilidadeTecnicaAtiva(idObrigatorio(corpo, "habilidade_id", "Habilidade"));
+  const ehRH = conta.perfil === "RH";
+  const agora = new Date().toISOString();
+  const { data: existente, error: eErro } = await supabaseAdmin
+    .from("peopleflow_dev_cargo_requisitos")
+    .select(COLS_REQ)
+    .eq("cargo_nome", cargoNome)
+    .eq("habilidade_id", hab.id)
+    .maybeSingle();
+  if (eErro) erroBanco(eErro, "Requisito");
+  if (existente && existente.status !== "inativo") return existente; // já está no cargo (vigente ou aguardando o RH)
+  const valores = ehRH
+    ? { status: "vigente", validado_em: agora, validado_por: conta.userId, status_motivo: null }
+    : { status: "sugerido", validado_em: null, validado_por: null, status_motivo: null };
+  let data;
+  if (existente) {
+    // Reaproveita a linha (unicidade cargo × habilidade): reativa — o histórico fica na auditoria.
+    const r = await supabaseAdmin
+      .from("peopleflow_dev_cargo_requisitos")
+      .update({ ...valores, ...(ehRH ? {} : { origem: "gestor", sugerido_por_colaborador_id: conta.colaboradorId, justificativa: "Selecionada na Descrição de Cargo" }), updated_by: conta.userId })
+      .eq("id", existente.id)
+      .select(COLS_REQ)
+      .single();
+    if (r.error) erroBanco(r.error, "Requisito");
+    data = r.data;
+  } else {
+    const r = await supabaseAdmin
+      .from("peopleflow_dev_cargo_requisitos")
+      .insert({
+        cargo_nome: cargoNome,
+        tipo_requisito: "habilidade",
+        habilidade_id: hab.id,
+        obrigatorio: false,
+        observacao: OBS_DC,
+        justificativa: ehRH ? "" : "Selecionada na Descrição de Cargo",
+        origem: ehRH ? "rh" : "gestor",
+        origem_registro: "sistema",
+        sugerido_por_colaborador_id: ehRH ? null : conta.colaboradorId,
+        created_by: conta.userId,
+        updated_by: conta.userId,
+        ...valores,
+      })
+      .select(COLS_REQ)
+      .single();
+    if (r.error) erroBanco(r.error, "Requisito");
+    data = r.data;
+  }
+  await auditar(conta, "dc_habilidade_adicionada", "peopleflow_dev_cargo_requisitos", String(data.id), { cargo_nome: cargoNome, habilidade_id: hab.id, habilidade: hab.nome, status: data.status, reativada: Boolean(existente) });
+  return data;
+}
+
+/** Habilidade que não está no catálogo: Gestor sugere (RH valida); RH já cadastra no catálogo. */
+async function dcHabilidadeSugerir(conta: ContaDev, corpo: Corpo) {
+  const cargoNome = texto(corpo, "cargo_nome", { obrigatorio: true, max: 200, rotulo: "o cargo" });
+  await exigirCargoOficial(cargoNome, false);
+  await exigirCargoNaEquipe(conta, cargoNome);
+  const nome = texto(corpo, "nome", { obrigatorio: true, max: 200, rotulo: "o nome da habilidade técnica" }).replace(/\s+/g, " ");
+  const descricao = texto(corpo, "descricao", { max: 2000 });
+  const justificativa = texto(corpo, "justificativa", { max: 2000 });
+  const { data: igual, error: dErro } = await supabaseAdmin.from("peopleflow_dev_habilidades").select("id, nome, ativo").eq("nome_normalizado", normalizarNome(nome)).maybeSingle();
+  if (dErro) erroBanco(dErro, "Habilidades");
+  if (igual) throw new ErroHttp(409, `Já existe no catálogo: "${igual.nome}"${igual.ativo ? " — selecione-a na lista." : " (inativa — peça ao RH para reativar)."}`);
+  if (conta.perfil === "RH") {
+    const h = (await habilidadeSalvar(conta, { nome, descricao, tipo: "tecnica" })) as Record<string, any>;
+    return dcHabilidadeAdicionar(conta, { cargo_nome: cargoNome, habilidade_id: h.id });
+  }
+  const { data: pendenteIgual } = await supabaseAdmin
+    .from("peopleflow_dev_cargo_requisitos")
+    .select("id")
+    .eq("cargo_nome", cargoNome)
+    .eq("tipo_requisito", "habilidade")
+    .eq("status", "sugerido")
+    .is("habilidade_id", null);
+  for (const r of pendenteIgual ?? []) {
+    const lida = await lerRequisitoPorId(Number(r.id));
+    if (normalizarNome(String(lida.descricao_sugerida ?? "")) === normalizarNome(nome)) throw new ErroHttp(409, "Essa sugestão já está aguardando validação do RH para este cargo.");
+  }
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_cargo_requisitos")
+    .insert({
+      cargo_nome: cargoNome,
+      tipo_requisito: "habilidade",
+      habilidade_id: null,
+      descricao_sugerida: nome,
+      obrigatorio: false,
+      observacao: descricao,
+      justificativa: justificativa || "Sugerida na Descrição de Cargo",
+      status: "sugerido",
+      origem: "gestor",
+      origem_registro: "sistema",
+      sugerido_por_colaborador_id: conta.colaboradorId,
+      created_by: conta.userId,
+      updated_by: conta.userId,
+    })
+    .select(COLS_REQ)
+    .single();
+  if (error) erroBanco(error, "Sugestão de habilidade técnica");
+  await auditar(conta, "dc_habilidade_sugerida", "peopleflow_dev_cargo_requisitos", String(data.id), { cargo_nome: cargoNome, nome, descricao });
+  return data;
+}
+
+/** RH remove qualquer uma; Gestor só retira a PRÓPRIA sugestão ainda pendente. Nunca exclusão física. */
+async function dcHabilidadeRemover(conta: ContaDev, corpo: Corpo) {
+  const r = await lerRequisitoPorId(idObrigatorio(corpo, "id", "Habilidade"));
+  if (r.tipo_requisito !== "habilidade" || r.status === "inativo") throw new ErroHttp(422, "Esta habilidade não está ativa na Descrição de Cargo.");
+  if (conta.perfil !== "RH") {
+    await exigirCargoNaEquipe(conta, r.cargo_nome);
+    if (!(r.status === "sugerido" && r.origem === "gestor" && Number(r.sugerido_por_colaborador_id) === conta.colaboradorId)) {
+      throw new ErroHttp(403, "O Gestor retira apenas as próprias sugestões ainda pendentes. Para remover uma habilidade oficial, fale com o RH.");
+    }
+  }
+  const motivo = texto(corpo, "motivo", { max: 1000 }) || (conta.perfil === "RH" ? "Removida da Descrição de Cargo" : "Sugestão retirada pelo gestor");
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_cargo_requisitos")
+    .update({ status: "inativo", status_motivo: motivo, updated_by: conta.userId })
+    .eq("id", r.id)
+    .select(COLS_REQ)
+    .single();
+  if (error) erroBanco(error, "Requisito");
+  await auditar(conta, "dc_habilidade_removida", "peopleflow_dev_cargo_requisitos", String(r.id), { cargo_nome: r.cargo_nome, habilidade_id: r.habilidade_id, descricao_sugerida: r.descricao_sugerida, motivo });
+  return data;
+}
+
+/** RH valida a sugestão de habilidade NOVA: cadastra no catálogo (ou vincula a uma existente) e associa ao cargo. */
+async function habilidadeSugestaoValidar(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const r = await lerRequisitoPorId(idObrigatorio(corpo, "requisito_id", "Sugestão"));
+  if (r.tipo_requisito !== "habilidade" || r.status !== "sugerido" || r.habilidade_id) throw new ErroHttp(422, "Esta não é uma sugestão de habilidade nova pendente.");
+  let habilidadeId: number;
+  if (corpo.habilidade_id) {
+    habilidadeId = (await exigirHabilidadeTecnicaAtiva(idObrigatorio(corpo, "habilidade_id", "Habilidade"))).id as number;
+  } else {
+    const nome = texto(corpo, "nome", { max: 200 }) || String(r.descricao_sugerida ?? "");
+    const h = (await habilidadeSalvar(conta, { nome, descricao: texto(corpo, "descricao", { max: 2000 }) || r.observacao || "", tipo: "tecnica", categoria: texto(corpo, "categoria", { max: 80 }) })) as Record<string, any>;
+    habilidadeId = Number(h.id);
+  }
+  const { data: jaNoCargo } = await supabaseAdmin.from("peopleflow_dev_cargo_requisitos").select("id, status").eq("cargo_nome", r.cargo_nome).eq("habilidade_id", habilidadeId).maybeSingle();
+  if (jaNoCargo) {
+    // O cargo já tem essa habilidade: a sugestão é encerrada como atendida pela existente (sem duplicar).
+    const { error: encErro } = await supabaseAdmin.from("peopleflow_dev_cargo_requisitos").update({ status: "inativo", status_motivo: "Sugestão atendida por habilidade já existente no cargo", updated_by: conta.userId }).eq("id", r.id);
+    if (encErro) erroBanco(encErro, "Requisito");
+    if (jaNoCargo.status !== "vigente") await requisitoStatus(conta, { id: jaNoCargo.id, status: "vigente" });
+    await auditar(conta, "habilidade_sugestao_validada", "peopleflow_dev_cargo_requisitos", String(r.id), { cargo_nome: r.cargo_nome, habilidade_id: habilidadeId, via: "existente_no_cargo" });
+    return lerRequisitoPorId(Number(jaNoCargo.id));
+  }
+  const agora = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_cargo_requisitos")
+    .update({ habilidade_id: habilidadeId, descricao_sugerida: null, status: "vigente", validado_em: agora, validado_por: conta.userId, status_motivo: null, updated_by: conta.userId })
+    .eq("id", r.id)
+    .select(COLS_REQ)
+    .single();
+  if (error) erroBanco(error, "Requisito");
+  await auditar(conta, "habilidade_sugestao_validada", "peopleflow_dev_cargo_requisitos", String(r.id), { cargo_nome: r.cargo_nome, sugerida: r.descricao_sugerida, habilidade_id: habilidadeId, criada_no_catalogo: !corpo.habilidade_id });
+  return data;
+}
+
+/** Leitura para a DC (qualquer conta do PeopleFlow, como a própria DC): habilidades técnicas do cargo + catálogo ativo. */
+async function dcHabilidadesDados(cargoNome: string) {
+  const [req, cat, pend] = await Promise.all([
+    supabaseAdmin
+      .from("peopleflow_dev_cargo_requisitos")
+      .select("id, habilidade_id, descricao_sugerida, status, origem, observacao, sugerido_por_colaborador_id")
+      .eq("cargo_nome", cargoNome)
+      .eq("tipo_requisito", "habilidade")
+      .in("status", ["vigente", "sugerido"]),
+    supabaseAdmin.from("peopleflow_dev_habilidades").select("id, nome, descricao, categoria").eq("ativo", true).eq("tipo", "tecnica"),
+    supabaseAdmin.from("peopleflow_dev_cargo_requisitos").select("cargo_nome, descricao_sugerida").eq("tipo_requisito", "habilidade").eq("status", "sugerido").is("habilidade_id", null).neq("origem", "importacao"),
+  ]);
+  if (req.error) erroBanco(req.error, "Requisitos");
+  if (cat.error) erroBanco(cat.error, "Habilidades");
+  const nomes = new Map((cat.data ?? []).map((h) => [Number(h.id), String(h.nome)]));
+  // Na DC: vigentes (qualquer origem) + sugestões feitas na própria DC/Por cargo por Gestor ou RH.
+  // Requisitos só importados do portal antigo (sugerido/importação) seguem em "Por cargo" até a validação.
+  const selecionadas = (req.data ?? [])
+    .filter((r) => r.status === "vigente" || r.origem !== "importacao")
+    .map((r) => ({
+      id: Number(r.id),
+      habilidade_id: r.habilidade_id == null ? null : Number(r.habilidade_id),
+      nome: r.habilidade_id ? (nomes.get(Number(r.habilidade_id)) ?? "Habilidade") : String(r.descricao_sugerida ?? ""),
+      status: r.status,
+      nova: r.habilidade_id == null,
+      descricao: r.habilidade_id == null ? (r.observacao ?? "") : "",
+      sugerido_por_colaborador_id: r.sugerido_por_colaborador_id == null ? null : Number(r.sugerido_por_colaborador_id),
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  return {
+    selecionadas,
+    catalogo: (cat.data ?? []).map((h) => ({ id: Number(h.id), nome: String(h.nome), descricao: String(h.descricao ?? ""), categoria: h.categoria ?? null })).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    sugestoes_pendentes: (pend.data ?? []).map((p) => ({ cargo: String(p.cargo_nome), nome: String(p.descricao_sugerida ?? "") })),
+  };
+}
+
+export async function executarLeituraDC(req: VercelRequest, res: VercelResponse) {
+  try {
+    const raw = Array.isArray(req.headers.authorization) ? req.headers.authorization[0] : req.headers.authorization;
+    const token = raw?.replace(/^Bearer\s+/i, "").trim();
+    if (!token) throw new ErroHttp(401, "Sessão ausente.");
+    const { data: u, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !u.user) throw new ErroHttp(401, "Sessão inválida ou expirada.");
+    const { data: acesso } = await supabaseAdmin.from("module_access").select("modulo").eq("user_id", u.user.id).eq("modulo", "peopleflow").maybeSingle();
+    if (!acesso) throw new ErroHttp(403, "Conta sem acesso ao PeopleFlow.");
+    const corpo = (typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {})) as Corpo;
+    const cargoNome = texto(corpo, "cargo_nome", { obrigatorio: true, max: 200, rotulo: "o cargo" });
+    res.status(200).json({ ok: true, dados: await dcHabilidadesDados(cargoNome) });
+  } catch (err) {
+    if (err instanceof ErroHttp) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+}
+
 // ── Roteamento ──────────────────────────────────────────────────────────
 const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>> = {
   lista_mestra_salvar: listaMestraSalvar,
@@ -2029,6 +2273,10 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   reposicao_faltantes: reposicaoFaltantes,
   participantes_opcoes: participantesOpcoes,
   lista_presenca_gerar: listaPresencaGerar,
+  dc_habilidade_adicionar: dcHabilidadeAdicionar,
+  dc_habilidade_sugerir: dcHabilidadeSugerir,
+  dc_habilidade_remover: dcHabilidadeRemover,
+  habilidade_sugestao_validar: habilidadeSugestaoValidar,
   treinamento_planejar: treinamentoPlanejar,
   treinamento_iniciar: treinamentoIniciar,
   treinamento_concluir: treinamentoConcluir,

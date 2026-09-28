@@ -1,0 +1,187 @@
+/* Habilidades Técnicas da Descrição de Cargo — complementa DescricaoCargoModal.module.css
+   (mesmos chips/inputs das Habilidades Comportamentais). */
+.chipPendente {
+  background: #f8efdc;
+  border-color: rgba(138, 94, 24, 0.3);
+}
+
+.pendenteTag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a5e18;
+  white-space: nowrap;
+}
+
+.seletor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.lista {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(51, 72, 90, 0.12);
+}
+
+.opcao {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: 500 13px var(--font-sans);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.opcao:hover,
+.opcao:focus {
+  background: var(--color-brand-pale, #eef7f9);
+  outline: none;
+}
+
+.opcaoCategoria {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.semResultado {
+  padding: 9px 10px;
+  font-size: 12.5px;
+  color: var(--color-muted);
+}
+
+.linkSugerir {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  font: 600 12.5px var(--font-sans);
+  color: var(--color-brand-dark, #0f7f78);
+  cursor: pointer;
+}
+
+.sugestao {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt, #f6fafb);
+}
+
+.rotulo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.parecidas {
+  font-size: 12.5px;
+  color: var(--color-text);
+}
+
+.parecidas ul {
+  margin: 6px 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.parecidas li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 10px;
+}
+
+.confirmar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.botaoPrimario,
+.botaoSecundario {
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md, 10px);
+  font: 700 12.5px var(--font-sans);
+  cursor: pointer;
+}
+
+.botaoPrimario {
+  border: 0;
+  background: var(--color-brand);
+  color: #fff;
+}
+
+.botaoPrimario:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.botaoSecundario {
+  border: 1px solid var(--color-border-strong);
+  background: #fff;
+  color: var(--color-text);
+}
+
+.dica {
+  font-size: 11.5px;
+  color: var(--color-muted);
+}
+
+.erro {
+  font-size: 12px;
+  color: #a23b3b;
+}
+
+@media (max-width: 700px) {
+  .botaoPrimario,
+  .botaoSecundario {
+    min-height: 44px;
+    flex: 1 1 auto;
+  }
+  .opcao {
+    padding: 12px 10px;
+  }
+}

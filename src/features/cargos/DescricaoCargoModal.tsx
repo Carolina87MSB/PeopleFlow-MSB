@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { Badge, Button, Modal } from "../../components/ui";
 import { CAMPOS_DESCRICAO_CARGO, descricaoCargoVazia } from "../../domain/descricaoCargo";
@@ -9,6 +9,9 @@ import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import type { HistoricoDescricaoCargo } from "../../types/domain";
 import styles from "./DescricaoCargoModal.module.css";
+
+// Carregado sob demanda (usa a API do módulo Desenvolvimento) — não pesa na abertura do portal.
+const HabilidadesTecnicasCargo = lazy(() => import("./HabilidadesTecnicasCargo"));
 
 interface DescricaoCargoModalProps {
   cargoNome: string;
@@ -126,7 +129,7 @@ export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalP
       }
       subtitle="Descrição de cargo · POP-RH-001"
       onClose={onClose}
-      width={640}
+      width={720}
     >
       {emRevisao && (
         <div className={styles.bannerRevisao}>
@@ -147,9 +150,11 @@ export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalP
         // (RH, 2026-09) — vira o seletor estruturado de competências
         // (SeletorCompetenciasCargo), renderizado como mais uma "célula" deste
         // mesmo grid, no lugar de onde o textarea livre aparecia antes.
-        const camposRenderizados = campos.filter((c) => c.key !== "habilidadesComportamentais");
+        // "Habilidades técnicas" também virou seleção estruturada — no Catálogo de Habilidades
+        // Técnicas (Desenvolvimento). O texto livre continua gravado, exibido como legado.
+        const camposRenderizados = campos.filter((c) => c.key !== "habilidadesComportamentais" && c.key !== "habilidadesTecnicas");
         const mostrarCompetencias = grupo === "Competências e requisitos desejáveis";
-        const totalColunas = camposRenderizados.length + (mostrarCompetencias ? 1 : 0);
+        const totalColunas = camposRenderizados.length + (mostrarCompetencias ? 2 : 0);
         return (
           <div key={grupo} className={styles.grupo}>
             <h4 className={styles.sectionTitle}>{grupo}</h4>
@@ -169,6 +174,16 @@ export function DescricaoCargoModal({ cargoNome, onClose }: DescricaoCargoModalP
                   opcoesOverride={campo.key === "subordinacao" ? cargosParaSubordinacao : undefined}
                 />
               ))}
+              {mostrarCompetencias && (
+                <Suspense fallback={<div className={styles.campo}><span className={styles.campoLabel}>Habilidades técnicas</span><span className={styles.vazio}>Carregando…</span></div>}>
+                  <HabilidadesTecnicasCargo
+                    cargoNome={cargoNome}
+                    textoLegado={descricao.habilidadesTecnicas}
+                    textoPendente={descricao.pendente?.habilidadesTecnicas}
+                    podeEditar={podeEditarSecaoDescricaoCargo(cargoNome, grupo)}
+                  />
+                </Suspense>
+              )}
               {mostrarCompetencias && (
                 <SeletorCompetenciasCargo
                   cargoNome={cargoNome}

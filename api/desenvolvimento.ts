@@ -19,7 +19,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "./_lib/adminAuth.js";
-import { ehAcaoDeGravacao, ehAcaoDePresencaQr, executarAcao, executarPresencaQr } from "./_lib/desenvolvimentoAcoes.js";
+import { ehAcaoDeGravacao, ehAcaoDePresencaQr, executarAcao, executarLeituraDC, executarPresencaQr } from "./_lib/desenvolvimentoAcoes.js";
 import { buildAccess, descendants, emailOf } from "../src/domain/hierarquia.js";
 import { tempoDeEmpresa } from "../src/domain/dates.js";
 import type { Colaborador } from "../src/types/domain.js";
@@ -252,6 +252,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const acao = typeof req.query.acao === "string" ? req.query.acao : "";
     if (acao === "sessao" && req.method === "POST") {
       await sessao(req, res);
+      return;
+    }
+    // Descrição de Cargo: leitura das habilidades técnicas — qualquer conta do PeopleFlow (como a própria DC).
+    if (acao === "dc_habilidades_listar" && req.method === "POST") {
+      await executarLeituraDC(req, res);
       return;
     }
     // Página /participar/:token — qualquer conta do PeopleFlow, sem sessão do módulo.

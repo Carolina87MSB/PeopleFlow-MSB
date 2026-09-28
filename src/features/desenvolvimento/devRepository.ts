@@ -764,7 +764,11 @@ export type AcaoGravacao =
   | "necessidades_opcoes"
   | "responsaveis_gestao_listar"
   | "responsavel_gestao_indicar"
-  | "responsavel_gestao_revogar";
+  | "responsavel_gestao_revogar"
+  | "dc_habilidade_adicionar"
+  | "dc_habilidade_sugerir"
+  | "dc_habilidade_remover"
+  | "habilidade_sugestao_validar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {
