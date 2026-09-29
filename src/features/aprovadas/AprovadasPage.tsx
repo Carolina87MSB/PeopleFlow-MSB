@@ -61,6 +61,7 @@ function AcaoSubstituicao({ m }: { m: Movimentacao }) {
       {pendente && (
         <Button
           variant="ghost"
+          className={styles.botaoSubstituicao}
           onClick={(e) => {
             e.stopPropagation();
             setAberta(true);
@@ -105,7 +106,17 @@ export function AprovadasPage() {
         <EmptyState message="Nenhuma movimentação aprovada ainda." />
       ) : (
         <div className={tableStyles.wrap}>
-          <table className={tableStyles.table}>
+          <table className={[tableStyles.table, styles.tabelaAprovadas].join(" ")}>
+            <colgroup>
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "19%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "17%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "15%" }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>Solicitação</th>
@@ -135,8 +146,10 @@ export function AprovadasPage() {
                   </td>
                   <td>{m.aprovacaoFinal ? `${m.aprovacaoFinal.data} · ${m.aprovacaoFinal.hora}` : "—"}</td>
                   <td className={tableStyles.right}>
-                    <AcaoSubstituicao m={m} />
-                    <AcaoCarta m={m} />
+                    <div className={styles.acoesColuna}>
+                      <AcaoSubstituicao m={m} />
+                      <AcaoCarta m={m} />
+                    </div>
                   </td>
                 </tr>
               ))}
