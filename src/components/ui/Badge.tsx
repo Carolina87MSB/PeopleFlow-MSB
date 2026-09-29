@@ -7,12 +7,13 @@ interface BadgeProps {
   fg: string;
   dot?: string;
   pill?: boolean;
+  className?: string;
 }
 
-export function Badge({ children, bg, fg, dot, pill = true }: BadgeProps) {
+export function Badge({ children, bg, fg, dot, pill = true, className }: BadgeProps) {
   const style: CSSProperties = { background: bg, color: fg, borderRadius: pill ? "999px" : "8px" };
   return (
-    <span className={styles.badge} style={style}>
+    <span className={[styles.badge, className].filter(Boolean).join(" ")} style={style}>
       {dot && <span className={styles.dot} style={{ background: dot }} />}
       {children}
     </span>

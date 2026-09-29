@@ -6,36 +6,6 @@
   margin-bottom: 12px;
 }
 
-/* O texto do botão de status da Carta ("Carta (Aguardando ciência)") varia de
- * tamanho e, dentro da coluna "Ações" da tabela, era cortado na borda direita
- * da tela porque o botão-base (Button.module.css) força `white-space: nowrap`.
- * Aqui, só para este botão específico, deixamos quebrar em várias linhas
- * dentro de uma largura máxima, em vez de depender só do scroll horizontal do
- * container da tabela (`Table.module.css` já tem `overflow-x: auto` como
- * reforço em telas bem estreitas).
- *
- * `min-width` é essencial aqui: sem um piso, `word-break: break-word` (que
- * permite quebrar até no meio de uma palavra, não só num espaço) deixava o
- * navegador tratar "1 caractere por linha" como opção válida quando a
- * tabela precisava espremer espaço — o texto virava uma coluna vertical de
- * letras soltas. Como o texto sempre tem um espaço natural ("Carta" /
- * "(status)"), a quebra normal de linha já resolve sozinha; por isso
- * `word-break: break-word` foi removido — nunca foi necessário pra este
- * texto e era exatamente o que abria a brecha pro bug. */
-.botaoCarta {
-  min-width: 140px;
-  max-width: 230px;
-  white-space: normal;
-  text-align: left;
-  line-height: 1.35;
-}
-
-@media (max-width: 700px) {
-  .botaoCarta {
-    max-width: 160px;
-  }
-}
-
 .acaoSubstituicao {
   display: flex;
   flex-direction: column;
@@ -43,22 +13,11 @@
   gap: 4px;
 }
 
-/* Mesmo tratamento do .botaoCarta acima (Button.module.css força
- * white-space: nowrap na base) — sem isso, "Registrar substituição" força a
- * coluna Ações além da largura fixa da tabela. */
-.botaoSubstituicao {
-  min-width: 130px;
-  max-width: 190px;
-  white-space: normal;
-  text-align: right;
-  line-height: 1.35;
-}
-
 .substituicaoPendente,
 .substituicaoRealizada {
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: var(--radius-pill);
   white-space: nowrap;
 }
@@ -73,30 +32,90 @@
   color: var(--color-success-fg);
 }
 
+/* Botão de ação (Emitir Carta / Carta (status) / Registrar substituição) —
+ * fora da tabela (cabeçalho do detalhe) mantém o tamanho natural do texto;
+ * dentro da tabela, `.acoesColuna .botaoAcao` abaixo o força a caber em
+ * `width: 100%` da coluna, nunca maior do que ela (ver comentário de
+ * `.acoesColuna` sobre a sobreposição que isso corrige). */
+.botaoAcao.botaoAcao {
+  white-space: normal;
+  line-height: 1.3;
+  text-align: center;
+}
+
 /* Larguras fixas (via <colgroup> no JSX) só nesta tabela — sem isso
  * (table-layout: auto, o padrão de Table.module.css, compartilhado com todas
  * as outras tabelas do portal), cada coluna cresce pelo conteúdo mais largo
- * e a linha inteira passa da largura da tela, forçando o scroll horizontal
- * que apareceu depois da coluna de Substituição. `th`/`td` aqui têm a mesma
- * especificidade dos de Table.module.css — dobrar a classe (`.tabelaAprovadas.tabelaAprovadas`)
- * garante que este padding mais compacto vence independente da ordem de
- * carregamento dos dois CSS Modules. */
+ * e a linha inteira passa da largura da tela. `th`/`td` aqui têm a mesma
+ * especificidade dos de Table.module.css — dobrar a classe
+ * (`.tabelaAprovadas.tabelaAprovadas`) garante que a tipografia/padding mais
+ * compactos vencem independente da ordem de carregamento dos dois CSS
+ * Modules. */
 .tabelaAprovadas {
   table-layout: fixed;
 }
 
 .tabelaAprovadas.tabelaAprovadas th,
 .tabelaAprovadas.tabelaAprovadas td {
-  padding: 11px 12px;
+  padding: 8px 10px;
 }
 
 .tabelaAprovadas.tabelaAprovadas th {
+  font-size: 10px;
   white-space: normal;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
-.tabelaAprovadas td {
+.tabelaAprovadas.tabelaAprovadas td {
+  font-size: 11px;
+  line-height: 1.35;
   overflow-wrap: break-word;
+}
+
+.celulaNowrap {
+  white-space: nowrap;
+}
+
+.badgeCompacta {
+  font-size: 9.5px !important;
+  padding: 2px 7px !important;
+}
+
+/* A coluna Ações é a origem da sobreposição visual com "Aprovação final":
+ * os botões (Button.module.css) têm `white-space: nowrap` de base e, no
+ * ajuste anterior, um `min-width` fixo — sempre que o texto ("Registrar
+ * substituição", "Emitir Carta de Movimentação") precisava de mais espaço
+ * do que a coluna realmente tinha, o botão ficava mais largo que a própria
+ * célula e, alinhado à direita, vazava para a ESQUERDA por cima da coluna
+ * anterior. A correção estrutural: a coluna vira uma caixa que ocupa
+ * exatamente a largura da célula (`width: 100%` + `box-sizing: border-box`)
+ * e cada botão dentro dela também é `width: 100%` — nunca pode ficar maior
+ * que o pai, então nunca pode vazar pra fora da célula. */
+.acoesColuna {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.acoesColuna .botaoAcao {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  font-size: 10.5px;
+}
+
+.acoesColuna .acaoSubstituicao {
+  align-items: stretch;
+  width: 100%;
+}
+
+.acoesColuna .substituicaoPendente,
+.acoesColuna .substituicaoRealizada {
+  text-align: center;
 }
 
 @media (max-width: 900px) {
@@ -106,11 +125,13 @@
   .tabelaAprovadas {
     table-layout: auto;
   }
-}
 
-.acoesColuna {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  .acoesColuna {
+    align-items: flex-end;
+    width: auto;
+  }
+
+  .acoesColuna .botaoAcao {
+    width: auto;
+  }
 }

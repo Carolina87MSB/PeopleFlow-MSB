@@ -20,6 +20,7 @@ function AcaoCarta({ m }: { m: Movimentacao }) {
     return (
       <Button
         variant="ghost"
+        className={styles.botaoAcao}
         onClick={(e) => {
           e.stopPropagation();
           emitirCartaMovimentacao(m.id);
@@ -34,7 +35,7 @@ function AcaoCarta({ m }: { m: Movimentacao }) {
     <>
       <Button
         variant="ghost"
-        className={styles.botaoCarta}
+        className={styles.botaoAcao}
         title={`Carta (${statusCarta(m.cartaMovimentacao)})`}
         onClick={(e) => {
           e.stopPropagation();
@@ -61,7 +62,7 @@ function AcaoSubstituicao({ m }: { m: Movimentacao }) {
       {pendente && (
         <Button
           variant="ghost"
-          className={styles.botaoSubstituicao}
+          className={styles.botaoAcao}
           onClick={(e) => {
             e.stopPropagation();
             setAberta(true);
@@ -109,13 +110,13 @@ export function AprovadasPage() {
           <table className={[tableStyles.table, styles.tabelaAprovadas].join(" ")}>
             <colgroup>
               <col style={{ width: "9%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "19%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "17%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "9%" }} />
               <col style={{ width: "15%" }} />
+              <col style={{ width: "16%" }} />
             </colgroup>
             <thead>
               <tr>
@@ -132,9 +133,9 @@ export function AprovadasPage() {
             <tbody>
               {aprovadas.map((m) => (
                 <tr key={m.id} className={tableStyles.clickable} onClick={() => setSelecionado(m.id)}>
-                  <td>{m.id}</td>
+                  <td className={styles.celulaNowrap}>{m.id}</td>
                   <td>
-                    <Badge bg={`${tipoColor(m.tipoCod)}1a`} fg={tipoColor(m.tipoCod)} pill={false}>
+                    <Badge bg={`${tipoColor(m.tipoCod)}1a`} fg={tipoColor(m.tipoCod)} pill={false} className={styles.badgeCompacta}>
                       {m.tipoCod}
                     </Badge>
                   </td>
@@ -142,7 +143,7 @@ export function AprovadasPage() {
                   <td>{m.depto}</td>
                   <td>{m.solicitante}</td>
                   <td>
-                    <StatusBadge status={m.status} />
+                    <StatusBadge status={m.status} className={styles.badgeCompacta} />
                   </td>
                   <td>{m.aprovacaoFinal ? `${m.aprovacaoFinal.data} · ${m.aprovacaoFinal.hora}` : "—"}</td>
                   <td className={tableStyles.right}>
