@@ -1,6 +1,8 @@
 // Camada de acesso à tabela `colaboradores` — COMPARTILHADA com o Portal SST
 // MSB (mesmo projeto Supabase, mesmas pessoas). O PeopleFlow só lê as colunas
-// que usa (nunca cpf/epis/exames, que são do domínio do SST). Escritas em
+// que usa (nunca cpf/epis/exames, que são do domínio do SST — `id` é a única
+// exceção, RH 2026-09: usado como chave pra cadeia do Aviso Prévio, nunca
+// para exibir/comparar nada na UI). Escritas em
 // `colaboradores`, todas via Vercel Function RH-only (RLS só libera SELECT
 // direto do navegador): atualizarAdmissao() (edição manual na tela
 // Colaboradores), criarPreCadastro() (ao concluir uma Admissão) e
@@ -18,6 +20,7 @@ import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import type { Colaborador, Nivel } from "../types/domain";
 
 interface ColaboradorRow {
+  id: number;
   nome: string;
   cargo: string | null;
   departamento: string | null;
@@ -48,6 +51,7 @@ const NIVEIS_VALIDOS: Nivel[] = [
 function fromRow(row: ColaboradorRow): Colaborador {
   const nivel = NIVEIS_VALIDOS.includes(row.nivel as Nivel) ? (row.nivel as Nivel) : "Operacional";
   return {
+    id: row.id,
     vinculo: row.vinculo ?? "—",
     nome: row.nome,
     cargo: row.cargo ?? "",
@@ -83,7 +87,7 @@ export async function getColaboradores(): Promise<Colaborador[]> {
   const { data, error } = await supabase
     .from("colaboradores")
     .select(
-      "nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by, matriz9box_visao_completa, empresa_afiliada",
+      "id, nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by, matriz9box_visao_completa, empresa_afiliada",
     )
     .order("nome", { ascending: true });
 

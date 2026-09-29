@@ -277,6 +277,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     atualizacaoInfo,
     desligamentoInfo,
     pedidoDemissao: f.tipo === "DES" ? f.desPedidoDemissao : undefined,
+    colaboradorId: colab?.id,
     historico,
   });
 }

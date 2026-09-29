@@ -49,6 +49,7 @@ const COLUNAS =
 
 function toColaborador(row: ColaboradorRow): Colaborador {
   return {
+    id: row.id,
     vinculo: row.vinculo ?? "—",
     nome: row.nome,
     cargo: row.cargo ?? "",

@@ -6,6 +6,7 @@ import {
   criarPreCadastro as criarPreCadastroNoSupabase,
   criarSolicitacaoDesligamento as criarSolicitacaoDesligamentoNoSupabase,
 } from "../repositories/colaboradoresRepository";
+import { gerarAvisoPrevio } from "../repositories/avisoPrevioRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import {
   COLUNA_POR_CAMPO,
@@ -786,6 +787,21 @@ export function usePortalData(): PortalData {
               conta.email,
             );
             msg = `Desligamento de "${desligamentoRegistrado.nome}" aprovado — agora aguarda o RH efetivar no Portal SST (anexando o ASO demissional, se aplicável).`;
+
+            // Geração automática do Aviso Prévio Indenizado (RH, 2026-09) — só
+            // quando tipoAvisoPrevio === "indenizado" (checado dentro do
+            // endpoint, que também é idempotente). Best-effort: uma falha aqui
+            // (ex.: CPF ausente no cadastro) não deve travar a aprovação em si,
+            // que já foi persistida acima — só avisa a RH para ela corrigir.
+            if (atualizada.tipoAvisoPrevio === "indenizado") {
+              try {
+                await gerarAvisoPrevio(id);
+              } catch (avisoErr) {
+                // eslint-disable-next-line no-console
+                console.error("[aprovarEtapaFn] Falha ao gerar Aviso Prévio", avisoErr);
+                msg += ` Atenção: falha ao gerar o Aviso Prévio automaticamente (${avisoErr instanceof Error ? avisoErr.message : "erro desconhecido"}).`;
+              }
+            }
           }
           dispatch({ type: "APROVAR_ETAPA", id });
           flash(msg);

@@ -5,7 +5,7 @@
 // nunca pode fazer diretamente.
 
 import { createClient } from "@supabase/supabase-js";
-import { buildAccess } from "../../src/domain/hierarquia.js";
+import { buildAccess, descendants } from "../../src/domain/hierarquia.js";
 import { tempoDeEmpresa } from "../../src/domain/dates.js";
 import type { Colaborador } from "../../src/types/domain.js";
 
@@ -25,6 +25,7 @@ export const supabaseAdmin = createClient(url || "https://placeholder.supabase.c
 });
 
 interface ColaboradorRow {
+  id: number;
   nome: string;
   cargo: string | null;
   departamento: string | null;
@@ -43,6 +44,7 @@ interface ColaboradorRow {
 
 function fromRow(row: ColaboradorRow): Colaborador {
   return {
+    id: row.id,
     vinculo: row.vinculo ?? "—",
     nome: row.nome,
     cargo: row.cargo ?? "",
@@ -88,7 +90,7 @@ export async function requireRH(authHeader: string | string[] | undefined): Prom
   const { data, error } = await supabaseAdmin
     .from("colaboradores")
     .select(
-      "nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by, matriz9box_visao_completa, empresa_afiliada",
+      "id, nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by, matriz9box_visao_completa, empresa_afiliada",
     );
   if (error) return { ok: false, status: 500, error: error.message };
 
@@ -99,6 +101,58 @@ export async function requireRH(authHeader: string | string[] | undefined): Prom
     return { ok: false, status: 403, error: "Apenas RH pode gerenciar acessos." };
   }
   return { ok: true, colaboradores };
+}
+
+export type RequireRHOuGestorResult =
+  | { ok: true; perfil: "RH" | "Gestor"; nomeSolicitante: string; colaboradorNome: string; colaboradores: Colaborador[] }
+  | { ok: false; status: number; error: string };
+
+/** Autorização dos documentos da movimentação (Aviso Prévio) — RH, 2026-09.
+ * RH sempre libera. Gestor só quando o colaborador do documento está no seu
+ * escopo hierárquico (`descendants()`, o mesmo cálculo que já decide o que
+ * um Gestor vê em qualquer outra tela — nunca recalculado do zero aqui).
+ * `descendants()` NUNCA inclui a própria pessoa (só descendentes reais na
+ * árvore) — deliberado: "ser o próprio colaborador" não concede acesso ao
+ * documento por si só (pedido explícito da RH). Localiza o colaborador por
+ * `colaboradorId`, nunca por nome. */
+export async function requireRHOuGestorDoColaborador(
+  authHeader: string | string[] | undefined,
+  colaboradorId: number,
+): Promise<RequireRHOuGestorResult> {
+  if (!url || !serviceRoleKey) {
+    return { ok: false, status: 500, error: "SUPABASE_SERVICE_ROLE_KEY (ou VITE_SUPABASE_URL) não configurada nas variáveis de ambiente da Vercel." };
+  }
+
+  const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  const token = raw?.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return { ok: false, status: 401, error: "Token de autenticação ausente." };
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+  if (userError || !userData.user?.email) {
+    return { ok: false, status: 401, error: "Sessão inválida ou expirada." };
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("colaboradores")
+    .select(
+      "id, nome, cargo, departamento, vinculo, depto_code, nivel, gestor, admissao, desligado, data_desligamento, motivo_desligamento, desligado_by, matriz9box_visao_completa, empresa_afiliada",
+    );
+  if (error) return { ok: false, status: 500, error: error.message };
+
+  const colaboradores = (data as ColaboradorRow[]).map(fromRow);
+  const alvo = colaboradores.find((c) => c.id === colaboradorId);
+  if (!alvo) return { ok: false, status: 404, error: "Colaborador não encontrado." };
+
+  const conta = buildAccess(colaboradores).find((a) => a.email === userData.user!.email!.toLowerCase());
+  if (!conta) return { ok: false, status: 403, error: "Conta não encontrada no cadastro de acessos." };
+
+  if (conta.perfil === "RH") {
+    return { ok: true, perfil: "RH", nomeSolicitante: conta.nome, colaboradorNome: alvo.nome, colaboradores };
+  }
+  if (conta.perfil === "Gestor" && descendants(colaboradores, conta.nome).has(alvo.nome)) {
+    return { ok: true, perfil: "Gestor", nomeSolicitante: conta.nome, colaboradorNome: alvo.nome, colaboradores };
+  }
+  return { ok: false, status: 403, error: "Sem acesso a este documento." };
 }
 
 export type RequireAuthResult = { ok: true; email: string } | { ok: false; status: number; error: string };

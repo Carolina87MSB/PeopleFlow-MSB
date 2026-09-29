@@ -42,6 +42,8 @@ interface MovimentacaoRow {
   carta_movimentacao: CartaMovimentacao | null;
   legado: boolean;
   pedido_demissao: boolean | null;
+  colaborador_id: number | null;
+  tipo_aviso_previo: string | null;
 }
 
 function fromRow(row: MovimentacaoRow): Movimentacao {
@@ -68,6 +70,8 @@ function fromRow(row: MovimentacaoRow): Movimentacao {
     cartaMovimentacao: row.carta_movimentacao ?? null,
     legado: row.legado,
     pedidoDemissao: row.pedido_demissao ?? false,
+    colaboradorId: row.colaborador_id ?? undefined,
+    tipoAvisoPrevio: (row.tipo_aviso_previo as Movimentacao["tipoAvisoPrevio"]) ?? undefined,
   };
 }
 
@@ -95,6 +99,8 @@ function toRow(m: Movimentacao): Omit<MovimentacaoRow, "legado"> & { legado: boo
     carta_movimentacao: m.cartaMovimentacao ?? null,
     legado: m.legado ?? false,
     pedido_demissao: m.pedidoDemissao ?? false,
+    colaborador_id: m.colaboradorId ?? null,
+    tipo_aviso_previo: m.tipoAvisoPrevio ?? null,
   };
 }
 

@@ -14,6 +14,13 @@ export type Nivel =
   | "Aprendiz / Estágio";
 
 export interface Colaborador {
+  /** Id físico da tabela `colaboradores` (compartilhada com o Portal SST) —
+   * RH, 2026-09: trazido pro PeopleFlow especificamente para a cadeia do
+   * Aviso Prévio (localizar CPF, gerar documento, autorizar acesso), que
+   * não pode mais usar nome como chave. O resto do PeopleFlow (PDI, AVD,
+   * movimentações em geral) continua identificando colaborador por nome —
+   * não migrar mais nada pra id sem pedido explícito. */
+  id: number;
   vinculo: string;
   nome: string;
   cargo: string;
@@ -293,6 +300,17 @@ export interface Movimentacao {
    * domain/workflow.ts), a movimentação vai direto de "Gestor Solicitante"
    * para "RH". Fixado na criação, nunca muda depois. */
   pedidoDemissao?: boolean;
+  /** Id do colaborador (RH, 2026-09) — capturado uma única vez na criação da
+   * MP, a partir do colaborador já selecionado no formulário (ver
+   * construirMovimentacao() em domain/formMovimentacao.ts). Chave usada pela
+   * cadeia do Aviso Prévio (nunca nome). Undefined em MPs de Admissão (a
+   * pessoa ainda não existe em `colaboradores`) e em MPs criadas antes desta
+   * funcionalidade existir — nunca preenchido retroativamente. */
+  colaboradorId?: number;
+  /** Só `tipoCod === "DES"`. "indenizado" gera automaticamente o Aviso Prévio
+   * ao concluir o fluxo (ver aprovarEtapa() em usePortalData.ts); "trabalhado"
+   * não gera nada por enquanto. */
+  tipoAvisoPrevio?: "indenizado" | "trabalhado";
   /** Trilha de reaberturas/edições pós-criação — ver EventoHistoricoMovimentacao. */
   historico?: EventoHistoricoMovimentacao[];
   /** null/undefined = carta ainda não emitida. Só existe pra PRO/TRF/SAL já
@@ -358,6 +376,31 @@ export interface CargoAgregado {
 export interface DocumentoGerado {
   nome: string;
   status: "Gerado" | "Pendente";
+}
+
+/** Documento real de uma movimentação (RH, 2026-09) — hoje só o Aviso Prévio
+ * Indenizado do Desligamento usa, mas a estrutura não é exclusiva de um tipo.
+ * Espelha `peopleflow_movimentacoes_documentos`; nunca é apagado — uma
+ * substituição cria uma linha nova e marca a anterior `situacao: "substituido"`. */
+export interface MovimentacaoDocumento {
+  id: number;
+  movimentacaoId: string;
+  colaboradorId: number;
+  /** Snapshot histórico — nunca usado pra localizar o colaborador. */
+  colaboradorNome: string;
+  tipo: string;
+  versao: number;
+  fileName: string;
+  mime: string;
+  tamanhoBytes: number | null;
+  origem: "sistema" | "upload";
+  situacao: "ativo" | "substituido";
+  documentoOriginalId: number | null;
+  substituidoEm: string | null;
+  substituidoPor: string | null;
+  substituidoMotivo: string | null;
+  criadoPor: string;
+  criadoEm: string;
 }
 
 export interface HistoricoEvento {
