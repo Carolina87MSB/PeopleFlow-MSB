@@ -3,10 +3,8 @@ import { Header } from "../../components/layout/Header";
 import { Badge, Button, EmptyState, StatusBadge, tableStyles } from "../../components/ui";
 import { MovimentacaoDetalhe } from "../../components/shared/MovimentacaoDetalhe";
 import { CartaMovimentacaoModal } from "../../components/shared/CartaMovimentacaoModal";
-import { RegistrarSubstituicaoModal } from "../../components/shared/RegistrarSubstituicaoModal";
 import { tipoColor } from "../../domain/colors";
 import { podeEmitirCarta, statusCarta } from "../../domain/cartaMovimentacao";
-import { podeRegistrarSubstituicao } from "../../domain/workflow";
 import { usePortalData } from "../../store/usePortalData";
 import type { Movimentacao } from "../../types/domain";
 import styles from "./AprovadasPage.module.css";
@@ -49,29 +47,17 @@ function AcaoCarta({ m }: { m: Movimentacao }) {
   );
 }
 
-function AcaoSubstituicao({ m }: { m: Movimentacao }) {
-  const [aberta, setAberta] = useState(false);
-  if (m.tipoCod !== "DES" || !m.substituicaoInfo?.necessaria) return null;
-  const pendente = podeRegistrarSubstituicao(m);
-
+/** Indicador compacto "Vagas: preenchidas/autorizadas" (RH, 2026-09) — os
+ * detalhes (cargo, status de cada vaga, ações) ficam só dentro da MP (ver
+ * VagasAutorizadasBloco.tsx), pra não voltar a alargar esta tabela. */
+function IndicadorVagas({ m }: { m: Movimentacao }) {
+  const { vagas } = usePortalData();
+  const vagasDaMp = vagas.filter((v) => v.movimentacaoId === m.id);
+  if (vagasDaMp.length === 0) return null;
+  const preenchidas = vagasDaMp.filter((v) => v.status === "preenchida").length;
   return (
-    <span className={styles.acaoSubstituicao}>
-      <span className={pendente ? styles.substituicaoPendente : styles.substituicaoRealizada}>
-        {pendente ? "Substituição pendente" : "Substituição realizada"}
-      </span>
-      {pendente && (
-        <Button
-          variant="ghost"
-          className={styles.botaoAcao}
-          onClick={(e) => {
-            e.stopPropagation();
-            setAberta(true);
-          }}
-        >
-          Registrar substituição
-        </Button>
-      )}
-      {aberta && <RegistrarSubstituicaoModal movimentacao={m} onClose={() => setAberta(false)} />}
+    <span className={preenchidas === vagasDaMp.length ? styles.substituicaoRealizada : styles.substituicaoPendente}>
+      Vagas: {preenchidas}/{vagasDaMp.length}
     </span>
   );
 }
@@ -92,7 +78,6 @@ export function AprovadasPage() {
       <>
         <Header />
         <div className={styles.acaoCartaDetalhe}>
-          <AcaoSubstituicao m={movimentacao} />
           <AcaoCarta m={movimentacao} />
         </div>
         <MovimentacaoDetalhe movimentacao={movimentacao} onVoltar={() => setSelecionado(null)} />
@@ -148,7 +133,7 @@ export function AprovadasPage() {
                   <td>{m.aprovacaoFinal ? `${m.aprovacaoFinal.data} · ${m.aprovacaoFinal.hora}` : "—"}</td>
                   <td className={tableStyles.right}>
                     <div className={styles.acoesColuna}>
-                      <AcaoSubstituicao m={m} />
+                      <IndicadorVagas m={m} />
                       <AcaoCarta m={m} />
                     </div>
                   </td>

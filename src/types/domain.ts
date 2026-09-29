@@ -229,12 +229,10 @@ export interface AprovacaoFinal {
   hora: string;
 }
 
-/** Substituição vinculada a uma MP de Desligamento com "Substituição" = Sim
- * (RH, 2026-09) — não abre uma MP de Admissão nova; o novo colaborador entra
- * pelo mesmo fluxo de pré-cadastro já usado por Admissão (ver
- * registrarSubstituicao() em store/usePortalData.ts). `necessaria=true` é
- * setado automaticamente ao aprovar a última etapa da MP; `status` só vira
- * "realizada" quando o RH/Gestor registra o novo colaborador. */
+/** @deprecated Substituído por Vaga (peopleflow_vagas, RH 2026-09) — mantido só
+ * para não perder as 3 MPs históricas que já tinham esse dado; o app nunca
+ * mais escreve neste campo (ver comentário da migration 38 em
+ * supabase/schema.sql). */
 export interface SubstituicaoInfo {
   necessaria: boolean;
   status: "pendente" | "realizada";
@@ -244,6 +242,35 @@ export interface SubstituicaoInfo {
   observacao?: string;
   registradoPor?: string;
   registradoEm?: string;
+}
+
+export type OrigemVaga = "substituicao" | "aumento_quadro";
+export type StatusVaga = "pendente" | "aguardando_aprovacao_gestor" | "preenchida";
+
+/** Vaga autorizada por uma MP (Desligamento com Substituição=Sim, ou Admissão
+ * com Quantidade de vagas > 1 — "aumento de quadro") — RH, 2026-09. Uma MP
+ * pode ter várias; cada vaga tem no máximo um preenchimento. "Registrar
+ * preenchimento" nunca cria uma MP de Admissão nova — o candidato entra em
+ * `colaboradores` só quando o gestor aprova (ver aprovarPreenchimento() em
+ * store/usePortalData.ts). `cargo` nulo = vaga compatibilizada retroativamente
+ * de uma MP antiga, sem cargo definido na autorização (obrigatório escolher
+ * em `cargoPreenchimento`). Promoção/Transferência nunca geram vaga. */
+export interface Vaga {
+  id: number;
+  movimentacaoId: string;
+  origem: OrigemVaga;
+  cargo: string | null;
+  status: StatusVaga;
+  novoColaboradorNome: string | null;
+  cargoPreenchimento: string | null;
+  admissaoPrevistaIso: string | null;
+  observacao: string | null;
+  registradoPor: string | null;
+  registradoEm: string | null;
+  aprovadoPor: string | null;
+  aprovadoEm: string | null;
+  criadoPor: string;
+  criadoEm: string;
 }
 
 /** Evento de auditoria gravado dentro da própria movimentação — reabertura
@@ -368,6 +395,9 @@ export interface NovaMovimentacaoForm {
   desData: string;
   desUltimoDia: string;
   desSubst: "Sim" | "Não";
+  /** Obrigatório quando desSubst === "Sim" — cargo da vaga autorizada pelo
+   * desligamento (RH, 2026-09). Não precisa ser igual ao cargo de quem saiu. */
+  desCargoVaga: string;
   desObs: string;
   /** "Pedido de demissão" — colaborador solicitou o próprio desligamento;
    * dispensa a etapa de aprovação da Diretoria (ver montarEtapas()). */

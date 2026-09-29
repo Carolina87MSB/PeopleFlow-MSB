@@ -55,6 +55,7 @@ export function blankForm(): NovaMovimentacaoForm {
     desData: "",
     desUltimoDia: "",
     desSubst: "Não",
+    desCargoVaga: "",
     desObs: "",
     desPedidoDemissao: false,
     desTipoAvisoPrevio: "",
@@ -123,6 +124,9 @@ export function validarForm(
 
   if (f.tipo === "DES") {
     if (!f.desTipoAvisoPrevio) return { ok: false, error: 'Selecione o "Tipo de aviso prévio".' };
+    if (f.desSubst === "Sim" && !f.desCargoVaga.trim()) {
+      return { ok: false, error: 'Selecione o "Cargo da vaga de substituição".' };
+    }
     return { ok: true };
   }
 
@@ -236,6 +240,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
       { label: "Data prevista", value: f.desData ? formatarDataIso(f.desData) : "A definir" },
       { label: "Último dia trabalhado", value: f.desUltimoDia ? formatarDataIso(f.desUltimoDia) : "A definir" },
       { label: "Substituição", value: f.desSubst || "Não" },
+      ...(f.desSubst === "Sim" ? ([{ label: "Cargo da vaga de substituição", value: f.desCargoVaga.trim() }] as DadoField[]) : []),
       { label: "Observações", value: f.desObs || "—" },
     ];
   }

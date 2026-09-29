@@ -7,6 +7,11 @@ import {
   criarSolicitacaoDesligamento as criarSolicitacaoDesligamentoNoSupabase,
 } from "../repositories/colaboradoresRepository";
 import { gerarAvisoPrevio } from "../repositories/avisoPrevioRepository";
+import {
+  aprovarPreenchimento as aprovarPreenchimentoNoSupabase,
+  criarVagas as criarVagasNoSupabase,
+  registrarPreenchimento as registrarPreenchimentoNoSupabase,
+} from "../repositories/vagasRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import {
   COLUNA_POR_CAMPO,
@@ -105,7 +110,6 @@ import {
   editarDadosMovimentacao as editarDadosMovimentacaoDomain,
   type EdicaoDadoMovimentacao,
   etapaAtual,
-  podeRegistrarSubstituicao as podeRegistrarSubstituicaoDomain,
   reabrirParaRH,
   reprovarEtapa as reprovarEtapaDomain,
 } from "../domain/workflow";
@@ -143,6 +147,7 @@ import type {
   SalarioBase,
   TemaFeedback,
   TipoCompetenciaPdi,
+  Vaga,
 } from "../types/domain";
 
 export interface PortalData {
@@ -224,11 +229,15 @@ export interface PortalData {
   /** RH-only, só depois da ciência do gestor — não cria movimentação nova,
    * só marca a entrega na mesma linha. */
   marcarCartaMovimentacaoEntregue: (id: string) => void;
-  /** "Registrar substituição" (RH, 2026-09) — só quando
-   * `podeRegistrarSubstituicao()` (MP de Desligamento com substituição
-   * pendente). Cria o pré-cadastro do novo colaborador (mesmo fluxo de
-   * Admissão) e marca a substituição como realizada na própria MP. */
-  registrarSubstituicao: (id: string, dados: { novoColaborador: string; cargo: string; admissaoIso: string; observacao: string }) => void;
+  /** Vagas autorizadas por MPs (Desligamento com substituição, Admissão por
+   * aumento de quadro — RH, 2026-09). Ver Vaga em types/domain.ts. */
+  vagas: Vaga[];
+  /** "Registrar preenchimento" (RH-only) — não conclui a vaga, manda para
+   * aprovação do gestor responsável (ver aprovarPreenchimento abaixo). */
+  registrarPreenchimento: (vagaId: number, dados: { novoColaboradorNome: string; cargo: string; admissaoPrevistaIso: string; observacao: string }) => void;
+  /** Aprovação do gestor solicitante da MP de origem (ou RH) — só aqui o
+   * colaborador entra de fato no cadastro. */
+  aprovarPreenchimento: (vagaId: number) => void;
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   /** Botão "Novo Cargo" (RH-only) — cria só nome/depto/gestor, 0 ocupantes. */
   criarCargoCustom: (nome: string, depto: string, gestor: string) => Promise<{ ok: true } | { ok: false }>;
@@ -756,7 +765,7 @@ export function usePortalData(): PortalData {
 
   const aprovarEtapaFn = useCallback(
     (id: string) => {
-      const { movimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado } = aprovarEtapaDomain(
+      const { movimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado, vagaParaCriar } = aprovarEtapaDomain(
         state.movimentacoes,
         id,
       );
@@ -809,6 +818,17 @@ export function usePortalData(): PortalData {
               }
             }
           }
+          if (vagaParaCriar) {
+            try {
+              await criarVagasNoSupabase(vagaParaCriar.movimentacaoId, vagaParaCriar.origem, vagaParaCriar.cargo, vagaParaCriar.quantidade, conta.nome);
+              msg += ` ${vagaParaCriar.quantidade} vaga(s) autorizada(s) — use "Registrar preenchimento" na MP quando houver candidato(a).`;
+              reload();
+            } catch (vagaErr) {
+              // eslint-disable-next-line no-console
+              console.error("[aprovarEtapaFn] Falha ao criar vaga(s) autorizada(s)", vagaErr);
+              msg += ` Atenção: falha ao autorizar a(s) vaga(s) (${vagaErr instanceof Error ? vagaErr.message : "erro desconhecido"}).`;
+            }
+          }
           dispatch({ type: "APROVAR_ETAPA", id });
           flash(msg);
 
@@ -824,7 +844,7 @@ export function usePortalData(): PortalData {
         }
       })();
     },
-    [dispatch, state.movimentacoes, flash, reload, conta.email],
+    [dispatch, state.movimentacoes, flash, reload, conta.email, conta.nome],
   );
 
   const reprovarEtapaFn = useCallback(
@@ -965,55 +985,76 @@ export function usePortalData(): PortalData {
     [dispatch, state.movimentacoes, flash, me, perfil],
   );
 
-  /** "Registrar substituição" (RH, 2026-09) — só para MP de Desligamento com
-   * `substituicaoInfo?.status === "pendente"` (ver podeRegistrarSubstituicao()
-   * em domain/workflow.ts e RegistrarSubstituicaoModal.tsx). Não abre uma MP
-   * de Admissão nova: o novo colaborador entra em `colaboradores` pelo mesmo
-   * fluxo de pré-cadastro já usado por Admissão (criarPreCadastroNoSupabase),
-   * com departamento herdado da MP e gestor/vínculo herdados de quem saiu
-   * (quando localizável). */
-  const registrarSubstituicaoFn = useCallback(
-    (id: string, dados: { novoColaborador: string; cargo: string; admissaoIso: string; observacao: string }) => {
-      const movimentacao = state.movimentacoes.find((m) => m.id === id);
-      if (!movimentacao || !podeRegistrarSubstituicaoDomain(movimentacao)) {
-        flash("Esta movimentação não tem substituição pendente.");
+/** "Registrar preenchimento" (RH-only, 2026-09) — vaga já autorizada por uma
+   * MP (Desligamento com substituição, Admissão por aumento de quadro); não
+   * conclui a vaga nem cria colaborador ainda, só manda para a aprovação do
+   * gestor (ver aprovarPreenchimentoFn abaixo e Vaga em types/domain.ts). O
+   * nome nunca é buscado no cadastro atual — a pessoa ainda não existe nele. */
+  const registrarPreenchimentoFn = useCallback(
+    (vagaId: number, dados: { novoColaboradorNome: string; cargo: string; admissaoPrevistaIso: string; observacao: string }) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode registrar o preenchimento de uma vaga.");
         return;
       }
-      const colaboradorQueSaiu =
+      const vaga = state.vagas.find((v) => v.id === vagaId);
+      if (!vaga || vaga.status !== "pendente") {
+        flash("Esta vaga não está mais pendente de preenchimento.");
+        return;
+      }
+      (async () => {
+        try {
+          await registrarPreenchimentoNoSupabase(vagaId, dados, me);
+          reload();
+          flash(`Candidato(a) registrado(a) — aguardando aprovação do gestor responsável.`);
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao registrar o preenchimento.");
+        }
+      })();
+    },
+    [perfil, state.vagas, flash, me, reload],
+  );
+
+  /** Aprovação do gestor responsável (ou RH) — só aqui o novo colaborador
+   * entra de fato em `colaboradores`, pelo mesmo fluxo de pré-cadastro já
+   * usado por Admissão. Gestor: só quem é o solicitante da MP de origem
+   * (ver Movimentacao.solicitante) — não é a mesma checagem hierárquica do
+   * Aviso Prévio, é uma pessoa específica: quem abriu a MP que autorizou a
+   * vaga. RH sempre pode aprovar. */
+  const aprovarPreenchimentoFn = useCallback(
+    (vagaId: number) => {
+      const vaga = state.vagas.find((v) => v.id === vagaId);
+      const movimentacao = vaga ? state.movimentacoes.find((m) => m.id === vaga.movimentacaoId) : undefined;
+      if (!vaga || !movimentacao || vaga.status !== "aguardando_aprovacao_gestor") {
+        flash("Esta vaga não está aguardando aprovação.");
+        return;
+      }
+      if (perfil !== "RH" && movimentacao.solicitante !== me) {
+        flash("Só o RH ou o gestor solicitante desta movimentação pode aprovar o preenchimento.");
+        return;
+      }
+      const colaboradorDeReferencia =
         (movimentacao.colaboradorId && state.colaboradores.find((c) => c.id === movimentacao.colaboradorId)) ||
         state.colaboradores.find((c) => c.nome === movimentacao.colaborador);
 
       (async () => {
         try {
+          await aprovarPreenchimentoNoSupabase(vagaId, me);
           await criarPreCadastroNoSupabase({
-            candidato: dados.novoColaborador.trim(),
-            cargo: dados.cargo,
+            candidato: vaga.novoColaboradorNome ?? "",
+            cargo: vaga.cargoPreenchimento ?? vaga.cargo ?? "",
             depto: movimentacao.depto,
-            gestor: colaboradorQueSaiu?.gestor ?? "",
-            vinculo: colaboradorQueSaiu?.vinculo ?? "",
-            admissaoIso: dados.admissaoIso,
+            gestor: movimentacao.admissaoInfo?.gestor ?? colaboradorDeReferencia?.gestor ?? "",
+            vinculo: movimentacao.admissaoInfo?.vinculo ?? colaboradorDeReferencia?.vinculo ?? "",
+            admissaoIso: vaga.admissaoPrevistaIso ?? "",
           });
-          const substituicaoInfo: NonNullable<Movimentacao["substituicaoInfo"]> = {
-            necessaria: true,
-            status: "realizada",
-            novoColaborador: dados.novoColaborador.trim(),
-            cargo: dados.cargo,
-            admissaoIso: dados.admissaoIso,
-            observacao: dados.observacao.trim() || undefined,
-            registradoPor: me,
-            registradoEm: new Date().toISOString(),
-          };
-          const atualizada = { ...movimentacao, substituicaoInfo };
-          await atualizarMovimentacao(atualizada);
-          dispatch({ type: "REGISTRAR_SUBSTITUICAO", id, substituicaoInfo });
-          flash(`Substituição registrada — "${dados.novoColaborador.trim()}" incluído(a) no cadastro de colaboradores.`);
           reload();
+          flash(`Preenchimento aprovado — "${vaga.novoColaboradorNome}" incluído(a) no cadastro de colaboradores.`);
         } catch (err) {
-          flash(err instanceof Error ? err.message : "Falha ao registrar a substituição.");
+          flash(err instanceof Error ? err.message : "Falha ao aprovar o preenchimento.");
         }
       })();
     },
-    [dispatch, state.movimentacoes, state.colaboradores, flash, me, reload],
+    [perfil, me, state.vagas, state.movimentacoes, state.colaboradores, flash, reload],
   );
 
   /** Botão "Novo Cargo" em CargosPage.tsx (RH-only) — cria só nome/depto/
@@ -2641,7 +2682,9 @@ export function usePortalData(): PortalData {
     emitirCartaMovimentacao: emitirCartaMovimentacaoFn,
     darCienciaCartaMovimentacao: darCienciaCartaMovimentacaoFn,
     marcarCartaMovimentacaoEntregue: marcarCartaMovimentacaoEntregueFn,
-    registrarSubstituicao: registrarSubstituicaoFn,
+    vagas: state.vagas,
+    registrarPreenchimento: registrarPreenchimentoFn,
+    aprovarPreenchimento: aprovarPreenchimentoFn,
     criarMovimentacao: criarMovimentacaoFn,
     criarCargoCustom: criarCargoCustomFn,
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,

@@ -4,25 +4,25 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
-import type { Movimentacao } from "../../types/domain";
+import type { Vaga } from "../../types/domain";
 import styles from "./NovaMovimentacaoModal.module.css";
 
-interface RegistrarSubstituicaoModalProps {
-  movimentacao: Movimentacao;
+interface RegistrarPreenchimentoModalProps {
+  vaga: Vaga;
   onClose: () => void;
 }
 
-/** Modal simples do "Registrar substituição" (RH, 2026-09) — vinculado à MP de
- * Desligamento que marcou "Substituição = Sim"; não abre uma MP de Admissão
- * nova (ver registrarSubstituicao() em store/usePortalData.ts). O nome do
- * novo colaborador é sempre digitado (a pessoa ainda não existe no
- * cadastro) — o cargo reaproveita o catálogo oficial já usado em Nova
- * Movimentação. */
-export function RegistrarSubstituicaoModal({ movimentacao: m, onClose }: RegistrarSubstituicaoModalProps) {
+/** Modal do "Registrar preenchimento" (RH, 2026-09) — de uma Vaga já
+ * autorizada por uma MP (Desligamento com substituição, Admissão por
+ * aumento de quadro). Não conclui a vaga nem abre uma MP de Admissão nova:
+ * fica "aguardando aprovação do gestor" até o gestor responsável (ou o RH)
+ * aprovar (ver aprovarPreenchimento() em store/usePortalData.ts). O nome é
+ * sempre digitado — a pessoa ainda não existe no cadastro de colaboradores. */
+export function RegistrarPreenchimentoModal({ vaga, onClose }: RegistrarPreenchimentoModalProps) {
   const { state } = usePortalStore();
-  const { colaboradores, registrarSubstituicao } = usePortalData();
-  const [novoColaborador, setNovoColaborador] = useState("");
-  const [cargo, setCargo] = useState("");
+  const { colaboradores, registrarPreenchimento } = usePortalData();
+  const [nome, setNome] = useState("");
+  const [cargo, setCargo] = useState(vaga.cargo ?? "");
   const [admissaoIso, setAdmissaoIso] = useState("");
   const [observacao, setObservacao] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -35,19 +35,19 @@ export function RegistrarSubstituicaoModal({ movimentacao: m, onClose }: Registr
 
   function handleConfirmar() {
     setErro(null);
-    if (!novoColaborador.trim() || !cargo || !admissaoIso) {
-      setErro("Preencha novo colaborador, cargo e data prevista/efetiva de admissão.");
+    if (!nome.trim() || !cargo || !admissaoIso) {
+      setErro("Preencha nome, cargo e data prevista de admissão.");
       return;
     }
     setEnviando(true);
-    registrarSubstituicao(m.id, { novoColaborador, cargo, admissaoIso, observacao });
+    registrarPreenchimento(vaga.id, { novoColaboradorNome: nome, cargo, admissaoPrevistaIso: admissaoIso, observacao });
     onClose();
   }
 
   return (
     <Modal
-      title="Registrar substituição"
-      subtitle={`${m.id} · vaga de ${m.colaborador}`}
+      title="Registrar preenchimento"
+      subtitle={vaga.cargo ? `Vaga: ${vaga.cargo}` : "Vaga sem cargo pré-definido"}
       onClose={onClose}
       width={520}
       footer={
@@ -56,15 +56,15 @@ export function RegistrarSubstituicaoModal({ movimentacao: m, onClose }: Registr
             Cancelar
           </Button>
           <Button variant="primary" icon={<Check size={16} />} onClick={handleConfirmar} disabled={enviando}>
-            Confirmar substituição
+            Enviar para aprovação do gestor
           </Button>
         </>
       }
     >
       <div className={styles.grid}>
         <label className={[styles.field, styles.full].join(" ")}>
-          <span>Novo colaborador</span>
-          <input value={novoColaborador} onChange={(e) => setNovoColaborador(e.target.value)} placeholder="Nome completo" />
+          <span>Novo(a) colaborador(a)</span>
+          <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" />
         </label>
 
         <label className={styles.field}>
@@ -80,7 +80,7 @@ export function RegistrarSubstituicaoModal({ movimentacao: m, onClose }: Registr
         </label>
 
         <label className={styles.field}>
-          <span>Data prevista/efetiva de admissão</span>
+          <span>Data prevista de admissão</span>
           <input type="date" value={admissaoIso} onChange={(e) => setAdmissaoIso(e.target.value)} />
         </label>
 

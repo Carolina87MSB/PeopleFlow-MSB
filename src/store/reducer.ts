@@ -27,6 +27,7 @@ export const initialPortalState: PortalState = {
   salariosBase: [],
   reajustesSalariais: [],
   feedbacks: [],
+  vagas: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -58,6 +59,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         salariosBase: action.salariosBase,
         reajustesSalariais: action.reajustesSalariais,
         feedbacks: action.feedbacks,
+        vagas: action.vagas,
       };
 
     case "ADICIONAR_COMPETENCIA_CARGO":
@@ -136,12 +138,6 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
       return {
         ...state,
         movimentacoes: state.movimentacoes.map((m) => (m.id === action.id ? { ...m, cartaMovimentacao: action.carta } : m)),
-      };
-
-    case "REGISTRAR_SUBSTITUICAO":
-      return {
-        ...state,
-        movimentacoes: state.movimentacoes.map((m) => (m.id === action.id ? { ...m, substituicaoInfo: action.substituicaoInfo } : m)),
       };
 
     case "CRIAR_MOVIMENTACAO":

@@ -11,13 +11,6 @@ import type {
   TipoMovimentacao,
 } from "../types/domain";
 
-/** true só quando a MP de Desligamento já foi aprovada, marcou "Substituição"
- * = Sim e ainda ninguém foi registrado para a vaga (ver registrarSubstituicao()
- * em store/usePortalData.ts e AcaoSubstituicao em AprovadasPage.tsx). */
-export function podeRegistrarSubstituicao(m: Movimentacao): boolean {
-  return m.tipoCod === "DES" && m.substituicaoInfo?.status === "pendente";
-}
-
 export function nextId(movimentacoes: Movimentacao[]): string {
   const nums = movimentacoes
     .map((m) => parseInt(m.id.split("-")[2], 10))
@@ -80,11 +73,25 @@ export function montarEtapas(
   }));
 }
 
+/** Sinaliza que a MP recém-concluída autoriza `quantidade` Vaga(s) (RH,
+ * 2026-09) — ver aprovarEtapaFn() em store/usePortalData.ts, que de fato cria
+ * as linhas em peopleflow_vagas. Nunca mais de um descritor por aprovação
+ * (só a MP com `id` pode disparar isso). */
+export interface VagaParaCriar {
+  movimentacaoId: string;
+  origem: "substituicao" | "aumento_quadro";
+  /** Cargo já escolhido no formulário — null só quando genuinamente
+   * indisponível (nunca inventado). */
+  cargo: string | null;
+  quantidade: number;
+}
+
 export interface ApproveResult {
   movimentacoes: Movimentacao[];
   admissaoRegistrada: AdmissaoInfo | null;
   atualizacaoRegistrada: AtualizacaoCargoDeptoInfo | null;
   desligamentoRegistrado: DesligamentoInfo | null;
+  vagaParaCriar: VagaParaCriar | null;
 }
 
 /** Advances the first pending/in-review etapa to "Aprovado"; completes the movement once the last etapa clears. */
@@ -92,6 +99,7 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
   let admissaoRegistrada: AdmissaoInfo | null = null;
   let atualizacaoRegistrada: AtualizacaoCargoDeptoInfo | null = null;
   let desligamentoRegistrado: DesligamentoInfo | null = null;
+  let vagaParaCriar: VagaParaCriar | null = null;
   const hoje = formatarDataAtual();
   const agora = formatarHoraAtual();
 
@@ -113,7 +121,22 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
     } else {
       status = m.tipoCod === "ADM" ? "Concluído" : "Aprovado";
       aprovacaoFinal = { data: etapas[idx].data, hora: etapas[idx].hora! };
-      if (m.tipoCod === "ADM" && m.admissaoInfo?.candidato) admissaoRegistrada = m.admissaoInfo;
+
+      if (m.tipoCod === "ADM") {
+        // "Aumento de quadro" (Quantidade de vagas > 1): autoriza N vagas
+        // preenchidas depois, uma a uma, pelo RH — não cria pré-cadastro
+        // automático pro "Candidato" do formulário (ver seção 8 do pedido da
+        // RH: um candidato preenchido não deve travar as demais vagas nem
+        // ser presumido como já ocupando uma delas). Quantidade <= 1
+        // preserva o comportamento antigo (pré-cadastro direto), intocado.
+        const qtd = parseInt((m.dados ?? []).find((d) => d.label === "Quantidade de vagas")?.value ?? "1", 10) || 1;
+        if (qtd > 1) {
+          const cargoSolicitado = (m.dados ?? []).find((d) => d.label === "Cargo solicitado")?.value ?? null;
+          vagaParaCriar = { movimentacaoId: m.id, origem: "aumento_quadro", cargo: cargoSolicitado, quantidade: qtd };
+        } else if (m.admissaoInfo?.candidato) {
+          admissaoRegistrada = m.admissaoInfo;
+        }
+      }
       if (
         (m.tipoCod === "PRO" || m.tipoCod === "TRF") &&
         m.atualizacaoInfo &&
@@ -122,17 +145,16 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
         atualizacaoRegistrada = m.atualizacaoInfo;
       }
       if (m.tipoCod === "DES" && m.desligamentoInfo?.nome) desligamentoRegistrado = m.desligamentoInfo;
+      if (m.tipoCod === "DES" && (m.dados ?? []).some((d) => d.label === "Substituição" && d.value === "Sim")) {
+        const cargoVaga = (m.dados ?? []).find((d) => d.label === "Cargo da vaga de substituição")?.value ?? null;
+        vagaParaCriar = { movimentacaoId: m.id, origem: "substituicao", cargo: cargoVaga && cargoVaga !== "—" ? cargoVaga : null, quantidade: 1 };
+      }
     }
 
-    let substituicaoInfo = m.substituicaoInfo;
-    if (status === "Aprovado" && m.tipoCod === "DES" && !substituicaoInfo && (m.dados ?? []).some((d) => d.label === "Substituição" && d.value === "Sim")) {
-      substituicaoInfo = { necessaria: true, status: "pendente" };
-    }
-
-    return { ...m, etapas, status, aprovacaoFinal, substituicaoInfo };
+    return { ...m, etapas, status, aprovacaoFinal };
   });
 
-  return { movimentacoes: novasMovimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado };
+  return { movimentacoes: novasMovimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado, vagaParaCriar };
 }
 
 export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comentario: string): Movimentacao[] {

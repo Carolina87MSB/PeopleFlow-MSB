@@ -147,7 +147,10 @@ export async function atualizarMovimentacao(m: Movimentacao): Promise<void> {
       aprovacao_final: m.aprovacaoFinal ?? null,
       historico: m.historico ?? [],
       carta_movimentacao: m.cartaMovimentacao ?? null,
-      substituicao_info: m.substituicaoInfo ?? null,
+      // substituicao_info NUNCA é escrito aqui — mecanismo substituído por
+      // peopleflow_vagas (RH, 2026-09); as 3 MPs históricas que já tinham
+      // esse campo preenchido devem manter o valor congelado para sempre
+      // (ver comment da migration 38 em supabase/schema.sql).
       updated_at: new Date().toISOString(),
     })
     .eq("id", m.id);

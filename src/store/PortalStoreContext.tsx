@@ -7,6 +7,7 @@ import { getDesligamentosFinanceiros } from "../repositories/desligadosRepositor
 import { getDescricoesCargo } from "../repositories/descricoesCargoRepository";
 import { getCatalogoCompetenciasCargo, getDescricaoCargoCompetencias } from "../repositories/competenciasCargoRepository";
 import { efetivarSincronizacoesPendentes, getMovimentacoes } from "../repositories/movimentacoesRepository";
+import { getVagas } from "../repositories/vagasRepository";
 import { getAvaliacoesExperiencia, getDispensasAvaliacaoExperiencia } from "../repositories/avaliacoesExperienciaRepository";
 import { getPerfis, getTiposMovimentacao } from "../repositories/portalRepository";
 import { getConfigAvaliacaoDesempenho } from "../repositories/configAvaliacaoDesempenhoRepository";
@@ -82,6 +83,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getSalariosBase(),
       getReajustesSalariais(),
       getFeedbacks(),
+      getVagas(),
     ])
       .then(
         async ([
@@ -109,6 +111,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           salariosBase,
           reajustesSalariais,
           feedbacks,
+          vagas,
         ]) => {
           if (cancelado) return;
           // Efetiva promoções/transferências aprovadas cuja "Data prevista" já
@@ -144,6 +147,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             salariosBase,
             reajustesSalariais,
             feedbacks,
+            vagas,
           });
         },
       )

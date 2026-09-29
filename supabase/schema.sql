@@ -1608,4 +1608,55 @@ alter table public.peopleflow_movimentacoes
   add column if not exists substituicao_info jsonb;
 
 comment on column public.peopleflow_movimentacoes.substituicao_info is
-  'Só tipo_cod = DES com dados."Substituição" = Sim. {necessaria, status: "pendente"|"realizada", novoColaborador?, cargo?, admissaoIso?, observacao?, registradoPor?, registradoEm?}. Setado automaticamente ao aprovar a última etapa; "realizada" só após "Registrar substituição".';
+  'Só tipo_cod = DES com dados."Substituição" = Sim. {necessaria, status: "pendente"|"realizada", novoColaborador?, cargo?, admissaoIso?, observacao?, registradoPor?, registradoEm?}. Setado automaticamente ao aprovar a última etapa; "realizada" só após "Registrar substituição".
+   SUBSTITUÍDO pela tabela peopleflow_vagas (seção 38, RH 2026-09) — coluna mantida só como histórico das 3 MPs que já tinham esse dado (nunca mais escrita pelo app; ver atualizarMovimentacao() em movimentacoesRepository.ts).';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 38) Vagas autorizadas (RH, 2026-09) — generaliza o modelo "1 MP = 1 pessoa"
+--    para "1 MP pode autorizar 1+ vagas": Desligamento com Substituição=Sim
+--    autoriza 1 vaga; Admissão com Quantidade de vagas > 1 (aumento de
+--    quadro) autoriza N vagas. Cada vaga é preenchida individualmente pelo
+--    RH ("Registrar preenchimento") sem abrir uma nova MP de Admissão — o
+--    novo colaborador só entra em `colaboradores` quando o preenchimento é
+--    aprovado pelo gestor (mesmo fluxo de pré-cadastro já usado por
+--    Admissão). Promoção/Transferência não usam esta tabela — fluxo
+--    inalterado (RH, pedido explícito). Substitui peopleflow_movimentacoes.
+--    substituicao_info como mecanismo ativo (ver comment acima) — as MPs
+--    históricas com substituicao_info NÃO são migradas em massa agora; só
+--    M-2026-027 foi compatibilizada manualmente (SQL à parte, sem cargo
+--    definido — "Não inventar dados que não estejam disponíveis").
+-- ────────────────────────────────────────────────────────────────────────
+create table if not exists public.peopleflow_vagas (
+  id bigint generated always as identity primary key,
+  movimentacao_id text not null references public.peopleflow_movimentacoes(id),
+  origem text not null,
+  cargo text,
+  status text not null default 'pendente',
+  novo_colaborador_nome text,
+  cargo_preenchimento text,
+  admissao_prevista_iso text,
+  observacao text,
+  registrado_por text,
+  registrado_em timestamptz,
+  aprovado_por text,
+  aprovado_em timestamptz,
+  criado_por text not null,
+  criado_em timestamptz not null default now()
+);
+
+comment on table public.peopleflow_vagas is
+  'Vagas autorizadas por uma MP (Desligamento com substituição, Admissão por aumento de quadro — nunca PRO/TRF). Uma MP pode ter várias; cada vaga tem no máximo um preenchimento ativo/concluído. "Registrar preenchimento" nunca cria uma MP de Admissão nova.';
+comment on column public.peopleflow_vagas.origem is '"substituicao" (Desligamento) | "aumento_quadro" (Admissão com Quantidade de vagas > 1).';
+comment on column public.peopleflow_vagas.cargo is 'Cargo autorizado no momento da criação da vaga. Nulo quando não estava disponível (ex.: vaga compatibilizada retroativamente de uma MP antiga) — nesse caso é obrigatório escolher no preenchimento (cargo_preenchimento).';
+comment on column public.peopleflow_vagas.status is '"pendente" (aguardando RH registrar candidato) | "aguardando_aprovacao_gestor" (RH já registrou, falta o gestor aprovar) | "preenchida" (aprovada — colaborador já criado em `colaboradores`).';
+comment on column public.peopleflow_vagas.cargo_preenchimento is 'Cargo confirmado em "Registrar preenchimento" — pode repetir ou ajustar o `cargo` autorizado; é o que efetivamente vai para `colaboradores`.';
+
+alter table public.peopleflow_vagas enable row level security;
+
+drop policy if exists "authenticated_rw_vagas" on public.peopleflow_vagas;
+create policy "authenticated_rw_vagas"
+  on public.peopleflow_vagas
+  for all
+  to authenticated
+  using (true)
+  with check (true);

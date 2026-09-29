@@ -23,6 +23,7 @@ import type {
   ReajusteSalarial,
   SalarioBase,
   TipoMovimentacao,
+  Vaga,
 } from "../types/domain";
 
 export interface PortalState {
@@ -50,4 +51,5 @@ export interface PortalState {
   salariosBase: SalarioBase[];
   reajustesSalariais: ReajusteSalarial[];
   feedbacks: Feedback[];
+  vagas: Vaga[];
 }
