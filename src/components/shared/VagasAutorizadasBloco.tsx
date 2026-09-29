@@ -2,19 +2,9 @@ import { useState } from "react";
 import { usePortalData } from "../../store/usePortalData";
 import { RegistrarPreenchimentoModal } from "./RegistrarPreenchimentoModal";
 import { formatarDataHora } from "../../domain/dates";
+import { ORIGEM_VAGA_LABEL, STATUS_VAGA_LABEL } from "../../domain/vagas";
 import type { Movimentacao, Vaga } from "../../types/domain";
 import styles from "./MovimentacaoDetalhe.module.css";
-
-const ORIGEM_LABEL: Record<Vaga["origem"], string> = {
-  substituicao: "Substituição",
-  aumento_quadro: "Aumento de quadro",
-};
-
-const STATUS_LABEL: Record<Vaga["status"], string> = {
-  pendente: "Pendente de preenchimento",
-  aguardando_aprovacao_gestor: "Aguardando aprovação do gestor",
-  preenchida: "Preenchimento concluído",
-};
 
 interface EventoVaga {
   chave: string;
@@ -62,18 +52,20 @@ function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentac
     <div className={styles.vagaCard}>
       <div className={styles.vagaTopo}>
         <div>
-          <div className={styles.vagaOrigem}>{ORIGEM_LABEL[vaga.origem]}</div>
+          <div className={styles.vagaOrigem}>{ORIGEM_VAGA_LABEL[vaga.origem]}</div>
           {vaga.novoColaboradorNome ? (
             <>
               <div className={styles.vagaNome}>{vaga.novoColaboradorNome}</div>
               <div className={styles.vagaAdmissao}>Admissão prevista: {formatarIsoNumerico(vaga.admissaoPrevistaIso)}</div>
             </>
+          ) : vaga.status === "reservada" ? (
+            <div className={styles.vagaNomePendente}>Vinculada à movimentação {vaga.preenchidoPorMovimentacaoId} — aguardando aprovação</div>
           ) : (
             <div className={styles.vagaNomePendente}>Aguardando indicação do RH</div>
           )}
         </div>
         <div className={styles.vagaAcoes}>
-          <span className={vaga.status === "preenchida" ? styles.pillGerado : styles.pillPendente}>{STATUS_LABEL[vaga.status]}</span>
+          <span className={vaga.status === "preenchida" ? styles.pillGerado : styles.pillPendente}>{STATUS_VAGA_LABEL[vaga.status]}</span>
           <div className={styles.documentoAcoes}>
             {podeRegistrar && (
               <button type="button" className={styles.documentoAcaoBtn} onClick={() => setModalAberto("registrar")}>

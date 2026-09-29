@@ -1645,11 +1645,11 @@ create table if not exists public.peopleflow_vagas (
 );
 
 comment on table public.peopleflow_vagas is
-  'Vagas autorizadas por uma MP (Desligamento com substituição, Admissão por aumento de quadro — nunca PRO/TRF). Uma MP pode ter várias; cada vaga tem no máximo um preenchimento ativo/concluído. "Registrar preenchimento" nunca cria uma MP de Admissão nova.';
-comment on column public.peopleflow_vagas.origem is '"substituicao" (Desligamento) | "aumento_quadro" (Admissão com Quantidade de vagas > 1).';
-comment on column public.peopleflow_vagas.cargo is 'Cargo autorizado no momento da criação da vaga. Nulo quando não estava disponível (ex.: vaga compatibilizada retroativamente de uma MP antiga) — nesse caso é obrigatório escolher no preenchimento (cargo_preenchimento).';
-comment on column public.peopleflow_vagas.status is '"pendente" (aguardando RH registrar candidato) | "aguardando_aprovacao_gestor" (RH já registrou, falta o gestor aprovar) | "preenchida" (aprovada — colaborador já criado em `colaboradores`).';
-comment on column public.peopleflow_vagas.cargo_preenchimento is 'Cargo confirmado em "Registrar preenchimento" — pode repetir ou ajustar o `cargo` autorizado; é o que efetivamente vai para `colaboradores`.';
+  'Vagas autorizadas por uma MP (Desligamento com substituição, Admissão por aumento de quadro, ou Promoção/Transferência que gera vacância — ver seção 39). Uma MP pode ter várias; cada vaga tem no máximo um preenchimento ativo/concluído, externo ("Registrar preenchimento") ou interno (uma PRO/TRF que referencia a vaga). "Registrar preenchimento" nunca cria uma MP de Admissão nova.';
+comment on column public.peopleflow_vagas.origem is '"substituicao" (Desligamento) | "aumento_quadro" (Admissão com Quantidade de vagas > 1) | "vacancia_promocao" | "vacancia_transferencia" (seção 39).';
+comment on column public.peopleflow_vagas.cargo is 'Cargo autorizado no momento da criação da vaga. Nulo quando não estava disponível (ex.: vaga compatibilizada retroativamente, ou vacância de PRO/TRF — cargo da reposição só é definido no preenchimento) — nesse caso é obrigatório escolher no preenchimento (cargo_preenchimento).';
+comment on column public.peopleflow_vagas.status is '"pendente" (disponível pra preenchimento) | "reservada" (uma PRO/TRF "Em Aprovação" já referencia esta vaga — seção 39, volta a "pendente" se essa PRO/TRF for reprovada) | "aguardando_aprovacao_gestor" (preenchimento externo registrado pelo RH, falta o gestor aprovar) | "preenchida" (concluída — externamente, com colaborador já criado em `colaboradores`, ou internamente, pela aprovação da PRO/TRF vinculada).';
+comment on column public.peopleflow_vagas.cargo_preenchimento is 'Cargo confirmado no preenchimento (externo: "Registrar preenchimento"; interno: o novo cargo da PRO, ou o cargo atual do colaborador pra TRF) — pode repetir ou ajustar o `cargo` autorizado.';
 
 alter table public.peopleflow_vagas enable row level security;
 
@@ -1660,3 +1660,51 @@ create policy "authenticated_rw_vagas"
   to authenticated
   using (true)
   with check (true);
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 39) Ramificações/cadeias de movimentações (RH, 2026-09) — Promoção e
+--    Transferência continuam sendo MPs próprias, com seu fluxo normal de
+--    solicitação/aprovação (nada muda nisso), mas passam a poder:
+--    a) preencher uma vaga já autorizada (por Desligamento, Aumento de
+--       Quadro ou outra PRO/TRF) — sem abrir MP de Admissão nova;
+--    b) gerar uma nova vaga (vacância no cargo/setor de origem) quando a
+--       movimentação é aprovada.
+--    As duas coisas não são excludentes: uma mesma PRO/TRF pode preencher
+--    uma vaga anterior E gerar uma vaga nova ao mesmo tempo — formando uma
+--    cadeia (ou ramificação, já que uma MP de aumento de quadro com várias
+--    vagas pode originar vários "galhos" independentes).
+--
+--    Vínculos usam IDs reais, nunca texto solto:
+--    - peopleflow_movimentacoes.vaga_origem_id: qual vaga esta PRO/TRF
+--      preenche (fixado na criação — a vaga é RESERVADA nesse momento, ver
+--      criarMovimentacaoFn em usePortalData.ts; só vira "preenchida" quando
+--      esta MP é aprovada; volta a "pendente" se for reprovada);
+--    - peopleflow_movimentacoes.gera_nova_vaga: true = ao aprovar, autoriza
+--      1 nova vaga (cargo em aberto, mesma lógica do Desligamento);
+--    - peopleflow_vagas.preenchido_por_movimentacao_id: a PRO/TRF que
+--      preencheu (ou reservou) a vaga — permite montar a "Cadeia da
+--      movimentação" (CadeiaMovimentacaoBloco.tsx) sem tabela extra, só
+--      percorrendo os dois vínculos em qualquer direção.
+--
+--    Proteção contra duplo preenchimento é no banco: reservar/preencher uma
+--    vaga é sempre um UPDATE condicional (`where status = 'pendente'`/
+--    `'reservada'`), nunca um UPDATE incondicional — ver vagasRepository.ts.
+--
+--    Escopo estritamente contido: NÃO migra MPs históricas (M-2026-007,
+--    M-2026-012, M-2026-017 etc.) para criar essas cadeias retroativamente
+--    — combinado explicitamente com a RH, fica pra uma etapa posterior.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_movimentacoes
+  add column if not exists vaga_origem_id bigint references public.peopleflow_vagas(id),
+  add column if not exists gera_nova_vaga boolean not null default false;
+
+comment on column public.peopleflow_movimentacoes.vaga_origem_id is
+  'Só PRO/TRF. Vaga (peopleflow_vagas) que esta movimentação preenche internamente — reservada na criação, confirmada como "preenchida" na aprovação, liberada de volta a "pendente" na reprovação.';
+comment on column public.peopleflow_movimentacoes.gera_nova_vaga is
+  'Só PRO/TRF. true = ao aprovar, autoriza 1 nova vaga (origem "vacancia_promocao"/"vacancia_transferencia", cargo em aberto) vinculada a esta MP.';
+
+alter table public.peopleflow_vagas
+  add column if not exists preenchido_por_movimentacao_id text references public.peopleflow_movimentacoes(id);
+
+comment on column public.peopleflow_vagas.preenchido_por_movimentacao_id is
+  'PRO/TRF que preencheu (status=preenchida) ou reservou (status=reservada) esta vaga internamente — null pra preenchimento externo/vaga ainda livre. Junto com vaga_origem_id acima, permite montar a Cadeia da movimentação sem tabela nova.';

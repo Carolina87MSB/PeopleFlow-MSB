@@ -9,9 +9,12 @@ import {
 import { gerarAvisoPrevio } from "../repositories/avisoPrevioRepository";
 import {
   aprovarPreenchimento as aprovarPreenchimentoNoSupabase,
+  concluirPreenchimentoInterno as concluirPreenchimentoInternoNoSupabase,
   criarVagas as criarVagasNoSupabase,
   editarPreenchimento as editarPreenchimentoNoSupabase,
+  liberarVaga as liberarVagaNoSupabase,
   registrarPreenchimento as registrarPreenchimentoNoSupabase,
+  reservarVaga as reservarVagaNoSupabase,
 } from "../repositories/vagasRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
 import {
@@ -770,10 +773,8 @@ export function usePortalData(): PortalData {
 
   const aprovarEtapaFn = useCallback(
     (id: string) => {
-      const { movimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado, vagaParaCriar } = aprovarEtapaDomain(
-        state.movimentacoes,
-        id,
-      );
+      const { movimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado, vagaParaCriar, vagaParaPreencherInternamente } =
+        aprovarEtapaDomain(state.movimentacoes, id);
       const atualizada = movimentacoes.find((m) => m.id === id);
       if (!atualizada) return;
       (async () => {
@@ -834,6 +835,32 @@ export function usePortalData(): PortalData {
               msg += ` Atenção: falha ao autorizar a(s) vaga(s) (${vagaErr instanceof Error ? vagaErr.message : "erro desconhecido"}).`;
             }
           }
+          if (vagaParaPreencherInternamente) {
+            // Preenchimento interno (PRO/TRF, RH, 2026-09) — diferente do
+            // externo: sem "aguardando_aprovacao_gestor", a aprovação desta
+            // própria movimentação já conclui o preenchimento. Best-effort:
+            // uma falha aqui não desfaz a aprovação da PRO/TRF em si (já
+            // persistida acima).
+            try {
+              const colaboradorMovido = state.colaboradores.find((c) => c.nome === atualizada.colaborador);
+              await concluirPreenchimentoInternoNoSupabase(
+                vagaParaPreencherInternamente.vagaId,
+                vagaParaPreencherInternamente.movimentacaoId,
+                {
+                  novoColaboradorNome: atualizada.colaborador,
+                  cargoPreenchimento: atualizada.atualizacaoInfo?.novoCargo ?? colaboradorMovido?.cargo ?? null,
+                  admissaoPrevistaIso: atualizada.atualizacaoInfo?.dataPrevistaIso ?? null,
+                },
+                conta.nome,
+              );
+              msg += " Vaga vinculada preenchida por esta movimentação.";
+              reload();
+            } catch (vagaErr) {
+              // eslint-disable-next-line no-console
+              console.error("[aprovarEtapaFn] Falha ao concluir preenchimento interno da vaga", vagaErr);
+              msg += ` Atenção: falha ao concluir o preenchimento da vaga vinculada (${vagaErr instanceof Error ? vagaErr.message : "erro desconhecido"}).`;
+            }
+          }
           dispatch({ type: "APROVAR_ETAPA", id });
           flash(msg);
 
@@ -849,12 +876,12 @@ export function usePortalData(): PortalData {
         }
       })();
     },
-    [dispatch, state.movimentacoes, flash, reload, conta.email, conta.nome],
+    [dispatch, state.movimentacoes, state.colaboradores, flash, reload, conta.email, conta.nome],
   );
 
   const reprovarEtapaFn = useCallback(
     (id: string, comentario: string) => {
-      const movimentacoes = reprovarEtapaDomain(state.movimentacoes, id, comentario);
+      const { movimentacoes, vagaParaLiberar } = reprovarEtapaDomain(state.movimentacoes, id, comentario);
       const atualizada = movimentacoes.find((m) => m.id === id);
       if (!atualizada) return;
       (async () => {
@@ -862,6 +889,20 @@ export function usePortalData(): PortalData {
           await atualizarMovimentacao(atualizada);
           dispatch({ type: "REPROVAR_ETAPA", id, comentario });
           flash("Movimentação reprovada e registrada na trilha.");
+
+          if (vagaParaLiberar) {
+            // Ramificações/cadeia de movimentações (RH, 2026-09) — reprovar
+            // NUNCA deixa a vaga presa a esta movimentação; volta pra
+            // "pendente" pra poder ser selecionada por outra PRO/TRF (ou
+            // preenchida externamente). Best-effort, não desfaz a reprovação.
+            try {
+              await liberarVagaNoSupabase(vagaParaLiberar.vagaId, vagaParaLiberar.movimentacaoId);
+              reload();
+            } catch (vagaErr) {
+              // eslint-disable-next-line no-console
+              console.error("[reprovarEtapaFn] Falha ao liberar vaga vinculada", vagaErr);
+            }
+          }
 
           const etapaReprovada = atualizada.etapas.find((e) => e.status === "Reprovado");
           if (etapaReprovada) {
@@ -873,7 +914,7 @@ export function usePortalData(): PortalData {
         }
       })();
     },
-    [dispatch, state.movimentacoes, flash],
+    [dispatch, state.movimentacoes, flash, reload],
   );
 
   const restaurarMovimentacaoParaRHFn = useCallback(
@@ -1160,8 +1201,36 @@ export function usePortalData(): PortalData {
       const ctx: FormContext = { me, tipos: state.tipos, colaboradores: state.colaboradores, movimentacoes: state.movimentacoes };
       const movimentacao = construirMovimentacao(form, ctx);
       try {
-        await criarMovimentacaoNoSupabase(movimentacao);
+        // Ramificações/cadeia de movimentações (RH, 2026-09) — quando esta
+        // PRO/TRF preenche uma vaga já autorizada, a vaga precisa ser
+        // RESERVADA antes de a MP existir de fato: um UPDATE condicional no
+        // banco (`where status = 'pendente'`, ver reservarVaga() em
+        // vagasRepository.ts) é a proteção real contra dois gestores
+        // escolherem a mesma vaga ao mesmo tempo — nunca só uma checagem no
+        // cliente (seção 15 do pedido da RH: "garantir no banco"). Se a vaga
+        // não estiver mais disponível, a MP nem chega a ser criada.
+        if (movimentacao.vagaOrigemId) {
+          const reservou = await reservarVagaNoSupabase(movimentacao.vagaOrigemId, movimentacao.id);
+          if (!reservou) {
+            const erro = "A vaga selecionada não está mais disponível — foi reservada ou preenchida por outra movimentação. Atualize a lista e escolha outra.";
+            flash(erro);
+            return { ok: false as const, error: erro };
+          }
+        }
+
+        try {
+          await criarMovimentacaoNoSupabase(movimentacao);
+        } catch (err) {
+          // Best-effort: se a MP não pôde ser criada depois de já ter
+          // reservado a vaga, libera de volta — não deixa vaga presa a uma
+          // movimentação que não existe.
+          if (movimentacao.vagaOrigemId) {
+            liberarVagaNoSupabase(movimentacao.vagaOrigemId, movimentacao.id).catch(() => {});
+          }
+          throw err;
+        }
         dispatch({ type: "CRIAR_MOVIMENTACAO", movimentacao });
+        if (movimentacao.vagaOrigemId) reload();
 
         const primeiraEtapa = etapaAtual(movimentacao);
         if (primeiraEtapa) {
@@ -1176,7 +1245,7 @@ export function usePortalData(): PortalData {
         return { ok: false as const, error };
       }
     },
-    [dispatch, me, state.tipos, state.colaboradores, state.movimentacoes, state.cargosCustom, state.descricoesCargo, flash],
+    [dispatch, me, state.tipos, state.colaboradores, state.movimentacoes, state.cargosCustom, state.descricoesCargo, flash, reload],
   );
 
   /** RH e Diretoria sempre; Gestor só nos grupos liberados (ver

@@ -8,6 +8,7 @@ import type {
   Etapa,
   EventoHistoricoMovimentacao,
   Movimentacao,
+  OrigemVaga,
   TipoMovimentacao,
 } from "../types/domain";
 
@@ -79,11 +80,19 @@ export function montarEtapas(
  * (só a MP com `id` pode disparar isso). */
 export interface VagaParaCriar {
   movimentacaoId: string;
-  origem: "substituicao" | "aumento_quadro";
+  origem: OrigemVaga;
   /** Cargo já escolhido no formulário — null só quando genuinamente
    * indisponível (nunca inventado). */
   cargo: string | null;
   quantidade: number;
+}
+
+/** Sinaliza que a PRO/TRF recém-aprovada preenche internamente a vaga
+ * `vagaId` (que ela mesma já tinha reservado na criação, ver
+ * criarMovimentacaoFn em usePortalData.ts) — ver seção 39 do schema.sql. */
+export interface VagaParaPreencherInternamente {
+  vagaId: number;
+  movimentacaoId: string;
 }
 
 export interface ApproveResult {
@@ -92,6 +101,7 @@ export interface ApproveResult {
   atualizacaoRegistrada: AtualizacaoCargoDeptoInfo | null;
   desligamentoRegistrado: DesligamentoInfo | null;
   vagaParaCriar: VagaParaCriar | null;
+  vagaParaPreencherInternamente: VagaParaPreencherInternamente | null;
 }
 
 /** Advances the first pending/in-review etapa to "Aprovado"; completes the movement once the last etapa clears. */
@@ -100,6 +110,7 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
   let atualizacaoRegistrada: AtualizacaoCargoDeptoInfo | null = null;
   let desligamentoRegistrado: DesligamentoInfo | null = null;
   let vagaParaCriar: VagaParaCriar | null = null;
+  let vagaParaPreencherInternamente: VagaParaPreencherInternamente | null = null;
   const hoje = formatarDataAtual();
   const agora = formatarHoraAtual();
 
@@ -144,6 +155,24 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
       ) {
         atualizacaoRegistrada = m.atualizacaoInfo;
       }
+      if (m.tipoCod === "PRO" || m.tipoCod === "TRF") {
+        // Ramificações/cadeia de movimentações (RH, 2026-09) — as duas coisas
+        // abaixo NÃO são excludentes: a mesma PRO/TRF pode preencher uma vaga
+        // anterior E gerar uma vaga nova ao mesmo tempo (ver seção 39 do
+        // schema.sql). A vaga que ELA MESMA preenche já foi reservada na
+        // criação (criarMovimentacaoFn) — aqui só confirma a conclusão.
+        if (m.vagaOrigemId) {
+          vagaParaPreencherInternamente = { vagaId: m.vagaOrigemId, movimentacaoId: m.id };
+        }
+        if (m.geraNovaVaga) {
+          vagaParaCriar = {
+            movimentacaoId: m.id,
+            origem: m.tipoCod === "PRO" ? "vacancia_promocao" : "vacancia_transferencia",
+            cargo: null,
+            quantidade: 1,
+          };
+        }
+      }
       if (m.tipoCod === "DES" && m.desligamentoInfo?.nome) desligamentoRegistrado = m.desligamentoInfo;
       if (m.tipoCod === "DES" && (m.dados ?? []).some((d) => d.label === "Substituição" && d.value === "Sim")) {
         // Cargo NUNCA é definido na abertura do desligamento (RH, 2026-09) —
@@ -157,13 +186,30 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
     return { ...m, etapas, status, aprovacaoFinal };
   });
 
-  return { movimentacoes: novasMovimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado, vagaParaCriar };
+  return {
+    movimentacoes: novasMovimentacoes,
+    admissaoRegistrada,
+    atualizacaoRegistrada,
+    desligamentoRegistrado,
+    vagaParaCriar,
+    vagaParaPreencherInternamente,
+  };
 }
 
-export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comentario: string): Movimentacao[] {
+export interface ReproveResult {
+  movimentacoes: Movimentacao[];
+  /** Vaga a liberar de volta pra "pendente" — a PRO/TRF reprovada tinha
+   * reservado uma vaga na criação (ver Movimentacao.vagaOrigemId, seção 39
+   * do schema.sql); reprovar NUNCA deixa a vaga presa a uma movimentação que
+   * não vai mais se concretizar. */
+  vagaParaLiberar: VagaParaPreencherInternamente | null;
+}
+
+export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comentario: string): ReproveResult {
   const hoje = formatarDataAtual();
   const agora = formatarHoraAtual();
-  return movimentacoes.map((m) => {
+  let vagaParaLiberar: VagaParaPreencherInternamente | null = null;
+  const novasMovimentacoes = movimentacoes.map((m) => {
     if (m.id !== id || m.status !== "Em Aprovação") return m;
     const etapas = m.etapas.map((e) => ({ ...e }));
     const idx = etapas.findIndex((e) => e.status === "Em análise" || e.status === "Aguardando");
@@ -172,8 +218,10 @@ export function reprovarEtapa(movimentacoes: Movimentacao[], id: string, comenta
     etapas[idx].data = hoje;
     etapas[idx].hora = agora;
     etapas[idx].comentario = comentario;
-    return { ...m, etapas, status: "Reprovado" };
+    if (m.vagaOrigemId) vagaParaLiberar = { vagaId: m.vagaOrigemId, movimentacaoId: m.id };
+    return { ...m, etapas, status: "Reprovado" as const };
   });
+  return { movimentacoes: novasMovimentacoes, vagaParaLiberar };
 }
 
 /** true só quando quem reprovou foi a própria etapa de RH — a última de toda

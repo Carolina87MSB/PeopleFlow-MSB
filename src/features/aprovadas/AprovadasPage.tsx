@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Header } from "../../components/layout/Header";
 import { Badge, Button, EmptyState, StatusBadge, tableStyles } from "../../components/ui";
 import { MovimentacaoDetalhe } from "../../components/shared/MovimentacaoDetalhe";
@@ -64,7 +65,22 @@ function IndicadorVagas({ m }: { m: Movimentacao }) {
 
 export function AprovadasPage() {
   const { movimentacoesVisiveis } = usePortalData();
-  const [selecionado, setSelecionado] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Deep-link "Cadeia da movimentação" (RH, 2026-09) — abrir /aprovadas?mp=ID
+  // seleciona direto essa MP, reaproveitando o mesmo detalhe já existente
+  // (ver CadeiaMovimentacaoBloco.tsx). Toda MP linkável ali já é Aprovada/
+  // Concluída (só uma MP nesse estado gera/preenche vaga), então esta tela é
+  // sempre o destino certo.
+  const [selecionado, setSelecionado] = useState<string | null>(() => searchParams.get("mp"));
+
+  // Re-sincroniza se o parâmetro mudar com o componente já montado — ex.:
+  // clicar num link da Cadeia da movimentação (CadeiaMovimentacaoBloco.tsx)
+  // enquanto já se está em /aprovadas vendo outra MP (mesma rota, não
+  // remonta, então o useState inicial sozinho não pegaria a troca).
+  useEffect(() => {
+    const mp = searchParams.get("mp");
+    if (mp) setSelecionado(mp);
+  }, [searchParams]);
 
   const aprovadas = useMemo(
     () => movimentacoesVisiveis.filter((m) => m.status === "Aprovado" || m.status === "Concluído"),
@@ -73,6 +89,15 @@ export function AprovadasPage() {
 
   const movimentacao = useMemo(() => aprovadas.find((m) => m.id === selecionado) || null, [aprovadas, selecionado]);
 
+  function voltar() {
+    setSelecionado(null);
+    if (searchParams.has("mp")) {
+      const proximos = new URLSearchParams(searchParams);
+      proximos.delete("mp");
+      setSearchParams(proximos, { replace: true });
+    }
+  }
+
   if (movimentacao) {
     return (
       <>
@@ -80,7 +105,7 @@ export function AprovadasPage() {
         <div className={styles.acaoCartaDetalhe}>
           <AcaoCarta m={movimentacao} />
         </div>
-        <MovimentacaoDetalhe movimentacao={movimentacao} onVoltar={() => setSelecionado(null)} />
+        <MovimentacaoDetalhe movimentacao={movimentacao} onVoltar={voltar} />
       </>
     );
   }

@@ -46,6 +46,8 @@ interface MovimentacaoRow {
   colaborador_id: number | null;
   tipo_aviso_previo: string | null;
   substituicao_info: SubstituicaoInfo | null;
+  vaga_origem_id: number | null;
+  gera_nova_vaga: boolean | null;
 }
 
 function fromRow(row: MovimentacaoRow): Movimentacao {
@@ -75,6 +77,8 @@ function fromRow(row: MovimentacaoRow): Movimentacao {
     colaboradorId: row.colaborador_id ?? undefined,
     tipoAvisoPrevio: (row.tipo_aviso_previo as Movimentacao["tipoAvisoPrevio"]) ?? undefined,
     substituicaoInfo: row.substituicao_info ?? undefined,
+    vagaOrigemId: row.vaga_origem_id ?? undefined,
+    geraNovaVaga: row.gera_nova_vaga ?? undefined,
   };
 }
 
@@ -105,6 +109,8 @@ function toRow(m: Movimentacao): Omit<MovimentacaoRow, "legado"> & { legado: boo
     colaborador_id: m.colaboradorId ?? null,
     tipo_aviso_previo: m.tipoAvisoPrevio ?? null,
     substituicao_info: m.substituicaoInfo ?? null,
+    vaga_origem_id: m.vagaOrigemId ?? null,
+    gera_nova_vaga: m.geraNovaVaga ?? false,
   };
 }
 

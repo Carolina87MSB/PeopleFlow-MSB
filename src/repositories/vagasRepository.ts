@@ -24,6 +24,7 @@ interface VagaRow {
   aprovado_em: string | null;
   criado_por: string;
   criado_em: string;
+  preenchido_por_movimentacao_id: string | null;
 }
 
 function fromRow(row: VagaRow): Vaga {
@@ -43,6 +44,7 @@ function fromRow(row: VagaRow): Vaga {
     aprovadoEm: row.aprovado_em,
     criadoPor: row.criado_por,
     criadoEm: row.criado_em,
+    preenchidoPorMovimentacaoId: row.preenchido_por_movimentacao_id,
   };
 }
 
@@ -137,4 +139,75 @@ export async function aprovarPreenchimento(vagaId: number, aprovadoPor: string):
     .eq("id", vagaId)
     .eq("status", "aguardando_aprovacao_gestor");
   if (error) throw new Error(`Falha ao aprovar o preenchimento: ${error.message}`);
+}
+
+// ── Preenchimento interno por Promoção/Transferência (RH, 2026-09) ────────
+// Uma PRO/TRF pode preencher uma vaga já autorizada, sem os dois passos
+// (registrar + aprovar) do preenchimento externo — a aprovação da PRO/TRF É
+// a aprovação do preenchimento. Ver seção 39 do schema.sql.
+
+/** Reserva a vaga pra uma PRO/TRF recém-criada ("Em Aprovação") — chamado por
+ * criarMovimentacaoFn ANTES de gravar a movimentação, pra nunca existir uma
+ * MP com vaga_origem_id apontando pra uma vaga que não conseguiu reservar.
+ * UPDATE CONDICIONAL (`where status = 'pendente'`): é a proteção de verdade
+ * contra duplo preenchimento (seção 15 — "garantir no banco, não só na
+ * interface"), não uma checagem só no cliente. Devolve `false` quando outra
+ * movimentação reservou a vaga primeiro (corrida) — nesse caso a MP não deve
+ * ser criada. */
+export async function reservarVaga(vagaId: number, movimentacaoId: string): Promise<boolean> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { data, error } = await supabase
+    .from("peopleflow_vagas")
+    .update({ status: "reservada", preenchido_por_movimentacao_id: movimentacaoId })
+    .eq("id", vagaId)
+    .eq("status", "pendente")
+    .select("id");
+  if (error) throw new Error(`Falha ao reservar a vaga: ${error.message}`);
+  return (data?.length ?? 0) === 1;
+}
+
+/** Libera a vaga de volta pra "pendente" — PRO/TRF vinculada foi reprovada
+ * (ver reprovarEtapaFn em usePortalData.ts). Só libera se ainda estava
+ * reservada POR ESSA MESMA movimentação (nunca libera um preenchimento já
+ * concluído por engano). */
+export async function liberarVaga(vagaId: number, movimentacaoId: string): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { error } = await supabase
+    .from("peopleflow_vagas")
+    .update({ status: "pendente", preenchido_por_movimentacao_id: null })
+    .eq("id", vagaId)
+    .eq("status", "reservada")
+    .eq("preenchido_por_movimentacao_id", movimentacaoId);
+  if (error) throw new Error(`Falha ao liberar a vaga: ${error.message}`);
+}
+
+/** Conclui o preenchimento interno — chamado quando a PRO/TRF que reservou a
+ * vaga é APROVADA (ver aprovarEtapaFn em usePortalData.ts). Diferente do
+ * preenchimento externo: não passa por "aguardando_aprovacao_gestor" (a
+ * aprovação da própria PRO/TRF já é a aprovação) e nunca chama
+ * criarPreCadastro — o colaborador já existe. */
+export async function concluirPreenchimentoInterno(
+  vagaId: number,
+  movimentacaoId: string,
+  dados: { novoColaboradorNome: string; cargoPreenchimento: string | null; admissaoPrevistaIso: string | null },
+  aprovadoPor: string,
+): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { error } = await supabase
+    .from("peopleflow_vagas")
+    .update({
+      status: "preenchida",
+      novo_colaborador_nome: dados.novoColaboradorNome,
+      cargo_preenchimento: dados.cargoPreenchimento,
+      admissao_prevista_iso: dados.admissaoPrevistaIso,
+      aprovado_por: aprovadoPor,
+      aprovado_em: new Date().toISOString(),
+    })
+    .eq("id", vagaId)
+    .eq("status", "reservada")
+    .eq("preenchido_por_movimentacao_id", movimentacaoId);
+  if (error) throw new Error(`Falha ao concluir o preenchimento interno: ${error.message}`);
 }

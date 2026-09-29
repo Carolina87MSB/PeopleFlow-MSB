@@ -244,17 +244,28 @@ export interface SubstituicaoInfo {
   registradoEm?: string;
 }
 
-export type OrigemVaga = "substituicao" | "aumento_quadro";
-export type StatusVaga = "pendente" | "aguardando_aprovacao_gestor" | "preenchida";
+/** "vacancia_promocao"/"vacancia_transferencia" (RH, 2026-09) — vaga gerada
+ * por uma Promoção/Transferência aprovada que deixa vaga no cargo/setor de
+ * origem (ver ramificações/cadeia de movimentações em domain/workflow.ts). */
+export type OrigemVaga = "substituicao" | "aumento_quadro" | "vacancia_promocao" | "vacancia_transferencia";
+/** "reservada" (RH, 2026-09) — uma Promoção/Transferência "Em Aprovação" já
+ * referenciou esta vaga como a que vai preencher (ver Movimentacao.vagaOrigemId);
+ * fica travada pra outras seleções até essa movimentação ser aprovada
+ * (`preenchida`) ou reprovada (volta pra `pendente`, ver reprovarEtapa()). */
+export type StatusVaga = "pendente" | "reservada" | "aguardando_aprovacao_gestor" | "preenchida";
 
-/** Vaga autorizada por uma MP (Desligamento com Substituição=Sim, ou Admissão
- * com Quantidade de vagas > 1 — "aumento de quadro") — RH, 2026-09. Uma MP
- * pode ter várias; cada vaga tem no máximo um preenchimento. "Registrar
- * preenchimento" nunca cria uma MP de Admissão nova — o candidato entra em
- * `colaboradores` só quando o gestor aprova (ver aprovarPreenchimento() em
- * store/usePortalData.ts). `cargo` nulo = vaga compatibilizada retroativamente
- * de uma MP antiga, sem cargo definido na autorização (obrigatório escolher
- * em `cargoPreenchimento`). Promoção/Transferência nunca geram vaga. */
+/** Vaga autorizada por uma MP (Desligamento com Substituição=Sim, Admissão
+ * com Quantidade de vagas > 1, ou Promoção/Transferência que gera vacância
+ * no cargo/setor de origem) — RH, 2026-09. Uma MP pode ter várias; cada vaga
+ * tem no máximo um preenchimento, que pode ser:
+ * - EXTERNO: "Registrar preenchimento" (RH digita nome) + aprovação do
+ *   gestor solicitante da MP de origem — nunca cria uma MP de Admissão nova;
+ * - INTERNO: uma Promoção/Transferência referencia esta vaga
+ *   (`preenchidoPorMovimentacaoId`) e a preenche automaticamente quando ELA
+ *   MESMA é aprovada — sem os dois passos (registrar + aprovar) do externo.
+ * `cargo` nulo = vaga compatibilizada retroativamente de uma MP antiga, ou
+ * vacância de PRO/TRF (cargo da futura reposição não é definido na
+ * autorização — só em "Registrar preenchimento"/na PRO/TRF que preenche). */
 export interface Vaga {
   id: number;
   movimentacaoId: string;
@@ -271,6 +282,12 @@ export interface Vaga {
   aprovadoEm: string | null;
   criadoPor: string;
   criadoEm: string;
+  /** Id da Promoção/Transferência que preenche (ou reservou) esta vaga
+   * internamente — null pra preenchimento externo ou vaga ainda sem
+   * nenhum vínculo. Nunca um texto solto tipo "M-2026-012": é o id real
+   * de `peopleflow_movimentacoes`, usado pra montar a Cadeia da
+   * movimentação (ver domain/vagas.ts / CadeiaMovimentacaoBloco.tsx). */
+  preenchidoPorMovimentacaoId: string | null;
 }
 
 /** Evento de auditoria gravado dentro da própria movimentação — reabertura
@@ -363,6 +380,18 @@ export interface Movimentacao {
   /** Só `tipoCod === "DES"` com `dados["Substituição"] === "Sim"` — ver
    * SubstituicaoInfo. */
   substituicaoInfo?: SubstituicaoInfo;
+  /** Só PRO/TRF (RH, 2026-09) — id real de uma Vaga já autorizada (`peopleflow_vagas`)
+   * que esta movimentação preenche internamente. Fixado na criação (a vaga é
+   * reservada nesse momento, ver criarMovimentacaoFn em usePortalData.ts);
+   * a vaga só vira "preenchida" quando esta MP é aprovada, e volta pra
+   * "pendente" se for reprovada — ver aprovarEtapa()/reprovarEtapa() em
+   * domain/workflow.ts. */
+  vagaOrigemId?: number;
+  /** Só PRO/TRF — true quando a movimentação deixa vaga no cargo/setor de
+   * origem; ao ser aprovada, autoriza 1 nova Vaga (origem "vacancia_promocao"/
+   * "vacancia_transferencia", cargo ainda indefinido — mesma lógica do
+   * Desligamento: RH define o cargo só em "Registrar preenchimento"). */
+  geraNovaVaga?: boolean;
 }
 
 export interface NovaMovimentacaoForm {
@@ -391,6 +420,17 @@ export interface NovaMovimentacaoForm {
   salNovo: string;
   trfNovoDepto: string;
   trfData: string;
+  /** Só PRO/TRF (RH, 2026-09) — "Esta movimentação está preenchendo uma vaga
+   * já autorizada?". Obrigatório escolher uma vaga (movPreencheVagaId) quando
+   * = "Sim". */
+  movPreencheVaga: "Sim" | "Não";
+  /** Id (string, valor do <select>) da Vaga selecionada — só relevante quando
+   * movPreencheVaga === "Sim". */
+  movPreencheVagaId: string;
+  /** Só PRO/TRF — "Esta movimentação deixará uma vaga a ser preenchida no
+   * cargo/setor de origem?". Não exige definir o cargo agora (mesma lógica
+   * do Desligamento) — só ao aprovar autoriza 1 vaga com cargo em aberto. */
+  movGeraNovaVaga: "Sim" | "Não";
   desMotivo: string;
   desData: string;
   desUltimoDia: string;

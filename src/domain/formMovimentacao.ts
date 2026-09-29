@@ -51,6 +51,9 @@ export function blankForm(): NovaMovimentacaoForm {
     salNovo: "",
     trfNovoDepto: "",
     trfData: "",
+    movPreencheVaga: "Não",
+    movPreencheVagaId: "",
+    movGeraNovaVaga: "Não",
     desMotivo: "",
     desData: "",
     desUltimoDia: "",
@@ -108,6 +111,9 @@ export function validarForm(
     } else if (colab && colab.gestor !== ctx.me) {
       return { ok: false, error: `Somente ${colab.gestor}, gestor(a) atual de ${colab.nome}, pode abrir esta promoção.` };
     }
+    if (f.movPreencheVaga === "Sim" && !f.movPreencheVagaId) {
+      return { ok: false, error: 'Selecione a "Vaga de origem".' };
+    }
     return { ok: true };
   }
 
@@ -117,6 +123,9 @@ export function validarForm(
       const gestorDestino = gestorDoDepartamento(ctx.colaboradores, f.trfNovoDepto, ctx.cargosCustom);
       if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
       return { ok: false, error: `Somente um gestor que já lidera colaboradores de ${f.trfNovoDepto} pode abrir esta movimentação (ex.: ${gestorDestino}).` };
+    }
+    if (f.movPreencheVaga === "Sim" && !f.movPreencheVagaId) {
+      return { ok: false, error: 'Selecione a "Vaga de origem".' };
     }
     return { ok: true };
   }
@@ -210,6 +219,8 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
       { label: "Alteração salarial", value: f.proAltSal || "Não" },
       { label: "Novo salário", value: f.proAltSal === "Sim" ? f.proNovoSalario || "A definir" : "—" },
       { label: "Data prevista", value: f.proData ? formatarDataIso(f.proData) : "A definir" },
+      { label: "Preenche vaga autorizada?", value: f.movPreencheVaga },
+      { label: "Gera nova vaga no cargo/setor de origem?", value: f.movGeraNovaVaga },
     ];
   } else if (f.tipo === "SAL") {
     resumo = "Reajuste salarial — " + cargoAtual;
@@ -227,6 +238,8 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
       { label: "Novo departamento", value: f.trfNovoDepto || "—" },
       { label: "Gestor de destino", value: me },
       { label: "Data prevista", value: f.trfData ? formatarDataIso(f.trfData) : "A definir" },
+      { label: "Preenche vaga autorizada?", value: f.movPreencheVaga },
+      { label: "Gera nova vaga no cargo/setor de origem?", value: f.movGeraNovaVaga },
     ];
   } else if (f.tipo === "DES") {
     resumo = (f.desPedidoDemissao ? "Pedido de Demissão — " : "Desligamento — ") + (f.desMotivo || "") + " · " + cargoAtual;
@@ -285,6 +298,8 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     pedidoDemissao: f.tipo === "DES" ? f.desPedidoDemissao : undefined,
     tipoAvisoPrevio: f.tipo === "DES" && f.desTipoAvisoPrevio ? f.desTipoAvisoPrevio : undefined,
     colaboradorId: colab?.id,
+    vagaOrigemId: (f.tipo === "PRO" || f.tipo === "TRF") && f.movPreencheVaga === "Sim" && f.movPreencheVagaId ? Number(f.movPreencheVagaId) : undefined,
+    geraNovaVaga: f.tipo === "PRO" || f.tipo === "TRF" ? f.movGeraNovaVaga === "Sim" : undefined,
     historico,
   });
 }

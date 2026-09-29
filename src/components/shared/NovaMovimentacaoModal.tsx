@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { blankForm } from "../../domain/formMovimentacao";
 import { contarPorGestor } from "../../domain/agregados";
 import { ehGestorDoDepartamento, gestorDoDepartamento } from "../../domain/hierarquia";
+import { ORIGEM_VAGA_LABEL, vagaDisponivelParaPreenchimento } from "../../domain/vagas";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { useToast } from "./ToastContext";
@@ -16,7 +17,7 @@ const TIPOS_SEM_CADASTRO_PREVIO: TipoCod[] = ["ADM"];
 
 export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const { state } = usePortalStore();
-  const { conta, colaboradores, descricoesCargo, criarMovimentacao } = usePortalData();
+  const { conta, colaboradores, descricoesCargo, vagas, criarMovimentacao } = usePortalData();
   const { flash } = useToast();
   const navigate = useNavigate();
 
@@ -61,6 +62,14 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
         .sort((a, b) => a.localeCompare(b, "pt-BR")),
     [descricoesCargo],
   );
+
+  // Vagas selecionáveis como "Vaga de origem" em PRO/TRF (RH, 2026-09) — só
+  // com saldo disponível (status "pendente"); nunca lista vaga já reservada,
+  // aguardando aprovação de preenchimento externo, ou já preenchida (ver
+  // vagaDisponivelParaPreenchimento() em domain/vagas.ts — a garantia real
+  // contra corrida/duplo preenchimento é no banco, ver reservarVaga() em
+  // vagasRepository.ts, chamado em criarMovimentacaoFn).
+  const vagasDisponiveis = useMemo(() => vagas.filter(vagaDisponivelParaPreenchimento), [vagas]);
 
   function set<K extends keyof NovaMovimentacaoForm>(key: K, value: NovaMovimentacaoForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -395,6 +404,38 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             <label className={[styles.field, styles.full].join(" ")}>
               <span>Observações</span>
               <input value={form.desObs} onChange={(e) => set("desObs", e.target.value)} />
+            </label>
+          </>
+        )}
+
+        {(tipo === "PRO" || tipo === "TRF") && (
+          <>
+            <label className={styles.field}>
+              <span>Esta movimentação está preenchendo uma vaga já autorizada?</span>
+              <select value={form.movPreencheVaga} onChange={(e) => set("movPreencheVaga", e.target.value as "Sim" | "Não")}>
+                <option value="Não">Não</option>
+                <option value="Sim">Sim</option>
+              </select>
+            </label>
+            {form.movPreencheVaga === "Sim" && (
+              <label className={styles.field}>
+                <span>Vaga de origem</span>
+                <select value={form.movPreencheVagaId} onChange={(e) => set("movPreencheVagaId", e.target.value)}>
+                  <option value="">Selecione...</option>
+                  {vagasDisponiveis.map((v) => (
+                    <option key={v.id} value={String(v.id)}>
+                      {v.movimentacaoId} — {ORIGEM_VAGA_LABEL[v.origem]} — {v.cargo ?? "cargo a definir"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className={styles.field}>
+              <span>Esta movimentação deixará uma vaga a ser preenchida no cargo/setor de origem?</span>
+              <select value={form.movGeraNovaVaga} onChange={(e) => set("movGeraNovaVaga", e.target.value as "Sim" | "Não")}>
+                <option value="Não">Não</option>
+                <option value="Sim">Sim</option>
+              </select>
             </label>
           </>
         )}
