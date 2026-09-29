@@ -146,8 +146,11 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
       }
       if (m.tipoCod === "DES" && m.desligamentoInfo?.nome) desligamentoRegistrado = m.desligamentoInfo;
       if (m.tipoCod === "DES" && (m.dados ?? []).some((d) => d.label === "Substituição" && d.value === "Sim")) {
-        const cargoVaga = (m.dados ?? []).find((d) => d.label === "Cargo da vaga de substituição")?.value ?? null;
-        vagaParaCriar = { movimentacaoId: m.id, origem: "substituicao", cargo: cargoVaga && cargoVaga !== "—" ? cargoVaga : null, quantidade: 1 };
+        // Cargo NUNCA é definido na abertura do desligamento (RH, 2026-09) —
+        // a autorização é pra reposição da NECESSIDADE, não necessariamente
+        // do mesmo cargo; quem escolhe o cargo é o RH, só em "Registrar
+        // preenchimento", quando já existir candidato(a) aprovado(a).
+        vagaParaCriar = { movimentacaoId: m.id, origem: "substituicao", cargo: null, quantidade: 1 };
       }
     }
 

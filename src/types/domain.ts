@@ -395,9 +395,6 @@ export interface NovaMovimentacaoForm {
   desData: string;
   desUltimoDia: string;
   desSubst: "Sim" | "Não";
-  /** Obrigatório quando desSubst === "Sim" — cargo da vaga autorizada pelo
-   * desligamento (RH, 2026-09). Não precisa ser igual ao cargo de quem saiu. */
-  desCargoVaga: string;
   desObs: string;
   /** "Pedido de demissão" — colaborador solicitou o próprio desligamento;
    * dispensa a etapa de aprovação da Diretoria (ver montarEtapas()). */

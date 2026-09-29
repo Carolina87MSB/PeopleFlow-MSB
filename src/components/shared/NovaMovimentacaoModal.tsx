@@ -392,19 +392,6 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
                 <option value="Sim">Sim</option>
               </select>
             </label>
-            {form.desSubst === "Sim" && (
-              <label className={styles.field}>
-                <span>Cargo da vaga de substituição</span>
-                <select value={form.desCargoVaga} onChange={(e) => set("desCargoVaga", e.target.value)}>
-                  <option value="">Selecione...</option>
-                  {cargosExistentes.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
             <label className={[styles.field, styles.full].join(" ")}>
               <span>Observações</span>
               <input value={form.desObs} onChange={(e) => set("desObs", e.target.value)} />
