@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { usePortalData } from "../../store/usePortalData";
 import { RegistrarPreenchimentoModal } from "./RegistrarPreenchimentoModal";
-import { dataBrParaIso, formatarDataHora } from "../../domain/dates";
-import type { EventoHistoricoMovimentacao, Movimentacao, Vaga } from "../../types/domain";
+import { formatarDataHora } from "../../domain/dates";
+import type { Movimentacao, Vaga } from "../../types/domain";
 import styles from "./MovimentacaoDetalhe.module.css";
 
 const ORIGEM_LABEL: Record<Vaga["origem"], string> = {
@@ -20,8 +20,6 @@ interface EventoVaga {
   chave: string;
   titulo: string;
   quando: string;
-  autorLinha?: string;
-  detalhe?: string;
 }
 
 /** ISO ("aaaa-mm-dd") pro formato numérico "dd/mm/aaaa" — o resto do app usa
@@ -34,39 +32,19 @@ function formatarIsoNumerico(iso: string | null | undefined): string {
   return `${dia}/${mes}/${ano}`;
 }
 
-/** Converte "dd/mmm/aaaa" + "HH:MM" (formato de EventoHistoricoMovimentacao)
- * pro mesmo estilo numérico de formatarDataHora() ("dd/mm/aaaa, HH:MM"), pra
- * não misturar dois formatos de data na mesma lista cronológica. Reaproveita
- * dataBrParaIso() já existente — nenhuma lógica de data nova. */
-function formatarEventoHistorico(dataBr: string, hora: string): { chave: string; quando: string } {
-  const iso = dataBrParaIso(dataBr);
-  if (!iso) return { chave: `${dataBr} ${hora}`, quando: `${dataBr}, ${hora}` };
-  const [ano, mes, dia] = iso.split("-");
-  return { chave: `${iso}T${hora}`, quando: `${dia}/${mes}/${ano}, ${hora}` };
-}
-
-/** Histórico completo do preenchimento de UMA vaga (RH, 2026-09) — combina os
- * dois momentos que já ficam gravados na própria vaga (registrado/aprovado)
- * com as edições gravadas no histórico da MP de origem (Movimentacao.historico
- * é da MP inteira; aqui filtramos só os eventos de preenchimento de vaga).
- * Puramente apresentação — não grava nada, não inventa evento que não exista.
- *
- * Limitação conhecida: se uma MP tiver mais de uma vaga (aumento de quadro),
- * os eventos de EDIÇÃO (vindos de Movimentacao.historico) não são gravados
- * com o id da vaga — nesse caso todas as vagas da mesma MP mostrariam as
- * mesmas edições. Não afeta os casos reais de hoje (uma vaga por MP). */
-function eventosDaVaga(vaga: Vaga, historicoMp: EventoHistoricoMovimentacao[]): EventoVaga[] {
+/** Estado atual do preenchimento de UMA vaga (RH, 2026-09) — só os dois
+ * momentos que ficam gravados na própria vaga (registrado/aprovado). As
+ * edições (nome/cargo/data alterados) NÃO aparecem aqui — RH pediu pra
+ * concentrar exclusivamente no "Histórico de edições" da MP (que já mostra
+ * todo Movimentacao.historico, incluindo essas edições, sem filtro nenhum
+ * aqui). Puramente apresentação — não apaga nem deixa de gravar nada. */
+function eventosDaVaga(vaga: Vaga): EventoVaga[] {
   const eventos: EventoVaga[] = [];
   if (vaga.registradoPor && vaga.registradoEm) {
     eventos.push({ chave: vaga.registradoEm, titulo: `Registrado por ${vaga.registradoPor}`, quando: formatarDataHora(vaga.registradoEm) });
   }
   if (vaga.aprovadoPor && vaga.aprovadoEm) {
     eventos.push({ chave: vaga.aprovadoEm, titulo: `Aprovado por ${vaga.aprovadoPor}`, quando: formatarDataHora(vaga.aprovadoEm) });
-  }
-  for (const h of historicoMp) {
-    if (!h.acao.startsWith("Preenchimento de vaga editado")) continue;
-    const { chave, quando } = formatarEventoHistorico(h.data, h.hora);
-    eventos.push({ chave, titulo: h.acao, quando, autorLinha: `por ${h.autor}`, detalhe: h.detalhe });
   }
   return eventos.sort((a, b) => a.chave.localeCompare(b.chave));
 }
@@ -78,7 +56,7 @@ function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentac
   const podeRegistrar = perfil === "RH" && vaga.status === "pendente";
   const podeEditar = perfil === "RH" && vaga.status === "aguardando_aprovacao_gestor";
   const podeAprovar = vaga.status === "aguardando_aprovacao_gestor" && (perfil === "RH" || movimentacao.solicitante === conta.nome);
-  const eventos = eventosDaVaga(vaga, movimentacao.historico ?? []);
+  const eventos = eventosDaVaga(vaga);
 
   return (
     <div className={styles.vagaCard}>
@@ -126,8 +104,6 @@ function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentac
                   <span className={styles.historicoAcao}>{ev.titulo}</span>
                   <span className={styles.historicoData}>{ev.quando}</span>
                 </div>
-                {ev.autorLinha && <div className={styles.historicoAutor}>{ev.autorLinha}</div>}
-                {ev.detalhe && <div className={styles.historicoDetalhe}>{ev.detalhe}</div>}
               </div>
             ))}
           </div>
