@@ -4,8 +4,11 @@ function doc(nome: string, status: "Gerado" | "Pendente"): DocumentoGerado {
   return { nome, status };
 }
 
-/** Mirrors the prototype's docsFor(): the set of paperwork a movement type auto-generates on approval. */
+/** Mirrors the prototype's docsFor(): the set of paperwork a movement type auto-generates on approval.
+ * Desligamento (DES) não usa mais esta lista mockada — ver o bloco "Aviso
+ * prévio"/"Documento assinado" com status real em MovimentacaoDetalhe.tsx. */
 export function docsFor(m: Movimentacao): DocumentoGerado[] {
+  if (m.tipoCod === "DES") return [];
   const list: DocumentoGerado[] = [];
   switch (m.tipoCod) {
     case "ADM":
@@ -19,9 +22,6 @@ export function docsFor(m: Movimentacao): DocumentoGerado[] {
       break;
     case "TRF":
       list.push(doc("Comunicado de transferência", "Gerado"));
-      break;
-    case "DES":
-      list.push(doc("Termo de desligamento", "Gerado"), doc("Aviso prévio", "Gerado"));
       break;
     default:
       break;

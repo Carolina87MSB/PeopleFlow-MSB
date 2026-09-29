@@ -5,6 +5,8 @@
 
 import { supabase } from "../lib/supabaseClient";
 
+const BUCKET = "movimentacoes-documentos";
+
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -30,16 +32,20 @@ export async function gerarAvisoPrevio(movimentacaoId: string): Promise<{ gerado
   return chamar("gerar", { movimentacaoId });
 }
 
-/** Passo 1 do upload do "Documento assinado": pede uma URL assinada pra
- * enviar o arquivo direto ao Storage. */
-export async function prepararUploadAssinado(movimentacaoId: string, fileName: string, mime: string): Promise<{ path: string; token: string }> {
-  return chamar("anexar_preparar", { movimentacaoId, fileName, mime });
-}
-
-/** Passo 2: confirma o upload e registra o documento (substitui o anterior
- * sem apagá-lo, se já existir um "Documento assinado" ativo). */
-export async function confirmarUploadAssinado(movimentacaoId: string, path: string, fileName: string, mime: string): Promise<void> {
-  await chamar("anexar_confirmar", { movimentacaoId, path, fileName, mime });
+/** Envio do "Documento assinado" em 3 passos (igual às evidências do
+ * Desenvolvimento, ver enviarEvidencia() em devRepository.ts): o servidor
+ * emite uma URL assinada → o arquivo vai direto ao bucket privado → o
+ * servidor confere e registra. Substitui o anterior sem apagá-lo, se já
+ * existir um "Documento assinado" ativo para esta movimentação. */
+export async function enviarDocumentoAssinado(movimentacaoId: string, arquivo: File): Promise<void> {
+  const { path, token } = await chamar<{ path: string; token: string }>("anexar_preparar", {
+    movimentacaoId,
+    fileName: arquivo.name,
+    mime: arquivo.type,
+  });
+  const { error } = await supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, arquivo, { contentType: arquivo.type });
+  if (error) throw new Error(`Falha ao enviar o arquivo: ${error.message}`);
+  await chamar("anexar_confirmar", { movimentacaoId, path, fileName: arquivo.name, mime: arquivo.type });
 }
 
 /** URL assinada de curta duração para visualizar (baixar=false) ou baixar

@@ -367,6 +367,17 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
               <input value={form.desMotivo} onChange={(e) => set("desMotivo", e.target.value)} />
             </label>
             <label className={styles.field}>
+              <span>Tipo de aviso prévio</span>
+              <select
+                value={form.desTipoAvisoPrevio}
+                onChange={(e) => set("desTipoAvisoPrevio", e.target.value as "" | "indenizado" | "trabalhado")}
+              >
+                <option value="">Selecione...</option>
+                <option value="indenizado">Indenizado</option>
+                <option value="trabalhado">Trabalhado</option>
+              </select>
+            </label>
+            <label className={styles.field}>
               <span>Data prevista</span>
               <input type="date" value={form.desData} onChange={(e) => set("desData", e.target.value)} />
             </label>

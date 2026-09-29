@@ -57,6 +57,7 @@ export function blankForm(): NovaMovimentacaoForm {
     desSubst: "Não",
     desObs: "",
     desPedidoDemissao: false,
+    desTipoAvisoPrevio: "",
   };
 }
 
@@ -117,6 +118,11 @@ export function validarForm(
       if (!gestorDestino) return { ok: false, error: "Não foi possível identificar o gestor do departamento de destino selecionado." };
       return { ok: false, error: `Somente um gestor que já lidera colaboradores de ${f.trfNovoDepto} pode abrir esta movimentação (ex.: ${gestorDestino}).` };
     }
+    return { ok: true };
+  }
+
+  if (f.tipo === "DES") {
+    if (!f.desTipoAvisoPrevio) return { ok: false, error: 'Selecione o "Tipo de aviso prévio".' };
     return { ok: true };
   }
 
@@ -277,6 +283,7 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
     atualizacaoInfo,
     desligamentoInfo,
     pedidoDemissao: f.tipo === "DES" ? f.desPedidoDemissao : undefined,
+    tipoAvisoPrevio: f.tipo === "DES" && f.desTipoAvisoPrevio ? f.desTipoAvisoPrevio : undefined,
     colaboradorId: colab?.id,
     historico,
   });

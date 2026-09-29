@@ -3,6 +3,7 @@ import { Pencil } from "lucide-react";
 import { Avatar, Button } from "../ui";
 import { tipoColor } from "../../domain/colors";
 import { docsFor } from "../../domain/documentos";
+import { AvisoPrevioBloco } from "./AvisoPrevioBloco";
 import { dataBrParaIso, formatarDataIso } from "../../domain/dates";
 import { calcularPercentual, type EdicaoDadoMovimentacao } from "../../domain/workflow";
 import type { DadoField, Movimentacao } from "../../types/domain";
@@ -207,17 +208,21 @@ export function MovimentacaoDetalhe({ movimentacao: m, onVoltar, editavel, onSal
             </div>
           </div>
 
-          <div>
-            <h4 className={styles.sectionTitle}>Documentos gerados</h4>
-            <div className={styles.documentosList}>
-              {documentos.map((doc) => (
-                <div key={doc.nome} className={styles.documentoItem}>
-                  <span className={styles.documentoNome}>{doc.nome}</span>
-                  <span className={doc.status === "Gerado" ? styles.pillGerado : styles.pillPendente}>{doc.status}</span>
-                </div>
-              ))}
+          {m.tipoCod === "DES" ? (
+            <AvisoPrevioBloco movimentacao={m} />
+          ) : (
+            <div>
+              <h4 className={styles.sectionTitle}>Documentos gerados</h4>
+              <div className={styles.documentosList}>
+                {documentos.map((doc) => (
+                  <div key={doc.nome} className={styles.documentoItem}>
+                    <span className={styles.documentoNome}>{doc.nome}</span>
+                    <span className={doc.status === "Gerado" ? styles.pillGerado : styles.pillPendente}>{doc.status}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {m.historico && m.historico.length > 0 && (

@@ -352,6 +352,9 @@ export interface NovaMovimentacaoForm {
   /** "Pedido de demissão" — colaborador solicitou o próprio desligamento;
    * dispensa a etapa de aprovação da Diretoria (ver montarEtapas()). */
   desPedidoDemissao: boolean;
+  /** Obrigatório para Desligamento — só "indenizado" gera o Aviso Prévio
+   * automaticamente (ver Movimentacao.tipoAvisoPrevio). */
+  desTipoAvisoPrevio: "" | "indenizado" | "trabalhado";
 }
 
 export interface DepartamentoAgregado {
