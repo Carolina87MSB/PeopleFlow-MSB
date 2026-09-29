@@ -23,6 +23,7 @@ import type {
   Perfil2Info,
   ReajusteSalarial,
   SalarioBase,
+  SubstituicaoInfo,
   TipoMovimentacao,
 } from "../types/domain";
 
@@ -69,6 +70,7 @@ export type PortalAction =
       autor: string;
     }
   | { type: "ATUALIZAR_CARTA_MOVIMENTACAO"; id: string; carta: CartaMovimentacao }
+  | { type: "REGISTRAR_SUBSTITUICAO"; id: string; substituicaoInfo: SubstituicaoInfo }
   | { type: "CRIAR_MOVIMENTACAO"; movimentacao: Movimentacao }
   | { type: "REGISTRAR_CARGO_CUSTOM"; cargo: CargoCustom }
   | { type: "SALVAR_FECHAMENTO_FINANCEIRO"; desligamento: DesligamentoFinanceiro }

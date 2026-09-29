@@ -1,6 +1,8 @@
 .acaoCartaDetalhe {
   display: flex;
+  align-items: flex-start;
   justify-content: flex-end;
+  gap: 16px;
   margin-bottom: 12px;
 }
 
@@ -32,4 +34,30 @@
   .botaoCarta {
     max-width: 160px;
   }
+}
+
+.acaoSubstituicao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.substituicaoPendente,
+.substituicaoRealizada {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.substituicaoPendente {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+
+.substituicaoRealizada {
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
 }

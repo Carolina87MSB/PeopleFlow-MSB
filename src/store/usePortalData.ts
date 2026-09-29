@@ -105,6 +105,7 @@ import {
   editarDadosMovimentacao as editarDadosMovimentacaoDomain,
   type EdicaoDadoMovimentacao,
   etapaAtual,
+  podeRegistrarSubstituicao as podeRegistrarSubstituicaoDomain,
   reabrirParaRH,
   reprovarEtapa as reprovarEtapaDomain,
 } from "../domain/workflow";
@@ -223,6 +224,11 @@ export interface PortalData {
   /** RH-only, só depois da ciência do gestor — não cria movimentação nova,
    * só marca a entrega na mesma linha. */
   marcarCartaMovimentacaoEntregue: (id: string) => void;
+  /** "Registrar substituição" (RH, 2026-09) — só quando
+   * `podeRegistrarSubstituicao()` (MP de Desligamento com substituição
+   * pendente). Cria o pré-cadastro do novo colaborador (mesmo fluxo de
+   * Admissão) e marca a substituição como realizada na própria MP. */
+  registrarSubstituicao: (id: string, dados: { novoColaborador: string; cargo: string; admissaoIso: string; observacao: string }) => void;
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   /** Botão "Novo Cargo" (RH-only) — cria só nome/depto/gestor, 0 ocupantes. */
   criarCargoCustom: (nome: string, depto: string, gestor: string) => Promise<{ ok: true } | { ok: false }>;
@@ -957,6 +963,57 @@ export function usePortalData(): PortalData {
       })();
     },
     [dispatch, state.movimentacoes, flash, me, perfil],
+  );
+
+  /** "Registrar substituição" (RH, 2026-09) — só para MP de Desligamento com
+   * `substituicaoInfo?.status === "pendente"` (ver podeRegistrarSubstituicao()
+   * em domain/workflow.ts e RegistrarSubstituicaoModal.tsx). Não abre uma MP
+   * de Admissão nova: o novo colaborador entra em `colaboradores` pelo mesmo
+   * fluxo de pré-cadastro já usado por Admissão (criarPreCadastroNoSupabase),
+   * com departamento herdado da MP e gestor/vínculo herdados de quem saiu
+   * (quando localizável). */
+  const registrarSubstituicaoFn = useCallback(
+    (id: string, dados: { novoColaborador: string; cargo: string; admissaoIso: string; observacao: string }) => {
+      const movimentacao = state.movimentacoes.find((m) => m.id === id);
+      if (!movimentacao || !podeRegistrarSubstituicaoDomain(movimentacao)) {
+        flash("Esta movimentação não tem substituição pendente.");
+        return;
+      }
+      const colaboradorQueSaiu =
+        (movimentacao.colaboradorId && state.colaboradores.find((c) => c.id === movimentacao.colaboradorId)) ||
+        state.colaboradores.find((c) => c.nome === movimentacao.colaborador);
+
+      (async () => {
+        try {
+          await criarPreCadastroNoSupabase({
+            candidato: dados.novoColaborador.trim(),
+            cargo: dados.cargo,
+            depto: movimentacao.depto,
+            gestor: colaboradorQueSaiu?.gestor ?? "",
+            vinculo: colaboradorQueSaiu?.vinculo ?? "",
+            admissaoIso: dados.admissaoIso,
+          });
+          const substituicaoInfo: NonNullable<Movimentacao["substituicaoInfo"]> = {
+            necessaria: true,
+            status: "realizada",
+            novoColaborador: dados.novoColaborador.trim(),
+            cargo: dados.cargo,
+            admissaoIso: dados.admissaoIso,
+            observacao: dados.observacao.trim() || undefined,
+            registradoPor: me,
+            registradoEm: new Date().toISOString(),
+          };
+          const atualizada = { ...movimentacao, substituicaoInfo };
+          await atualizarMovimentacao(atualizada);
+          dispatch({ type: "REGISTRAR_SUBSTITUICAO", id, substituicaoInfo });
+          flash(`Substituição registrada — "${dados.novoColaborador.trim()}" incluído(a) no cadastro de colaboradores.`);
+          reload();
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao registrar a substituição.");
+        }
+      })();
+    },
+    [dispatch, state.movimentacoes, state.colaboradores, flash, me, reload],
   );
 
   /** Botão "Novo Cargo" em CargosPage.tsx (RH-only) — cria só nome/depto/
@@ -2584,6 +2641,7 @@ export function usePortalData(): PortalData {
     emitirCartaMovimentacao: emitirCartaMovimentacaoFn,
     darCienciaCartaMovimentacao: darCienciaCartaMovimentacaoFn,
     marcarCartaMovimentacaoEntregue: marcarCartaMovimentacaoEntregueFn,
+    registrarSubstituicao: registrarSubstituicaoFn,
     criarMovimentacao: criarMovimentacaoFn,
     criarCargoCustom: criarCargoCustomFn,
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,

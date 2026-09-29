@@ -4,7 +4,7 @@ import { Avatar, Button } from "../ui";
 import { tipoColor } from "../../domain/colors";
 import { docsFor } from "../../domain/documentos";
 import { AvisoPrevioBloco } from "./AvisoPrevioBloco";
-import { dataBrParaIso, formatarDataIso } from "../../domain/dates";
+import { dataBrParaIso, formatarDataHora, formatarDataIso } from "../../domain/dates";
 import { calcularPercentual, type EdicaoDadoMovimentacao } from "../../domain/workflow";
 import type { DadoField, Movimentacao } from "../../types/domain";
 import styles from "./MovimentacaoDetalhe.module.css";
@@ -224,6 +224,48 @@ export function MovimentacaoDetalhe({ movimentacao: m, onVoltar, editavel, onSal
             </div>
           )}
         </div>
+
+        {m.substituicaoInfo?.necessaria && (
+          <div className={styles.justificativaBox}>
+            <h4 className={styles.sectionTitle}>Substituição</h4>
+            <div className={styles.infoGrid} style={{ marginBottom: 0 }}>
+              <div className={styles.infoItem}>
+                <span className={styles.infoLabel}>Status</span>
+                <span className={styles.infoValue}>{m.substituicaoInfo.status === "realizada" ? "Substituição realizada" : "Substituição pendente"}</span>
+              </div>
+              {m.substituicaoInfo.status === "realizada" && (
+                <>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Novo colaborador</span>
+                    <span className={styles.infoValue}>{m.substituicaoInfo.novoColaborador}</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Cargo</span>
+                    <span className={styles.infoValue}>{m.substituicaoInfo.cargo}</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Data de admissão</span>
+                    <span className={styles.infoValue}>{formatarDataIso(m.substituicaoInfo.admissaoIso)}</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Registrado por</span>
+                    <span className={styles.infoValue}>{m.substituicaoInfo.registradoPor}</span>
+                  </div>
+                  <div className={styles.infoItem}>
+                    <span className={styles.infoLabel}>Registrado em</span>
+                    <span className={styles.infoValue}>{formatarDataHora(m.substituicaoInfo.registradoEm)}</span>
+                  </div>
+                  {m.substituicaoInfo.observacao && (
+                    <div className={styles.infoItem}>
+                      <span className={styles.infoLabel}>Observação</span>
+                      <span className={styles.infoValue}>{m.substituicaoInfo.observacao}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {m.historico && m.historico.length > 0 && (
           <div className={styles.historicoBox}>

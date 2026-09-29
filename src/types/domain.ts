@@ -229,6 +229,23 @@ export interface AprovacaoFinal {
   hora: string;
 }
 
+/** Substituição vinculada a uma MP de Desligamento com "Substituição" = Sim
+ * (RH, 2026-09) — não abre uma MP de Admissão nova; o novo colaborador entra
+ * pelo mesmo fluxo de pré-cadastro já usado por Admissão (ver
+ * registrarSubstituicao() em store/usePortalData.ts). `necessaria=true` é
+ * setado automaticamente ao aprovar a última etapa da MP; `status` só vira
+ * "realizada" quando o RH/Gestor registra o novo colaborador. */
+export interface SubstituicaoInfo {
+  necessaria: boolean;
+  status: "pendente" | "realizada";
+  novoColaborador?: string;
+  cargo?: string;
+  admissaoIso?: string;
+  observacao?: string;
+  registradoPor?: string;
+  registradoEm?: string;
+}
+
 /** Evento de auditoria gravado dentro da própria movimentação — reabertura
  * pelo RH ou edição de um campo de `dados` (ver reabrirParaRH()/
  * editarDadosMovimentacao() em domain/workflow.ts). Nunca removido, mesmo que
@@ -316,6 +333,9 @@ export interface Movimentacao {
   /** null/undefined = carta ainda não emitida. Só existe pra PRO/TRF/SAL já
    * aprovadas — ver domain/cartaMovimentacao.ts. */
   cartaMovimentacao?: CartaMovimentacao | null;
+  /** Só `tipoCod === "DES"` com `dados["Substituição"] === "Sim"` — ver
+   * SubstituicaoInfo. */
+  substituicaoInfo?: SubstituicaoInfo;
 }
 
 export interface NovaMovimentacaoForm {

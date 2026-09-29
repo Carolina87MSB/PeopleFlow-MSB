@@ -11,6 +11,13 @@ import type {
   TipoMovimentacao,
 } from "../types/domain";
 
+/** true só quando a MP de Desligamento já foi aprovada, marcou "Substituição"
+ * = Sim e ainda ninguém foi registrado para a vaga (ver registrarSubstituicao()
+ * em store/usePortalData.ts e AcaoSubstituicao em AprovadasPage.tsx). */
+export function podeRegistrarSubstituicao(m: Movimentacao): boolean {
+  return m.tipoCod === "DES" && m.substituicaoInfo?.status === "pendente";
+}
+
 export function nextId(movimentacoes: Movimentacao[]): string {
   const nums = movimentacoes
     .map((m) => parseInt(m.id.split("-")[2], 10))
@@ -117,7 +124,12 @@ export function aprovarEtapa(movimentacoes: Movimentacao[], id: string): Approve
       if (m.tipoCod === "DES" && m.desligamentoInfo?.nome) desligamentoRegistrado = m.desligamentoInfo;
     }
 
-    return { ...m, etapas, status, aprovacaoFinal };
+    let substituicaoInfo = m.substituicaoInfo;
+    if (status === "Aprovado" && m.tipoCod === "DES" && !substituicaoInfo && (m.dados ?? []).some((d) => d.label === "Substituição" && d.value === "Sim")) {
+      substituicaoInfo = { necessaria: true, status: "pendente" };
+    }
+
+    return { ...m, etapas, status, aprovacaoFinal, substituicaoInfo };
   });
 
   return { movimentacoes: novasMovimentacoes, admissaoRegistrada, atualizacaoRegistrada, desligamentoRegistrado };

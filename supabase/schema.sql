@@ -1595,3 +1595,17 @@ create policy "authenticated_rw_movimentacoes_documentos"
 insert into storage.buckets (id, name, public)
 values ('movimentacoes-documentos', 'movimentacoes-documentos', false)
 on conflict (id) do nothing;
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 37) Substituição vinculada à MP de Desligamento (RH, 2026-09). Quando uma
+--    MP de Desligamento com "Substituição" = Sim é aprovada, fica pendente
+--    até o RH/Gestor registrar quem vai ocupar a vaga — sem abrir uma MP de
+--    Admissão nova (essa continua existindo só para vaga nova/aumento de
+--    quadro). O novo colaborador entra em `colaboradores` pelo mesmo fluxo
+--    já usado por Admissão (criarPreCadastro / api/criar-pre-cadastro.ts).
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_movimentacoes
+  add column if not exists substituicao_info jsonb;
+
+comment on column public.peopleflow_movimentacoes.substituicao_info is
+  'Só tipo_cod = DES com dados."Substituição" = Sim. {necessaria, status: "pendente"|"realizada", novoColaborador?, cargo?, admissaoIso?, observacao?, registradoPor?, registradoEm?}. Setado automaticamente ao aprovar a última etapa; "realizada" só após "Registrar substituição".';

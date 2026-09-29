@@ -3,8 +3,10 @@ import { Header } from "../../components/layout/Header";
 import { Badge, Button, EmptyState, StatusBadge, tableStyles } from "../../components/ui";
 import { MovimentacaoDetalhe } from "../../components/shared/MovimentacaoDetalhe";
 import { CartaMovimentacaoModal } from "../../components/shared/CartaMovimentacaoModal";
+import { RegistrarSubstituicaoModal } from "../../components/shared/RegistrarSubstituicaoModal";
 import { tipoColor } from "../../domain/colors";
 import { podeEmitirCarta, statusCarta } from "../../domain/cartaMovimentacao";
+import { podeRegistrarSubstituicao } from "../../domain/workflow";
 import { usePortalData } from "../../store/usePortalData";
 import type { Movimentacao } from "../../types/domain";
 import styles from "./AprovadasPage.module.css";
@@ -46,6 +48,32 @@ function AcaoCarta({ m }: { m: Movimentacao }) {
   );
 }
 
+function AcaoSubstituicao({ m }: { m: Movimentacao }) {
+  const [aberta, setAberta] = useState(false);
+  if (m.tipoCod !== "DES" || !m.substituicaoInfo?.necessaria) return null;
+  const pendente = podeRegistrarSubstituicao(m);
+
+  return (
+    <span className={styles.acaoSubstituicao}>
+      <span className={pendente ? styles.substituicaoPendente : styles.substituicaoRealizada}>
+        {pendente ? "Substituição pendente" : "Substituição realizada"}
+      </span>
+      {pendente && (
+        <Button
+          variant="ghost"
+          onClick={(e) => {
+            e.stopPropagation();
+            setAberta(true);
+          }}
+        >
+          Registrar substituição
+        </Button>
+      )}
+      {aberta && <RegistrarSubstituicaoModal movimentacao={m} onClose={() => setAberta(false)} />}
+    </span>
+  );
+}
+
 export function AprovadasPage() {
   const { movimentacoesVisiveis } = usePortalData();
   const [selecionado, setSelecionado] = useState<string | null>(null);
@@ -62,6 +90,7 @@ export function AprovadasPage() {
       <>
         <Header />
         <div className={styles.acaoCartaDetalhe}>
+          <AcaoSubstituicao m={movimentacao} />
           <AcaoCarta m={movimentacao} />
         </div>
         <MovimentacaoDetalhe movimentacao={movimentacao} onVoltar={() => setSelecionado(null)} />
@@ -106,6 +135,7 @@ export function AprovadasPage() {
                   </td>
                   <td>{m.aprovacaoFinal ? `${m.aprovacaoFinal.data} · ${m.aprovacaoFinal.hora}` : "—"}</td>
                   <td className={tableStyles.right}>
+                    <AcaoSubstituicao m={m} />
                     <AcaoCarta m={m} />
                   </td>
                 </tr>

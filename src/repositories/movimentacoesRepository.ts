@@ -16,6 +16,7 @@ import type {
   Etapa,
   EventoHistoricoMovimentacao,
   Movimentacao,
+  SubstituicaoInfo,
   TipoCod,
 } from "../types/domain";
 
@@ -44,6 +45,7 @@ interface MovimentacaoRow {
   pedido_demissao: boolean | null;
   colaborador_id: number | null;
   tipo_aviso_previo: string | null;
+  substituicao_info: SubstituicaoInfo | null;
 }
 
 function fromRow(row: MovimentacaoRow): Movimentacao {
@@ -72,6 +74,7 @@ function fromRow(row: MovimentacaoRow): Movimentacao {
     pedidoDemissao: row.pedido_demissao ?? false,
     colaboradorId: row.colaborador_id ?? undefined,
     tipoAvisoPrevio: (row.tipo_aviso_previo as Movimentacao["tipoAvisoPrevio"]) ?? undefined,
+    substituicaoInfo: row.substituicao_info ?? undefined,
   };
 }
 
@@ -101,6 +104,7 @@ function toRow(m: Movimentacao): Omit<MovimentacaoRow, "legado"> & { legado: boo
     pedido_demissao: m.pedidoDemissao ?? false,
     colaborador_id: m.colaboradorId ?? null,
     tipo_aviso_previo: m.tipoAvisoPrevio ?? null,
+    substituicao_info: m.substituicaoInfo ?? null,
   };
 }
 
@@ -143,6 +147,7 @@ export async function atualizarMovimentacao(m: Movimentacao): Promise<void> {
       aprovacao_final: m.aprovacaoFinal ?? null,
       historico: m.historico ?? [],
       carta_movimentacao: m.cartaMovimentacao ?? null,
+      substituicao_info: m.substituicaoInfo ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", m.id);
