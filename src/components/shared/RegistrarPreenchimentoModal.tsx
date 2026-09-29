@@ -10,21 +10,28 @@ import styles from "./NovaMovimentacaoModal.module.css";
 interface RegistrarPreenchimentoModalProps {
   vaga: Vaga;
   onClose: () => void;
+  /** "editar" (RH, 2026-09) — mesmo formulário, mas pré-preenchido com os
+   * dados já registrados e salvando via editarPreenchimento(); só disponível
+   * enquanto a vaga está "aguardando_aprovacao_gestor" (ver
+   * VagasAutorizadasBloco.tsx). Omitido = fluxo original de registro. */
+  modo?: "registrar" | "editar";
 }
 
-/** Modal do "Registrar preenchimento" (RH, 2026-09) — de uma Vaga já
- * autorizada por uma MP (Desligamento com substituição, Admissão por
- * aumento de quadro). Não conclui a vaga nem abre uma MP de Admissão nova:
- * fica "aguardando aprovação do gestor" até o gestor responsável (ou o RH)
- * aprovar (ver aprovarPreenchimento() em store/usePortalData.ts). O nome é
- * sempre digitado — a pessoa ainda não existe no cadastro de colaboradores. */
-export function RegistrarPreenchimentoModal({ vaga, onClose }: RegistrarPreenchimentoModalProps) {
+/** Modal do "Registrar preenchimento"/"Editar preenchimento" (RH, 2026-09) —
+ * de uma Vaga já autorizada por uma MP (Desligamento com substituição,
+ * Admissão por aumento de quadro). Não conclui a vaga nem abre uma MP de
+ * Admissão nova: fica "aguardando aprovação do gestor" até o gestor
+ * responsável (ou o RH) aprovar (ver aprovarPreenchimento() em
+ * store/usePortalData.ts). O nome é sempre digitado — a pessoa ainda não
+ * existe no cadastro de colaboradores. */
+export function RegistrarPreenchimentoModal({ vaga, onClose, modo = "registrar" }: RegistrarPreenchimentoModalProps) {
   const { state } = usePortalStore();
-  const { colaboradores, registrarPreenchimento } = usePortalData();
-  const [nome, setNome] = useState("");
-  const [cargo, setCargo] = useState(vaga.cargo ?? "");
-  const [admissaoIso, setAdmissaoIso] = useState("");
-  const [observacao, setObservacao] = useState("");
+  const { colaboradores, registrarPreenchimento, editarPreenchimento } = usePortalData();
+  const editando = modo === "editar";
+  const [nome, setNome] = useState(editando ? vaga.novoColaboradorNome ?? "" : "");
+  const [cargo, setCargo] = useState(editando ? vaga.cargoPreenchimento ?? "" : vaga.cargo ?? "");
+  const [admissaoIso, setAdmissaoIso] = useState(editando ? vaga.admissaoPrevistaIso ?? "" : "");
+  const [observacao, setObservacao] = useState(editando ? vaga.observacao ?? "" : "");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -40,13 +47,18 @@ export function RegistrarPreenchimentoModal({ vaga, onClose }: RegistrarPreenchi
       return;
     }
     setEnviando(true);
-    registrarPreenchimento(vaga.id, { novoColaboradorNome: nome, cargo, admissaoPrevistaIso: admissaoIso, observacao });
+    const dados = { novoColaboradorNome: nome, cargo, admissaoPrevistaIso: admissaoIso, observacao };
+    if (editando) {
+      editarPreenchimento(vaga.id, dados);
+    } else {
+      registrarPreenchimento(vaga.id, dados);
+    }
     onClose();
   }
 
   return (
     <Modal
-      title="Registrar preenchimento"
+      title={editando ? "Editar preenchimento" : "Registrar preenchimento"}
       subtitle={vaga.cargo ? `Vaga: ${vaga.cargo}` : "Vaga sem cargo pré-definido"}
       onClose={onClose}
       width={520}
@@ -56,7 +68,7 @@ export function RegistrarPreenchimentoModal({ vaga, onClose }: RegistrarPreenchi
             Cancelar
           </Button>
           <Button variant="primary" icon={<Check size={16} />} onClick={handleConfirmar} disabled={enviando}>
-            Enviar para aprovação do gestor
+            {editando ? "Salvar alterações" : "Enviar para aprovação do gestor"}
           </Button>
         </>
       }

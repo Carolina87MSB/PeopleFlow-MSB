@@ -100,6 +100,30 @@ export async function registrarPreenchimento(
   if (error) throw new Error(`Falha ao registrar o preenchimento: ${error.message}`);
 }
 
+/** "Editar preenchimento" (RH, 2026-09) — só enquanto a vaga está
+ * "aguardando_aprovacao_gestor" (antes da conclusão); depois de "preenchida"
+ * o registro fica congelado (ver aprovarPreenchimentoFn/editarPreenchimentoFn
+ * em usePortalData.ts, que grava o histórico da alteração na própria MP). */
+export async function editarPreenchimento(
+  vagaId: number,
+  dados: { novoColaboradorNome: string; cargo: string; admissaoPrevistaIso: string; observacao: string },
+): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { error } = await supabase
+    .from("peopleflow_vagas")
+    .update({
+      status: "aguardando_aprovacao_gestor",
+      novo_colaborador_nome: dados.novoColaboradorNome.trim(),
+      cargo_preenchimento: dados.cargo,
+      admissao_prevista_iso: dados.admissaoPrevistaIso,
+      observacao: dados.observacao.trim() || null,
+    })
+    .eq("id", vagaId)
+    .eq("status", "aguardando_aprovacao_gestor");
+  if (error) throw new Error(`Falha ao editar o preenchimento: ${error.message}`);
+}
+
 /** Aprovação do gestor (ou RH) — a vaga só vira "preenchida" aqui; é este o
  * momento em que o novo colaborador entra de fato em `colaboradores` (ver
  * aprovarPreenchimentoFn em usePortalData.ts, que chama criarPreCadastro

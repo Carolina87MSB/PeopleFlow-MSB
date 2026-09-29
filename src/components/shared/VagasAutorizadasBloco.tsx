@@ -18,9 +18,13 @@ const STATUS_LABEL: Record<Vaga["status"], string> = {
 
 function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentacao }) {
   const { perfil, conta, aprovarPreenchimento } = usePortalData();
-  const [modalAberto, setModalAberto] = useState(false);
+  const [modalAberto, setModalAberto] = useState<"registrar" | "editar" | null>(null);
 
   const podeRegistrar = perfil === "RH" && vaga.status === "pendente";
+  // "Editar preenchimento" (RH, 2026-09) — só antes da conclusão; depois de
+  // "preenchida" o registro fica congelado (rastreabilidade, sem alteração
+  // silenciosa — ver editarPreenchimentoFn em store/usePortalData.ts).
+  const podeEditar = perfil === "RH" && vaga.status === "aguardando_aprovacao_gestor";
   // Gestor: só quem é o solicitante desta MP de origem (não é escopo
   // hierárquico — é a pessoa específica que abriu a MP que autorizou a vaga).
   const podeAprovar = vaga.status === "aguardando_aprovacao_gestor" && (perfil === "RH" || movimentacao.solicitante === conta.nome);
@@ -48,8 +52,13 @@ function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentac
       <div className={styles.documentoDireita}>
         <span className={vaga.status === "preenchida" ? styles.pillGerado : styles.pillPendente}>{STATUS_LABEL[vaga.status]}</span>
         {podeRegistrar && (
-          <button type="button" className={styles.documentoAcaoBtn} onClick={() => setModalAberto(true)}>
+          <button type="button" className={styles.documentoAcaoBtn} onClick={() => setModalAberto("registrar")}>
             Registrar preenchimento
+          </button>
+        )}
+        {podeEditar && (
+          <button type="button" className={styles.documentoAcaoBtn} onClick={() => setModalAberto("editar")}>
+            Editar preenchimento
           </button>
         )}
         {podeAprovar && (
@@ -58,7 +67,7 @@ function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentac
           </button>
         )}
       </div>
-      {modalAberto && <RegistrarPreenchimentoModal vaga={vaga} onClose={() => setModalAberto(false)} />}
+      {modalAberto && <RegistrarPreenchimentoModal vaga={vaga} modo={modalAberto} onClose={() => setModalAberto(null)} />}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { gerarAvisoPrevio } from "../repositories/avisoPrevioRepository";
 import {
   aprovarPreenchimento as aprovarPreenchimentoNoSupabase,
   criarVagas as criarVagasNoSupabase,
+  editarPreenchimento as editarPreenchimentoNoSupabase,
   registrarPreenchimento as registrarPreenchimentoNoSupabase,
 } from "../repositories/vagasRepository";
 import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
@@ -57,7 +58,7 @@ import {
   criarAvaliacoesPotencial as criarAvaliacoesPotencialNoSupabase,
 } from "../repositories/avaliacoesPotencialRepository";
 import { notificar } from "../repositories/notificacoesRepository";
-import { formatarDataIso, hojeIso, tempoDeEmpresa } from "../domain/dates";
+import { formatarDataAtual, formatarDataIso, formatarHoraAtual, hojeIso, tempoDeEmpresa } from "../domain/dates";
 import { GRUPO_HABILIDADES_COMPETENCIAS } from "../domain/descricaoCargo";
 import { colaboradoresAtivosEmData } from "../domain/dashboardExecutivo";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
@@ -145,6 +146,7 @@ import type {
   RespostaAvaliacaoExperiencia,
   ResultadoAvaliacaoExperiencia,
   SalarioBase,
+  EventoHistoricoMovimentacao,
   TemaFeedback,
   TipoCompetenciaPdi,
   Vaga,
@@ -235,6 +237,9 @@ export interface PortalData {
   /** "Registrar preenchimento" (RH-only) — não conclui a vaga, manda para
    * aprovação do gestor responsável (ver aprovarPreenchimento abaixo). */
   registrarPreenchimento: (vagaId: number, dados: { novoColaboradorNome: string; cargo: string; admissaoPrevistaIso: string; observacao: string }) => void;
+  /** "Editar preenchimento" (RH-only) — só enquanto aguarda aprovação do
+   * gestor; registra cada campo alterado no histórico da MP de origem. */
+  editarPreenchimento: (vagaId: number, dados: { novoColaboradorNome: string; cargo: string; admissaoPrevistaIso: string; observacao: string }) => void;
   /** Aprovação do gestor solicitante da MP de origem (ou RH) — só aqui o
    * colaborador entra de fato no cadastro. */
   aprovarPreenchimento: (vagaId: number) => void;
@@ -1055,6 +1060,67 @@ export function usePortalData(): PortalData {
       })();
     },
     [perfil, me, state.vagas, state.movimentacoes, state.colaboradores, flash, reload],
+  );
+
+  /** "Editar preenchimento" (RH-only, 2026-09) — só enquanto a vaga está
+   * "aguardando_aprovacao_gestor" (antes da conclusão; depois de "preenchida"
+   * o registro fica congelado, ver comentário em vagasRepository.ts).
+   * Correção cadastral (nome/data/observação) não precisa de nova aprovação
+   * — a vaga já está "aguardando_aprovacao_gestor" e continua assim; troca de
+   * nome ou de cargo é tratada como decisão diferente, mas como só existe
+   * esse único estado pré-aprovação, o efeito prático é o mesmo (garante que
+   * o gestor sempre revê os dados atuais antes de aprovar). Cada campo
+   * alterado vira um evento no histórico da MP de origem — nunca sobrescrito
+   * silenciosamente. */
+  const editarPreenchimentoFn = useCallback(
+    (vagaId: number, dados: { novoColaboradorNome: string; cargo: string; admissaoPrevistaIso: string; observacao: string }) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode editar o preenchimento de uma vaga.");
+        return;
+      }
+      const vaga = state.vagas.find((v) => v.id === vagaId);
+      const movimentacao = vaga ? state.movimentacoes.find((m) => m.id === vaga.movimentacaoId) : undefined;
+      if (!vaga || !movimentacao || vaga.status !== "aguardando_aprovacao_gestor") {
+        flash("Este preenchimento não pode mais ser editado.");
+        return;
+      }
+
+      const nomeNovo = dados.novoColaboradorNome.trim();
+      const observacaoNova = dados.observacao.trim();
+      const mudancas: { label: string; anterior: string; novo: string }[] = [
+        { label: "Nome do(a) candidato(a)", anterior: vaga.novoColaboradorNome ?? "—", novo: nomeNovo },
+        { label: "Cargo", anterior: vaga.cargoPreenchimento ?? "—", novo: dados.cargo },
+        { label: "Data prevista de admissão", anterior: formatarDataIso(vaga.admissaoPrevistaIso), novo: formatarDataIso(dados.admissaoPrevistaIso) },
+        { label: "Observação", anterior: vaga.observacao ?? "—", novo: observacaoNova || "—" },
+      ].filter((c) => c.anterior !== c.novo);
+
+      if (mudancas.length === 0) {
+        flash("Nenhuma alteração para salvar.");
+        return;
+      }
+
+      const hoje = formatarDataAtual();
+      const agora = formatarHoraAtual();
+      const eventos: EventoHistoricoMovimentacao[] = mudancas.map((c) => ({
+        data: hoje,
+        hora: agora,
+        autor: me,
+        acao: `Preenchimento de vaga editado — ${c.label}`,
+        detalhe: `De "${c.anterior}" para "${c.novo}".`,
+      }));
+
+      (async () => {
+        try {
+          await editarPreenchimentoNoSupabase(vagaId, dados);
+          await atualizarMovimentacao({ ...movimentacao, historico: [...(movimentacao.historico ?? []), ...eventos] });
+          reload();
+          flash("Preenchimento atualizado.");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Falha ao editar o preenchimento.");
+        }
+      })();
+    },
+    [perfil, me, state.vagas, state.movimentacoes, flash, reload],
   );
 
   /** Botão "Novo Cargo" em CargosPage.tsx (RH-only) — cria só nome/depto/
@@ -2684,6 +2750,7 @@ export function usePortalData(): PortalData {
     marcarCartaMovimentacaoEntregue: marcarCartaMovimentacaoEntregueFn,
     vagas: state.vagas,
     registrarPreenchimento: registrarPreenchimentoFn,
+    editarPreenchimento: editarPreenchimentoFn,
     aprovarPreenchimento: aprovarPreenchimentoFn,
     criarMovimentacao: criarMovimentacaoFn,
     criarCargoCustom: criarCargoCustomFn,
