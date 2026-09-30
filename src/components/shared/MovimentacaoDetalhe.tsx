@@ -6,6 +6,7 @@ import { docsFor } from "../../domain/documentos";
 import { AvisoPrevioBloco } from "./AvisoPrevioBloco";
 import { VagasAutorizadasBloco } from "./VagasAutorizadasBloco";
 import { CadeiaMovimentacaoBloco } from "./CadeiaMovimentacaoBloco";
+import { LegadoIncorporadoBloco } from "./LegadoIncorporadoBloco";
 import { dataBrParaIso, formatarDataIso } from "../../domain/dates";
 import { calcularPercentual, type EdicaoDadoMovimentacao } from "../../domain/workflow";
 import type { DadoField, Movimentacao } from "../../types/domain";
@@ -132,6 +133,8 @@ export function MovimentacaoDetalhe({ movimentacao: m, onVoltar, editavel, onSal
       </div>
 
       <div className={styles.detalheBody}>
+        <LegadoIncorporadoBloco movimentacao={m} />
+
         {editavel && onSalvarEdicoes && (
           <div className={styles.editarBar}>
             {editando ? (

@@ -48,6 +48,7 @@ interface MovimentacaoRow {
   substituicao_info: SubstituicaoInfo | null;
   vaga_origem_id: number | null;
   gera_nova_vaga: boolean | null;
+  incorporada_em_vaga_id: number | null;
 }
 
 function fromRow(row: MovimentacaoRow): Movimentacao {
@@ -79,6 +80,7 @@ function fromRow(row: MovimentacaoRow): Movimentacao {
     substituicaoInfo: row.substituicao_info ?? undefined,
     vagaOrigemId: row.vaga_origem_id ?? undefined,
     geraNovaVaga: row.gera_nova_vaga ?? undefined,
+    incorporadaEmVagaId: row.incorporada_em_vaga_id ?? undefined,
   };
 }
 
@@ -111,6 +113,7 @@ function toRow(m: Movimentacao): Omit<MovimentacaoRow, "legado"> & { legado: boo
     substituicao_info: m.substituicaoInfo ?? null,
     vaga_origem_id: m.vagaOrigemId ?? null,
     gera_nova_vaga: m.geraNovaVaga ?? false,
+    incorporada_em_vaga_id: m.incorporadaEmVagaId ?? null,
   };
 }
 
@@ -170,6 +173,9 @@ export async function atualizarMovimentacao(m: Movimentacao): Promise<void> {
       // peopleflow_vagas (RH, 2026-09); as 3 MPs históricas que já tinham
       // esse campo preenchido devem manter o valor congelado para sempre
       // (ver comment da migration 38 em supabase/schema.sql).
+      // incorporada_em_vaga_id também NUNCA é escrito aqui pelo mesmo motivo
+      // — só setado por compatibilização manual de migração histórica (RH,
+      // 2026-09), nunca por um fluxo normal de aprovar/reprovar/editar.
       updated_at: new Date().toISOString(),
     })
     .eq("id", m.id);

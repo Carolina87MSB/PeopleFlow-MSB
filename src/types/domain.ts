@@ -392,6 +392,16 @@ export interface Movimentacao {
    * "vacancia_transferencia", cargo ainda indefinido — mesma lógica do
    * Desligamento: RH define o cargo só em "Registrar preenchimento"). */
   geraNovaVaga?: boolean;
+  /** Migração histórica (RH, 2026-09): setado quando ESTA MP (ex. uma Admissão
+   * antiga, anterior ao modelo de vagas) foi incorporada como o preenchimento
+   * já registrado numa Vaga autorizada por outra MP mais nova — id da vaga em
+   * `peopleflow_vagas`. A MP originadora é obtida por `vagas.find(v => v.id
+   * === incorporadaEmVagaId)?.movimentacaoId`. Nunca escrito pelo app em uso
+   * normal (nem por atualizarMovimentacao()) — só por compatibilização manual
+   * caso a caso, reaproveitável pras próximas migrações históricas. Esta MP
+   * mantém todos os seus dados originais intactos; só passa a ser identificada
+   * como "Registro legado incorporado" (ver LegadoIncorporadoBloco.tsx). */
+  incorporadaEmVagaId?: number | null;
 }
 
 export interface NovaMovimentacaoForm {

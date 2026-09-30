@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { usePortalData } from "../../store/usePortalData";
 import { RegistrarPreenchimentoModal } from "./RegistrarPreenchimentoModal";
 import { formatarDataHora } from "../../domain/dates";
@@ -40,13 +41,18 @@ function eventosDaVaga(vaga: Vaga): EventoVaga[] {
 }
 
 function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentacao }) {
-  const { perfil, conta, aprovarPreenchimento } = usePortalData();
+  const { perfil, conta, movimentacoes, aprovarPreenchimento } = usePortalData();
+  const navigate = useNavigate();
   const [modalAberto, setModalAberto] = useState<"registrar" | "editar" | null>(null);
 
   const podeRegistrar = perfil === "RH" && vaga.status === "pendente";
   const podeEditar = perfil === "RH" && vaga.status === "aguardando_aprovacao_gestor";
   const podeAprovar = vaga.status === "aguardando_aprovacao_gestor" && (perfil === "RH" || movimentacao.solicitante === conta.nome);
   const eventos = eventosDaVaga(vaga);
+  // Migração histórica (RH, 2026-09) — se alguma MP legada foi incorporada
+  // como o preenchimento desta vaga (ver Movimentacao.incorporadaEmVagaId),
+  // mostra de onde veio, sem duplicar os dados dela aqui.
+  const mpLegadoOrigem = movimentacoes.find((mm) => mm.incorporadaEmVagaId === vaga.id);
 
   return (
     <div className={styles.vagaCard}>
@@ -100,6 +106,15 @@ function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentac
             ))}
           </div>
         </>
+      )}
+
+      {mpLegadoOrigem && (
+        <div className={styles.legadoOrigemNota}>
+          Registrado originalmente pela{" "}
+          <button type="button" className={styles.legadoLink} onClick={() => navigate(`/aprovadas?mp=${encodeURIComponent(mpLegadoOrigem.id)}`)}>
+            {mpLegadoOrigem.id}
+          </button>
+        </div>
       )}
 
       {modalAberto && <RegistrarPreenchimentoModal vaga={vaga} modo={modalAberto} onClose={() => setModalAberto(null)} />}

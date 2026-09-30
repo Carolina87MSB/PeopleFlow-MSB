@@ -1708,3 +1708,29 @@ alter table public.peopleflow_vagas
 
 comment on column public.peopleflow_vagas.preenchido_por_movimentacao_id is
   'PRO/TRF que preencheu (status=preenchida) ou reservou (status=reservada) esta vaga internamente — null pra preenchimento externo/vaga ainda livre. Junto com vaga_origem_id acima, permite montar a Cadeia da movimentação sem tabela nova.';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 40) Migração histórica — MP legada incorporada a uma vaga (RH, 2026-09).
+--    Primeiro caso: M-2026-002 (Desligamento — Selma Ribeiro, substituição)
+--    e M-2026-004 (Admissão — Emanoela Maria Caciquinho Costa), que
+--    representavam a mesma necessidade como duas MPs independentes, antes
+--    do modelo de vagas existir (seção 38 deixou essa migração explicitamente
+--    fora do escopo — ver comentário da seção 39). Preserva a MP legada
+--    (M-2026-004) intacta e consultável — nunca excluída, nunca reescrita —
+--    só marcada como incorporada, com o preenchimento equivalente registrado
+--    numa vaga (peopleflow_vagas) da MP que hoje é a fonte operacional da
+--    necessidade (M-2026-002).
+--
+--    Nenhum campo existente serve pra esse vínculo: substituicao_info é um
+--    jsonb solto sem FK (não aponta pra uma vaga específica) e já está
+--    congelado como legado desde a seção 38; `legado` é um boolean genérico,
+--    nunca lido por nenhuma regra do app, incapaz de indicar EM QUAL vaga uma
+--    MP foi incorporada. Por isso, coluna nova, mínima e reutilizável pras
+--    próximas migrações históricas (RH avisou que M-2026-002/004 é só o
+--    primeiro caso, não uma migração em massa).
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_movimentacoes
+  add column if not exists incorporada_em_vaga_id bigint references public.peopleflow_vagas(id);
+
+comment on column public.peopleflow_movimentacoes.incorporada_em_vaga_id is
+  'Migração histórica (RH, 2026-09): setado quando esta MP legada (ex. uma Admissão antiga) foi incorporada como o preenchimento já registrado numa vaga (peopleflow_vagas) autorizada por outra MP mais nova. A MP originadora é obtida via peopleflow_vagas.movimentacao_id da vaga referenciada — sem tabela extra, mesmo padrão da Cadeia da movimentação (seção 39). Nunca escrito pelo app em uso normal (nem por atualizarMovimentacao() em movimentacoesRepository.ts) — só por compatibilização manual, caso a caso.';
