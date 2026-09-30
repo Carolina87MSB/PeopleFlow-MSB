@@ -4,7 +4,7 @@ import { Check } from "lucide-react";
 import { blankForm } from "../../domain/formMovimentacao";
 import { contarPorGestor } from "../../domain/agregados";
 import { ehGestorDoDepartamento, gestorDoDepartamento } from "../../domain/hierarquia";
-import { ORIGEM_VAGA_LABEL, vagaDisponivelParaPreenchimento } from "../../domain/vagas";
+import { descreverVagaParaSelecao, vagaDisponivelParaPreenchimento } from "../../domain/vagas";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { useToast } from "./ToastContext";
@@ -17,7 +17,7 @@ const TIPOS_SEM_CADASTRO_PREVIO: TipoCod[] = ["ADM"];
 
 export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   const { state } = usePortalStore();
-  const { conta, colaboradores, descricoesCargo, vagas, criarMovimentacao } = usePortalData();
+  const { conta, colaboradores, descricoesCargo, vagas, movimentacoes, criarMovimentacao } = usePortalData();
   const { flash } = useToast();
   const navigate = useNavigate();
 
@@ -419,12 +419,12 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
             </label>
             {form.movPreencheVaga === "Sim" && (
               <label className={styles.field}>
-                <span>Vaga de origem</span>
+                <span>Qual vaga esta movimentação irá preencher?</span>
                 <select value={form.movPreencheVagaId} onChange={(e) => set("movPreencheVagaId", e.target.value)}>
                   <option value="">Selecione...</option>
                   {vagasDisponiveis.map((v) => (
                     <option key={v.id} value={String(v.id)}>
-                      {v.movimentacaoId} — {ORIGEM_VAGA_LABEL[v.origem]} — {v.cargo ?? "cargo a definir"}
+                      {descreverVagaParaSelecao(v, movimentacoes, colaboradores, vagas)}
                     </option>
                   ))}
                 </select>
