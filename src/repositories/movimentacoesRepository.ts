@@ -133,6 +133,19 @@ export async function criarMovimentacao(m: Movimentacao): Promise<void> {
   if (error) throw new Error(`Falha ao criar movimentação no Supabase: ${error.message}`);
 }
 
+/** Desfaz a criação de uma PRO/TRF que acabou de ser inserida mas não
+ * conseguiu reservar a vaga referenciada (ver criarMovimentacaoFn em
+ * usePortalData.ts — a vaga só pode ser reservada com o id REAL da MP, que
+ * só existe depois do insert; se a reserva falhar por concorrência, a MP
+ * criada segundos antes precisa ser desfeita, nunca ficar órfã). Guardado
+ * por `status = 'Em Aprovação'` — nunca apaga uma MP que já avançou. */
+export async function excluirMovimentacaoRecemCriada(id: string): Promise<void> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const { error } = await supabase.from("peopleflow_movimentacoes").delete().eq("id", id).eq("status", "Em Aprovação");
+  if (error) throw new Error(`Falha ao desfazer a criação da movimentação: ${error.message}`);
+}
+
 /** Persiste o novo estado de uma movimentação após aprovar/reprovar/reabrir
  * uma etapa, ou editar um campo de `dados` (ver domain/workflow.ts) — inclui
  * `dados`/`*_info`/`historico` mesmo quando aprovar/reprovar não os altera

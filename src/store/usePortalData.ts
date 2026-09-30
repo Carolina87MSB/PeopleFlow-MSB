@@ -30,6 +30,7 @@ import {
   atualizarMovimentacao,
   criarMovimentacao as criarMovimentacaoNoSupabase,
   efetivarSincronizacoesPendentes,
+  excluirMovimentacaoRecemCriada as excluirMovimentacaoRecemCriadaNoSupabase,
 } from "../repositories/movimentacoesRepository";
 import {
   criarAvaliacaoExperiencia as criarAvaliacaoExperienciaNoSupabase,
@@ -1201,34 +1202,35 @@ export function usePortalData(): PortalData {
       const ctx: FormContext = { me, tipos: state.tipos, colaboradores: state.colaboradores, movimentacoes: state.movimentacoes };
       const movimentacao = construirMovimentacao(form, ctx);
       try {
-        // Ramificações/cadeia de movimentações (RH, 2026-09) — quando esta
-        // PRO/TRF preenche uma vaga já autorizada, a vaga precisa ser
-        // RESERVADA antes de a MP existir de fato: um UPDATE condicional no
-        // banco (`where status = 'pendente'`, ver reservarVaga() em
-        // vagasRepository.ts) é a proteção real contra dois gestores
-        // escolherem a mesma vaga ao mesmo tempo — nunca só uma checagem no
-        // cliente (seção 15 do pedido da RH: "garantir no banco"). Se a vaga
-        // não estiver mais disponível, a MP nem chega a ser criada.
+        // Ramificações/cadeia de movimentações (RH, 2026-09) — a vaga só pode
+        // ser reservada DEPOIS de a MP existir de fato: `preenchido_por_
+        // movimentacao_id` tem foreign key pra peopleflow_movimentacoes, e
+        // usar o id antes do insert violava essa constraint (bug real
+        // encontrado no primeiro teste — nunca enfraquecer a FK pra
+        // contornar isso). Ordem correta: 1) cria a MP; 2) reserva a vaga com
+        // o id REAL, ainda como UPDATE condicional (`where status =
+        // 'pendente'`, ver reservarVaga() em vagasRepository.ts — a proteção
+        // real contra dois gestores escolherem a mesma vaga continua sendo o
+        // banco, não uma checagem no cliente); 3) se a reserva falhar por
+        // concorrência, desfaz a MP recém-criada (rollback) — nunca fica MP
+        // órfã nem vaga presa.
+        await criarMovimentacaoNoSupabase(movimentacao);
+
         if (movimentacao.vagaOrigemId) {
           const reservou = await reservarVagaNoSupabase(movimentacao.vagaOrigemId, movimentacao.id);
           if (!reservou) {
-            const erro = "A vaga selecionada não está mais disponível — foi reservada ou preenchida por outra movimentação. Atualize a lista e escolha outra.";
+            try {
+              await excluirMovimentacaoRecemCriadaNoSupabase(movimentacao.id);
+            } catch (rollbackErr) {
+              // eslint-disable-next-line no-console
+              console.error("[criarMovimentacaoFn] Falha ao desfazer a MP após reserva de vaga malsucedida", rollbackErr);
+            }
+            const erro = "A vaga selecionada não está mais disponível — foi reservada ou preenchida por outra movimentação enquanto esta era enviada. A movimentação não foi criada; atualize a lista e escolha outra vaga.";
             flash(erro);
             return { ok: false as const, error: erro };
           }
         }
 
-        try {
-          await criarMovimentacaoNoSupabase(movimentacao);
-        } catch (err) {
-          // Best-effort: se a MP não pôde ser criada depois de já ter
-          // reservado a vaga, libera de volta — não deixa vaga presa a uma
-          // movimentação que não existe.
-          if (movimentacao.vagaOrigemId) {
-            liberarVagaNoSupabase(movimentacao.vagaOrigemId, movimentacao.id).catch(() => {});
-          }
-          throw err;
-        }
         dispatch({ type: "CRIAR_MOVIMENTACAO", movimentacao });
         if (movimentacao.vagaOrigemId) reload();
 
