@@ -117,15 +117,41 @@ export function VagasAutorizadasBloco({ movimentacao: m }: { movimentacao: Movim
   const vagasDaMp = vagas.filter((v) => v.movimentacaoId === m.id);
   if (vagasDaMp.length === 0) return null;
 
+  // "Pendente" representa só vaga realmente disponível — "reservada" (PRO/TRF
+  // interna ainda em aprovação) e "aguardando_aprovacao_gestor" (candidato
+  // externo já registrado, falta o gestor aprovar) NÃO são "pendente": já têm
+  // um preenchimento em andamento, só ainda não concluído (RH, 2026-09 —
+  // ajuste de apresentação, a contagem/status no banco continua igual). Cada
+  // segmento só aparece quando > 0, pra não poluir o resumo à toa.
   const preenchidas = vagasDaMp.filter((v) => v.status === "preenchida").length;
-  const pendentes = vagasDaMp.length - preenchidas;
-  const statusGeral = pendentes === 0 ? "Concluída" : preenchidas > 0 ? "Parcialmente atendida" : "Pendente";
+  const reservadas = vagasDaMp.filter((v) => v.status === "reservada").length;
+  const emAprovacaoExterna = vagasDaMp.filter((v) => v.status === "aguardando_aprovacao_gestor").length;
+  const pendentes = vagasDaMp.length - preenchidas - reservadas - emAprovacaoExterna;
+
+  const segmentos = [
+    `${vagasDaMp.length} autorizada${vagasDaMp.length === 1 ? "" : "s"}`,
+    `${preenchidas} preenchida${preenchidas === 1 ? "" : "s"}`,
+  ];
+  if (reservadas > 0) segmentos.push(`${reservadas} reservada${reservadas === 1 ? "" : "s"}`);
+  if (emAprovacaoExterna > 0) segmentos.push(`${emAprovacaoExterna} em aprovação`);
+  if (pendentes > 0) segmentos.push(`${pendentes} pendente${pendentes === 1 ? "" : "s"}`);
+
+  const statusGeral =
+    pendentes === 0 && reservadas === 0 && emAprovacaoExterna === 0
+      ? "Concluída"
+      : preenchidas > 0
+        ? "Parcialmente atendida"
+        : reservadas > 0
+          ? "Reservada"
+          : emAprovacaoExterna > 0
+            ? "Em aprovação"
+            : "Pendente";
 
   return (
-    <div>
+    <div className={styles.vagasAutorizadasWrap}>
       <h4 className={styles.sectionTitle}>Vagas autorizadas</h4>
       <div className={styles.documentoNotaAntiga} style={{ marginBottom: 10 }}>
-        {vagasDaMp.length} autorizada(s) · {preenchidas} preenchida(s) · {pendentes} pendente(s) — {statusGeral}
+        {segmentos.join(" · ")} — {statusGeral}
       </div>
       <div className={styles.documentosList}>
         {vagasDaMp.map((v) => (

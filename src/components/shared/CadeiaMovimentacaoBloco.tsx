@@ -57,14 +57,18 @@ export function CadeiaMovimentacaoBloco({ movimentacao: m }: { movimentacao: Mov
       <div className={styles.historicoList}>
         {elos.map((elo, i) => {
           const resumoMp = elo.mpRelacionada ? `${elo.mpRelacionada.id} — ${elo.mpRelacionada.tipo} — ${elo.mpRelacionada.colaborador}` : null;
+          // "Preenchida por" só depois da aprovação de verdade (status
+          // "preenchida") — enquanto o preenchimento ainda está em aprovação
+          // (vaga "reservada" por uma PRO/TRF interna, ou "aguardando_
+          // aprovacao_gestor" por um candidato externo já registrado), o
+          // texto precisa deixar isso explícito, nunca dar a entender que já
+          // concluiu (RH, 2026-09).
           const titulo =
             elo.direcao === "entrada"
               ? "↑ Preenche vaga gerada por"
-              : elo.mpRelacionada
-                ? elo.vaga.status === "preenchida"
-                  ? "↓ Gerou vaga, preenchida por"
-                  : "↓ Gerou vaga, reservada por (aguardando aprovação)"
-                : "↓ Gerou vaga, preenchida por";
+              : elo.vaga.status === "preenchida"
+                ? "↓ Gerou vaga, preenchida por"
+                : "↓ Gerou vaga, preenchimento em aprovação";
 
           return (
             <div key={i} className={styles.historicoItem}>

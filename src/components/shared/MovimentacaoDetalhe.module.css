@@ -227,6 +227,14 @@
   gap: 32px;
 }
 
+/* Respiro antes de "Vagas autorizadas" (RH, 2026-09) — mesmo valor de
+ * espaçamento já usado entre as demais seções da ficha (ver .infoGrid/
+ * .justificativaBox acima), só que como margin-top aqui porque a seção
+ * anterior (.duasColunas, Aprovações) não tem margin-bottom próprio. */
+.vagasAutorizadasWrap {
+  margin-top: 20px;
+}
+
 .aprovacoesList {
   display: flex;
   flex-direction: column;
