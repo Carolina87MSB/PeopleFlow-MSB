@@ -6,6 +6,7 @@ import { MovimentacaoDetalhe } from "../../components/shared/MovimentacaoDetalhe
 import { CartaMovimentacaoModal } from "../../components/shared/CartaMovimentacaoModal";
 import { tipoColor } from "../../domain/colors";
 import { podeEmitirCarta, statusCarta } from "../../domain/cartaMovimentacao";
+import { nomeExibicaoMovimentacao } from "../../domain/workflow";
 import { usePortalData } from "../../store/usePortalData";
 import type { Movimentacao } from "../../types/domain";
 import styles from "./AprovadasPage.module.css";
@@ -60,6 +61,39 @@ function IndicadorVagas({ m }: { m: Movimentacao }) {
     <span className={preenchidas === vagasDaMp.length ? styles.substituicaoRealizada : styles.substituicaoPendente}>
       Vagas: {preenchidas}/{vagasDaMp.length}
     </span>
+  );
+}
+
+/** Coluna "Colaborador" (RH, 2026-10) — pra uma MP com vagas autorizadas
+ * (Desligamento com substituição, Aumento de quadro, PRO/TRF que gera
+ * vacância), `m.colaborador` é só o campo histórico de QUEM ABRIU a
+ * necessidade, não representa os preenchimentos de fato. Mostra os nomes
+ * efetivamente preenchidos (vaga.status === "preenchida"), um por linha,
+ * limitando a 2 + "+N" pra não alargar a tabela (ver IndicadorVagas acima
+ * pro contador "preenchidas/autorizadas"). Vaga pendente/reservada/aguardando
+ * aprovação do gestor nunca entra aqui — só preenchimento já concluído.
+ * Sem vaga nenhuma (a maioria das MPs), ou com vagas mas nenhuma ainda
+ * preenchida, cai no comportamento de sempre (`m.colaborador`). */
+function ColaboradorCelula({ m }: { m: Movimentacao }) {
+  const { vagas } = usePortalData();
+  const vagasDaMp = vagas.filter((v) => v.movimentacaoId === m.id);
+  const nomePadrao = nomeExibicaoMovimentacao(m.colaborador);
+  if (vagasDaMp.length === 0) return <>{nomePadrao}</>;
+
+  const nomes = Array.from(
+    new Set(vagasDaMp.filter((v) => v.status === "preenchida" && v.novoColaboradorNome).map((v) => v.novoColaboradorNome as string)),
+  );
+  if (nomes.length === 0) return <>{nomePadrao}</>;
+
+  const visiveis = nomes.slice(0, 2);
+  const restantes = nomes.length - visiveis.length;
+  return (
+    <div className={styles.celulaColaborador}>
+      {visiveis.map((nome) => (
+        <div key={nome}>{nome}</div>
+      ))}
+      {restantes > 0 && <div className={styles.celulaColaboradorMais}>+{restantes}</div>}
+    </div>
   );
 }
 
@@ -149,7 +183,9 @@ export function AprovadasPage() {
                       {m.tipoCod}
                     </Badge>
                   </td>
-                  <td>{m.colaborador}</td>
+                  <td>
+                    <ColaboradorCelula m={m} />
+                  </td>
                   <td>{m.depto}</td>
                   <td>{m.solicitante}</td>
                   <td>

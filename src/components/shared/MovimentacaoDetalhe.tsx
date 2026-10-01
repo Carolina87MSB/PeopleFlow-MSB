@@ -8,7 +8,7 @@ import { VagasAutorizadasBloco } from "./VagasAutorizadasBloco";
 import { CadeiaMovimentacaoBloco } from "./CadeiaMovimentacaoBloco";
 import { LegadoIncorporadoBloco } from "./LegadoIncorporadoBloco";
 import { dataBrParaIso, formatarDataIso } from "../../domain/dates";
-import { calcularPercentual, type EdicaoDadoMovimentacao } from "../../domain/workflow";
+import { calcularPercentual, nomeExibicaoMovimentacao, type EdicaoDadoMovimentacao } from "../../domain/workflow";
 import type { DadoField, Movimentacao } from "../../types/domain";
 import styles from "./MovimentacaoDetalhe.module.css";
 
@@ -90,7 +90,7 @@ export function MovimentacaoDetalhe({ movimentacao: m, onVoltar, editavel, onSal
 
   const camposBase: DadoField[] = [
     { label: "Tipo", value: m.tipo },
-    { label: "Colaborador", value: m.colaborador },
+    { label: "Colaborador", value: nomeExibicaoMovimentacao(m.colaborador) },
     { label: "Departamento", value: m.depto },
     { label: "Gestor solicitante", value: m.solicitante },
     { label: "Data da solicitação", value: m.dataSolicitacao },
@@ -115,7 +115,7 @@ export function MovimentacaoDetalhe({ movimentacao: m, onVoltar, editavel, onSal
             </span>
             <div>
               <div className={styles.detalheNome}>
-                {m.colaborador} <span className={styles.detalheId}>{m.id}</span>
+                {nomeExibicaoMovimentacao(m.colaborador)} <span className={styles.detalheId}>{m.id}</span>
               </div>
               <div className={styles.detalheDepto}>{m.depto}</div>
             </div>

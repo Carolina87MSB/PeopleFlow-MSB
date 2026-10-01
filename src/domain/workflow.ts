@@ -328,3 +328,14 @@ export function calcularPercentual(atual: string, novo: string): string {
   if (Number.isNaN(pa) || Number.isNaN(pn) || pa <= 0) return "—";
   return ((pn - pa) / pa * 100).toFixed(1).replace(".", ",") + "%";
 }
+
+/** Normaliza a exibição de `Movimentacao.colaborador` (RH, 2026-10) — uma
+ * Admissão sem candidato(a) ainda definido grava um placeholder "<cargo>
+ * (admissão)" (ver formMovimentacao.ts), pensado só pra identificar a MP
+ * internamente antes de existir um nome — nunca deveria aparecer pro usuário
+ * como se fosse o nome de alguém. Puramente apresentação: não reescreve o
+ * dado persistido, só o texto exibido nas telas que mostram esse campo como
+ * nome (listagens e detalhe da MP). */
+export function nomeExibicaoMovimentacao(colaborador: string): string {
+  return colaborador.replace(/\s*\(admissão\)\s*$/i, "");
+}

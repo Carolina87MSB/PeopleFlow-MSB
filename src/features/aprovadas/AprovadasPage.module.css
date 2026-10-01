@@ -76,6 +76,20 @@
   white-space: nowrap;
 }
 
+/* Coluna Colaborador com múltiplos preenchimentos (RH, 2026-10) — gap mínimo
+ * pra não alargar a altura da linha além do necessário (a maioria das MPs
+ * mostra só 1 nome e nem usa esta classe, ver ColaboradorCelula). */
+.celulaColaborador {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.celulaColaboradorMais {
+  color: var(--color-muted-light);
+  font-weight: 600;
+}
+
 .badgeCompacta {
   font-size: 9.5px !important;
   padding: 2px 7px !important;

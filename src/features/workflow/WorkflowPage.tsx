@@ -8,7 +8,7 @@ import { ReprovarModal } from "../../components/shared/ReprovarModal";
 import { useToast } from "../../components/shared/ToastContext";
 import { Badge, Button, Card, Drawer, EmptyState, FilterChips, StatusBadge } from "../../components/ui";
 import { prioMeta, tipoColor } from "../../domain/colors";
-import { etapaAtual, podeAgir, reprovadaPeloRH } from "../../domain/workflow";
+import { etapaAtual, nomeExibicaoMovimentacao, podeAgir, reprovadaPeloRH } from "../../domain/workflow";
 import { usePortalData } from "../../store/usePortalData";
 import type { Etapa, EtapaStatus, Movimentacao } from "../../types/domain";
 import styles from "./WorkflowPage.module.css";
@@ -193,7 +193,7 @@ export function WorkflowPage() {
                     </div>
                     <div className={styles.headerInfo}>
                       <div className={styles.nameRow}>
-                        <span className={styles.colaborador}>{m.colaborador}</span>
+                        <span className={styles.colaborador}>{nomeExibicaoMovimentacao(m.colaborador)}</span>
                         <span className={styles.idMuted}>{m.id}</span>
                       </div>
                       <div className={styles.tipoResumo}>
