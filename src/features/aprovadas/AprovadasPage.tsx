@@ -64,19 +64,25 @@ function IndicadorVagas({ m }: { m: Movimentacao }) {
   );
 }
 
-/** Coluna "Colaborador" (RH, 2026-10) — pra uma MP com vagas autorizadas
- * (Desligamento com substituição, Aumento de quadro, PRO/TRF que gera
- * vacância), `m.colaborador` é só o campo histórico de QUEM ABRIU a
- * necessidade, não representa os preenchimentos de fato. Mostra os nomes
- * efetivamente preenchidos (vaga.status === "preenchida"), um por linha,
- * limitando a 2 + "+N" pra não alargar a tabela (ver IndicadorVagas acima
- * pro contador "preenchidas/autorizadas"). Vaga pendente/reservada/aguardando
- * aprovação do gestor nunca entra aqui — só preenchimento já concluído.
- * Sem vaga nenhuma (a maioria das MPs), ou com vagas mas nenhuma ainda
- * preenchida, cai no comportamento de sempre (`m.colaborador`). */
+/** Coluna "Colaborador" (RH, 2026-10) — só pra MPs de `aumento_quadro` (ex.
+ * M-2026-024) a lista de nomes preenchidos substitui `m.colaborador`: ali a
+ * MP não representa uma pessoa específica, só autoriza N vagas, então os
+ * preenchimentos efetivos (vaga.status === "preenchida") É a identidade real
+ * a mostrar — um por linha, limitando a 2 + "+N" pra não alargar a tabela
+ * (ver IndicadorVagas acima pro contador "preenchidas/autorizadas").
+ *
+ * Para `substituicao` (Desligamento) e `vacancia_promocao`/
+ * `vacancia_transferencia` (Promoção/Transferência que gera vaga), `m.
+ * colaborador` já É uma pessoa real e específica (quem está sendo desligado/
+ * promovido/transferido) — quem preenche a vaga resultante é uma pessoa
+ * DIFERENTE, relacionada mas nunca um substituto do titular da MP na
+ * listagem (regressão corrigida em 2026-10 — ver M-2026-027: o titular é
+ * Leandro, não a Rute que ocupou a vaga gerada pelo desligamento dele).
+ * Vaga pendente/reservada/aguardando aprovação do gestor nunca entra aqui —
+ * só preenchimento já concluído, e só quando a origem é aumento_quadro. */
 function ColaboradorCelula({ m }: { m: Movimentacao }) {
   const { vagas } = usePortalData();
-  const vagasDaMp = vagas.filter((v) => v.movimentacaoId === m.id);
+  const vagasDaMp = vagas.filter((v) => v.movimentacaoId === m.id && v.origem === "aumento_quadro");
   const nomePadrao = nomeExibicaoMovimentacao(m.colaborador);
   if (vagasDaMp.length === 0) return <>{nomePadrao}</>;
 
