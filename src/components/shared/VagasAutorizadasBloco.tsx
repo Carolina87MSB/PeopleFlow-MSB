@@ -110,7 +110,7 @@ function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentac
 
       {mpLegadoOrigem && (
         <div className={styles.legadoOrigemNota}>
-          Registrado originalmente pela{" "}
+          {vaga.status === "preenchida" ? "Registrado originalmente pela" : "Necessidade formalizada originalmente pela"}{" "}
           <button type="button" className={styles.legadoLink} onClick={() => navigate(`/aprovadas?mp=${encodeURIComponent(mpLegadoOrigem.id)}`)}>
             {mpLegadoOrigem.id}
           </button>
