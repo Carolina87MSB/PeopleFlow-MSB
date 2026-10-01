@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePortalData } from "../../store/usePortalData";
 import { descendants } from "../../domain/hierarquia";
 import { getDocumentosAtivos } from "../../repositories/movimentacoesDocumentosRepository";
-import { obterUrlDocumento, enviarDocumentoAssinado } from "../../repositories/avisoPrevioRepository";
+import { gerarAvisoPrevio, obterUrlDocumento, enviarDocumentoAssinado } from "../../repositories/avisoPrevioRepository";
 import { useToast } from "./ToastContext";
 import type { Movimentacao, MovimentacaoDocumento } from "../../types/domain";
 import styles from "./MovimentacaoDetalhe.module.css";
@@ -24,6 +24,7 @@ export function AvisoPrevioBloco({ movimentacao: m }: { movimentacao: Movimentac
   const { flash } = useToast();
   const [documentos, setDocumentos] = useState<MovimentacaoDocumento[] | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [gerando, setGerando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -49,6 +50,30 @@ export function AvisoPrevioBloco({ movimentacao: m }: { movimentacao: Movimentac
   const assinado = documentos?.find((d) => d.tipo === TIPO_ASSINADO);
   const podeGerenciar =
     !!m.colaboradorId && (conta.perfil === "RH" || (conta.perfil === "Gestor" && descendants(colaboradores, conta.nome).has(m.colaborador)));
+  // "Gerar Aviso Prévio" manual (RH, 2026-10) — a geração automática só roda
+  // dentro do fluxo normal de aprovação (aprovarEtapaFn); uma MP que chegou a
+  // "Aprovado" por outro caminho (ex.: correção direta no banco) nunca passa
+  // por ali, então fica "Pendente" para sempre sem essa saída manual. A
+  // própria ação `gerar` já é idempotente (confere documento ativo antes de
+  // criar outro), então é segura de expor sem risco de duplicar.
+  const podeGerarManualmente = podeGerenciar && !carregando && !gerado && m.tipoAvisoPrevio === "indenizado" && m.status === "Aprovado";
+
+  async function handleGerarManual() {
+    setGerando(true);
+    try {
+      const resultado = await gerarAvisoPrevio(m.id);
+      if (resultado.gerado) {
+        setDocumentos(await getDocumentosAtivos(m.id));
+        flash("Aviso Prévio gerado.");
+      } else {
+        flash("Não foi possível gerar agora — verifique se a MP já está apta (CPF, data prevista) e tente de novo.");
+      }
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Falha ao gerar o Aviso Prévio.");
+    } finally {
+      setGerando(false);
+    }
+  }
 
   async function abrirDocumento(doc: MovimentacaoDocumento, baixar: boolean) {
     try {
@@ -83,6 +108,11 @@ export function AvisoPrevioBloco({ movimentacao: m }: { movimentacao: Movimentac
             {gerado && (
               <button type="button" className={styles.documentoAcaoBtn} onClick={() => abrirDocumento(gerado, true)}>
                 Baixar PDF
+              </button>
+            )}
+            {podeGerarManualmente && (
+              <button type="button" className={styles.documentoAcaoBtn} disabled={gerando} onClick={handleGerarManual}>
+                {gerando ? "Gerando..." : "Gerar Aviso Prévio"}
               </button>
             )}
           </div>
