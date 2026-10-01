@@ -92,6 +92,8 @@ function VagaItem({ vaga, movimentacao }: { vaga: Vaga; movimentacao: Movimentac
         </div>
       </div>
 
+      {vaga.observacao && <p className={styles.documentoNotaAntiga}>{vaga.observacao}</p>}
+
       {eventos.length > 0 && (
         <>
           <div className={styles.vagaHistoricoTitulo}>Histórico do preenchimento</div>
