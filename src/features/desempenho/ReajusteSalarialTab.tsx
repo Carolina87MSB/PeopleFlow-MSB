@@ -96,7 +96,10 @@ export function ReajusteSalarialTab() {
 
   const elegiveisCount = validadas?.filter((v) => v.status === "elegivel").length ?? 0;
   const aplicadosOrdenados = useMemo(
-    () => [...reajustesSalariais].sort((a, b) => b.aplicadoEm.localeCompare(a.aplicadoEm)),
+    () =>
+      [...reajustesSalariais].sort(
+        (a, b) => a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR", { sensitivity: "base" }) || b.aplicadoEm.localeCompare(a.aplicadoEm),
+      ),
     [reajustesSalariais],
   );
 
