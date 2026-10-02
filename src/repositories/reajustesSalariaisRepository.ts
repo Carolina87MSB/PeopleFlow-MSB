@@ -17,6 +17,7 @@ interface ReajusteSalarialRow {
   fatorial: number;
   reajuste_efetivo: number;
   novo_salario: number;
+  posicao_9box?: string | null;
   aplicado_em: string;
   aplicado_por: string;
 }
@@ -33,6 +34,7 @@ function fromRow(row: ReajusteSalarialRow): ReajusteSalarial {
     fatorial: row.fatorial,
     reajusteEfetivo: row.reajuste_efetivo,
     novoSalario: row.novo_salario,
+    posicao9Box: row.posicao_9box ?? null,
     aplicadoEm: row.aplicado_em,
     aplicadoPor: row.aplicado_por,
   };
@@ -50,6 +52,10 @@ function toRow(r: ReajusteSalarial): ReajusteSalarialRow {
     fatorial: r.fatorial,
     reajuste_efetivo: r.reajusteEfetivo,
     novo_salario: r.novoSalario,
+    // Só entra no INSERT quando informada — o import atual não captura a 9 Box,
+    // e assim a coluna nunca é exigida no insert (segura mesmo antes da
+    // migration 41 ser aplicada).
+    ...(r.posicao9Box ? { posicao_9box: r.posicao9Box } : {}),
     aplicado_em: r.aplicadoEm,
     aplicado_por: r.aplicadoPor,
   };

@@ -142,6 +142,12 @@ export interface ReajusteSalarial {
   fatorial: number;
   reajusteEfetivo: number;
   novoSalario: number;
+  /** Fotografia do resultado na 9 Box usado neste reajuste (ex.: "Alto
+   * Desempenho") — gravada NO registro, nunca consultada de novo na posição
+   * atual do colaborador, pra a memória de cálculo não mudar quando ele
+   * mudar de posição em outro ciclo. `null`/ausente = não registrada (ex.
+   * reajuste importado sem essa informação). */
+  posicao9Box?: string | null;
   aplicadoEm: string;
   aplicadoPor: string;
 }

@@ -1734,3 +1734,21 @@ alter table public.peopleflow_movimentacoes
 
 comment on column public.peopleflow_movimentacoes.incorporada_em_vaga_id is
   'Migração histórica (RH, 2026-09): setado quando esta MP legada (ex. uma Admissão antiga) foi incorporada como o preenchimento já registrado numa vaga (peopleflow_vagas) autorizada por outra MP mais nova. A MP originadora é obtida via peopleflow_vagas.movimentacao_id da vaga referenciada — sem tabela extra, mesmo padrão da Cadeia da movimentação (seção 39). Nunca escrito pelo app em uso normal (nem por atualizarMovimentacao() em movimentacoesRepository.ts) — só por compatibilização manual, caso a caso.';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 41) Reajuste Salarial — memória de cálculo (RH, 2026-10). Cada reajuste
+--    preserva uma FOTOGRAFIA da regra aplicada naquele momento: Reajuste Base,
+--    Fatorial e Reajuste Efetivo já eram gravados por linha (seção 25); falta
+--    só o resultado na 9 Box que determinou o Fatorial, gravado aqui como
+--    texto — nunca consultado de novo na posição atual do colaborador, então
+--    uma mudança de posição em outro ciclo não altera o histórico de 2026. A
+--    regra em si (percentual-base por mês de admissão, Fatorial por posição
+--    na 9 Box) pertence ao ciclo "AVD 2º Ciclo — Agosto/2026" e NÃO é fixada
+--    no sistema: os próximos ciclos podem usar critérios diferentes. Nullable:
+--    reajustes de outra origem, ou importados sem essa informação, ficam sem.
+-- ────────────────────────────────────────────────────────────────────────
+alter table public.peopleflow_reajustes_salariais
+  add column if not exists posicao_9box text;
+
+comment on column public.peopleflow_reajustes_salariais.posicao_9box is
+  'Fotografia do resultado na 9 Box (ex.: "Alto Desempenho") usado para definir o Fatorial deste reajuste, gravada no momento da aplicação — nunca recalculada pela posição atual do colaborador. Null = não registrada.';

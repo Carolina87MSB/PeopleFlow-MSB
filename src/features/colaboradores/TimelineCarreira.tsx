@@ -82,7 +82,22 @@ function resumoDoEvento(e: EventoTimelineCarreira, verSalario: boolean): string 
   }
 }
 
-function detalhesDoEvento(e: EventoTimelineCarreira, verSalario: boolean): { label: string; valor: string }[] {
+/** Linha do card expandido. `secao` = só um subtítulo (sem valor); `separadorAntes`
+ * = divisória fina acima da linha, pra separar grupos dentro do mesmo card. */
+interface DetalheEvento {
+  label: string;
+  valor: string;
+  secao?: boolean;
+  separadorAntes?: boolean;
+}
+
+/** "125%" / "5,5%" — sem casas decimais fixas (diferente de formatarPercentual,
+ * que sempre mostra 2): o Fatorial é um multiplicador redondo (100/125/150). */
+function formatarPontos(valor: number): string {
+  return `${valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+}
+
+function detalhesDoEvento(e: EventoTimelineCarreira, verSalario: boolean): DetalheEvento[] {
   switch (e.tipo) {
     case "admissao":
       return [
@@ -150,20 +165,24 @@ function detalhesDoEvento(e: EventoTimelineCarreira, verSalario: boolean): { lab
       return det;
     }
     case "reajusteAvd": {
-      const det = [
-        { label: "Competência", valor: e.competencia },
+      // Memória de cálculo (RH, 2026-10) — tudo vem do próprio registro do
+      // reajuste (Base, 9 Box e Fatorial daquele ciclo), nunca da posição
+      // atual do colaborador. Mesma restrição de visibilidade dos valores
+      // salariais (RH/Diretoria): percentuais e posição na 9 Box permitem
+      // deduzir o reajuste individual.
+      const periodo: DetalheEvento[] = [
+        { label: "Competência", valor: e.competencia, separadorAntes: verSalario },
         { label: "Origem", valor: e.origem },
       ];
-      if (verSalario) {
-        det.push(
-          { label: "Salário anterior", valor: formatarValorMonetario(e.salarioAnterior) },
-          { label: "Reajuste efetivo", valor: formatarPercentual(e.reajusteEfetivo) },
-          { label: "Novo salário", valor: formatarValorMonetario(e.novoSalario) },
-        );
-      } else {
-        det.push({ label: "Valores", valor: "Restrito a RH/Diretoria" });
-      }
-      return det;
+      if (!verSalario) return [...periodo, { label: "Valores", valor: "Restrito a RH/Diretoria" }];
+      return [
+        { label: "Como o reajuste foi calculado", valor: "", secao: true },
+        { label: "Reajuste Base", valor: formatarPercentual(e.reajusteBase) },
+        { label: "Resultado de desempenho", valor: e.posicao9Box ?? "Não registrado" },
+        { label: "Fatorial aplicado", valor: formatarPontos(e.fatorial) },
+        { label: "Reajuste final", valor: formatarPercentual(e.reajusteEfetivo) },
+        ...periodo,
+      ];
     }
     case "desligamento": {
       const det = [
@@ -252,12 +271,18 @@ export function TimelineCarreira({ colaborador }: TimelineCarreiraProps) {
                   <p className={styles.itemResumo}>{resumoDoEvento(e, verSalario)}</p>
                   {aberto && (
                     <div className={styles.detalhes}>
-                      {detalhes.map((d) => (
-                        <div key={d.label} className={styles.detalheLinha}>
-                          <span className={styles.detalheLabel}>{d.label}</span>
-                          <span className={styles.detalheValor}>{d.valor}</span>
-                        </div>
-                      ))}
+                      {detalhes.map((d) =>
+                        d.secao ? (
+                          <div key={d.label} className={styles.detalheSecao}>
+                            {d.label}
+                          </div>
+                        ) : (
+                          <div key={d.label} className={[styles.detalheLinha, d.separadorAntes ? styles.detalheSeparador : ""].join(" ")}>
+                            <span className={styles.detalheLabel}>{d.label}</span>
+                            <span className={styles.detalheValor}>{d.valor}</span>
+                          </div>
+                        ),
+                      )}
                     </div>
                   )}
                 </button>

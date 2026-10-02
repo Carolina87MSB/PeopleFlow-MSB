@@ -81,6 +81,11 @@ export type EventoTimelineCarreira =
       competencia: string;
       origem: string;
       salarioAnterior: number;
+      /** Memória de cálculo — tudo lido do próprio registro do reajuste
+       * (fotografia do momento), nunca recalculado nem consultado na 9 Box atual. */
+      reajusteBase: number;
+      posicao9Box: string | null;
+      fatorial: number;
       reajusteEfetivo: number;
       novoSalario: number;
     }
@@ -267,6 +272,9 @@ export function montarTimelineCarreira(
         competencia: r.competencia,
         origem: r.origem,
         salarioAnterior: r.salarioAnterior,
+        reajusteBase: r.reajusteBase,
+        posicao9Box: r.posicao9Box ?? null,
+        fatorial: r.fatorial,
         reajusteEfetivo: r.reajusteEfetivo,
         novoSalario: r.novoSalario,
       });
