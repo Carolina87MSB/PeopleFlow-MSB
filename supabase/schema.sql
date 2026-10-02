@@ -1752,3 +1752,84 @@ alter table public.peopleflow_reajustes_salariais
 
 comment on column public.peopleflow_reajustes_salariais.posicao_9box is
   'Fotografia do resultado na 9 Box (ex.: "Alto Desempenho") usado para definir o Fatorial deste reajuste, gravada no momento da aplicação — nunca recalculada pela posição atual do colaborador. Null = não registrada.';
+
+-- ────────────────────────────────────────────────────────────────────────
+-- 42) Notificações automáticas por e-mail — log e deduplicação (RH, 2026-10).
+--    Uma linha por notificação que o PeopleFlow decidiu enviar (ou deixou de
+--    enviar, com o motivo). É ao mesmo tempo:
+--    - o LOG de rastreabilidade (tipo, destinatário, e-mail usado, referência,
+--      data/hora, status e erro); e
+--    - a TRAVA contra duplicidade: `chave_dedup` é única, então o servidor
+--      "reserva" a chave com INSERT ... ON CONFLICT DO NOTHING antes de
+--      enviar — duas chamadas concorrentes (ou um refresh/reprocesso) nunca
+--      geram dois e-mails pelo mesmo evento.
+--    Chaves (montadas no servidor, nunca pelo navegador):
+--      MP aguardando ação  → mp:{id da MP}:{índice da etapa}:{nº de reaberturas}
+--      Experiência (D-10)  → exp:{colaborador}:{etapa}:{data de vencimento}
+--      Aprovação de vaga   → vaga:{id da vaga}:{registrado_em}
+--    Preparada pra futura tela do RH (notificações com erro/não enviadas) e
+--    pra reenvio (`tentativas`, `ultima_tentativa_em` e `contexto`, que guarda
+--    o mínimo pra remontar o e-mail — nunca salário, justificativa ou dado
+--    pessoal) — nenhuma dessas duas funcionalidades existe ainda. Contém
+--    e-mail de pessoas, por isso a RLS fica LIGADA sem nenhuma política: só o
+--    servidor (service_role, que ignora RLS) lê e grava; quando o RH ganhar a
+--    tela, entra uma política de leitura só pra ele.
+-- ────────────────────────────────────────────────────────────────────────
+create table if not exists public.peopleflow_notificacoes_email (
+  id bigint generated always as identity primary key,
+  tipo text not null,
+  destinatario_nome text not null,
+  destinatario_email text,
+  referencia_tipo text not null,
+  referencia_id text not null,
+  chave_dedup text not null,
+  status text not null default 'pendente_envio',
+  tentativas integer not null default 0,
+  erro text,
+  motivo_ignorado text,
+  contexto jsonb not null default '{}'::jsonb,
+  ultima_tentativa_em timestamptz,
+  enviado_em timestamptz,
+  criado_em timestamptz not null default now(),
+  constraint peopleflow_notificacoes_email_chave_unica unique (chave_dedup),
+  constraint peopleflow_notificacoes_email_status_valido
+    check (status in ('pendente_envio', 'enviado', 'erro', 'ignorado'))
+);
+
+comment on table public.peopleflow_notificacoes_email is
+  'Log + deduplicação das notificações automáticas por e-mail do PeopleFlow (seção 42). Só o servidor (service_role) lê/escreve — RLS ligada sem política.';
+comment on column public.peopleflow_notificacoes_email.tipo is
+  'Tipo da notificação — catálogo em api/_lib/notificacoesEmail.ts (hoje: mp_aguardando_acao, experiencia_vencimento, vaga_aprovacao). Texto livre de propósito: um tipo novo não exige migration.';
+comment on column public.peopleflow_notificacoes_email.destinatario_email is
+  'E-mail efetivamente usado no envio. Null quando não foi possível resolver o destinatário (status "erro" ou "ignorado").';
+comment on column public.peopleflow_notificacoes_email.referencia_tipo is
+  'O que gerou a pendência: "movimentacao", "avaliacao_experiencia" ou "vaga".';
+comment on column public.peopleflow_notificacoes_email.referencia_id is
+  'Identificador da referência — id da MP (ex.: "M-2026-030"), "{colaborador}|{etapa}" da avaliação de experiência, ou id da vaga.';
+comment on column public.peopleflow_notificacoes_email.chave_dedup is
+  'Chave única do evento de negócio (formatos na seção 42) — impede duas notificações pela mesma pendência.';
+comment on column public.peopleflow_notificacoes_email.status is
+  '"pendente_envio" (chave reservada, envio em andamento ou interrompido) | "enviado" | "erro" (falhou; pode ser reenviada no futuro) | "ignorado" (decidiu-se não enviar — ver motivo_ignorado, ex.: a pendência pertence a quem acabou de agir).';
+comment on column public.peopleflow_notificacoes_email.tentativas is
+  'Quantas vezes o envio foi tentado — base pra um futuro reenvio com limite.';
+comment on column public.peopleflow_notificacoes_email.erro is
+  'Mensagem de erro do último envio que falhou (status "erro").';
+comment on column public.peopleflow_notificacoes_email.motivo_ignorado is
+  'Por que a notificação não foi enviada quando status = "ignorado".';
+comment on column public.peopleflow_notificacoes_email.contexto is
+  'Dados mínimos pra remontar o e-mail num reenvio (ex.: rota do link, etapa/vencimento). NUNCA salário, justificativa ou dado pessoal.';
+
+-- Consultas previstas: "o que deu erro / não foi enviado" (futura tela do RH)
+-- e "o que já foi notificado sobre esta referência".
+create index if not exists peopleflow_notificacoes_email_problemas_idx
+  on public.peopleflow_notificacoes_email (criado_em desc)
+  where status in ('erro', 'pendente_envio');
+
+create index if not exists peopleflow_notificacoes_email_referencia_idx
+  on public.peopleflow_notificacoes_email (referencia_tipo, referencia_id);
+
+alter table public.peopleflow_notificacoes_email enable row level security;
+
+-- Sem política de propósito (ver cabeçalho). Por segurança em profundidade,
+-- tira também os privilégios de tabela dos papéis do navegador.
+revoke all on table public.peopleflow_notificacoes_email from anon, authenticated;
