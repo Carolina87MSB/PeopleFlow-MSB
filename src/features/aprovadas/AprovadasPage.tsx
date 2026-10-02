@@ -7,6 +7,7 @@ import { CartaMovimentacaoModal } from "../../components/shared/CartaMovimentaca
 import { tipoColor } from "../../domain/colors";
 import { podeEmitirCarta, statusCarta } from "../../domain/cartaMovimentacao";
 import { nomeExibicaoMovimentacao } from "../../domain/workflow";
+import { nomesPreenchidosAumentoQuadro } from "../../domain/vagas";
 import { usePortalData } from "../../store/usePortalData";
 import type { Movimentacao } from "../../types/domain";
 import styles from "./AprovadasPage.module.css";
@@ -82,13 +83,8 @@ function IndicadorVagas({ m }: { m: Movimentacao }) {
  * só preenchimento já concluído, e só quando a origem é aumento_quadro. */
 function ColaboradorCelula({ m }: { m: Movimentacao }) {
   const { vagas } = usePortalData();
-  const vagasDaMp = vagas.filter((v) => v.movimentacaoId === m.id && v.origem === "aumento_quadro");
   const nomePadrao = nomeExibicaoMovimentacao(m.colaborador);
-  if (vagasDaMp.length === 0) return <>{nomePadrao}</>;
-
-  const nomes = Array.from(
-    new Set(vagasDaMp.filter((v) => v.status === "preenchida" && v.novoColaboradorNome).map((v) => v.novoColaboradorNome as string)),
-  );
+  const nomes = nomesPreenchidosAumentoQuadro(vagas, m.id);
   if (nomes.length === 0) return <>{nomePadrao}</>;
 
   const visiveis = nomes.slice(0, 2);

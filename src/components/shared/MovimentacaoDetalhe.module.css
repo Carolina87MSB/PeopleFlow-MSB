@@ -129,6 +129,12 @@
   color: var(--color-text);
 }
 
+.infoValueLista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .editarBar {
   display: flex;
   justify-content: flex-end;

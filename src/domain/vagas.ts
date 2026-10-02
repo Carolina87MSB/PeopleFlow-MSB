@@ -28,6 +28,20 @@ export function vagaDisponivelParaPreenchimento(v: Vaga): boolean {
   return v.status === "pendente";
 }
 
+/** Nomes de quem já preencheu (status "preenchida") as vagas de
+ * `aumento_quadro` de uma MP, sem repetir, na ordem das vagas (RH, 2026-10).
+ * Só `aumento_quadro`: ali a MP não é sobre uma pessoa específica, só autoriza
+ * N vagas, então estes nomes SÃO a identidade a mostrar (listagem e detalhe).
+ * Em `substituicao`/`vacancia_*`, `m.colaborador` já é a pessoa da MP e quem
+ * preenche a vaga nunca o substitui. Vaga pendente/reservada/aguardando
+ * aprovação não entra. Vazio = nada a sobrescrever (usar o campo da MP). */
+export function nomesPreenchidosAumentoQuadro(vagas: Vaga[], movimentacaoId: string): string[] {
+  const nomes = vagas
+    .filter((v) => v.movimentacaoId === movimentacaoId && v.origem === "aumento_quadro" && v.status === "preenchida" && v.novoColaboradorNome)
+    .map((v) => v.novoColaboradorNome as string);
+  return Array.from(new Set(nomes));
+}
+
 /** Texto de uma vaga pro dropdown "Qual vaga esta movimentação irá
  * preencher?" em PRO/TRF (RH, 2026-09) — o gestor precisa reconhecer a vaga
  * pelo departamento/motivo/colaborador, NUNCA pelo código da MP (que só

@@ -3,6 +3,8 @@ import { Pencil } from "lucide-react";
 import { Avatar, Button } from "../ui";
 import { tipoColor } from "../../domain/colors";
 import { docsFor } from "../../domain/documentos";
+import { nomesPreenchidosAumentoQuadro } from "../../domain/vagas";
+import { usePortalData } from "../../store/usePortalData";
 import { AvisoPrevioBloco } from "./AvisoPrevioBloco";
 import { VagasAutorizadasBloco } from "./VagasAutorizadasBloco";
 import { CadeiaMovimentacaoBloco } from "./CadeiaMovimentacaoBloco";
@@ -26,6 +28,8 @@ function ehCampoEditavel(label: string): boolean {
   return ehCampoSalario(label) || ehCampoDataPrevista(label);
 }
 
+const CAMPOS_COM_NOMES_DAS_VAGAS = new Set(["Candidato", "Colaborador"]);
+
 interface MovimentacaoDetalheProps {
   movimentacao: Movimentacao;
   /** Quando informado, mostra o link "← Voltar" no topo (uso em página cheia — ver AprovadasPage.tsx).
@@ -42,8 +46,15 @@ interface MovimentacaoDetalheProps {
  * trilha de aprovações e documentos gerados. Usada tanto em Movimentações aprovadas
  * (página cheia) quanto no Workflow de aprovação (dentro de um Drawer, "Ver detalhes"). */
 export function MovimentacaoDetalhe({ movimentacao: m, onVoltar, editavel, onSalvarEdicoes }: MovimentacaoDetalheProps) {
+  const { vagas } = usePortalData();
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState<Record<string, string>>({});
+
+  // Aumento de quadro (RH, 2026-10): "Candidato"/"Colaborador" vêm do
+  // formulário original, que só comporta 1 nome — com várias vagas, listam
+  // todos os preenchidos, um por linha (mesma regra da listagem; ver
+  // nomesPreenchidosAumentoQuadro). Sem nenhum preenchido, mantém o campo da MP.
+  const nomesPreenchidos = nomesPreenchidosAumentoQuadro(vagas, m.id);
 
   const dados = m.dados ?? [];
   const dadosLabels = new Set(dados.map((d) => d.label));
@@ -174,6 +185,14 @@ export function MovimentacaoDetalhe({ movimentacao: m, onVoltar, editavel, onSal
                     value={rascunho[c.label] ?? c.value}
                     onChange={(e) => setRascunho((prev) => ({ ...prev, [c.label]: e.target.value }))}
                   />
+                ) : nomesPreenchidos.length > 0 && CAMPOS_COM_NOMES_DAS_VAGAS.has(c.label) ? (
+                  <div className={styles.infoValueLista}>
+                    {nomesPreenchidos.map((nome) => (
+                      <span key={nome} className={styles.infoValue}>
+                        {nome}
+                      </span>
+                    ))}
+                  </div>
                 ) : (
                   <span className={styles.infoValue}>{c.value}</span>
                 )}
