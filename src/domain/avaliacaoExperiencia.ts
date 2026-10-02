@@ -8,6 +8,11 @@ import type {
   RespostaAvaliacaoExperiencia,
   ResultadoAvaliacaoExperiencia,
 } from "../types/domain";
+import { foraDaExperiencia } from "./experienciaDatas";
+
+// Movidos pra experienciaDatas.ts (sem import de JSON, usado também pelo cron de
+// notificações) — continuam exportados daqui, nenhum import existente muda.
+export { dataEtapaAvaliacaoExperiencia, etapaConcluida } from "./experienciaDatas";
 
 export const PERGUNTAS_AVALIACAO_EXPERIENCIA = perguntasSeed as PerguntaAvaliacaoExperiencia[];
 
@@ -55,36 +60,6 @@ function diasDesdeAdmissao(admissaoIso: string, hoje: Date): number | null {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
-/** Data (ISO "aaaa-mm-dd") em que uma etapa do contrato de experiência cai,
- * a partir da admissão — ex.: admitido em 2026-06-01, "45 dias" cai em
- * 2026-07-16. Puramente informativo pra tela de acompanhamento (mostrar a
- * data prevista de cada etapa); NUNCA decide elegibilidade/pendência —
- * isso continua exclusivamente em pendenciasAvaliacaoExperiencia(), sem
- * nenhuma mudança de regra aqui. */
-export function dataEtapaAvaliacaoExperiencia(admissaoIso: string | null | undefined, dias: number): string | null {
-  if (!admissaoIso) return null;
-  const [anoStr, mesStr, diaStr] = admissaoIso.split("-");
-  const ano = parseInt(anoStr, 10);
-  const mesIdx = parseInt(mesStr, 10) - 1;
-  const dia = parseInt(diaStr, 10);
-  if (Number.isNaN(ano) || Number.isNaN(mesIdx) || Number.isNaN(dia)) return null;
-  const data = new Date(ano, mesIdx, dia);
-  data.setDate(data.getDate() + dias);
-  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
-}
-
-/** true quando já existe uma AvaliacaoExperiencia registrada pro colaborador
- * nessa etapa específica — usado só pra exibir "Concluída"/"Pendente" na
- * tela de acompanhamento, mesma checagem que pendenciasAvaliacaoExperiencia()
- * já faz internamente, só reaproveitada aqui pra exibição por etapa. */
-export function etapaConcluida(
-  colaboradorNome: string,
-  etapa: EtapaAvaliacaoExperiencia,
-  avaliacoes: AvaliacaoExperiencia[],
-): boolean {
-  return avaliacoes.some((a) => a.colaboradorNome === colaboradorNome && a.etapa === etapa);
-}
-
 export interface PendenciaAvaliacaoExperiencia {
   colaborador: Colaborador;
   etapa: EtapaAvaliacaoExperiencia;
@@ -124,7 +99,7 @@ export function pendenciasAvaliacaoExperiencia(
 
   for (const c of colaboradores) {
     // Regra da RH, 2026-09: vínculo PJ não realiza Avaliação de Experiência.
-    if (c.desligado || c.vinculo === "PJ" || dispensados.has(c.nome)) continue;
+    if (foraDaExperiencia(c, dispensados)) continue;
     const dias = diasDesdeAdmissao(c.admissaoIso, hoje);
     if (dias === null || dias < 45 || dias >= 90) continue;
 

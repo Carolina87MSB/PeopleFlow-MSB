@@ -11,7 +11,6 @@ export interface EmailNotificacao {
 
 // Mesmos tons de src/index.css — --color-brand-dark / --color-success /
 // --color-danger — usados como faixa de destaque de cada tipo de e-mail.
-const ACCENT_PENDENTE = { cor: "#5f89a1", bg: "#e3f0f4" };
 const ACCENT_CONCLUIDA = { cor: "#2f8f6b", bg: "#e4f3ed" };
 const ACCENT_REPROVADA = { cor: "#c0584e", bg: "#f8e7e4" };
 
@@ -28,47 +27,6 @@ function primeiroNome(nomeCompleto: string): string {
  * as pendentes. */
 function linkMovimentacao(m: Movimentacao, baseUrl: string): string {
   return `${baseUrl}/workflow?id=${encodeURIComponent(m.id)}`;
-}
-
-/** Notifica quem precisa agir agora: a movimentação acabou de ser criada, ou
- * uma etapa anterior acabou de ser aprovada e a próxima entrou em análise —
- * mesmo e-mail nos dois casos (é o mesmo evento de negócio: "uma etapa ficou
- * pendente de mim"), só troca quem é `etapa.aprovador`. Texto/assunto fixos
- * por pedido explícito do RH (e-mail "simples e objetivo", sempre igual,
- * pra ser reconhecível de imediato). `baseUrl` é a origem do portal
- * (`window.location.origin` de quem disparou a ação) — evita fixar no
- * código um domínio de deploy específico. */
-export function notificacaoNovaEtapa(m: Movimentacao, etapa: Etapa, baseUrl: string): EmailNotificacao {
-  const nome = primeiroNome(etapa.aprovador);
-  const link = linkMovimentacao(m, baseUrl);
-  return {
-    to: emailOf(etapa.aprovador),
-    subject: `[PeopleFlow] Movimentação de Pessoal pendente de sua ação`,
-    text: [
-      `Olá, ${nome}.`,
-      ``,
-      `Existe uma Movimentação de Pessoal pendente de sua ação no PeopleFlow.`,
-      ``,
-      `Acesse o PeopleFlow para realizar a ação necessária.`,
-      link,
-      ``,
-      `Atenciosamente,`,
-      `PeopleFlow | RH – MSB`,
-    ].join("\n"),
-    html: buildEmailHtml({
-      accentColor: ACCENT_PENDENTE.cor,
-      accentBg: ACCENT_PENDENTE.bg,
-      badgeLabel: "Aprovação pendente",
-      title: "Movimentação de Pessoal pendente de sua ação",
-      paragrafos: [`Olá, ${nome}.`, `Existe uma Movimentação de Pessoal pendente de sua ação no PeopleFlow.`, `Acesse o PeopleFlow para realizar a ação necessária.`],
-      detalhes: [
-        { label: "Tipo", valor: m.tipo },
-        { label: "Colaborador", valor: m.colaborador },
-        { label: "Etapa", valor: etapa.papel },
-      ],
-      cta: { label: "ACESSAR MOVIMENTAÇÃO", url: link },
-    }),
-  };
 }
 
 /** Notifica o solicitante quando a movimentação é concluída (todas as etapas aprovadas). */

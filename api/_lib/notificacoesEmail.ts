@@ -166,6 +166,10 @@ export interface PedidoNotificacao {
    * enviada. Só compara com ESTA ação — participar de uma etapa anterior não
    * bloqueia nada. Omitido (ex.: cron) = nunca ignora. */
   atorEmail?: string;
+  /** Quando quem chama já sabe que não há como notificar (ex.: colaborador sem
+   * gestor cadastrado), registra a linha como "erro" com este motivo, sem
+   * tentar resolver e-mail nem enviar — o caso fica visível no log. */
+  falhaPrevia?: string;
 }
 
 export type ResultadoNotificacao =
@@ -217,10 +221,14 @@ export async function notificar(pedido: PedidoNotificacao, deps: DependenciasNot
   }
 
   let resolucao: ResolucaoEmail;
-  try {
-    resolucao = await resolverEmail(pedido.destinatarioNome);
-  } catch (err) {
-    resolucao = { email: "", erro: mensagemDeErro(err) };
+  if (pedido.falhaPrevia) {
+    resolucao = { email: "", erro: pedido.falhaPrevia };
+  } else {
+    try {
+      resolucao = await resolverEmail(pedido.destinatarioNome);
+    } catch (err) {
+      resolucao = { email: "", erro: mensagemDeErro(err) };
+    }
   }
   const agora = () => new Date().toISOString();
 

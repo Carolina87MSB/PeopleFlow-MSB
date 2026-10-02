@@ -61,7 +61,7 @@ import {
   atualizarAvaliacaoPotencial as atualizarAvaliacaoPotencialNoSupabase,
   criarAvaliacoesPotencial as criarAvaliacoesPotencialNoSupabase,
 } from "../repositories/avaliacoesPotencialRepository";
-import { notificar } from "../repositories/notificacoesRepository";
+import { notificar, solicitarNotificacao } from "../repositories/notificacoesRepository";
 import { formatarDataAtual, formatarDataIso, formatarHoraAtual, hojeIso, tempoDeEmpresa } from "../domain/dates";
 import { GRUPO_HABILIDADES_COMPETENCIAS } from "../domain/descricaoCargo";
 import { colaboradoresAtivosEmData } from "../domain/dashboardExecutivo";
@@ -107,7 +107,7 @@ import {
   podeEmitirCarta as podeEmitirCartaDomain,
   podeMarcarEntregue as podeMarcarEntregueDomain,
 } from "../domain/cartaMovimentacao";
-import { notificacaoConcluida, notificacaoNovaEtapa, notificacaoReprovada } from "../domain/notificacoes";
+import { notificacaoConcluida, notificacaoReprovada } from "../domain/notificacoes";
 import { canCreate, canSeeMov, navCargos, navColab, navRegistro, showEquipes } from "../domain/permissoes";
 import { construirMovimentacao, validarForm, type FormContext } from "../domain/formMovimentacao";
 import {
@@ -867,11 +867,12 @@ export function usePortalData(): PortalData {
 
           // Notificação por e-mail: best-effort, não bloqueia nem afeta o
           // resultado da aprovação (ver notificacoesRepository.ts).
+          // Surgiu uma nova etapa pendente → o servidor descobre o responsável e
+          // avisa (pendência, ver api/notificacoes.ts). Fluxo concluído →
+          // e-mail de "aprovada" ao solicitante, como sempre.
           const proximaEtapa = etapaAtual(atualizada);
-          const email = proximaEtapa
-            ? notificacaoNovaEtapa(atualizada, proximaEtapa, window.location.origin)
-            : notificacaoConcluida(atualizada);
-          void notificar(email);
+          if (proximaEtapa) void solicitarNotificacao("mp_etapa", atualizada.id);
+          else void notificar(notificacaoConcluida(atualizada));
         } catch (err) {
           flash(err instanceof Error ? err.message : "Falha ao aprovar etapa.");
         }
@@ -928,6 +929,7 @@ export function usePortalData(): PortalData {
           await atualizarMovimentacao(atualizada);
           dispatch({ type: "REABRIR_MOVIMENTACAO_RH", id, autor: me });
           flash("Movimentação restaurada para nova análise do RH.");
+          void solicitarNotificacao("mp_etapa", id);
         } catch (err) {
           flash(err instanceof Error ? err.message : "Falha ao restaurar movimentação.");
         }
@@ -1053,6 +1055,7 @@ export function usePortalData(): PortalData {
           await registrarPreenchimentoNoSupabase(vagaId, dados, me);
           reload();
           flash(`Candidato(a) registrado(a) — aguardando aprovação do gestor responsável.`);
+          void solicitarNotificacao("vaga_preenchimento", vagaId);
         } catch (err) {
           flash(err instanceof Error ? err.message : "Falha ao registrar o preenchimento.");
         }
@@ -1234,11 +1237,7 @@ export function usePortalData(): PortalData {
         dispatch({ type: "CRIAR_MOVIMENTACAO", movimentacao });
         if (movimentacao.vagaOrigemId) reload();
 
-        const primeiraEtapa = etapaAtual(movimentacao);
-        if (primeiraEtapa) {
-          const email = notificacaoNovaEtapa(movimentacao, primeiraEtapa, window.location.origin);
-          void notificar(email);
-        }
+        if (etapaAtual(movimentacao)) void solicitarNotificacao("mp_etapa", movimentacao.id);
 
         return { ok: true as const, movimentacao };
       } catch (err) {

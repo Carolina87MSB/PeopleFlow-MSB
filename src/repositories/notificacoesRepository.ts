@@ -23,3 +23,24 @@ export async function notificar(email: EmailNotificacao): Promise<void> {
     // silencioso — ver comentário acima.
   }
 }
+
+/** Eventos de pendência que o servidor sabe transformar em notificação — o
+ * navegador só informa QUAL aconteceu (um id); destinatário, assunto e texto
+ * são decididos no servidor lendo o banco (ver api/notificacoes.ts). */
+export type EventoNotificacao = "mp_etapa" | "vaga_preenchimento";
+
+/** Avisa o servidor que uma pendência acabou de surgir (MP aguardando ação de
+ * alguém, ou preenchimento de vaga aguardando aprovação). Best-effort, igual a
+ * notificar(): a ação que disparou isto já foi salva e não pode falhar por um
+ * e-mail não enviado. */
+export async function solicitarNotificacao(evento: EventoNotificacao, id: string | number): Promise<void> {
+  try {
+    await fetch("/api/notificacoes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+      body: JSON.stringify({ evento, id: String(id) }),
+    });
+  } catch {
+    // silencioso — ver comentário acima.
+  }
+}
