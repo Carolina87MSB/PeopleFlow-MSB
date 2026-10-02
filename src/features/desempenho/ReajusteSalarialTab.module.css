@@ -70,6 +70,25 @@
   color: var(--color-text);
 }
 
+.regraLista {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Cada coluna ocupa 2 linhas da grade (cabeçalho + lista) em subgrade — o
+ * cabeçalho das duas colunas passa a ter sempre a mesma altura, então as
+ * listas começam alinhadas mesmo quando a descrição do Reajuste Base quebra
+ * de linha numa tela mais estreita. Sem suporte a subgrid, cai no flex acima. */
+@supports (grid-template-rows: subgrid) {
+  .regraColuna {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: 3px;
+  }
+}
+
 .regraColunaTitulo {
   font-size: 10.5px;
   font-weight: 600;
@@ -78,10 +97,19 @@
   color: var(--color-muted-light);
 }
 
+/* Título + descrição na mesma linha (descrição ao lado do título), pra os
+ * cabeçalhos das duas colunas ficarem alinhados e as listas começarem na
+ * mesma altura. Em tela estreita a descrição quebra pra baixo. */
+.regraColunaCabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+}
+
 .regraDescricao {
   font-size: 11px;
   color: var(--color-muted);
-  margin-bottom: 1px;
 }
 
 .regraLinha {
