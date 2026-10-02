@@ -8,6 +8,8 @@ import {
   validarLinhaReajuste,
 } from "../../domain/reajusteSalarial";
 import type { LinhaReajusteValidada } from "../../domain/reajusteSalarial";
+import { regraDoCiclo } from "../../domain/regrasReajuste";
+import { RegraReajusteCiclo } from "./RegraReajusteCiclo";
 import { formatarPercentual, formatarValorMonetario } from "../../domain/salario";
 import { usePortalData } from "../../store/usePortalData";
 import type { ReajusteSalarial } from "../../types/domain";
@@ -45,6 +47,7 @@ export function ReajusteSalarialTab() {
   const [aplicando, setAplicando] = useState(false);
 
   const competenciaIso = useMemo(() => competenciaParaIso(competencia), [competencia]);
+  const regra = useMemo(() => regraDoCiclo(competencia, origem), [competencia, origem]);
 
   function handleAnalisar() {
     if (!competenciaIso) {
@@ -125,6 +128,8 @@ export function ReajusteSalarialTab() {
             <input value={origem} onChange={(e) => setOrigem(e.target.value)} placeholder="AVD 2º Ciclo" />
           </label>
         </div>
+
+        {regra && <RegraReajusteCiclo regra={regra} />}
 
         <label className={styles.campoTextarea}>
           <span>Cole aqui a tabela da planilha (Excel → Ctrl+C → Ctrl+V), com o cabeçalho incluído</span>
