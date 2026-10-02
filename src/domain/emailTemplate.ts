@@ -22,8 +22,12 @@ export interface EmailLayoutOptions {
   title: string;
   paragrafos: string[];
   detalhes?: DetalheEmail[];
+  /** Parágrafos entre o card de detalhes e o botão (ex.: "Acesse o portal…"). Opcional — ausente, o layout é o de sempre. */
+  paragrafosAposDetalhes?: string[];
   /** Botão de destaque abaixo do card de detalhes, ex.: link para o Workflow. */
   cta?: { label: string; url: string };
+  /** Linhas do rodapé. Opcional — ausente, mantém o rodapé padrão dos e-mails do fluxo. */
+  rodape?: string[];
 }
 
 function escapeHtml(s: string): string {
@@ -51,6 +55,14 @@ export function buildEmailHtml(opts: EmailLayoutOptions): string {
       </table>`
     : "";
 
+  const paragrafosAposDetalhesHtml = (opts.paragrafosAposDetalhes ?? [])
+    .map((p) => `<p style="margin:0 0 14px;color:${COR_TEXTO};font-size:14px;line-height:1.6;">${escapeHtml(p)}</p>`)
+    .join("");
+
+  const rodapeHtml = opts.rodape?.length
+    ? opts.rodape.map((l) => escapeHtml(l)).join("<br />")
+    : "Portal PeopleFlow — MSB · e-mail automático, não responda.";
+
   const ctaHtml = opts.cta
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 4px;">
         <tr><td style="border-radius:8px;background:${opts.accentColor};">
@@ -76,14 +88,14 @@ export function buildEmailHtml(opts: EmailLayoutOptions): string {
           <div style="padding:22px 24px 26px;">
             <h1 style="margin:0 0 14px;color:${COR_NAVY};font-size:17px;">${escapeHtml(opts.title)}</h1>
             ${paragrafosHtml}
-            ${detalhesHtml}
+            ${detalhesHtml}${paragrafosAposDetalhesHtml ? `\n            ${paragrafosAposDetalhesHtml}` : ""}
             ${ctaHtml}
           </div>
         </td>
       </tr>
       <tr>
         <td style="text-align:center;padding-top:18px;color:${COR_MUTED};font-size:11px;line-height:1.6;">
-          Portal PeopleFlow — MSB · e-mail automático, não responda.
+          ${rodapeHtml}
         </td>
       </tr>
     </table>
