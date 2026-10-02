@@ -6,7 +6,7 @@
 // avaliacaoExperiencia.ts e continuam exportados de lá (re-export) — nenhuma
 // tela mudou.
 
-import type { AvaliacaoExperiencia, Colaborador, DispensaAvaliacaoExperiencia, EtapaAvaliacaoExperiencia } from "../types/domain";
+import type { AvaliacaoExperiencia, Colaborador, DispensaAvaliacaoExperiencia, EtapaAvaliacaoExperiencia } from "../types/domain.js";
 
 /** Data (ISO "aaaa-mm-dd") em que uma etapa do contrato de experiência cai,
  * a partir da admissão — ex.: admitido em 2026-06-01, "45 dias" cai em
