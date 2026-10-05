@@ -590,8 +590,8 @@ export interface HistoricoDescricaoCargo {
   editadoEm: string;
 }
 
-/** Catálogo corporativo das 18 competências comportamentais oficiais (RH,
- * 2026-09) — estrutura própria do PeopleFlow pro seletor de competências da
+/** Catálogo corporativo das 23 competências comportamentais oficiais (RH,
+ * 2026-09, ampliado no saneamento de 2026-10) — estrutura própria do PeopleFlow pro seletor de competências da
  * Descrição de Cargo. Diferente de `CompetenciaComportamental` (catálogo da
  * AVD/PDI, outra tabela, outro conjunto de nomes) — nenhuma relação entre
  * os dois. `descricao` pode vir vazia até a RH fornecer o texto oficial. */

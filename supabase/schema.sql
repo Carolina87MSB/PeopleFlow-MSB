@@ -1397,8 +1397,9 @@ comment on column public.peopleflow_pdi_acoes.data_inicio is
 --    ter uma linha em `peopleflow_descricoes_cargo` (cargo "Sem descrição"
 --    ainda, ver `descricaoCargoVazia()` em domain/descricaoCargo.ts), e uma
 --    FK travaria exatamente esse caso. `competencia_id` já referencia um
---    catálogo fechado e estável (18 linhas, nunca criadas por um usuário
---    comum) — aí sim FK de verdade.
+--    catálogo fechado e estável (18 linhas na criação, 23 desde o saneamento
+--    da RH de 2026-10; nunca criadas por um usuário comum) — aí sim FK de
+--    verdade.
 -- ────────────────────────────────────────────────────────────────────────
 create table if not exists public.peopleflow_catalogo_competencias_cargo (
   id text primary key,
@@ -1411,7 +1412,7 @@ create table if not exists public.peopleflow_catalogo_competencias_cargo (
 );
 
 comment on table public.peopleflow_catalogo_competencias_cargo is
-  'Catálogo corporativo das 18 competências comportamentais oficiais (RH, 2026-09) — fonte fixa pro seletor de competências da Descrição de Cargo. Estrutura própria do PeopleFlow, não é o catálogo da AVD (peopleflow_competencias_comportamentais) nem nada do Portal de Treinamentos. `descricao` fica em branco até a RH fornecer o texto oficial de cada uma — não foi inventado.';
+  'Catálogo corporativo das 23 competências comportamentais oficiais (18 da criação, RH 2026-09, mais 5 do saneamento de 2026-10, todas com descrição oficial) — fonte fixa pro seletor de competências da Descrição de Cargo. Estrutura própria do PeopleFlow, não é o catálogo da AVD (peopleflow_competencias_comportamentais) nem nada do Portal de Treinamentos.';
 
 insert into public.peopleflow_catalogo_competencias_cargo (id, nome, ordem) values
   ('adaptabilidade', 'Adaptabilidade', 1),

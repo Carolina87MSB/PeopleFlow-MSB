@@ -19,7 +19,7 @@ import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, type AbaDef } fro
 import { useConsulta, usePaginado } from "./hooks";
 import { formatarCarga, formatarData, SITUACAO, SITUACAO_PARTICIPACAO } from "./rotulos";
 import { RequisitosCargoAba } from "./RequisitosCargoAba";
-import { CatalogoHabilidadesAba } from "./CatalogoHabilidadesAba";
+import { CatalogoAba } from "./CatalogoAba";
 import { TreinamentoDrawer } from "./TreinamentoForm";
 import { RegistrarNecessidadeDrawer } from "./NecessidadesAba";
 import { FILTROS_GAP, filtrarPessoas, tipoSugeridoParaGap, TODOS, valoresUnicos } from "./filtrosRequisitos";
@@ -31,7 +31,7 @@ const AJUDA: Record<AbaHabilidades, string> = {
   gaps: "Mostra requisitos do cargo que estão pendentes, vencidos, próximos do vencimento ou que exigem novo treinamento por revisão de documento.",
   cargo: "Mostra as habilidades e requisitos exigidos para cada cargo e permite acompanhar sua estruturação e validação.",
   colaborador: "Mostra a situação de cada colaborador em relação às habilidades e requisitos aplicáveis ao seu cargo.",
-  catalogo: "Base padronizada das habilidades técnicas utilizadas nos requisitos dos cargos.",
+  catalogo: "Catálogos oficiais: habilidades técnicas utilizadas nos requisitos dos cargos e competências comportamentais utilizadas nas Descrições de Cargo.",
 };
 
 export default function HabilidadesPage() {
@@ -53,7 +53,7 @@ export default function HabilidadesPage() {
       {atual === "gaps" && <GapsAba />}
       {atual === "cargo" && <RequisitosCargoAba />}
       {atual === "colaborador" && <PorColaboradorAba />}
-      {atual === "catalogo" && <CatalogoHabilidadesAba />}
+      {atual === "catalogo" && <CatalogoAba />}
     </>
   );
 }

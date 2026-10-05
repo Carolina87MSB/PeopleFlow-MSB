@@ -253,8 +253,8 @@ export interface PortalData {
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
   atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
-  /** Catálogo fechado das 18 competências comportamentais oficiais (RH,
-   * 2026-09) — estrutura própria do PeopleFlow pro seletor da Descrição de
+  /** Catálogo fechado das 23 competências comportamentais oficiais (RH,
+   * 2026-09, ampliado no saneamento de 2026-10) — estrutura própria do PeopleFlow pro seletor da Descrição de
    * Cargo, sem relação com o catálogo da AVD nem com o Portal de
    * Treinamentos. Só leitura nesta etapa (sem tela de cadastro). */
   catalogoCompetenciasCargo: CompetenciaCargoCatalogo[];

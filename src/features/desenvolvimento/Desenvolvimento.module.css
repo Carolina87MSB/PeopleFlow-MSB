@@ -633,3 +633,84 @@
     justify-content: flex-start;
   }
 }
+
+/* ── Catálogo: alternância Habilidades Técnicas | Competências Comportamentais ── */
+.alternador {
+  display: inline-flex;
+  gap: 2px;
+  max-width: 100%;
+  padding: 3px;
+  margin-bottom: 16px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.alternador::-webkit-scrollbar {
+  display: none;
+}
+
+.alternadorOpcao,
+.alternadorAtiva {
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  padding: 7px 14px;
+  font: 600 12px/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--color-muted);
+}
+
+.alternadorOpcao:hover {
+  color: var(--color-text);
+}
+
+.alternadorAtiva {
+  background: #fff;
+  color: var(--color-brand);
+  box-shadow: 0 1px 3px rgba(15, 52, 80, 0.12);
+}
+
+/* ── Catálogo de Competências Comportamentais (somente consulta) ── */
+.colunaNumero {
+  width: 44px;
+  color: var(--color-muted-light);
+  font-variant-numeric: tabular-nums;
+}
+
+.colunaDescricao {
+  min-width: 280px;
+  max-width: 560px;
+  line-height: 1.45;
+}
+
+.descricaoOficial {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text);
+}
+
+.listaCargos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.listaCargos li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.listaCargos li:last-child {
+  border-bottom: 0;
+}

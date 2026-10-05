@@ -46,7 +46,7 @@ function fromRowRelacao(row: DescricaoCargoCompetenciaRow): DescricaoCargoCompet
   };
 }
 
-/** Catálogo fechado das 18 competências — só leitura pela tela de Cargos
+/** Catálogo fechado das 23 competências oficiais (18 iniciais + 5 do saneamento de 2026-10) — só leitura pela tela de Cargos
  * (não há tela de edição do catálogo nesta etapa; ativo/ordem só servem
  * pra uma manutenção futura via SQL direto do RH). */
 export async function getCatalogoCompetenciasCargo(): Promise<CompetenciaCargoCatalogo[]> {
@@ -87,4 +87,44 @@ export async function removerCompetenciaCargo(cargoNome: string, competenciaId: 
     .eq("cargo_nome", cargoNome)
     .eq("competencia_id", competenciaId);
   if (error) throw new Error(`Falha ao remover competência do cargo no Supabase: ${error.message}`);
+}
+
+/** Uma competência do catálogo oficial para a tela de CONSULTA do módulo
+ * Desenvolvimento (Habilidades e Requisitos → Catálogo), já com os cargos que
+ * a utilizam. Só leitura. */
+export interface CompetenciaComportamentalConsulta extends CompetenciaCargoCatalogo {
+  /** Cargos com vínculo em `peopleflow_descricao_cargo_competencias`, em ordem alfabética. */
+  cargos: { nome: string; obsoleto: boolean }[];
+}
+
+/** Catálogo oficial inteiro (ativas e inativas, em ordem oficial) + uso por
+ * cargo, calculado a partir dos vínculos reais — 3 consultas no total,
+ * agregadas aqui (sem uma consulta por competência). `obsoleto` vem da
+ * Descrição de Cargo só para a tela sinalizar cargos já aposentados. */
+export async function getCatalogoCompetenciasComportamentaisComUso(): Promise<CompetenciaComportamentalConsulta[]> {
+  if (!supabaseConfigured) throw new SupabaseNotConfiguredError();
+
+  const [catalogo, relacao, descricoes] = await Promise.all([
+    supabase.from("peopleflow_catalogo_competencias_cargo").select("*").order("ordem"),
+    supabase.from("peopleflow_descricao_cargo_competencias").select("cargo_nome, competencia_id").limit(5000),
+    supabase.from("peopleflow_descricoes_cargo").select("cargo_nome, obsoleto").limit(5000),
+  ]);
+  if (catalogo.error) throw new Error(`Falha ao carregar catálogo de competências do Supabase: ${catalogo.error.message}`);
+  if (relacao.error) throw new Error(`Falha ao carregar competências dos cargos do Supabase: ${relacao.error.message}`);
+  if (descricoes.error) throw new Error(`Falha ao carregar cargos do Supabase: ${descricoes.error.message}`);
+
+  const obsoletos = new Set((descricoes.data as { cargo_nome: string; obsoleto: boolean | null }[]).filter((d) => d.obsoleto).map((d) => d.cargo_nome));
+  const cargosPorCompetencia = new Map<string, Set<string>>();
+  for (const r of relacao.data as { cargo_nome: string; competencia_id: string }[]) {
+    const set = cargosPorCompetencia.get(r.competencia_id) ?? new Set<string>();
+    set.add(r.cargo_nome);
+    cargosPorCompetencia.set(r.competencia_id, set);
+  }
+
+  return (catalogo.data as CompetenciaCargoCatalogoRow[]).map((row) => ({
+    ...fromRowCatalogo(row),
+    cargos: [...(cargosPorCompetencia.get(row.id) ?? [])]
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((nome) => ({ nome, obsoleto: obsoletos.has(nome) })),
+  }));
 }
