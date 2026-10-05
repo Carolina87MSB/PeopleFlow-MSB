@@ -14,6 +14,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
+import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
 
 export interface ContaDev {
   userId: string;
@@ -2336,6 +2337,8 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   evidencia_url: evidenciaUrl,
   evidencia_substituir: evidenciaSubstituir,
   eficacia_registrar: eficaciaRegistrar,
+  // LNT (Fase 6 — núcleo): ações só do RH, em api/_lib/lntAcoes.ts.
+  ...ACOES_LNT,
 };
 
 export function ehAcaoDeGravacao(acao: string): boolean {
@@ -2349,7 +2352,7 @@ export async function executarAcao(acao: string, req: VercelRequest, res: Vercel
     const resultado = await ACOES[acao](conta, corpo);
     res.status(200).json({ ok: true, dados: resultado });
   } catch (err) {
-    if (err instanceof ErroHttp) {
+    if (err instanceof ErroHttp || err instanceof ErroLnt) {
       res.status(err.status).json({ error: err.message });
       return;
     }

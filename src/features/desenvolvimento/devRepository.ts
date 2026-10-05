@@ -769,7 +769,23 @@ export type AcaoGravacao =
   | "dc_habilidade_sugerir"
   | "dc_habilidade_remover"
   | "dc_habilidade_classificar"
-  | "habilidade_sugestao_validar";
+  | "habilidade_sugestao_validar"
+  // LNT (Fase 6 — núcleo): ações só do RH, em api/_lib/lntAcoes.ts
+  | "lnt_ciclo_criar"
+  | "lnt_candidatas_carregar"
+  | "lnt_candidatas_atualizar"
+  | "lnt_item_criar_consolidado"
+  | "lnt_item_criar_direto"
+  | "lnt_item_editar"
+  | "lnt_necessidades_consolidar"
+  | "lnt_consolidacao_desfazer"
+  | "lnt_item_prioridade"
+  | "lnt_item_incluir"
+  | "lnt_item_nao_priorizar"
+  | "lnt_necessidade_nao_priorizar"
+  | "lnt_necessidade_reconsiderar"
+  | "lnt_ciclo_fechar"
+  | "lnt_ciclo_reabrir";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {
