@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { HelpCircle, Pencil, Search } from "lucide-react";
 import { Header } from "../../components/layout/Header";
-import { Avatar, Badge, Button, Drawer, EmptyState, FilterChips, tableStyles } from "../../components/ui";
+import { Avatar, Badge, Button, Drawer, EmptyState, tableStyles } from "../../components/ui";
 import { contarPorGestor } from "../../domain/agregados";
 import { nivelMeta } from "../../domain/colors";
 import { norm } from "../../domain/hierarquia";
@@ -143,8 +143,6 @@ export function ColaboradoresPage() {
         }
       />
 
-      <FilterChips options={deptos} value={depto} onChange={setDepto} />
-
       <div className={styles.filtersRow}>
         <div className={styles.search}>
           <Search size={15} strokeWidth={1.8} />
@@ -154,8 +152,18 @@ export function ColaboradoresPage() {
             onChange={(e) => setBusca(e.target.value)}
           />
         </div>
+        {/* Mesmo filtro de antes (estado `depto`, "Todos" = sem filtro), agora como lista suspensa na mesma linha. */}
+        <select className={styles.select} value={depto} onChange={(e) => setDepto(e.target.value)} aria-label="Departamento">
+          <option value="Todos">Todos os departamentos</option>
+          {deptos.slice(1).map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
         <select
           className={styles.select}
+          aria-label="Gestor"
           value={gestorSelecionado}
           onChange={(e) => handleGestorChange(e.target.value)}
         >

@@ -2,10 +2,13 @@
  * linguagem visual das abas de Gestão de Desempenho, para o módulo parecer
  * parte do PeopleFlow desde sempre. */
 
+/* O .content do AppShell já separa os blocos com gap de 20px; as margens NEGATIVAS abaixo só encurtam
+ * esse respiro nas abas (título → abas ≈ 24px; abas → conteúdo ≈ 14px). Antes eram margens POSITIVAS
+ * somadas ao gap (50px e 40px). Vale para todas as telas do módulo que usam <Abas>. */
 .abas {
   display: flex;
   gap: 6px;
-  margin: 14px 0 20px;
+  margin: -12px 0 -6px;
   border-bottom: 1px solid var(--color-divider);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -585,7 +588,7 @@
 }
 
 .ajudaTexto {
-  margin: -12px 0 16px;
+  margin: -4px 0 -6px;
   padding: 8px 12px;
   border-radius: var(--radius-md);
   background: var(--color-brand-pale);

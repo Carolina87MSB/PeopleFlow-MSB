@@ -13,12 +13,14 @@
   font-weight: 700;
 }
 
+/* O .content do AppShell já separa os blocos com gap de 20px; a margem negativa encurta esse respiro
+ * (título → filtros ≈ 24px; filtros → tabela ≈ 14px), igual às abas do módulo Desenvolvimento. */
 .filtersRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin: 10px 0 12px;
+  margin: -12px 0 -6px;
 }
 
 .search {
@@ -51,7 +53,9 @@
   font: 600 12px var(--font-sans);
   color: var(--color-text);
   background: #fff;
-  min-width: 220px;
+  flex: 0 1 220px;
+  min-width: 160px;
+  max-width: 260px;
 }
 
 @media (max-width: 700px) {
