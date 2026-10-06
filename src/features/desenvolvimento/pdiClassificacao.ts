@@ -71,3 +71,23 @@ export function contagemPorForma<T extends AcaoClassificavel>(acoes: T[], filtro
   const conta = (forma: FiltroForma) => base.filter((a) => passaForma(a, forma)).length;
   return { todas: base.length, mentoria: conta("mentoria"), pratica: conta("pratica"), treinamento: conta("treinamento"), outra: conta("outra") };
 }
+
+// ── Destino de cada ação na triagem do RH ───────────────────────────────
+export type SituacaoTriagem = "aguardando" | "confirmadas" | "mantidas";
+
+export const ROTULO_SITUACAO_TRIAGEM: Record<SituacaoTriagem, string> = {
+  aguardando: "Aguardando análise",
+  confirmadas: "Confirmadas como necessidade",
+  mantidas: "Mantidas somente no PDI",
+};
+
+/**
+ * Onde a ação aparece. Quem já recebeu decisão do RH fica na lista da decisão (mesmo que a ação já tenha sido
+ * concluída no PDI); só entra em "aguardando análise" a ação em aberto SEM decisão. Concluída/cancelada sem
+ * decisão não aparece (null). Confirmada prevalece se, por algum motivo, houver as duas marcas.
+ */
+export function situacaoDaAcao(emAberto: boolean, confirmada: boolean, mantida: boolean): SituacaoTriagem | null {
+  if (confirmada) return "confirmadas";
+  if (mantida) return "mantidas";
+  return emAberto ? "aguardando" : null;
+}

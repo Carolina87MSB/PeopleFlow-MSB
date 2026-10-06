@@ -626,14 +626,25 @@ export async function listarGrupos(): Promise<GrupoNecessidades[]> {
 }
 
 /** Ações do PDI que já viraram necessidade ou foram dispensadas (para não sugerir de novo). Somente RH. */
-export async function acoesPdiJaTratadas(): Promise<Set<string>> {
+/** Destino já dado pelo RH a cada ação de PDI (leitura sob RLS: só o RH vê). Ação sem registro aqui = aguardando análise. */
+export interface TriagemPdi {
+  /** ação → Necessidade de Desenvolvimento criada a partir dela */
+  confirmadas: Map<string, { necessidadeId: number; em: string | null }>;
+  /** ação → mantida somente no PDI (tabela de sugestões dispensadas, reaproveitada) */
+  mantidas: Map<string, { motivo: string; em: string }>;
+}
+
+export async function triagemPdi(): Promise<TriagemPdi> {
   const [nec, disp] = await Promise.all([
-    supabase.from("peopleflow_dev_necessidades").select("pdi_acao_id").not("pdi_acao_id", "is", null).limit(5000),
-    supabase.from("peopleflow_dev_pdi_sugestoes_dispensadas").select("pdi_acao_id").limit(5000),
+    supabase.from("peopleflow_dev_necessidades").select("id, pdi_acao_id, validada_em, created_at").not("pdi_acao_id", "is", null).limit(5000),
+    supabase.from("peopleflow_dev_pdi_sugestoes_dispensadas").select("pdi_acao_id, motivo, dispensada_em").limit(5000),
   ]);
   if (nec.error) falha("Necessidades de Desenvolvimento", nec.error.message);
-  if (disp.error) falha("Sugestões dispensadas", disp.error.message);
-  return new Set([...(nec.data ?? []), ...(disp.data ?? [])].map((r) => r.pdi_acao_id as string));
+  if (disp.error) falha("Ações mantidas somente no PDI", disp.error.message);
+  return {
+    confirmadas: new Map((nec.data ?? []).map((r) => [r.pdi_acao_id as string, { necessidadeId: r.id as number, em: ((r.validada_em ?? r.created_at) as string | null) ?? null }])),
+    mantidas: new Map((disp.data ?? []).map((r) => [r.pdi_acao_id as string, { motivo: r.motivo as string, em: r.dispensada_em as string }])),
+  };
 }
 
 export interface OpcaoRequisito {

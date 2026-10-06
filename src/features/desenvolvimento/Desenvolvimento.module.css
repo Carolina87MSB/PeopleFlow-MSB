@@ -994,3 +994,11 @@
   min-width: 0;
   flex: 1 1 260px;
 }
+
+/* Decisão de cada ação do PDI: ação principal + ação secundária discreta */
+.decisaoPdi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}

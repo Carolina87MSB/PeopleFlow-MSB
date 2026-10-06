@@ -3,16 +3,31 @@ import { Sparkles } from "lucide-react";
 import { Button, Card, Drawer, FilterChips, tableStyles } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import { usePortalStore } from "../../store/PortalStoreContext";
-import { acoesPdiJaTratadas, gravar, type CategoriaNecessidade } from "./devRepository";
+import { gravar, triagemPdi, type CategoriaNecessidade } from "./devRepository";
 import { useDesenvolvimento } from "./contexto";
-import { CabecalhoDrawer, Carregando, ConfirmarComMotivo, Erro, EstadoVazio, Selo } from "./componentes";
-import { plural } from "./lntRotulos";
+import { CabecalhoDrawer, Carregando, Erro, EstadoVazio, Selo } from "./componentes";
+import { dataCurta, plural } from "./lntRotulos";
 import { useConsulta } from "./hooks";
 import { CATEGORIA_NECESSIDADE, formatarData } from "./rotulos";
-import { contagemPorForma, filtrarAcoes, indiciosDaAcao, ROTULO_FILTRO_FORMA, ROTULO_FILTRO_TIPO, ROTULO_INDICIO, type FiltroForma, type FiltroTipo, type IndicioForma } from "./pdiClassificacao";
+import { MOTIVO_PADRAO_MANTER_NO_PDI } from "../../domain/pdiTriagem";
+import {
+  contagemPorForma,
+  filtrarAcoes,
+  indiciosDaAcao,
+  ROTULO_FILTRO_FORMA,
+  ROTULO_FILTRO_TIPO,
+  ROTULO_INDICIO,
+  ROTULO_SITUACAO_TRIAGEM,
+  situacaoDaAcao,
+  type FiltroForma,
+  type FiltroTipo,
+  type IndicioForma,
+  type SituacaoTriagem,
+} from "./pdiClassificacao";
 import styles from "./Desenvolvimento.module.css";
 
 const FORMAS: FiltroForma[] = ["todas", "mentoria", "pratica", "treinamento", "outra"];
+const SITUACOES: SituacaoTriagem[] = ["aguardando", "confirmadas", "mantidas"];
 
 interface Sugestao {
   pdiId: number;
@@ -26,6 +41,8 @@ interface Sugestao {
   acao: string;
   prazo: string | null;
   status: string;
+  /** A ação ainda está em aberto no PDI (não Concluída nem Cancelada). */
+  emAberto: boolean;
   indicios: IndicioForma[];
   departamento: string | undefined;
 }
@@ -33,13 +50,15 @@ interface Sugestao {
 export function SugestoesPdiAba() {
   const { pessoas } = useDesenvolvimento();
   const { state } = usePortalStore();
-  const tratadas = useConsulta(() => acoesPdiJaTratadas(), []);
+  const triagem = useConsulta(() => triagemPdi(), []);
+  const [situacao, setSituacao] = useState<SituacaoTriagem>("aguardando");
   const [forma, setForma] = useState<FiltroForma>("todas");
   const [tipo, setTipo] = useState<FiltroTipo>("todos");
   const [departamento, setDepartamento] = useState("");
   // Departamento pelo cadastro oficial (colaboradores já carregados pelo PeopleFlow).
   const deptoPorNome = useMemo(() => new Map(state.colaboradores.filter((c) => !c.desligado).map((c) => [c.nome, c.depto])), [state.colaboradores]);
   const [confirmando, setConfirmando] = useState<Sugestao | null>(null);
+  const [mantendo, setMantendo] = useState<Sugestao | null>(null);
 
   const idPorNome = useMemo(() => {
     const m = new Map<string, number | null>();
@@ -53,7 +72,6 @@ export function SugestoesPdiAba() {
     for (const pdi of state.pdi) {
       for (const item of pdi.itens) {
         for (const acao of item.acoes) {
-          if (acao.status === "Concluída" || acao.status === "Cancelada") continue;
           if (!acao.descricao.trim()) continue;
           out.push({
             pdiId: pdi.id,
@@ -67,6 +85,7 @@ export function SugestoesPdiAba() {
             acao: acao.descricao,
             prazo: acao.prazo,
             status: acao.status,
+            emAberto: acao.status !== "Concluída" && acao.status !== "Cancelada",
             indicios: indiciosDaAcao(acao.descricao),
             departamento: deptoPorNome.get(pdi.colaboradorNome),
           });
@@ -76,20 +95,34 @@ export function SugestoesPdiAba() {
     return out;
   }, [state.pdi, idPorNome, deptoPorNome]);
 
-  // Universo principal: TODA ação em aberto ainda não confirmada nem dispensada. Os filtros só estreitam a vista.
-  const aguardando = useMemo(() => {
-    const ja = tratadas.dados ?? new Set<string>();
-    return sugestoes.filter((s) => !ja.has(s.acaoId)).sort((a, b) => a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR"));
-  }, [sugestoes, tratadas.dados]);
+  // Cada ação tem um destino: aguardando análise (universo principal), confirmada como necessidade ou mantida somente no PDI.
+  const porSituacao = useMemo(() => {
+    const dados = triagem.dados;
+    const grupos: Record<SituacaoTriagem, Sugestao[]> = { aguardando: [], confirmadas: [], mantidas: [] };
+    if (!dados) return grupos;
+    for (const s of sugestoes) {
+      const sit = situacaoDaAcao(s.emAberto, dados.confirmadas.has(s.acaoId), dados.mantidas.has(s.acaoId));
+      if (sit) grupos[sit].push(s);
+    }
+    for (const g of Object.values(grupos)) g.sort((a, b) => a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR"));
+    return grupos;
+  }, [sugestoes, triagem.dados]);
+
+  const base = porSituacao[situacao];
   const filtros = useMemo(() => ({ departamento, tipo, forma }), [departamento, tipo, forma]);
-  const visiveis = useMemo(() => filtrarAcoes(aguardando, filtros), [aguardando, filtros]);
-  const contagem = useMemo(() => contagemPorForma(aguardando, filtros), [aguardando, filtros]);
+  const visiveis = useMemo(() => filtrarAcoes(base, filtros), [base, filtros]);
+  const contagem = useMemo(() => contagemPorForma(base, filtros), [base, filtros]);
   const departamentos = useMemo(
     () => [...new Set(sugestoes.map((s) => deptoPorNome.get(s.colaboradorNome)).filter((d): d is string => Boolean(d)))].sort((a, b) => a.localeCompare(b, "pt-BR")),
     [sugestoes, deptoPorNome],
   );
+  const aguardando = porSituacao.aguardando.length;
 
-  const removerDaLista = (acaoId: string) => tratadas.mutar((s) => new Set([...s, acaoId]));
+  // Atualização local imediata; os dados definitivos (data, observação) voltam do banco na próxima abertura.
+  const registrarConfirmada = (acaoId: string) =>
+    triagem.mutar((t) => ({ ...t, confirmadas: new Map(t.confirmadas).set(acaoId, { necessidadeId: 0, em: new Date().toISOString() }) }));
+  const registrarMantida = (acaoId: string, motivo: string) =>
+    triagem.mutar((t) => ({ ...t, mantidas: new Map(t.mantidas).set(acaoId, { motivo: motivo || MOTIVO_PADRAO_MANTER_NO_PDI, em: new Date().toISOString() }) }));
 
   return (
     <Card>
@@ -97,12 +130,20 @@ export function SugestoesPdiAba() {
         <div>
           <h3 className={styles.cardTitle}>Sugestões a partir do PDI</h3>
           <p className={styles.cardSubtitle}>
-            Ações de PDI em aberto que ainda precisam da sua análise. Cada uma pode apontar uma Necessidade de Desenvolvimento, que só depois será atendida da forma mais adequada (treinamento, mentoria, prática no trabalho…). Confirme para incluir na Base de Necessidades de Desenvolvimento.
+            Cada ação de PDI em aberto pode apontar uma Necessidade de Desenvolvimento, que só depois será atendida da forma mais adequada (treinamento, mentoria, prática no trabalho…). Para cada ação, decida: <strong>confirmar necessidade</strong> (entra na Base de Necessidades de Desenvolvimento) ou <strong>manter somente no PDI</strong> (continua no PDI e sai desta fila).
           </p>
         </div>
-        <span className={styles.secundario}>
-          {plural(aguardando.length, "ação aguardando análise", "ações aguardando análise")}
-        </span>
+        {triagem.dados && <span className={styles.secundario}>{plural(aguardando, "ação aguardando análise", "ações aguardando análise")}</span>}
+      </div>
+      <div className={styles.toolbar}>
+        <FilterChips
+          options={SITUACOES.map((s) => `${ROTULO_SITUACAO_TRIAGEM[s]} (${porSituacao[s].length})`)}
+          value={`${ROTULO_SITUACAO_TRIAGEM[situacao]} (${porSituacao[situacao].length})`}
+          onChange={(v) => {
+            setSituacao(SITUACOES.find((s) => v.startsWith(`${ROTULO_SITUACAO_TRIAGEM[s]} (`)) ?? "aguardando");
+            setForma("todas");
+          }}
+        />
       </div>
       <div className={styles.toolbar}>
         <FilterChips
@@ -130,16 +171,12 @@ export function SugestoesPdiAba() {
         </select>
       </div>
 
-      {tratadas.erro ? (
-        <Erro mensagem={tratadas.erro} />
-      ) : tratadas.carregando ? (
+      {triagem.erro ? (
+        <Erro mensagem={triagem.erro} />
+      ) : triagem.carregando && !triagem.dados ? (
         <Carregando />
       ) : visiveis.length === 0 ? (
-        <EstadoVazio
-          icone={<Sparkles size={26} strokeWidth={1.6} />}
-          titulo={aguardando.length === 0 ? "Nenhuma ação de PDI aguardando análise." : "Nenhuma ação com esses filtros."}
-          descricao={aguardando.length === 0 ? "Aparecem aqui as ações de PDI em aberto ainda não confirmadas nem dispensadas. O PDI nunca é alterado por esta tela." : "Escolha “Todas” e “Todos os tipos” para ver tudo o que aguarda análise."}
-        />
+        <EstadoVazio icone={<Sparkles size={26} strokeWidth={1.6} />} {...textoVazio(situacao, base.length)} />
       ) : (
         <div className={tableStyles.wrap}>
           <table className={tableStyles.table}>
@@ -150,37 +187,59 @@ export function SugestoesPdiAba() {
                 <th>Competência / KPI</th>
                 <th>Ciclo</th>
                 <th>Prazo</th>
-                <th />
+                <th>{situacao === "aguardando" ? "Decisão" : "Destino"}</th>
               </tr>
             </thead>
             <tbody>
-              {visiveis.map((s) => (
-                <tr key={s.acaoId}>
-                  <td>
-                    {s.colaboradorNome}
-                    {!s.colaboradorId && <div className={styles.secundario}>Não identificado de forma única</div>}
-                  </td>
-                  <td>
-                    {s.acao}
-                    <div className={styles.selos} style={{ marginTop: 4 }}>
-                      {s.indicios.length === 0 ? <Selo tom="neutral">Outra ação</Selo> : s.indicios.map((i) => <Selo key={i} tom="info">{ROTULO_INDICIO[i]}</Selo>)}
-                    </div>
-                  </td>
-                  <td className={styles.secundario}>
-                    {s.competencia}
-                    <div>{s.tipo === "Tecnica" ? "KPI" : "Competência"}</div>
-                  </td>
-                  <td className={styles.secundario}>{s.ciclo}</td>
-                  <td className={styles.mono}>{formatarData(s.prazo)}</td>
-                  <td>
-                    <div className={styles.acoes}>
-                      <Button variant="primary" disabled={!s.colaboradorId} title="Confirmar que esta ação do PDI representa uma Necessidade de Desenvolvimento" onClick={() => setConfirmando(s)}>
-                        Confirmar
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {visiveis.map((s) => {
+                const confirmada = triagem.dados?.confirmadas.get(s.acaoId);
+                const mantida = triagem.dados?.mantidas.get(s.acaoId);
+                return (
+                  <tr key={s.acaoId}>
+                    <td>
+                      {s.colaboradorNome}
+                      {!s.colaboradorId && <div className={styles.secundario}>Não identificado de forma única</div>}
+                    </td>
+                    <td>
+                      {s.acao}
+                      <div className={styles.selos} style={{ marginTop: 4 }}>
+                        {s.indicios.length === 0 ? <Selo tom="neutral">Outra ação</Selo> : s.indicios.map((i) => <Selo key={i} tom="info">{ROTULO_INDICIO[i]}</Selo>)}
+                      </div>
+                    </td>
+                    <td className={styles.secundario}>
+                      {s.competencia}
+                      <div>{s.tipo === "Tecnica" ? "KPI" : "Competência"}</div>
+                    </td>
+                    <td className={styles.secundario}>{s.ciclo}</td>
+                    <td className={styles.mono}>{formatarData(s.prazo)}</td>
+                    <td>
+                      {situacao === "aguardando" && (
+                        <div className={styles.decisaoPdi}>
+                          <Button variant="primary" disabled={!s.colaboradorId} title="Confirmar que esta ação do PDI representa uma Necessidade de Desenvolvimento" onClick={() => setConfirmando(s)}>
+                            Confirmar necessidade
+                          </Button>
+                          <Button variant="ghost" title="A ação continua no PDI, mas não entra na Base de Necessidades de Desenvolvimento" onClick={() => setMantendo(s)}>
+                            Manter somente no PDI
+                          </Button>
+                        </div>
+                      )}
+                      {situacao === "confirmadas" && (
+                        <span className={styles.secundario}>
+                          <Selo tom="success">Necessidade confirmada</Selo>
+                          {confirmada?.em && <div>em {dataCurta(confirmada.em)}</div>}
+                        </span>
+                      )}
+                      {situacao === "mantidas" && (
+                        <span className={styles.secundario}>
+                          <Selo tom="neutral">Mantida somente no PDI</Selo>
+                          {mantida && <div>em {dataCurta(mantida.em)}</div>}
+                          {mantida && mantida.motivo !== MOTIVO_PADRAO_MANTER_NO_PDI && <div>Observação: {mantida.motivo}</div>}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -190,9 +249,23 @@ export function SugestoesPdiAba() {
         <ConfirmarSugestaoDrawer
           sugestao={confirmando}
           onFechar={() => setConfirmando(null)}
-          onTratada={() => {
-            removerDaLista(confirmando.acaoId);
+          onManter={() => {
+            setMantendo(confirmando);
             setConfirmando(null);
+          }}
+          onTratada={() => {
+            registrarConfirmada(confirmando.acaoId);
+            setConfirmando(null);
+          }}
+        />
+      )}
+      {mantendo && (
+        <ManterNoPdiDrawer
+          sugestao={mantendo}
+          onFechar={() => setMantendo(null)}
+          onMantida={(motivo) => {
+            registrarMantida(mantendo.acaoId, motivo);
+            setMantendo(null);
           }}
         />
       )}
@@ -200,7 +273,59 @@ export function SugestoesPdiAba() {
   );
 }
 
-function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada }: { sugestao: Sugestao; onFechar: () => void; onTratada: () => void }) {
+function textoVazio(situacao: SituacaoTriagem, totalNaSituacao: number): { titulo: string; descricao: string } {
+  if (totalNaSituacao > 0) return { titulo: "Nenhuma ação com esses filtros.", descricao: "Escolha “Todas” e “Todos os tipos” para ver tudo desta lista." };
+  if (situacao === "aguardando") return { titulo: "Nenhuma ação de PDI aguardando análise.", descricao: "Toda ação em aberto já recebeu uma decisão. O PDI nunca é alterado por esta tela." };
+  if (situacao === "confirmadas") return { titulo: "Nenhuma ação confirmada ainda.", descricao: "Aparecem aqui as ações que a RH confirmou como Necessidade de Desenvolvimento." };
+  return { titulo: "Nenhuma ação mantida somente no PDI.", descricao: "Aparecem aqui as ações que continuam apenas no PDI, sem entrar na Base de Necessidades de Desenvolvimento." };
+}
+
+function ManterNoPdiDrawer({ sugestao, onFechar, onMantida }: { sugestao: Sugestao; onFechar: () => void; onMantida: (motivo: string) => void }) {
+  const { flash } = useToast();
+  const [observacao, setObservacao] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  return (
+    <Drawer onClose={onFechar} header={<CabecalhoDrawer eyebrow="Triagem do PDI" titulo="Manter somente no PDI?" sub={`${sugestao.colaboradorNome} · ${sugestao.ciclo}`} />}>
+      <div className={styles.secao}>
+        <div className={styles.nota}>Esta ação continuará normalmente no PDI, mas não será incluída na Base de Necessidades de Desenvolvimento.</div>
+        <span className={styles.origemTexto}>{sugestao.acao}</span>
+        <label className={styles.campo}>
+          Observação (opcional)
+          <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} maxLength={1000} />
+        </label>
+        <span className={styles.dica}>Não exclui, cancela nem altera a ação do PDI. Nenhuma Necessidade de Desenvolvimento ou treinamento é criado.</span>
+        {erro && <Erro mensagem={erro} />}
+        <div className={styles.acoes}>
+          <Button variant="ghost" onClick={onFechar} disabled={salvando}>
+            Cancelar
+          </Button>
+          <Button
+            variant="primary"
+            disabled={salvando}
+            onClick={async () => {
+              setErro(null);
+              setSalvando(true);
+              try {
+                await gravar("pdi_sugestao_dispensar", { pdi_acao_id: sugestao.acaoId, motivo: observacao.trim() });
+                flash("Ação mantida somente no PDI.");
+                onMantida(observacao.trim());
+              } catch (err) {
+                setErro(err instanceof Error ? err.message : String(err));
+              } finally {
+                setSalvando(false);
+              }
+            }}
+          >
+            {salvando ? "Salvando..." : "Manter somente no PDI"}
+          </Button>
+        </div>
+      </div>
+    </Drawer>
+  );
+}
+
+function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada, onManter }: { sugestao: Sugestao; onFechar: () => void; onTratada: () => void; onManter: () => void }) {
   const { flash } = useToast();
   const [form, setForm] = useState({
     // A competência/KPI que originou o PDI não define a categoria da capacitação: o RH escolhe.
@@ -271,24 +396,11 @@ function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada }: { sugestao: 
         </div>
       </form>
       <div className={styles.secao}>
-        <h4 className={styles.secaoTitulo}>Não é Necessidade de Desenvolvimento?</h4>
+        <h4 className={styles.secaoTitulo}>Esta ação não representa uma necessidade?</h4>
         <div className={styles.acoes} style={{ justifyContent: "flex-start" }}>
-          <ConfirmarComMotivo
-            rotulo="Dispensar sugestão"
-            confirmar="Dispensar"
-            variante="danger"
-            motivoObrigatorio
-            onConfirmar={async (motivo) => {
-              try {
-                await gravar("pdi_sugestao_dispensar", { pdi_acao_id: sugestao.acaoId, motivo });
-                flash("Sugestão dispensada.");
-                onTratada();
-              } catch (err) {
-                setErro(err instanceof Error ? err.message : String(err));
-                throw err;
-              }
-            }}
-          />
+          <Button variant="secondary" onClick={onManter}>
+            Manter somente no PDI
+          </Button>
         </div>
       </div>
     </Drawer>

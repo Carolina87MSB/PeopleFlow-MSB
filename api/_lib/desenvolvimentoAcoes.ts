@@ -13,6 +13,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
+import { MOTIVO_PADRAO_MANTER_NO_PDI } from "../../src/domain/pdiTriagem.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
 
@@ -737,15 +738,19 @@ async function pdiSugestaoAceitar(conta: ContaDev, corpo: Corpo) {
 async function pdiSugestaoDispensar(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
   const pdiAcaoId = texto(corpo, "pdi_acao_id", { obrigatorio: true, max: 100, rotulo: "a ação do PDI" });
-  const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "o motivo" });
+  // "Manter somente no PDI": a observação é opcional; o banco exige um texto, então usamos o padrão.
+  const motivo = texto(corpo, "motivo", { max: 1000, rotulo: "a observação" }) || MOTIVO_PADRAO_MANTER_NO_PDI;
   const { item } = await lerAcaoPdi(pdiAcaoId);
+  const { data: jaConfirmada, error: cErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id").eq("pdi_acao_id", pdiAcaoId).limit(1);
+  if (cErro) erroBanco(cErro, "Necessidades de Desenvolvimento");
+  if ((jaConfirmada ?? []).length > 0) throw new ErroHttp(409, "Esta ação do PDI já foi confirmada como Necessidade de Desenvolvimento.");
   const { data, error } = await supabaseAdmin
     .from("peopleflow_dev_pdi_sugestoes_dispensadas")
     .insert({ pdi_acao_id: pdiAcaoId, pdi_id: item.pdi_id, motivo, dispensada_por: conta.userId })
     .select("pdi_acao_id, motivo, dispensada_em")
     .single();
   if (error) {
-    if (error.code === "23505") throw new ErroHttp(409, "Sugestão já dispensada.");
+    if (error.code === "23505") throw new ErroHttp(409, "Esta ação já foi mantida somente no PDI.");
     erroBanco(error, "Sugestão do PDI");
   }
   await auditar(conta, "sugestao_pdi_dispensada", "peopleflow_dev_pdi_sugestoes_dispensadas", pdiAcaoId, { pdi_id: item.pdi_id, motivo });
