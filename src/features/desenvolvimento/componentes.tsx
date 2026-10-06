@@ -11,6 +11,8 @@ export interface AbaDef<T extends string> {
   rotulo: string;
   /** Definição curta exibida pelo "?" ao lado da aba (hover no desktop, toque no celular). */
   ajuda?: string;
+  /** Título do balão de ajuda; por padrão, o rótulo da aba seguido de dois-pontos. */
+  ajudaTitulo?: string;
 }
 
 /** Abas com sub-rota própria (/desenvolvimento/<tela>/<aba>), mesmo visual das abas de Gestão de Desempenho. */
@@ -57,7 +59,7 @@ export function Abas<T extends string>({ base, abas, atual }: { base: string; ab
       </div>
       {aberta?.ajuda && (
         <div id="ajuda-abas" role="tooltip" className={styles.ajudaTexto}>
-          <strong>{aberta.rotulo}:</strong> {aberta.ajuda}
+          <strong>{aberta.ajudaTitulo ?? `${aberta.rotulo}:`}</strong> {aberta.ajuda}
           {ajuda?.fixa && (
             <button type="button" className={styles.linkAcao} style={{ marginLeft: 8 }} onClick={() => setAjuda(null)}>
               Fechar

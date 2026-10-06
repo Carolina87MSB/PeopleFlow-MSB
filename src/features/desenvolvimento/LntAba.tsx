@@ -37,7 +37,7 @@ export function LntAba() {
           <EstadoVazio
             icone={<ClipboardList size={26} strokeWidth={1.6} />}
             titulo="Não há uma LNT em elaboração."
-            descricao="A LNT consolida e prioriza as Necessidades de Desenvolvimento para o planejamento de T&D do ano seguinte. Cada necessidade original continua preservada na Base de Necessidades."
+            descricao="A LNT consolida e prioriza as Necessidades de Desenvolvimento para apoiar o planejamento das ações de T&D da empresa."
           />
           {ehRH ? (
             <div className={styles.acoes} style={{ justifyContent: "center", marginTop: 4 }}>
@@ -170,7 +170,7 @@ function CicloAberto({ ciclo, ciclos, onEscolher, podeCriarNova, onNova, onCiclo
       ) : (
         <>
           <div className={styles.indicadores}>
-            <Indicador valor={ind.candidatas} rotulo="Candidatas" />
+            <Indicador valor={ind.candidatas} rotulo="Necessidades no ciclo" />
             <Indicador valor={ind.a_decidir} rotulo="A decidir" destaque={ind.a_decidir > 0 && podeEditar} />
             <Indicador valor={ind.pessoas_impactadas} rotulo="Pessoas impactadas" />
             <Indicador valor={ind.departamentos_envolvidos} rotulo="Departamentos envolvidos" />

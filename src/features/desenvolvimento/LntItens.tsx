@@ -8,7 +8,7 @@ import { CabecalhoDrawer, Erro, EstadoVazio, Selo } from "./componentes";
 import { CATEGORIA_NECESSIDADE, PRIORIDADE } from "./rotulos";
 import { lnt, type CicloLnt, type ItemLnt } from "./lntRepository";
 import { resumoDoItem, type DadosCiclo } from "./lntDados";
-import { mensagemDeErro, resumoDirecionadores, ROTULO_SITUACAO_ITEM, TEXTO_DEMANDA_DIRETA } from "./lntRotulos";
+import { mensagemDeErro, ROTULO_DIRECIONADOR, ROTULO_SITUACAO_ITEM, TEXTO_DEMANDA_DIRETA } from "./lntRotulos";
 import { LntItemDrawer } from "./LntItemDrawer";
 import styles from "./Desenvolvimento.module.css";
 
@@ -79,7 +79,9 @@ export function LntItens({ ciclo, dados, podeEditar, recarregar }: { ciclo: Cicl
                       <Selo tom={ROTULO_SITUACAO_ITEM[i.situacao].tom}>{ROTULO_SITUACAO_ITEM[i.situacao].rotulo}</Selo>
                     </td>
                     <td>{i.prioridade ? <Selo tom={PRIORIDADE[i.prioridade].tom}>{PRIORIDADE[i.prioridade].rotulo}</Selo> : <span className={styles.secundario}>A definir</span>}</td>
-                    <td className={styles.secundario}>{resumoDirecionadores(i.direcionadores)}</td>
+                    <td>
+                      <DirecionadoresCompactos valor={i.direcionadores} />
+                    </td>
                     <td className={styles.secundario}>{i.origem_item === "direto" ? (i.publico_estimado ? `~${i.publico_estimado} (estimado)` : "—") : r.pessoas}</td>
                     <td className={styles.secundario}>{r.departamentos.length > 0 ? (r.departamentos.length > 2 ? `${r.departamentos.slice(0, 2).join(", ")} +${r.departamentos.length - 2}` : r.departamentos.join(", ")) : "—"}</td>
                     <td className={styles.secundario}>{r.necessidades}</td>
@@ -104,6 +106,23 @@ export function LntItens({ ciclo, dados, podeEditar, recarregar }: { ciclo: Cicl
         />
       )}
     </Card>
+  );
+}
+
+/** Na tabela: o primeiro direcionador como selo e, se houver outros, "+N" (os demais ficam no tooltip e no detalhe do item). */
+function DirecionadoresCompactos({ valor }: { valor: Direcionador[] }) {
+  if (valor.length === 0) return <span className={styles.secundario}>A definir</span>;
+  const [primeiro, ...demais] = valor;
+  const nomesDosDemais = demais.map((d) => ROTULO_DIRECIONADOR[d]).join(", ");
+  return (
+    <span className={styles.selosCompactos}>
+      <Selo tom="neutral">{ROTULO_DIRECIONADOR[primeiro]}</Selo>
+      {demais.length > 0 && (
+        <span title={nomesDosDemais} aria-label={`Mais ${demais.length === 1 ? "1 direcionador" : `${demais.length} direcionadores`}: ${nomesDosDemais}`}>
+          <Selo tom="info">+{demais.length}</Selo>
+        </span>
+      )}
+    </span>
   );
 }
 

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { Drawer, FilterChips, Button } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import type { Direcionador, PrioridadeLnt } from "../../domain/lnt";
@@ -151,36 +152,54 @@ export function LntItemDrawer({ ciclo, dados, itemId, podeEditar, onFechar, reca
                 {membros.length === 0 ? (
                   <span className={styles.dica}>Nenhuma necessidade neste item.</span>
                 ) : (
-                  <ul className={styles.listaCargos}>
-                    {membros.map((m) => (
-                      <li key={m.id}>
-                        <button type="button" className={styles.linkAcao} onClick={() => setNecessidadeAberta(m)}>
-                          {m.descricao_na_carga}
-                        </button>
-                        <span className={styles.secundario}>
-                          · {quemEhANecessidade(m, pessoaPorId)}
-                          {m.departamento_na_carga ? ` · ${m.departamento_na_carga}` : ""}
-                        </span>
-                        {m.mudou_desde_carga_em && <Selo tom="info">Atualizada após a carga</Selo>}
-                        {podeEditar && (retirando === m.necessidade_id ? (
-                          <span className={styles.selos}>
-                            <Button
-                              variant="danger"
-                              onClick={() => executar(() => lnt.desfazerConsolidacao(ciclo.id, [m.necessidade_id]), "Necessidade retirada do item.").then(() => setRetirando(null), () => setRetirando(null))}
+                  <ul className={styles.origens}>
+                    {membros.map((m) => {
+                      const nome = quemEhANecessidade(m, pessoaPorId);
+                      return (
+                        <li key={m.id} className={styles.origem}>
+                          <div className={styles.origemCorpo}>
+                            <div className={styles.origemQuem}>
+                              <strong>{nome}</strong>
+                              {m.departamento_na_carga && <span className={styles.secundario}>{m.departamento_na_carga}</span>}
+                              {m.mudou_desde_carga_em && <Selo tom="info">Atualizada após a carga</Selo>}
+                            </div>
+                            <button type="button" className={styles.origemDescricao} onClick={() => setNecessidadeAberta(m)}>
+                              {m.descricao_na_carga}
+                            </button>
+                          </div>
+                          {podeEditar && (
+                            <button
+                              type="button"
+                              className={styles.botaoLixeira}
+                              title="Retirar deste item"
+                              aria-label={`Retirar deste item a necessidade de ${nome}`}
+                              disabled={retirando === m.necessidade_id}
+                              onClick={() => setRetirando(m.necessidade_id)}
                             >
-                              Confirmar retirada
-                            </Button>
-                            <Button variant="ghost" onClick={() => setRetirando(null)}>
-                              Cancelar
-                            </Button>
-                          </span>
-                        ) : (
-                          <button type="button" className={styles.linkAcao} onClick={() => setRetirando(m.necessidade_id)}>
-                            Retirar do item
-                          </button>
-                        ))}
-                      </li>
-                    ))}
+                              <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
+                            </button>
+                          )}
+                          {podeEditar && retirando === m.necessidade_id && (
+                            <div className={styles.origemConfirmacao} role="alertdialog" aria-label="Confirmar retirada da necessidade">
+                              <span>
+                                Retirar a necessidade de <strong>{nome}</strong> deste item? Ela não será excluída nem alterada: apenas sai deste item e volta para a Base para análise deste ciclo.
+                              </span>
+                              <div className={styles.acoes}>
+                                <Button variant="ghost" onClick={() => setRetirando(null)}>
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  variant="danger"
+                                  onClick={() => executar(() => lnt.desfazerConsolidacao(ciclo.id, [m.necessidade_id]), "Necessidade retirada do item.").then(() => setRetirando(null), () => setRetirando(null))}
+                                >
+                                  Confirmar retirada
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
                 {podeEditar && membros.length > 0 && <span className={styles.dica}>Retirar uma necessidade a devolve para a Base para análise. Ela não é apagada nem alterada.</span>}
@@ -210,7 +229,7 @@ export function LntItemDrawer({ ciclo, dados, itemId, podeEditar, onFechar, reca
                 <h4 className={styles.secaoTitulo}>Ações</h4>
                 <div className={styles.acoes} style={{ justifyContent: "flex-start" }}>
                   <Button variant="secondary" onClick={() => { setErro(null); setModo("editar"); }}>
-                    Editar
+                    Editar item
                   </Button>
                   <Button variant="secondary" onClick={() => { setErro(null); setModo("prioridade"); }}>
                     Definir prioridade

@@ -4,6 +4,7 @@
 import { DIRECIONADORES, type Direcionador, type PendenciaFechamento, type SituacaoItem, type StatusCiclo } from "../../domain/lnt";
 import { STATUS_NECESSIDADE, type Tom } from "./rotulos";
 import type { NecessidadeNoCicloComViva } from "./lntRepository";
+import type { MotivoSugestao } from "./lntSugestoes";
 import type { PessoaDesenvolvimento } from "./devRepository";
 
 export const ROTULO_STATUS_CICLO: Record<StatusCiclo, { rotulo: string; tom: Tom }> = {
@@ -18,6 +19,16 @@ export const ROTULO_SITUACAO_ITEM: Record<SituacaoItem, { rotulo: string; tom: T
 };
 
 export const ROTULO_DIRECIONADOR: Record<Direcionador, string> = Object.fromEntries(DIRECIONADORES.map((d) => [d.valor, d.rotulo])) as Record<Direcionador, string>;
+
+/** Por que o sistema sugeriu o agrupamento, em linguagem do RH (sem pontuação nem fórmula). */
+export const ROTULO_MOTIVO_SUGESTAO: Record<MotivoSugestao, string> = {
+  mesma_habilidade: "Mesma habilidade relacionada",
+  mesmo_documento: "Mesmo requisito",
+  mesmo_grupo: "Mesmo grupo da Base",
+  descricoes_parecidas: "Descrições semelhantes",
+  mesmo_tema: "Mesmo tema de capacitação",
+  termos_em_comum: "Termos em comum",
+};
 
 export const TEXTO_DEMANDA_DIRETA = "Demanda estratégica/direta";
 
@@ -104,10 +115,4 @@ export function dataCurta(iso: string | null | undefined): string {
 
 export function plural(n: number, um: string, varios: string): string {
   return `${n} ${n === 1 ? um : varios}`;
-}
-
-export function resumoDirecionadores(d: Direcionador[]): string {
-  if (d.length === 0) return "—";
-  const nomes = d.map((x) => ROTULO_DIRECIONADOR[x]);
-  return nomes.length > 2 ? `${nomes.slice(0, 2).join(", ")} +${nomes.length - 2}` : nomes.join(", ");
 }

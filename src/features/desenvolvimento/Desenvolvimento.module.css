@@ -833,3 +833,164 @@
   font-size: 12.5px;
   font-weight: 600;
 }
+
+/* Direcionadores na tabela da LNT: selo + "+N", sem quebrar a linha */
+.selosCompactos {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* Necessidades de origem no detalhe do item: um bloco por necessidade */
+.origens {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.origem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.origemCorpo {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.origemQuem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 12.5px;
+  color: var(--color-navy);
+}
+
+.origemDescricao {
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  font: 500 12.5px/1.5 var(--font-sans);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.origemDescricao:hover {
+  color: var(--color-brand-dark);
+  text-decoration: underline;
+}
+
+.botaoLixeira {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.botaoLixeira:hover,
+.botaoLixeira:focus-visible {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+}
+
+.botaoLixeira:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.origemConfirmacao {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-bg);
+  font-size: 12.5px;
+  color: var(--color-danger-fg);
+}
+
+/* Revisão de um grupo sugerido */
+.origemCheck {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.origemFora {
+  background: var(--color-surface-alt);
+  opacity: 0.75;
+}
+
+.origemTexto {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+/* Possíveis agrupamentos na Base para análise */
+.agrupamentos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-pale);
+  font-size: 12.5px;
+  color: var(--color-text);
+}
+
+.agrupamentosTopo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agrupamento {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.agrupamentoTexto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 260px;
+}

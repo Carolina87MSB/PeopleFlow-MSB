@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ClipboardList, Layers, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardList, Layers, Sparkles } from "lucide-react";
 import { Button, Card, Drawer, FilterChips, tableStyles } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import { type CategoriaNecessidade, type OrigemNecessidade } from "./devRepository";
@@ -10,13 +10,16 @@ import { CATEGORIA_NECESSIDADE, PRIORIDADE, ROTULO_ORIGEM } from "./rotulos";
 import { candidatasParaSugestao, lnt, type CicloLnt } from "./lntRepository";
 import { sugerirConsolidacoes, type SugestaoConsolidacao } from "./lntSugestoes";
 import { candidatasDe, type DadosCiclo } from "./lntDados";
-import { dataCurta, mensagemDeErro, plural, quemEhANecessidade, ROTULO_SITUACAO_ITEM } from "./lntRotulos";
+import { dataCurta, mensagemDeErro, plural, quemEhANecessidade, ROTULO_MOTIVO_SUGESTAO, ROTULO_SITUACAO_ITEM } from "./lntRotulos";
 import { LntNecessidadeDrawer } from "./LntNecessidadeDrawer";
+import { LntGrupoDrawer } from "./LntGrupoDrawer";
 import type { NecessidadeNoCicloComViva } from "./lntRepository";
 import { normalizar } from "./buscaHabilidades";
 import styles from "./Desenvolvimento.module.css";
 
 const POR_PAGINA = 50;
+/** Grupos sugeridos visíveis de início; os demais ficam atrás de "Mostrar todos". */
+const GRUPOS_INICIAIS = 3;
 
 interface Props {
   ciclo: CicloLnt;
@@ -39,6 +42,10 @@ export function LntBase({ ciclo, dados, podeEditar, recarregar }: Props) {
   const [aberta, setAberta] = useState<NecessidadeNoCicloComViva | null>(null);
   const [consolidando, setConsolidando] = useState(false);
   const [naoPriorizando, setNaoPriorizando] = useState(false);
+  const [revisando, setRevisando] = useState<SugestaoConsolidacao | null>(null);
+  const [tituloDoGrupo, setTituloDoGrupo] = useState<string | null>(null);
+  const [verTodosGrupos, setVerTodosGrupos] = useState(false);
+  const [recolhido, setRecolhido] = useState(false);
 
   const departamentos = useMemo(() => [...new Set(candidatas.map((l) => l.departamento_na_carga).filter((d): d is string => Boolean(d)))].sort((a, b) => a.localeCompare(b, "pt-BR")), [candidatas]);
 
@@ -57,10 +64,12 @@ export function LntBase({ ciclo, dados, podeEditar, recarregar }: Props) {
   const pagina0 = Math.min(pagina, Math.max(0, Math.ceil(filtradas.length / POR_PAGINA) - 1));
   const visiveis = filtradas.slice(pagina0 * POR_PAGINA, (pagina0 + 1) * POR_PAGINA);
 
-  // Sugestões de agrupamento: só apoiam a RH — nada é consolidado sozinho.
+  // Possíveis agrupamentos: ferramenta de trabalho da RH. Calculados uma vez por carga de dados (não a cada
+  // render) e só no navegador; nada é consolidado sozinho. O Gestor não os recebe (e a RLS não lhe deixa ver a base toda).
   const [versaoSugestoes, setVersaoSugestoes] = useState(0);
   const sugestoesBrutas = useConsulta(() => (podeEditar && candidatas.length >= 2 ? candidatasParaSugestao(ciclo.id) : Promise.resolve([])), [ciclo.id, podeEditar, candidatas.length, versaoSugestoes]);
-  const sugestoes = useMemo(() => sugerirConsolidacoes(sugestoesBrutas.dados ?? []).slice(0, 4), [sugestoesBrutas.dados]);
+  const sugestoes = useMemo(() => sugerirConsolidacoes(sugestoesBrutas.dados ?? []), [sugestoesBrutas.dados]);
+  const gruposVisiveis = verTodosGrupos ? sugestoes : sugestoes.slice(0, GRUPOS_INICIAIS);
 
   const alternar = (id: number) =>
     setMarcadas((m) => {
@@ -75,6 +84,8 @@ export function LntBase({ ciclo, dados, podeEditar, recarregar }: Props) {
     setMarcadas(new Set());
     setConsolidando(false);
     setNaoPriorizando(false);
+    setRevisando(null);
+    setTituloDoGrupo(null);
     setAberta(null);
     setVersaoSugestoes((v) => v + 1);
     recarregar();
@@ -108,28 +119,44 @@ export function LntBase({ ciclo, dados, podeEditar, recarregar }: Props) {
       </div>
 
       {podeEditar && sugestoes.length > 0 && (
-        <div className={styles.painelSugestao}>
-          <strong>
-            <Sparkles size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
-            Estas necessidades parecem tratar do mesmo tema
-          </strong>
-          {sugestoes.map((s) => (
-            <div key={s.chave} className={styles.linhaSugestao}>
-              <span>
-                <strong>{s.titulo_sugerido}</strong>
-                <span className={styles.secundario}>
-                  {" "}
-                  · {plural(s.necessidade_ids.length, "necessidade", "necessidades")}
-                  {s.colaboradores > 0 ? ` de ${plural(s.colaboradores, "pessoa", "pessoas")}` : ""} · {MOTIVO_SUGESTAO[s.motivo]}
-                </span>
-              </span>
-              <Button variant="ghost" onClick={() => setMarcadas(new Set(s.necessidade_ids))}>
-                Selecionar
-              </Button>
+        <section className={styles.agrupamentos} aria-label="Possíveis agrupamentos">
+          <div className={styles.agrupamentosTopo}>
+            <div>
+              <strong>
+                <Sparkles size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+                Possíveis agrupamentos ({sugestoes.length})
+              </strong>
+              {!recolhido && <div className={styles.secundario}>Encontramos necessidades que podem tratar de temas semelhantes. Revise as sugestões antes de consolidar.</div>}
             </div>
-          ))}
-          <span className={styles.dica}>É só uma sugestão: você escolhe o que consolidar.</span>
-        </div>
+            <Button variant="ghost" icon={recolhido ? <ChevronDown size={14} /> : <ChevronUp size={14} />} onClick={() => setRecolhido((r) => !r)} aria-expanded={!recolhido}>
+              {recolhido ? "Expandir" : "Recolher"}
+            </Button>
+          </div>
+          {!recolhido && (
+            <>
+              {gruposVisiveis.map((s) => (
+                <div key={s.chave} className={styles.agrupamento}>
+                  <div className={styles.agrupamentoTexto}>
+                    <strong>{s.tema}</strong>
+                    <span className={styles.secundario}>
+                      {plural(s.necessidade_ids.length, "necessidade possivelmente relacionada", "necessidades possivelmente relacionadas")}
+                      {s.departamentos > 1 ? ` · ${s.departamentos} departamentos` : ""} · {ROTULO_MOTIVO_SUGESTAO[s.motivos[0]]}
+                    </span>
+                  </div>
+                  <Button variant="secondary" onClick={() => setRevisando(s)}>
+                    Revisar grupo
+                  </Button>
+                </div>
+              ))}
+              {sugestoes.length > GRUPOS_INICIAIS && (
+                <Button variant="ghost" onClick={() => setVerTodosGrupos((v) => !v)}>
+                  {verTodosGrupos ? "Mostrar menos" : `Mostrar todos os ${sugestoes.length} grupos`}
+                </Button>
+              )}
+              <span className={styles.dica}>São só sugestões: o que não tem correspondência clara continua na tabela, sem grupo. A decisão de consolidar é sempre sua.</span>
+            </>
+          )}
+        </section>
       )}
 
       <div className={styles.toolbar}>
@@ -273,29 +300,52 @@ export function LntBase({ ciclo, dados, podeEditar, recarregar }: Props) {
           }
         />
       )}
-      {podeEditar && consolidando && <ConsolidarDrawer ciclo={ciclo} dados={dados} ids={marcadasValidas} sugestoes={sugestoes} onFechar={() => setConsolidando(false)} onConcluido={concluido} />}
+      {podeEditar && revisando && (
+        <LntGrupoDrawer
+          sugestao={revisando}
+          candidatas={candidatas}
+          onFechar={() => setRevisando(null)}
+          onVoltarParaBase={(ids) => {
+            setMarcadas(new Set(ids));
+            setRevisando(null);
+          }}
+          onSeguir={(ids, titulo) => {
+            setMarcadas(new Set(ids));
+            setTituloDoGrupo(titulo);
+            setRevisando(null);
+            setConsolidando(true);
+          }}
+        />
+      )}
+      {podeEditar && consolidando && (
+        <ConsolidarDrawer
+          ciclo={ciclo}
+          dados={dados}
+          ids={marcadasValidas}
+          sugestoes={sugestoes}
+          tituloInicial={tituloDoGrupo}
+          onFechar={() => {
+            setConsolidando(false);
+            setTituloDoGrupo(null);
+          }}
+          onConcluido={concluido}
+        />
+      )}
       {podeEditar && naoPriorizando && <NaoPriorizarNecessidadesDrawer ciclo={ciclo} ids={marcadasValidas} dados={dados} onFechar={() => setNaoPriorizando(false)} onConcluido={concluido} />}
     </Card>
   );
 }
 
-const MOTIVO_SUGESTAO: Record<SugestaoConsolidacao["motivo"], string> = {
-  mesma_habilidade: "mesma habilidade",
-  mesmo_documento: "mesmo documento",
-  mesmo_grupo: "mesmo grupo da Base",
-  texto_parecido: "texto parecido",
-};
-
 // ── Consolidar selecionadas ─────────────────────────────────────────────
-function ConsolidarDrawer({ ciclo, dados, ids, sugestoes, onFechar, onConcluido }: { ciclo: CicloLnt; dados: DadosCiclo; ids: number[]; sugestoes: SugestaoConsolidacao[]; onFechar: () => void; onConcluido: () => void }) {
+function ConsolidarDrawer({ ciclo, dados, ids, sugestoes, tituloInicial, onFechar, onConcluido }: { ciclo: CicloLnt; dados: DadosCiclo; ids: number[]; sugestoes: SugestaoConsolidacao[]; tituloInicial: string | null; onFechar: () => void; onConcluido: () => void }) {
   const { flash } = useToast();
   const { pessoaPorId } = useDesenvolvimento();
   const selecionadas = dados.linhas.filter((l) => ids.includes(l.necessidade_id));
-  const sugestao = sugestoes.find((s) => ids.every((id) => s.necessidade_ids.includes(id)) && s.necessidade_ids.length >= ids.length);
+  const sugestao = sugestoes.find((s) => ids.every((id) => s.necessidade_ids.includes(id)));
   const categoriaInicial = selecionadas.find((l) => l.viva?.categoria)?.viva?.categoria ?? "";
   const itensAbertos = dados.itens.filter((i) => i.situacao !== "nao_priorizado");
   const [modo, setModo] = useState<"novo" | "existente">("novo");
-  const [titulo, setTitulo] = useState(sugestao?.titulo_sugerido ?? (selecionadas[0]?.sugestao_capacitacao_na_carga || selecionadas[0]?.descricao_na_carga || "").slice(0, 200));
+  const [titulo, setTitulo] = useState(tituloInicial ?? sugestao?.titulo_sugerido ?? (selecionadas[0]?.sugestao_capacitacao_na_carga || selecionadas[0]?.descricao_na_carga || "").slice(0, 200));
   const [descricao, setDescricao] = useState("");
   const [categoria, setCategoria] = useState<string>(categoriaInicial);
   const [itemId, setItemId] = useState("");
@@ -337,7 +387,7 @@ function ConsolidarDrawer({ ciclo, dados, ids, sugestoes, onFechar, onConcluido 
             </li>
           ))}
         </ul>
-        {sugestao ? <div className={styles.nota}>Estas necessidades parecem tratar do mesmo tema ({MOTIVO_SUGESTAO[sugestao.motivo]}). A decisão é sua.</div> : ids.length > 1 ? <span className={styles.dica}>O sistema não encontrou semelhança clara entre elas. Consolide só se tratarem do mesmo tema.</span> : null}
+        {sugestao ? <div className={styles.nota}>Estas necessidades parecem tratar do mesmo tema ({sugestao.motivos.map((m) => ROTULO_MOTIVO_SUGESTAO[m].toLowerCase()).join("; ")}). A decisão é sua.</div> : ids.length > 1 ? <span className={styles.dica}>O sistema não encontrou semelhança clara entre elas. Consolide só se tratarem do mesmo tema.</span> : null}
       </div>
       <form className={styles.secao} onSubmit={confirmar}>
         {itensAbertos.length > 0 && <FilterChips options={["Novo item", "Item existente"]} value={modo === "novo" ? "Novo item" : "Item existente"} onChange={(v) => setModo(v === "Novo item" ? "novo" : "existente")} />}

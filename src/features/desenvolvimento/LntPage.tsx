@@ -16,7 +16,7 @@ export default function LntPage() {
   const abas: AbaDef<AbaLnt>[] = [
     { id: "necessidades", rotulo: "Necessidades de Desenvolvimento" },
     ...(perfil === "RH" || perfil === "Gestor"
-      ? [{ id: "lnt" as const, rotulo: "LNT", ajuda: "Consolida e prioriza as Necessidades de Desenvolvimento para o planejamento de T&D. Cada necessidade original continua preservada na Base." }]
+      ? [{ id: "lnt" as const, rotulo: "LNT", ajudaTitulo: "O que é LNT?", ajuda: "O Levantamento de Necessidades de Treinamento e Desenvolvimento (LNT) reúne e prioriza as necessidades de desenvolvimento identificadas na empresa para apoiar o planejamento das ações de T&D." }]
       : []),
     ...(perfil === "RH" ? [{ id: "sugestoes" as const, rotulo: "Sugestões" }] : []),
   ];

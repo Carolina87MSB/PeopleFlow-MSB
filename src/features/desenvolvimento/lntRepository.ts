@@ -218,7 +218,11 @@ export async function candidatasParaSugestao(cicloId: number): Promise<Candidata
       colaborador_id: l.viva?.colaborador_id ?? null,
       // o que a LNT analisou: a fotografia, não o texto vivo
       descricao: l.descricao_na_carga,
+      justificativa: l.justificativa_na_carga,
       sugestao_capacitacao: l.sugestao_capacitacao_na_carga,
+      categoria: l.viva?.categoria ?? null,
+      cargo_nome: l.viva?.cargo_nome ?? null,
+      departamento: l.departamento_na_carga,
       habilidade_id: e?.habilidade_id ?? null,
       lista_mestra_codigo: e?.lista_mestra_codigo ?? null,
       lista_mestra_revisao: e?.lista_mestra_revisao ?? null,
