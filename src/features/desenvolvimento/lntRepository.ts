@@ -227,6 +227,29 @@ export async function candidatasParaSugestao(cicloId: number): Promise<Candidata
   });
 }
 
+/** Necessidades ainda "sugeridas" (aguardando validação do RH) — informação do fechamento, nunca entra na LNT. */
+export async function contarSugeridasAguardando(): Promise<number> {
+  const { count, error } = await supabase.from("peopleflow_dev_necessidades").select("id", { count: "exact", head: true }).eq("status", "sugerida");
+  if (error) falha("Necessidades sugeridas", error.message);
+  return count ?? 0;
+}
+
+export interface EventoLnt {
+  id: number;
+  ts: string;
+  acao: string;
+  colaborador_id: number | null;
+  detalhe: Record<string, unknown>;
+}
+
+/** Eventos da LNT de um item ou ciclo, do mais recente para o mais antigo. A auditoria só é legível pelo RH (RLS): para os demais perfis volta vazio. */
+export async function eventosDaLnt(entidade: "ciclo" | "item", id: number): Promise<EventoLnt[]> {
+  const tabela = entidade === "ciclo" ? "peopleflow_dev_lnt_ciclos" : "peopleflow_dev_lnt_itens";
+  const { data, error } = await supabase.from("peopleflow_dev_auditoria").select("id, ts, acao, colaborador_id, detalhe").eq("entidade", tabela).eq("entidade_id", String(id)).order("id", { ascending: false }).limit(100);
+  if (error) falha("Histórico da LNT", error.message);
+  return (data ?? []) as EventoLnt[];
+}
+
 // ── Gravações (somente RH, pelo servidor) ───────────────────────────────
 export interface ResultadoCarga {
   ciclo_id: number;

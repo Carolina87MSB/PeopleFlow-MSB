@@ -601,7 +601,7 @@ async function itemPrioridade(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
   const antes = await lerItem(idObrigatorio(corpo, "id", "Item"));
   exigirCicloAberto(await lerCiclo(antes.ciclo_id));
-  if (antes.situacao === "nao_priorizado") throw new ErroLnt(409, "Item não priorizado: reconsidere o item (incluir) antes de definir a prioridade.");
+  // Item não priorizado também pode receber prioridade: é o caminho para reconsiderá-lo (incluir exige prioridade e direcionador).
   const prioridade = umDe(texto(corpo, "prioridade"), PRIORIDADES_LNT, "Prioridade");
   const justificativa = texto(corpo, "justificativa_prioridade", { max: 2000 });
   if (prioridade === "alta" && !justificativa) throw new ErroLnt(422, "Informe a justificativa da prioridade Alta.");

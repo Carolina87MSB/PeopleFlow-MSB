@@ -87,7 +87,7 @@ export function NecessidadesAba() {
         <div>
           <h3 className={styles.cardTitle}>Base de Necessidades de Desenvolvimento</h3>
           <p className={styles.cardSubtitle}>
-            {ehRH ? "Todas as Necessidades de Desenvolvimento registradas — insumo para a LNT 2027" : "Necessidades de Desenvolvimento dos seus liderados e as que você registrou"}
+            {ehRH ? "Todas as Necessidades de Desenvolvimento registradas — insumo para a LNT" : "Necessidades de Desenvolvimento dos seus liderados e as que você registrou"}
           </p>
         </div>
         <Button variant="primary" className={styles.botaoLongo} icon={<Plus size={16} />} onClick={() => setSelecao({ modo: "novo" })}>

@@ -80,5 +80,7 @@ export function sugerirConsolidacoes(candidatas: CandidataParaSugestao[]): Suges
       vistos.add(assinatura);
       return true;
     })
+    // um grupo contido em outro maior, pelo mesmo motivo, é redundante
+    .filter((s, _i, lista) => !lista.some((o) => o !== s && o.motivo === s.motivo && o.necessidade_ids.length > s.necessidade_ids.length && s.necessidade_ids.every((id) => o.necessidade_ids.includes(id))))
     .sort((a, b) => b.necessidade_ids.length - a.necessidade_ids.length || a.titulo_sugerido.localeCompare(b.titulo_sugerido, "pt-BR"));
 }
