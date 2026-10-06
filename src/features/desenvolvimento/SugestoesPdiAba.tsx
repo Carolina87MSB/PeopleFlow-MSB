@@ -5,15 +5,14 @@ import { useToast } from "../../components/shared/ToastContext";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { acoesPdiJaTratadas, gravar, type CategoriaNecessidade } from "./devRepository";
 import { useDesenvolvimento } from "./contexto";
-import { CabecalhoDrawer, Carregando, ConfirmarComMotivo, Erro, EstadoVazio } from "./componentes";
+import { CabecalhoDrawer, Carregando, ConfirmarComMotivo, Erro, EstadoVazio, Selo } from "./componentes";
+import { plural } from "./lntRotulos";
 import { useConsulta } from "./hooks";
 import { CATEGORIA_NECESSIDADE, formatarData } from "./rotulos";
+import { contagemPorForma, filtrarAcoes, indiciosDaAcao, ROTULO_FILTRO_FORMA, ROTULO_FILTRO_TIPO, ROTULO_INDICIO, type FiltroForma, type FiltroTipo, type IndicioForma } from "./pdiClassificacao";
 import styles from "./Desenvolvimento.module.css";
 
-/** Palavras que indicam ação de capacitação/desenvolvimento. O PDI pode ter ações que não são
- * treinamento — por isso isto é só uma SUGESTÃO; o RH confirma ou dispensa cada uma. */
-const PALAVRAS_CAPACITACAO =
-  /\b(treinament\w*|curso\w*|capacita\w*|qualifica\w*|workshop\w*|palestra\w*|semin[aá]ri\w*|congresso\w*|certifica\w*|forma[cç][aã]o|p[oó]s[- ]?gradua\w*|mba|especializa\w*|e-?learning|ead|aula\w*|oficina\w*|imers[aã]o|reciclagem|instru[cç][aã]o|trilha\w*|mentoria\w*)\b/i;
+const FORMAS: FiltroForma[] = ["todas", "mentoria", "pratica", "treinamento", "outra"];
 
 interface Sugestao {
   pdiId: number;
@@ -27,14 +26,16 @@ interface Sugestao {
   acao: string;
   prazo: string | null;
   status: string;
-  relacionada: boolean;
+  indicios: IndicioForma[];
+  departamento: string | undefined;
 }
 
 export function SugestoesPdiAba() {
   const { pessoas } = useDesenvolvimento();
   const { state } = usePortalStore();
   const tratadas = useConsulta(() => acoesPdiJaTratadas(), []);
-  const [modo, setModo] = useState("Relacionadas a capacitação");
+  const [forma, setForma] = useState<FiltroForma>("todas");
+  const [tipo, setTipo] = useState<FiltroTipo>("todos");
   const [departamento, setDepartamento] = useState("");
   // Departamento pelo cadastro oficial (colaboradores já carregados pelo PeopleFlow).
   const deptoPorNome = useMemo(() => new Map(state.colaboradores.filter((c) => !c.desligado).map((c) => [c.nome, c.depto])), [state.colaboradores]);
@@ -66,22 +67,23 @@ export function SugestoesPdiAba() {
             acao: acao.descricao,
             prazo: acao.prazo,
             status: acao.status,
-            relacionada: PALAVRAS_CAPACITACAO.test(acao.descricao),
+            indicios: indiciosDaAcao(acao.descricao),
+            departamento: deptoPorNome.get(pdi.colaboradorNome),
           });
         }
       }
     }
     return out;
-  }, [state.pdi, idPorNome]);
+  }, [state.pdi, idPorNome, deptoPorNome]);
 
-  const visiveis = useMemo(() => {
+  // Universo principal: TODA ação em aberto ainda não confirmada nem dispensada. Os filtros só estreitam a vista.
+  const aguardando = useMemo(() => {
     const ja = tratadas.dados ?? new Set<string>();
-    return sugestoes
-      .filter((s) => !ja.has(s.acaoId))
-      .filter((s) => modo !== "Relacionadas a capacitação" || s.relacionada)
-      .filter((s) => !departamento || deptoPorNome.get(s.colaboradorNome) === departamento)
-      .sort((a, b) => a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR"));
-  }, [sugestoes, tratadas.dados, modo, departamento, deptoPorNome]);
+    return sugestoes.filter((s) => !ja.has(s.acaoId)).sort((a, b) => a.colaboradorNome.localeCompare(b.colaboradorNome, "pt-BR"));
+  }, [sugestoes, tratadas.dados]);
+  const filtros = useMemo(() => ({ departamento, tipo, forma }), [departamento, tipo, forma]);
+  const visiveis = useMemo(() => filtrarAcoes(aguardando, filtros), [aguardando, filtros]);
+  const contagem = useMemo(() => contagemPorForma(aguardando, filtros), [aguardando, filtros]);
   const departamentos = useMemo(
     () => [...new Set(sugestoes.map((s) => deptoPorNome.get(s.colaboradorNome)).filter((d): d is string => Boolean(d)))].sort((a, b) => a.localeCompare(b, "pt-BR")),
     [sugestoes, deptoPorNome],
@@ -94,11 +96,32 @@ export function SugestoesPdiAba() {
       <div className={styles.cardHeader}>
         <div>
           <h3 className={styles.cardTitle}>Sugestões a partir do PDI</h3>
-          <p className={styles.cardSubtitle}>Ações de PDI em aberto que podem representar uma Necessidade de Desenvolvimento. Confirme para incluir na Base de Necessidades de Desenvolvimento.</p>
+          <p className={styles.cardSubtitle}>
+            Ações de PDI em aberto que ainda precisam da sua análise. Cada uma pode apontar uma Necessidade de Desenvolvimento, que só depois será atendida da forma mais adequada (treinamento, mentoria, prática no trabalho…). Confirme para incluir na Base de Necessidades de Desenvolvimento.
+          </p>
         </div>
-        <FilterChips options={["Relacionadas a capacitação", "Todas as ações em aberto"]} value={modo} onChange={setModo} />
+        <span className={styles.secundario}>
+          {plural(aguardando.length, "ação aguardando análise", "ações aguardando análise")}
+        </span>
       </div>
+      <div className={styles.toolbar}>
+        <FilterChips
+          options={FORMAS.map((f) => `${ROTULO_FILTRO_FORMA[f]} (${contagem[f]})`)}
+          value={`${ROTULO_FILTRO_FORMA[forma]} (${contagem[forma]})`}
+          onChange={(v) => setForma(FORMAS.find((f) => v.startsWith(`${ROTULO_FILTRO_FORMA[f]} (`)) ?? "todas")}
+        />
+      </div>
+      <span className={styles.dica} style={{ display: "block", marginBottom: 10 }}>
+        Os indícios (mentoria, aprendizagem prática, treinamento) vêm apenas do texto da ação e ajudam a leitura. Não definem como a necessidade será atendida, e nenhuma ação some da lista por causa deles.
+      </span>
       <div className={styles.filtros} style={{ marginBottom: 14 }}>
+        <select className={styles.select} style={{ minWidth: 200 }} value={tipo} onChange={(e) => setTipo(e.target.value as FiltroTipo)} aria-label="Tipo de desenvolvimento">
+          {(Object.keys(ROTULO_FILTRO_TIPO) as FiltroTipo[]).map((t) => (
+            <option key={t} value={t}>
+              {ROTULO_FILTRO_TIPO[t]}
+            </option>
+          ))}
+        </select>
         <select className={styles.select} style={{ minWidth: 200 }} value={departamento} onChange={(e) => setDepartamento(e.target.value)} aria-label="Departamento/Setor">
           <option value="">Todos os departamentos</option>
           {departamentos.map((d) => (
@@ -114,8 +137,8 @@ export function SugestoesPdiAba() {
       ) : visiveis.length === 0 ? (
         <EstadoVazio
           icone={<Sparkles size={26} strokeWidth={1.6} />}
-          titulo="Nenhuma sugestão no momento."
-          descricao="Aparecem aqui as ações de PDI em aberto ainda não confirmadas nem dispensadas. O PDI nunca é alterado por esta tela."
+          titulo={aguardando.length === 0 ? "Nenhuma ação de PDI aguardando análise." : "Nenhuma ação com esses filtros."}
+          descricao={aguardando.length === 0 ? "Aparecem aqui as ações de PDI em aberto ainda não confirmadas nem dispensadas. O PDI nunca é alterado por esta tela." : "Escolha “Todas” e “Todos os tipos” para ver tudo o que aguarda análise."}
         />
       ) : (
         <div className={tableStyles.wrap}>
@@ -137,7 +160,12 @@ export function SugestoesPdiAba() {
                     {s.colaboradorNome}
                     {!s.colaboradorId && <div className={styles.secundario}>Não identificado de forma única</div>}
                   </td>
-                  <td>{s.acao}</td>
+                  <td>
+                    {s.acao}
+                    <div className={styles.selos} style={{ marginTop: 4 }}>
+                      {s.indicios.length === 0 ? <Selo tom="neutral">Outra ação</Selo> : s.indicios.map((i) => <Selo key={i} tom="info">{ROTULO_INDICIO[i]}</Selo>)}
+                    </div>
+                  </td>
                   <td className={styles.secundario}>
                     {s.competencia}
                     <div>{s.tipo === "Tecnica" ? "KPI" : "Competência"}</div>
@@ -146,7 +174,7 @@ export function SugestoesPdiAba() {
                   <td className={styles.mono}>{formatarData(s.prazo)}</td>
                   <td>
                     <div className={styles.acoes}>
-                      <Button variant="primary" disabled={!s.colaboradorId} onClick={() => setConfirmando(s)}>
+                      <Button variant="primary" disabled={!s.colaboradorId} title="Confirmar que esta ação do PDI representa uma Necessidade de Desenvolvimento" onClick={() => setConfirmando(s)}>
                         Confirmar
                       </Button>
                     </div>
@@ -230,11 +258,11 @@ function ConfirmarSugestaoDrawer({ sugestao, onFechar, onTratada }: { sugestao: 
             <textarea value={form.justificativa} onChange={set("justificativa")} maxLength={2000} />
           </label>
           <label className={[styles.campo, styles.cheio].join(" ")}>
-            Sugestão de treinamento / capacitação
+            Sugestão de ação de desenvolvimento (opcional)
             <input value={form.sugestao_capacitacao} onChange={set("sugestao_capacitacao")} maxLength={500} />
           </label>
         </div>
-        <span className={styles.dica}>A Necessidade de Desenvolvimento guarda a referência ao PDI de origem. O PDI não é alterado.</span>
+        <span className={styles.dica}>Confirmar significa que esta ação do PDI representa uma Necessidade de Desenvolvimento. A forma de atendimento (treinamento, mentoria, prática no trabalho…) será definida depois. A necessidade guarda a referência ao PDI de origem e o PDI não é alterado.</span>
         {erro && <Erro mensagem={erro} />}
         <div className={styles.acoes}>
           <Button type="submit" variant="primary" className={styles.botaoLongo} disabled={salvando}>

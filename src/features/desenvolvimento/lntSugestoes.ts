@@ -63,6 +63,9 @@ const PALAVRAS_GENERICAS = new Set([
   "atividade", "atividades", "rotina", "funcao", "funcoes", "aplicavel", "aplicaveis", "conforme", "relacionado", "relacionados", "foco", "voltado", "realizar", "realizacao", "execucao",
   "executar", "aplicar", "aplicacao", "uso", "utilizacao", "utilizar", "trabalho", "trabalhar", "empresa", "ciclo", "pdi", "avaliacao", "desempenho", "msb", "necessario", "necessaria",
   "importante", "adequado", "adequada", "ajustar", "reforcar", "reforco", "capacidade", "buscar", "obter", "ampliar", "fortalecer", "evoluir", "evolucao", "pratica", "praticas", "dia",
+  // palavras da FORMA de desenvolvimento (como a ação seria feita), não do tema: a semelhança deve ser pela necessidade
+  "mentoria", "mentor", "participar", "participacao", "reuniao", "reunioes", "ouvinte", "acompanhamento", "acompanhar", "individual", "mensal", "mensais", "semanal", "semanais", "inicialmente",
+  "passando", "partir", "sustentada", "pauta", "voltada", "voltado", "preparacao", "posicao", "maior", "ciclo", "meses", "pelo", "menos", "apresentar", "leitura", "conectada", "exemplo", "ex",
 ]);
 
 /** Palavras que existem em muitos assuntos diferentes: contam, mas pouco (sozinhas não formam grupo). */
@@ -105,6 +108,7 @@ export const CONCEITOS: Conceito[] = [
   { id: "sistemas", rotulo: "Sistemas e ERP", padrao: /\b(erp|sap|protheus|totvs|sistema de gestao)\b/ },
   { id: "fiscal", rotulo: "Rotinas fiscais e contábeis", padrao: /\b(fiscal|fiscais|contabil|contabilidade|tributari[oa]s?|impostos?|nota fiscal|nfe)\b/ },
   { id: "logistica", rotulo: "Estoque e logística", padrao: /\b(estoque|almoxarifado|logistica|expedicao|inventario)\b/ },
+  { id: "visao_negocio", rotulo: "Visão de negócio e atuação estratégica", padrao: /\b(visao (de )?(negocio|negocios|estrategica|sistemica)|tomada de decisao|decisoes? estrategic\w*|pensamento estrategico|atuacao estrategica|stakeholders?|business partner|resultados? (do |da )?(negocio|empresa)|resultado negocio|discussoes estrategicas)\b/ },
   { id: "dp", rotulo: "Rotinas de Departamento Pessoal", padrao: /\b(esocial|folha de pagamento|legislacao trabalhista|clt|ponto eletronico)\b/ },
 ];
 
@@ -172,6 +176,8 @@ interface Perfil {
   vDescricao: Vetor;
   vSugestao: Vetor;
   conceitos: Set<string>;
+  /** Conceitos vindos da descrição e da sugestão (não da justificativa): são os que ligam duas necessidades por tema. */
+  conceitosPrincipais: Set<string>;
   palavras: Map<string, string>;
 }
 
@@ -198,7 +204,7 @@ function montarPerfil(c: CandidataParaSugestao): Perfil {
   somar(vSugestao, tSugestao, 1, false);
   const palavras = new Map<string, string>();
   for (const t of [tDescricao, tSugestao, tJustificativa]) for (const [r, p] of t.radicais) if (!palavras.has(r)) palavras.set(r, p);
-  return { c, vetor, vDescricao, vSugestao, conceitos: new Set([...tDescricao.conceitos, ...tSugestao.conceitos, ...tJustificativa.conceitos]), palavras };
+  return { c, vetor, vDescricao, vSugestao, conceitos: new Set([...tDescricao.conceitos, ...tSugestao.conceitos, ...tJustificativa.conceitos]), conceitosPrincipais: new Set([...tDescricao.conceitos, ...tSugestao.conceitos]), palavras };
 }
 
 function norma(v: Vetor): number {
@@ -235,6 +241,11 @@ const LIMIAR_LIGACAO = 0.5;
 const LIMIAR_COESAO = 0.5;
 /** Com poucos termos (textos curtos), uma única palavra em comum só vale se os textos forem quase iguais. */
 const TEXTO_CURTO_IGUAL = 0.8;
+/**
+ * Dois textos que tratam do mesmo conceito do dicionário são sugeridos juntos mesmo que um seja bem mais longo que o outro
+ * (o cosseno diluiria o tema). Fica logo acima do limiar de ligação: é só uma sugestão, a RH decide.
+ */
+const PISO_CONCEITO_COMUM = 0.52;
 
 function temEstrutural(a: CandidataParaSugestao, b: CandidataParaSugestao): { habilidade: boolean; documento: boolean; grupo: boolean } {
   return {
@@ -252,6 +263,7 @@ function semelhanca(a: Perfil, b: Perfil, ajustar: (v: Vetor) => Vetor): number 
   let texto = cosseno(va, vb);
   // uma palavra genérica compartilhada não basta: exige 2 termos específicos, ou textos praticamente iguais
   if (texto < TEXTO_CURTO_IGUAL && compartilhadosEspecificos(va, vb) < 2) texto = 0;
+  if ([...a.conceitosPrincipais].some((id) => b.conceitosPrincipais.has(id))) texto = Math.max(texto, PISO_CONCEITO_COMUM);
   let s = 1 - (1 - texto) * (1 - estrutural);
   if (s >= 0.4) {
     // categoria e cargo só reforçam uma semelhança que já existe; sozinhos valem zero
