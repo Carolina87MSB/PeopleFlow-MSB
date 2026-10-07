@@ -21,6 +21,8 @@ await db.exec(`insert into public.peopleflow_dev_pdi_sugestoes_dispensadas (pdi_
 // Fase 7 (1A) real + backfill, exatamente como em produção
 const MIG = rd("desenvolvimento_fase7_triagem_pdi.sql");
 await db.query(MIG.slice(0, MIG.indexOf("$mig$;", MIG.indexOf("do $mig$")) + 6));
+// APLICAR_8A=1: roda a mesma suíte com a migration da Fase 8A por cima (prova que a 1B não depende de a 8A estar ausente)
+if (process.env.APLICAR_8A) await db.exec(rd("desenvolvimento_fase8a_ia_fundacao.sql"));
 
 // itens extras para os cenários (PDI: nada disso é alterado pela triagem)
 await db.exec(`

@@ -13,6 +13,8 @@ const { db, sql, um } = R;
 const { p1 } = await semearPdi(R);
 const MIG = rd("desenvolvimento_fase7_triagem_pdi.sql");
 await db.query(MIG.slice(0, MIG.indexOf("$mig$;", MIG.indexOf("do $mig$")) + 6));
+// APLICAR_8A=1: roda a mesma suíte com a migration da Fase 8A por cima (prova que a 1B não depende de a 8A estar ausente)
+if (process.env.APLICAR_8A) await db.exec(rd("desenvolvimento_fase8a_ia_fundacao.sql"));
 
 // ── itens do cenário (PDI: o teste edita ações só para simular o gestor mexendo no PDI) ──
 const ESPECIFICO = (t) => `Ampliar a capacidade de ${t} com autonomia e consistência.`;
