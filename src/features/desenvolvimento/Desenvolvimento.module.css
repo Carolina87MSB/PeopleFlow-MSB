@@ -998,10 +998,205 @@
   flex: 1 1 260px;
 }
 
-/* Decisão de cada ação do PDI: ação principal + ação secundária discreta */
-.decisaoPdi {
+
+/* Triagem do PDI por ITEM (Fase 7 — Etapa 1B): um card por item, ações recolhíveis */
+.itensPdi {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  gap: 12px;
+}
+
+.itemPdi {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.itemPdiTopo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  font-size: 12.5px;
+  color: var(--color-muted);
+}
+
+.itemPdiTopo strong {
+  color: var(--color-navy);
+  font-size: 13.5px;
+}
+
+.itemPdiCompetencia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-navy);
+  overflow-wrap: anywhere;
+}
+
+.itemPdiObjetivo {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.itemPdiAcoesBotao {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: 600 12.5px/1.4 var(--font-sans);
+  color: var(--color-brand-dark);
+  cursor: pointer;
+}
+
+.itemPdiAcoesBotao:hover {
+  text-decoration: underline;
+}
+
+.itemPdiAcoes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.itemPdiAcoes li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.blocoNecessidade {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-pale);
+  font-size: 12.5px;
+  color: var(--color-text);
+}
+
+.blocoNecessidadeRotulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.blocoNecessidadeTexto {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-navy);
+  overflow-wrap: anywhere;
+}
+
+.avisoDesatualizada {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.avisoHistorico {
+  font-size: 12px;
+  color: var(--color-warning-fg);
+  font-weight: 600;
+}
+
+.botoesItem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.painelGerar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-pale);
+  font-size: 12.5px;
+  color: var(--color-text);
+}
+
+.separarGrupos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.separarAcao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
+.separarAcao > span {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .itemPdi {
+    padding: 12px;
+  }
+
+  .botoesItem > * {
+    flex: 1 1 100%;
+  }
+}
+
+.separarAcao select {
+  min-height: 34px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font: 600 12.5px/1.4 var(--font-sans);
+  color: var(--color-navy);
 }

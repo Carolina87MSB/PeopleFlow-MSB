@@ -625,28 +625,6 @@ export async function listarGrupos(): Promise<GrupoNecessidades[]> {
   return (data ?? []) as GrupoNecessidades[];
 }
 
-/** Ações do PDI que já viraram necessidade ou foram dispensadas (para não sugerir de novo). Somente RH. */
-/** Destino já dado pelo RH a cada ação de PDI (leitura sob RLS: só o RH vê). Ação sem registro aqui = aguardando análise. */
-export interface TriagemPdi {
-  /** ação → Necessidade de Desenvolvimento criada a partir dela */
-  confirmadas: Map<string, { necessidadeId: number; em: string | null }>;
-  /** ação → mantida somente no PDI (tabela de sugestões dispensadas, reaproveitada) */
-  mantidas: Map<string, { motivo: string; em: string }>;
-}
-
-export async function triagemPdi(): Promise<TriagemPdi> {
-  const [nec, disp] = await Promise.all([
-    supabase.from("peopleflow_dev_necessidades").select("id, pdi_acao_id, validada_em, created_at").not("pdi_acao_id", "is", null).limit(5000),
-    supabase.from("peopleflow_dev_pdi_sugestoes_dispensadas").select("pdi_acao_id, motivo, dispensada_em").limit(5000),
-  ]);
-  if (nec.error) falha("Necessidades de Desenvolvimento", nec.error.message);
-  if (disp.error) falha("Ações mantidas somente no PDI", disp.error.message);
-  return {
-    confirmadas: new Map((nec.data ?? []).map((r) => [r.pdi_acao_id as string, { necessidadeId: r.id as number, em: ((r.validada_em ?? r.created_at) as string | null) ?? null }])),
-    mantidas: new Map((disp.data ?? []).map((r) => [r.pdi_acao_id as string, { motivo: r.motivo as string, em: r.dispensada_em as string }])),
-  };
-}
-
 export interface OpcaoRequisito {
   id: number;
   tipo_requisito: "habilidade" | "treinamento";
@@ -747,6 +725,12 @@ export type AcaoGravacao =
   | "necessidade_desagrupar"
   | "pdi_sugestao_aceitar"
   | "pdi_sugestao_dispensar"
+  // Triagem do PDI por ITEM (Fase 7 — Etapa 1B): ações só do RH, em api/_lib/pdiTriagemAcoes.ts
+  | "pdi_triagem_gerar"
+  | "pdi_sugestao_confirmar"
+  | "pdi_sugestao_manter_no_pdi"
+  | "pdi_sugestao_separar"
+  | "pdi_sugestao_regenerar"
   | "treinamento_salvar"
   | "treinamento_realizacao"
   | "treinamento_planejar"

@@ -1,5 +1,5 @@
 // Leitura auxiliar das ações do PDI para a tela "Sugestões a partir do PDI".
-// Funções PURAS. O universo da tela é sempre TODA ação de PDI em aberto ainda não tratada: nada aqui
+// Funções PURAS. O universo da tela é sempre TODO item de PDI com ação em aberto ainda não tratada: nada aqui
 // esconde registros. Os "indícios" só ajudam o RH a ler o texto da ação; NÃO definem como a necessidade
 // será atendida (isso é decidido depois, em outro momento) e NÃO são gravados em lugar nenhum.
 
@@ -44,35 +44,7 @@ export function indiciosDaAcao(descricao: string): IndicioForma[] {
   return out;
 }
 
-export interface AcaoClassificavel {
-  tipo: "Comportamental" | "Tecnica";
-  indicios: IndicioForma[];
-  departamento?: string | undefined;
-}
-
-export interface FiltrosSugestao {
-  departamento: string;
-  tipo: FiltroTipo;
-  forma: FiltroForma;
-}
-
-const passaDepartamento = (a: AcaoClassificavel, f: FiltrosSugestao) => !f.departamento || a.departamento === f.departamento;
-const passaTipo = (a: AcaoClassificavel, f: FiltrosSugestao) => f.tipo === "todos" || a.tipo === f.tipo;
-const passaForma = (a: AcaoClassificavel, forma: FiltroForma) => forma === "todas" || (forma === "outra" ? a.indicios.length === 0 : a.indicios.includes(forma));
-
-/** Aplica os filtros auxiliares sobre o universo (todas as ações em aberto). Com tudo em "todas/todos" devolve tudo. */
-export function filtrarAcoes<T extends AcaoClassificavel>(acoes: T[], filtros: FiltrosSugestao): T[] {
-  return acoes.filter((a) => passaDepartamento(a, filtros) && passaTipo(a, filtros) && passaForma(a, filtros.forma));
-}
-
-/** Quantas ações cada chip de forma mostraria, respeitando departamento e tipo (não a própria forma). */
-export function contagemPorForma<T extends AcaoClassificavel>(acoes: T[], filtros: FiltrosSugestao): Record<FiltroForma, number> {
-  const base = acoes.filter((a) => passaDepartamento(a, filtros) && passaTipo(a, filtros));
-  const conta = (forma: FiltroForma) => base.filter((a) => passaForma(a, forma)).length;
-  return { todas: base.length, mentoria: conta("mentoria"), pratica: conta("pratica"), treinamento: conta("treinamento"), outra: conta("outra") };
-}
-
-// ── Destino de cada ação na triagem do RH ───────────────────────────────
+// ── Visões da triagem do RH (por item do PDI) ────────────────────────────
 export type SituacaoTriagem = "aguardando" | "confirmadas" | "mantidas";
 
 export const ROTULO_SITUACAO_TRIAGEM: Record<SituacaoTriagem, string> = {
@@ -80,14 +52,3 @@ export const ROTULO_SITUACAO_TRIAGEM: Record<SituacaoTriagem, string> = {
   confirmadas: "Confirmadas como necessidade",
   mantidas: "Mantidas somente no PDI",
 };
-
-/**
- * Onde a ação aparece. Quem já recebeu decisão do RH fica na lista da decisão (mesmo que a ação já tenha sido
- * concluída no PDI); só entra em "aguardando análise" a ação em aberto SEM decisão. Concluída/cancelada sem
- * decisão não aparece (null). Confirmada prevalece se, por algum motivo, houver as duas marcas.
- */
-export function situacaoDaAcao(emAberto: boolean, confirmada: boolean, mantida: boolean): SituacaoTriagem | null {
-  if (confirmada) return "confirmadas";
-  if (mantida) return "mantidas";
-  return emAberto ? "aguardando" : null;
-}

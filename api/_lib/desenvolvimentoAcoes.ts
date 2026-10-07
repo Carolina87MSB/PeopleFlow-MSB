@@ -13,9 +13,9 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
-import { MOTIVO_PADRAO_MANTER_NO_PDI } from "../../src/domain/pdiTriagem.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
+import { criarTriagemPdi } from "./pdiTriagemAcoes.js";
 
 export interface ContaDev {
   userId: string;
@@ -669,93 +669,10 @@ async function necessidadeDesagrupar(conta: ContaDev, corpo: Corpo) {
 }
 
 // ── Integração com PDI: SOMENTE LEITURA do PDI ──────────────────────────
-/** Lê a ação do PDI, o item e o cabeçalho (o PDI é a fonte oficial; nada é gravado nele). */
-async function lerAcaoPdi(pdiAcaoId: string) {
-  const { data: acao, error } = await supabaseAdmin.from("peopleflow_pdi_acoes").select("id, item_id, descricao, status, prazo").eq("id", pdiAcaoId).maybeSingle();
-  if (error) erroBanco(error, "PDI");
-  if (!acao) throw new ErroHttp(404, "Ação do PDI não encontrada (pode ter sido removida do PDI).");
-  const { data: item, error: iErro } = await supabaseAdmin.from("peopleflow_pdi_itens").select("id, pdi_id, competencia_nome, tipo_competencia, objetivo_desenvolvimento").eq("id", acao.item_id).maybeSingle();
-  if (iErro) erroBanco(iErro, "PDI");
-  if (!item) throw new ErroHttp(404, "Item do PDI não encontrado.");
-  const { data: pdi, error: pErro } = await supabaseAdmin.from("peopleflow_pdi").select("id, colaborador_nome, ciclo").eq("id", item.pdi_id).maybeSingle();
-  if (pErro) erroBanco(pErro, "PDI");
-  if (!pdi) throw new ErroHttp(404, "PDI não encontrado.");
-  return { acao, item, pdi };
-}
-
-async function pdiSugestaoAceitar(conta: ContaDev, corpo: Corpo) {
-  exigirRH(conta);
-  const pdiAcaoId = texto(corpo, "pdi_acao_id", { obrigatorio: true, max: 100, rotulo: "a ação do PDI" });
-  const { acao, item, pdi } = await lerAcaoPdi(pdiAcaoId);
-  const { data: dispensada } = await supabaseAdmin.from("peopleflow_dev_pdi_sugestoes_dispensadas").select("pdi_acao_id").eq("pdi_acao_id", pdiAcaoId).maybeSingle();
-  if (dispensada) throw new ErroHttp(422, "Esta sugestão já foi dispensada.");
-  // O PDI identifica a pessoa por nome; aqui o vínculo passa a ser por id (homônimo → não vincula).
-  const { data: pessoas, error: pErro } = await supabaseAdmin.from("colaboradores").select("id").eq("nome", pdi.colaborador_nome).eq("desligado", false);
-  if (pErro) erroBanco(pErro, "Colaborador");
-  if (!pessoas || pessoas.length !== 1) throw new ErroHttp(409, "Não foi possível identificar o colaborador do PDI de forma única.");
-  const colab = await lerColaboradorParaNecessidade(pessoas[0].id as number);
-  const categoria = umDe(texto(corpo, "categoria"), CATEGORIAS_NEC, "Categoria");
-  const prioridade = umDe(texto(corpo, "prioridade") || "media", PRIORIDADES, "Prioridade");
-  const justificativa =
-    texto(corpo, "justificativa", { max: 2000 }) ||
-    `PDI ${pdi.ciclo} — ${item.tipo_competencia === "Tecnica" ? "KPI" : "competência"} "${item.competencia_nome}"${item.objetivo_desenvolvimento ? `: ${item.objetivo_desenvolvimento}` : ""}`;
-  const agora = new Date().toISOString();
-  const { data, error } = await supabaseAdmin
-    .from("peopleflow_dev_necessidades")
-    .insert({
-      colaborador_id: colab.id,
-      departamento: colab.departamento,
-      gestor_colaborador_id: colab.gestorId,
-      origem: "pdi",
-      pdi_id: pdi.id,
-      pdi_item_id: item.id,
-      pdi_acao_id: acao.id,
-      pdi_item_nome: item.competencia_nome,
-      descricao: String(acao.descricao).slice(0, 500),
-      justificativa,
-      categoria,
-      prioridade,
-      sugestao_capacitacao: texto(corpo, "sugestao_capacitacao", { max: 500 }),
-      observacao: texto(corpo, "observacao", { max: 2000 }),
-      status: "validada",
-      validada_em: agora,
-      validada_por: conta.userId,
-      solicitado_por_colaborador_id: conta.colaboradorId,
-      origem_registro: "sistema",
-      created_by: conta.userId,
-      updated_by: conta.userId,
-    })
-    .select(COLS_NEC)
-    .single();
-  if (error) {
-    if (error.code === "23505") throw new ErroHttp(409, "Esta ação do PDI já está na Base de Necessidades de Desenvolvimento.");
-    erroBanco(error, "Necessidade de Desenvolvimento");
-  }
-  await auditar(conta, "necessidade_do_pdi", "peopleflow_dev_necessidades", String(data.id), { pdi_id: pdi.id, pdi_item_id: item.id, pdi_acao_id: acao.id, depois: data });
-  return data;
-}
-
-async function pdiSugestaoDispensar(conta: ContaDev, corpo: Corpo) {
-  exigirRH(conta);
-  const pdiAcaoId = texto(corpo, "pdi_acao_id", { obrigatorio: true, max: 100, rotulo: "a ação do PDI" });
-  // "Manter somente no PDI": a observação é opcional; o banco exige um texto, então usamos o padrão.
-  const motivo = texto(corpo, "motivo", { max: 1000, rotulo: "a observação" }) || MOTIVO_PADRAO_MANTER_NO_PDI;
-  const { item } = await lerAcaoPdi(pdiAcaoId);
-  const { data: jaConfirmada, error: cErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id").eq("pdi_acao_id", pdiAcaoId).limit(1);
-  if (cErro) erroBanco(cErro, "Necessidades de Desenvolvimento");
-  if ((jaConfirmada ?? []).length > 0) throw new ErroHttp(409, "Esta ação do PDI já foi confirmada como Necessidade de Desenvolvimento.");
-  const { data, error } = await supabaseAdmin
-    .from("peopleflow_dev_pdi_sugestoes_dispensadas")
-    .insert({ pdi_acao_id: pdiAcaoId, pdi_id: item.pdi_id, motivo, dispensada_por: conta.userId })
-    .select("pdi_acao_id, motivo, dispensada_em")
-    .single();
-  if (error) {
-    if (error.code === "23505") throw new ErroHttp(409, "Esta ação já foi mantida somente no PDI.");
-    erroBanco(error, "Sugestão do PDI");
-  }
-  await auditar(conta, "sugestao_pdi_dispensada", "peopleflow_dev_pdi_sugestoes_dispensadas", pdiAcaoId, { pdi_id: item.pdi_id, motivo });
-  return data;
-}
+// A triagem do PDI (por item) vive em pdiTriagemAcoes.ts. As ações antigas por ação isolada
+// (pdi_sugestao_aceitar / pdi_sugestao_dispensar) continuam existindo por compatibilidade, mas
+// DELEGAM ao novo fluxo (sugestão de 1 ação): não há mais decisão só no legado.
+const TRIAGEM_PDI = criarTriagemPdi({ ErroHttp, exigirRH, texto, umDe, erroBanco, lerColaboradorParaNecessidade, CATEGORIAS_NEC, PRIORIDADES, COLS_NEC });
 
 // ══ Fase 5 — Gestão de Treinamentos ═════════════════════════════════════
 const COLS_TRE =
@@ -2306,8 +2223,9 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   necessidade_status: necessidadeStatus,
   necessidade_consolidar: necessidadeConsolidar,
   necessidade_desagrupar: necessidadeDesagrupar,
-  pdi_sugestao_aceitar: pdiSugestaoAceitar,
-  pdi_sugestao_dispensar: pdiSugestaoDispensar,
+  pdi_sugestao_aceitar: TRIAGEM_PDI.aceitarLegado,
+  pdi_sugestao_dispensar: TRIAGEM_PDI.dispensarLegado,
+  ...TRIAGEM_PDI.acoes,
   treinamento_salvar: treinamentoSalvar,
   treinamento_realizacao: treinamentoRealizacao,
   treinamento_reposicao: treinamentoReposicao,
