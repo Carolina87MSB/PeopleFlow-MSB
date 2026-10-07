@@ -82,6 +82,12 @@ export function ConfirmarDrawer({ card, sugestao, editar: editarPedido, onFechar
       >
         <h4 className={styles.secaoTitulo}>Necessidade de Desenvolvimento</h4>
         {solta && <div className={styles.nota}>A necessidade nº {solta.id} já foi criada na Base, mas a confirmação não foi concluída. Ao concluir, ela é vinculada a esta sugestão e nenhuma nova necessidade é criada.</div>}
+        {sugestao.ia && sugestao.confianca && !solta && (
+          <div className={styles.nota}>
+            Sugerida pela IA — {sugestao.confianca === "alta" ? "confiança alta" : sugestao.confianca === "media" ? "confiança média" : "confiança baixa (vale revisar com atenção)"}.
+            {sugestao.justificativa ? ` Por quê: ${sugestao.justificativa}` : ""} A decisão é sua: você pode editar o texto antes de confirmar.
+          </div>
+        )}
         {aDefinir && (
           <>
             <div className={styles.nota}>Revise o objetivo e as ações do PDI e descreva a necessidade de desenvolvimento.</div>

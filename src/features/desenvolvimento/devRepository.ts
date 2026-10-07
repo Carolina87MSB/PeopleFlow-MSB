@@ -730,7 +730,7 @@ export type AcaoGravacao =
   | "pdi_sugestao_confirmar"
   | "pdi_sugestao_manter_no_pdi"
   | "pdi_sugestao_separar"
-  | "pdi_sugestao_regenerar"
+  | "pdi_sugestao_regenerar" | "pdi_ia_analisar" | "pdi_ia_estado"
   | "treinamento_salvar"
   | "treinamento_realizacao"
   | "treinamento_planejar"

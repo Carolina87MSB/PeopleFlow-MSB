@@ -882,5 +882,7 @@ export function criarTriagemPdi(d: DepsTriagemPdi) {
     } as Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>,
     aceitarLegado,
     dispensarLegado,
+    /** Peças reaproveitadas pela análise com IA (pdiIaAcoes.ts): mesmas leituras, mesma proteção e mesma auditoria da triagem. */
+    internos: { lerContextoItem, acoesIndisponiveis, lerSugestao, origemAlterada, necessidadesSoltas, exigirSemNecessidadeSolta, registrarAuditoria, descartarSugestoes },
   };
 }
