@@ -63,6 +63,9 @@ export interface ItemCard {
   pdiId: number;
   itemId: string;
   colaboradorNome: string;
+  /** Chave ESTÁVEL da pessoa para contagens (nunca o nome): `c:<id do cadastro>` quando o nome é único no cadastro; senão `pdi:<id do PDI>`,
+   * de modo que homônimos nunca se misturam. O nome serve só para exibir. */
+  colaboradorChave: string;
   departamento: string | undefined;
   competencia: string;
   tipo: string;
@@ -92,8 +95,14 @@ export interface Contagem {
 
 const PADRAO = MOTIVO_PADRAO_MANTER_NO_PDI;
 
-export function montarTriagem(entrada: { pdis: PdiEntrada[]; triagem: TriagemPdi; departamentoPorNome: Map<string, string> }): ModeloTriagem {
-  const { pdis, triagem, departamentoPorNome } = entrada;
+export function montarTriagem(entrada: {
+  pdis: PdiEntrada[];
+  triagem: TriagemPdi;
+  departamentoPorNome: Map<string, string>;
+  /** id do cadastro por nome, SÓ para nomes únicos (nome repetido não entra: o PDI usa o id do próprio PDI). */
+  colaboradorIdPorNome?: Map<string, number>;
+}): ModeloTriagem {
+  const { pdis, triagem, departamentoPorNome, colaboradorIdPorNome } = entrada;
   const linhaPorAcao = new Map<string, AcaoTriagem>(triagem.acoes.map((a) => [a.pdi_acao_id, a]));
   const acoesPorSugestao = new Map<number, AcaoDaSugestao[]>();
   for (const a of triagem.acoesDasSugestoes) if (a.ativa) acoesPorSugestao.set(a.sugestao_id, [...(acoesPorSugestao.get(a.sugestao_id) ?? []), a]);
@@ -159,9 +168,12 @@ export function montarTriagem(entrada: { pdis: PdiEntrada[]; triagem: TriagemPdi
     const ref = storeItem.get(itemId);
     const base = sugs[0];
     const nome = ref?.pdi.colaboradorNome ?? pdiPorId.get(base?.pdi_id ?? -1)?.colaboradorNome ?? "(PDI não localizado)";
+    const pdiId = ref?.pdi.id ?? base?.pdi_id ?? 0;
+    const idCadastro = colaboradorIdPorNome?.get(nome);
     return {
-      pdiId: ref?.pdi.id ?? base?.pdi_id ?? 0,
+      pdiId,
       colaboradorNome: nome,
+      colaboradorChave: idCadastro !== undefined ? `c:${idCadastro}` : `pdi:${pdiId}`,
       departamento: departamentoPorNome.get(nome),
       competencia: ref?.item.competenciaNome ?? base?.item_competencia_nome ?? "",
       tipo: ref?.item.tipoCompetencia ?? base?.item_tipo_competencia ?? "",

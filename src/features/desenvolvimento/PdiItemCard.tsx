@@ -18,6 +18,13 @@ export interface AcoesDoCard {
   onGerar: (itemId: string) => void;
 }
 
+/** Só leitura (visão "Por temas"): quais ações deste item pertencem ao tema aberto e por quê. Não muda nenhuma decisão. */
+export interface RealceTema {
+  rotulo: string;
+  acoes: { id: string; texto: string; explicacao: string; nota?: string }[];
+  tambemEm: string[];
+}
+
 interface Props extends AcoesDoCard {
   card: ItemCard;
   situacao: SituacaoItem;
@@ -25,6 +32,7 @@ interface Props extends AcoesDoCard {
   ocupado: boolean;
   /** O colaborador do PDI foi identificado de forma única (a Necessidade exige esse vínculo). */
   confirmavel: boolean;
+  realce?: RealceTema;
 }
 
 function ListaAcoes({ acoes }: { acoes: AcaoCard[] }) {
@@ -122,7 +130,7 @@ function ListaAcoesRecolhivel({ acoes, rotulo }: { acoes: AcaoCard[]; rotulo: st
   );
 }
 
-export function PdiItemCard({ card, situacao, ocupado, confirmavel, ...acoes }: Props) {
+export function PdiItemCard({ card, situacao, ocupado, confirmavel, realce, ...acoes }: Props) {
   const { decididas } = card;
   const jaDecididas = decididas.confirmadas + decididas.mantidas;
   return (
@@ -138,6 +146,28 @@ export function PdiItemCard({ card, situacao, ocupado, confirmavel, ...acoes }: 
         <Selo tom="neutral">{card.tipo === "Tecnica" ? "KPI" : "Competência"}</Selo>
       </div>
       {card.objetivo && <p className={styles.itemPdiObjetivo}>{card.objetivo}</p>}
+
+      {realce && (
+        <div className={styles.realceTema} data-testid="realce-tema">
+          <span className={styles.blocoNecessidadeRotulo}>
+            {realce.rotulo} · {plural(realce.acoes.length, "ação relevante", "ações relevantes")}
+          </span>
+          <ul className={styles.realceTemaLista}>
+            {realce.acoes.map((a) => (
+              <li key={a.id}>
+                <span>{a.texto}</span>
+                <span className={styles.dica}>{a.explicacao}</span>
+                {a.nota && <span className={styles.dica}>{a.nota}</span>}
+              </li>
+            ))}
+          </ul>
+          {realce.tambemEm.length > 0 && (
+            <span className={styles.dica}>
+              Este item também aparece em: {realce.tambemEm.join(", ")}. A decisão é uma só: decidir aqui vale para todos os grupos.
+            </span>
+          )}
+        </div>
+      )}
 
       {situacao === "aguardando" && (
         <>

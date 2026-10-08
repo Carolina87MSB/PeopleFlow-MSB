@@ -9,6 +9,7 @@ import { plural } from "./lntRotulos";
 import { useConsulta } from "./hooks";
 import { PdiItemCard, type SituacaoItem } from "./PdiItemCard";
 import { ConfirmarDrawer, ManterDrawer, SepararDrawer } from "./PdiTriagemDrawers";
+import { SugestoesPorTemas } from "./SugestoesPorTemas";
 import { ROTULO_FILTRO_FORMA, ROTULO_FILTRO_TIPO, ROTULO_SITUACAO_TRIAGEM, type FiltroForma, type FiltroTipo } from "./pdiClassificacao";
 import { contagemPorFormaItens, contar, filtrarItens, montarTriagem, type ItemCard, type SugestaoCard } from "./pdiTriagemItens";
 import { lerTriagemPdi, triagemPdi } from "./pdiTriagemRepository";
@@ -16,6 +17,9 @@ import styles from "./Desenvolvimento.module.css";
 
 const FORMAS: FiltroForma[] = ["todas", "mentoria", "pratica", "treinamento", "outra"];
 const SITUACOES: SituacaoItem[] = ["aguardando", "confirmadas", "mantidas"];
+const VISOES = { temas: "Por temas", colaborador: "Por colaborador" } as const;
+type Visao = keyof typeof VISOES;
+const ROTULO_ITENS: Record<SituacaoItem, string> = { aguardando: "itens aguardando análise", confirmadas: "itens confirmados", mantidas: "itens mantidos somente no PDI" };
 
 type Aberto = { modo: "confirmar" | "editar" | "separar" | "manter"; card: ItemCard; sugestao: SugestaoCard };
 
@@ -24,6 +28,7 @@ export function SugestoesPdiAba() {
   const { state } = usePortalStore();
   const { flash } = useToast();
   const triagem = useConsulta(() => lerTriagemPdi(), []);
+  const [visao, setVisao] = useState<Visao>("temas");
   const [situacao, setSituacao] = useState<SituacaoItem>("aguardando");
   const [forma, setForma] = useState<FiltroForma>("todas");
   const [tipo, setTipo] = useState<FiltroTipo>("todos");
@@ -35,16 +40,20 @@ export function SugestoesPdiAba() {
   // Departamento pelo cadastro oficial (colaboradores já carregados pelo PeopleFlow).
   const deptoPorNome = useMemo(() => new Map(state.colaboradores.filter((c) => !c.desligado).map((c) => [c.nome, c.depto])), [state.colaboradores]);
   // A Necessidade exige vínculo por id: nome ausente ou repetido (homônimo) não permite confirmar.
-  const identificaveis = useMemo(() => {
+  // Pessoa de nome único → id do cadastro (chave estável das contagens). Nome repetido não entra: o item usa o id do próprio PDI.
+  const idPorNomeUnico = useMemo(() => {
     const conta = new Map<string, number>();
     for (const p of pessoas) conta.set(p.nome, (conta.get(p.nome) ?? 0) + 1);
-    return new Set([...conta].filter(([, n]) => n === 1).map(([nome]) => nome));
+    return new Map(pessoas.filter((p) => conta.get(p.nome) === 1).map((p) => [p.nome, p.id]));
   }, [pessoas]);
+  const identificaveis = useMemo(() => new Set(idPorNomeUnico.keys()), [idPorNomeUnico]);
 
-  const modelo = useMemo(() => (triagem.dados ? montarTriagem({ pdis: state.pdi, triagem: triagem.dados, departamentoPorNome: deptoPorNome }) : null), [state.pdi, triagem.dados, deptoPorNome]);
+  const modelo = useMemo(() => (triagem.dados ? montarTriagem({ pdis: state.pdi, triagem: triagem.dados, departamentoPorNome: deptoPorNome, colaboradorIdPorNome: idPorNomeUnico }) : null), [state.pdi, triagem.dados, deptoPorNome, idPorNomeUnico]);
   const base = useMemo(() => modelo?.[situacao] ?? [], [modelo, situacao]);
   const filtros = useMemo(() => ({ departamento, tipo, forma }), [departamento, tipo, forma]);
   const visiveis = useMemo(() => filtrarItens(base, filtros), [base, filtros]);
+  // A visão por temas não usa o filtro de forma (mentoria/prática/treinamento): só situação, departamento, tipo e tema.
+  const paraTemas = useMemo(() => filtrarItens(base, { departamento, tipo, forma: "todas" }), [base, departamento, tipo]);
   const contagemForma = useMemo(() => contagemPorFormaItens(base, { departamento, tipo }), [base, departamento, tipo]);
   const departamentos = useMemo(() => {
     const todos = modelo ? [...modelo.aguardando, ...modelo.confirmadas, ...modelo.mantidas] : [];
@@ -80,6 +89,14 @@ export function SugestoesPdiAba() {
     triagem.recarregar();
   };
   const abrir = (modo: Aberto["modo"]) => (card: ItemCard) => (sugestao: SugestaoCard) => setAberto({ modo, card, sugestao });
+  const acoesPara = (card: ItemCard) => ({
+    onConfirmar: abrir("confirmar")(card),
+    onEditar: abrir("editar")(card),
+    onSeparar: abrir("separar")(card),
+    onManter: abrir("manter")(card),
+    onRegenerar: regenerar,
+    onGerar: (id: string) => gerar([id]),
+  });
 
   return (
     <Card>
@@ -96,6 +113,9 @@ export function SugestoesPdiAba() {
           </span>
         )}
       </div>
+      <div className={styles.visoesPdi}>
+        <FilterChips options={Object.values(VISOES)} value={VISOES[visao]} onChange={(v) => setVisao((Object.keys(VISOES) as Visao[]).find((k) => VISOES[k] === v) ?? "temas")} />
+      </div>
       <div className={styles.toolbar}>
         <FilterChips
           options={SITUACOES.map((s) => `${ROTULO_SITUACAO_TRIAGEM[s]} (${totais[s].itens})`)}
@@ -106,16 +126,20 @@ export function SugestoesPdiAba() {
           }}
         />
       </div>
-      <div className={styles.toolbar}>
-        <FilterChips
-          options={FORMAS.map((f) => `${ROTULO_FILTRO_FORMA[f]} (${contagemForma[f]})`)}
-          value={`${ROTULO_FILTRO_FORMA[forma]} (${contagemForma[forma]})`}
-          onChange={(v) => setForma(FORMAS.find((f) => v.startsWith(`${ROTULO_FILTRO_FORMA[f]} (`)) ?? "todas")}
-        />
-      </div>
-      <span className={styles.dica} style={{ display: "block", marginBottom: 10 }}>
-        Os indícios (mentoria, aprendizagem prática, treinamento) vêm apenas do texto das ações e ajudam a leitura. Não definem como a necessidade será atendida, e nenhum item some da lista por causa deles.
-      </span>
+      {visao === "colaborador" && (
+        <>
+        <div className={styles.toolbar}>
+          <FilterChips
+            options={FORMAS.map((f) => `${ROTULO_FILTRO_FORMA[f]} (${contagemForma[f]})`)}
+            value={`${ROTULO_FILTRO_FORMA[forma]} (${contagemForma[forma]})`}
+            onChange={(v) => setForma(FORMAS.find((f) => v.startsWith(`${ROTULO_FILTRO_FORMA[f]} (`)) ?? "todas")}
+          />
+        </div>
+        <span className={styles.dica} style={{ display: "block", marginBottom: 10 }}>
+          Os indícios (mentoria, aprendizagem prática, treinamento) vêm apenas do texto das ações e ajudam a leitura. Não definem como a necessidade será atendida, e nenhum item some da lista por causa deles.
+        </span>
+        </>
+      )}
       <div className={styles.filtros} style={{ marginBottom: 14 }}>
         <select className={styles.select} style={{ minWidth: 200 }} value={tipo} onChange={(e) => setTipo(e.target.value as FiltroTipo)} aria-label="Tipo de desenvolvimento">
           {(Object.keys(ROTULO_FILTRO_TIPO) as FiltroTipo[]).map((t) => (
@@ -148,6 +172,8 @@ export function SugestoesPdiAba() {
         <Erro mensagem={triagem.erro} />
       ) : !modelo ? (
         <Carregando />
+      ) : visao === "temas" ? (
+        <SugestoesPorTemas cards={paraTemas} situacao={situacao} rotuloItens={ROTULO_ITENS[situacao]} ocupado={ocupado} identificaveis={identificaveis} acoesPara={acoesPara} />
       ) : visiveis.length === 0 ? (
         <EstadoVazio icone={<Sparkles size={26} strokeWidth={1.6} />} {...textoVazio(situacao, base.length)} />
       ) : (
