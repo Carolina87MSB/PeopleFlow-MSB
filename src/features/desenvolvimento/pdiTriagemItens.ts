@@ -8,7 +8,7 @@
 
 import { MOTIVO_PADRAO_MANTER_NO_PDI, acaoEmAberto, ehTextoADefinir } from "../../domain/pdiTriagem";
 import { indiciosDaAcao, type FiltroForma, type FiltroTipo, type IndicioForma } from "./pdiClassificacao";
-import type { AcaoDaSugestao, AcaoTriagem, DestinoAcao, NecessidadePdi, ResultadoIa, SugestaoPdi, TriagemPdi } from "./pdiTriagemRepository";
+import type { AcaoDaSugestao, AcaoTriagem, DestinoAcao, NecessidadePdi, SugestaoPdi, TriagemPdi } from "./pdiTriagemRepository";
 
 export interface PdiEntrada {
   id: number;
@@ -49,16 +49,8 @@ export interface SugestaoCard {
   desatualizada: boolean;
   /** Decisão JÁ tomada cujo PDI mudou depois: só aviso histórico, a decisão não muda. */
   origemAlteradaAposDecisao: boolean;
-  /** Sugerida pela regra local simples (sem IA). */
+  /** Sugerida pela regra local do sistema (e não criada pelo RH nem vinda do legado). */
   automatica: boolean;
-  /** Análise da IA (Fase 8): a interpretação a que a sugestão pertence; nulo nas demais origens. */
-  ia: { interpretacaoId: number; resultado: ResultadoIa | null; observacao: string | null } | null;
-  /** Título curto da necessidade sugerida pela IA. */
-  tema: string | null;
-  confianca: "alta" | "media" | "baixa" | null;
-  justificativa: string | null;
-  /** Sugestão NEUTRA da IA ("A definir pelo RH", sem confiança): cobre ações sem necessidade; NÃO é uma necessidade identificada. */
-  neutraIa: boolean;
   /** A regra local não conseguiu sintetizar uma necessidade ("A definir pelo RH"): não é uma necessidade válida, o RH precisa descrevê-la. */
   aDefinir: boolean;
   /** Necessidade já criada na Base para esta sugestão cuja confirmação não foi concluída (queda no meio): só falta vincular. */
@@ -156,12 +148,7 @@ export function montarTriagem(entrada: { pdis: PdiEntrada[]; triagem: TriagemPdi
       observacao: s.estado === "mantida_no_pdi" && motivo && motivo !== PADRAO ? motivo : null,
       desatualizada: s.estado === "pendente" && (s.origem_alterada || s.contexto_do_item_alterado),
       origemAlteradaAposDecisao: s.origem_alterada_apos_decisao,
-      automatica: s.origem_sugestao === "regra_local",
-      ia: s.origem_sugestao === "ia" && s.interpretacao_id !== null ? { interpretacaoId: s.interpretacao_id, resultado: s.resultado_interpretacao, observacao: s.observacao_interpretacao } : null,
-      tema: s.tema,
-      confianca: s.confianca,
-      justificativa: s.justificativa_interpretacao,
-      neutraIa: s.origem_sugestao === "ia" && s.confianca === null,
+      automatica: s.origem_sugestao === "regra_local" || s.origem_sugestao === "ia",
       aDefinir,
       necessidadeSolta: solta ? { id: solta.id, descricao: solta.descricao, categoria: solta.categoria, prioridade: solta.prioridade } : null,
       acoes,

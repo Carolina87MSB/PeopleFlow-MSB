@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button, Card, FilterChips } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
@@ -11,7 +11,7 @@ import { PdiItemCard, type SituacaoItem } from "./PdiItemCard";
 import { ConfirmarDrawer, ManterDrawer, SepararDrawer } from "./PdiTriagemDrawers";
 import { ROTULO_FILTRO_FORMA, ROTULO_FILTRO_TIPO, ROTULO_SITUACAO_TRIAGEM, type FiltroForma, type FiltroTipo } from "./pdiClassificacao";
 import { contagemPorFormaItens, contar, filtrarItens, montarTriagem, type ItemCard, type SugestaoCard } from "./pdiTriagemItens";
-import { lerTriagemPdi, triagemPdi, type EstadoIaTela } from "./pdiTriagemRepository";
+import { lerTriagemPdi, triagemPdi } from "./pdiTriagemRepository";
 import styles from "./Desenvolvimento.module.css";
 
 const FORMAS: FiltroForma[] = ["todas", "mentoria", "pratica", "treinamento", "outra"];
@@ -31,20 +31,6 @@ export function SugestoesPdiAba() {
   const [aberto, setAberto] = useState<Aberto | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
-  // Análise com IA: disponível só se o servidor estiver configurado; sem ela o fluxo manual segue normal.
-  const [ia, setIa] = useState<EstadoIaTela | null>(null);
-  const [analisando, setAnalisando] = useState<string | null>(null);
-  useEffect(() => {
-    let vivo = true;
-    triagemPdi
-      .estadoIa()
-      .then((e) => vivo && setIa(e))
-      .catch(() => vivo && setIa({ disponivel: false, motivo: "indisponivel", mensagem: "Não foi possível verificar a análise com IA agora. O fluxo manual continua funcionando." }));
-    return () => {
-      vivo = false;
-    };
-  }, []);
-  const iaDisponivel = ia?.disponivel === true;
 
   // Departamento pelo cadastro oficial (colaboradores já carregados pelo PeopleFlow).
   const deptoPorNome = useMemo(() => new Map(state.colaboradores.filter((c) => !c.desligado).map((c) => [c.nome, c.depto])), [state.colaboradores]);
@@ -87,28 +73,6 @@ export function SugestoesPdiAba() {
     }
   };
   const gerar = (itemIds?: string[]) => executar(() => triagemPdi.gerar(itemIds), "Sugestões geradas.");
-  const analisarIa = async (itemId: string) => {
-    setErroAcao(null);
-    setAnalisando(itemId);
-    try {
-      const r = await triagemPdi.analisarIa(itemId);
-      flash(
-        r.auditoria === "pendente"
-          ? "Análise concluída, mas o registro de auditoria não pôde ser salvo. Avise o suporte."
-          : r.resultado === "necessidade_identificada" || r.resultado === "multiplas_necessidades"
-            ? "Análise da IA concluída. Revise a sugestão: a decisão é sua."
-            : r.resultado === "somente_acao_pdi"
-              ? "Análise concluída: sem necessidade distinta a registrar neste item."
-              : "Análise concluída: não há evidência suficiente para definir a necessidade.",
-      );
-      triagem.recarregar();
-    } catch (e) {
-      setErroAcao(e instanceof Error ? e.message : String(e));
-      triagem.recarregar();
-    } finally {
-      setAnalisando(null);
-    }
-  };
   const regenerar = (s: SugestaoCard) => executar(() => triagemPdi.regenerar(s.id), "Sugestão atualizada com o PDI atual.");
 
   const concluido = () => {
@@ -168,12 +132,7 @@ export function SugestoesPdiAba() {
         </select>
       </div>
 
-      {ia && !ia.disponivel && (
-        <span className={styles.dica} style={{ display: "block", marginBottom: 10 }}>
-          Análise com IA indisponível. {ia.mensagem}
-        </span>
-      )}
-      {situacao === "aguardando" && ia && !ia.disponivel && semSugestao.itens > 0 && (
+      {situacao === "aguardando" && semSugestao.itens > 0 && (
         <div className={styles.painelGerar}>
           <span>
             {plural(semSugestao.itens, "item", "itens")} ({plural(semSugestao.acoes, "ação", "ações")}) ainda sem sugestão de necessidade. A sugestão é montada por uma regra simples, sem inteligência artificial, e você revisa antes de decidir.
@@ -206,9 +165,6 @@ export function SugestoesPdiAba() {
               onManter={abrir("manter")(card)}
               onRegenerar={regenerar}
               onGerar={(id) => gerar([id])}
-              onAnalisarIa={analisarIa}
-              iaDisponivel={iaDisponivel}
-              analisando={analisando === card.itemId}
             />
           ))}
         </ul>

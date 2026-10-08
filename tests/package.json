@@ -2,16 +2,12 @@
   "name": "portal-peopleflow-tests",
   "private": true,
   "type": "module",
-  "description": "Testes da triagem do PDI por item (Fase 7 / Etapa 1B) e da análise com IA (Fase 8). Rodam numa réplica em memória (PGlite) com as migrations reais; nunca tocam o Supabase de produção nem chamam a IA de verdade. Pacote separado do app para não pesar no build.",
+  "description": "Testes da triagem do PDI por item (Fase 7 / Etapa 1B). Rodam numa réplica em memória (PGlite) com as migrations reais; nunca tocam o Supabase de produção. Pacote separado do app para não pesar no build.",
   "scripts": {
-    "test": "npm run test:visoes && npm run test:1b && npm run test:1b-ajustes && npm run test:8a && npm run test:ia-nucleo && npm run test:ia-cliente && npm run test:ia",
+    "test": "npm run test:visoes && npm run test:1b && npm run test:1b-ajustes",
     "test:visoes": "tsx pdi-triagem/teste_itens.ts",
     "test:1b": "node --import ./pdi-triagem/register.mjs pdi-triagem/teste_1b.mjs",
-    "test:1b-ajustes": "node --import ./pdi-triagem/register.mjs pdi-triagem/teste_1b_ajustes.mjs",
-    "test:8a": "node fase8a/teste_8a.mjs",
-    "test:ia-nucleo": "tsx fase8/teste_nucleo.ts",
-    "test:ia-cliente": "node --import ./pdi-triagem/register.mjs fase8/teste_cliente.mjs",
-    "test:ia": "node --import ./pdi-triagem/register.mjs fase8/teste_ia.mjs"
+    "test:1b-ajustes": "node --import ./pdi-triagem/register.mjs pdi-triagem/teste_1b_ajustes.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

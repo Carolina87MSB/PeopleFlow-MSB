@@ -16,7 +16,6 @@ import { emailOf } from "../../src/domain/hierarquia.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
 import { criarTriagemPdi } from "./pdiTriagemAcoes.js";
-import { criarIaPdi } from "./pdiIaAcoes.js";
 
 export interface ContaDev {
   userId: string;
@@ -674,7 +673,6 @@ async function necessidadeDesagrupar(conta: ContaDev, corpo: Corpo) {
 // (pdi_sugestao_aceitar / pdi_sugestao_dispensar) continuam existindo por compatibilidade, mas
 // DELEGAM ao novo fluxo (sugestão de 1 ação): não há mais decisão só no legado.
 const TRIAGEM_PDI = criarTriagemPdi({ ErroHttp, exigirRH, texto, umDe, erroBanco, lerColaboradorParaNecessidade, CATEGORIAS_NEC, PRIORIDADES, COLS_NEC });
-const IA_PDI = criarIaPdi({ ErroHttp, exigirRH, texto, erroBanco, internos: TRIAGEM_PDI.internos });
 
 // ══ Fase 5 — Gestão de Treinamentos ═════════════════════════════════════
 const COLS_TRE =
@@ -2228,7 +2226,6 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   pdi_sugestao_aceitar: TRIAGEM_PDI.aceitarLegado,
   pdi_sugestao_dispensar: TRIAGEM_PDI.dispensarLegado,
   ...TRIAGEM_PDI.acoes,
-  ...IA_PDI.acoes,
   treinamento_salvar: treinamentoSalvar,
   treinamento_realizacao: treinamentoRealizacao,
   treinamento_reposicao: treinamentoReposicao,

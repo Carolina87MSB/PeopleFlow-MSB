@@ -65,11 +65,6 @@ const sug = (o: Partial<SugestaoPdi> & { id: number; pdi_item_id: string; estado
   origem_alterada: false,
   contexto_do_item_alterado: false,
   origem_alterada_apos_decisao: false,
-  tema: null,
-  confianca: null,
-  justificativa_interpretacao: null,
-  resultado_interpretacao: null,
-  observacao_interpretacao: null,
   ...o,
 });
 const dest = (id: string, item: string, destino: DestinoAcao, pdi = 1, sid: number | null = null): AcaoTriagem => ({ pdi_acao_id: id, pdi_item_id: item, pdi_id: pdi, descricao: "", acao_status: "Em andamento", sugestao_id: sid, sugestao_estado: null, destino });
@@ -272,38 +267,6 @@ const legadoValidada = (id: number, item: string, pdi: number, texto: string, ne
   check("tela: necessidade ligada à sugestão validada NÃO é 'sem vínculo'", conf.sugestoes[0].necessidadeSolta === null);
 }
 
-
-
-// ═══ Fase 8D: análise da IA na montagem das visões ═══
-{
-  const iaSug = (id: number, interp: number, item: string, o: Record<string, unknown>) =>
-    sug({ id, estado: "pendente", interpretacao_id: interp, origem_sugestao: "ia", pdi_item_id: item, pdi_id: item === "I10" ? 2 : 1, ...o });
-  const t: TriagemPdi = {
-    acoes: [dest("A1", "I1", "sugestao_pendente", 1, 401), dest("A2", "I1", "sugestao_pendente", 1, 401), dest("A3", "I1", "sugestao_pendente", 1, 401),
-      dest("A4", "I2", "sugestao_pendente", 1, 402), dest("A5", "I3", "sugestao_pendente", 1, 403),
-      dest("B1", "I10", "sugestao_pendente", 2, 404), dest("B2", "I10", "sugestao_pendente", 2, 405), dest("B3", "I10", "sugestao_pendente", 2, 406)],
-    sugestoes: [
-      iaSug(401, 7, "I1", { texto_sugerido: "Desenvolvimento da comunicação assertiva.", tema: "Comunicação assertiva", confianca: "alta", justificativa_interpretacao: "As ações apontam para a mesma capacidade.", resultado_interpretacao: "necessidade_identificada", observacao_interpretacao: "Observação da IA." }),
-      iaSug(402, 8, "I2", { texto_sugerido: TEXTO_A_DEFINIR_PELO_RH, resultado_interpretacao: "evidencia_insuficiente", observacao_interpretacao: "Não descreve a lacuna." }),
-      sug({ id: 403, pdi_item_id: "I3", estado: "pendente", texto_sugerido: TEXTO_A_DEFINIR_PELO_RH }),
-      iaSug(404, 9, "I10", { texto_sugerido: "Necessidade um.", tema: "Um", confianca: "media", justificativa_interpretacao: "J1", resultado_interpretacao: "multiplas_necessidades", observacao_interpretacao: "Dois temas." }),
-      iaSug(405, 9, "I10", { texto_sugerido: "Necessidade dois.", tema: "Dois", confianca: "baixa", justificativa_interpretacao: "J2", resultado_interpretacao: "multiplas_necessidades", observacao_interpretacao: "Dois temas." }),
-      iaSug(406, 9, "I10", { texto_sugerido: TEXTO_A_DEFINIR_PELO_RH, resultado_interpretacao: "multiplas_necessidades", observacao_interpretacao: "Dois temas." }),
-    ],
-    necessidadesPdi: [],
-    acoesDasSugestoes: [sa(401, "A1", MENTORIA), sa(401, "A2", REUNIOES), sa(401, "A3", "Ler sobre cenários"), sa(402, "A4", "Estudar o DRE do setor"), sa(403, "A5", CURSO), sa(404, "B1", "Praticar apresentações curtas"), sa(405, "B2", "Pedir feedback ao gestor"), sa(406, "B3", "Curso de oratória")],
-  };
-  const m = montarTriagem({ pdis, triagem: t, departamentoPorNome: depto });
-  const i1 = m.aguardando.find((c) => c.itemId === "I1")!.sugestoes[0];
-  check("IA: sugestão com necessidade traz título, confiança, justificativa e a interpretação (resultado/observação), e não é 'a definir' nem 'neutra'", i1.ia?.resultado === "necessidade_identificada" && i1.ia.observacao === "Observação da IA." && i1.tema === "Comunicação assertiva" && i1.confianca === "alta" && i1.justificativa === "As ações apontam para a mesma capacidade." && !i1.neutraIa && !i1.aDefinir && !i1.automatica);
-  const i2 = m.aguardando.find((c) => c.itemId === "I2")!.sugestoes[0];
-  check("IA: evidência insuficiente = sugestão NEUTRA (a definir, sem confiança) cujo resultado verdadeiro vem da interpretação", i2.neutraIa && i2.aDefinir && i2.confianca === null && i2.ia?.resultado === "evidencia_insuficiente" && i2.ia.observacao === "Não descreve a lacuna.");
-  const i3 = m.aguardando.find((c) => c.itemId === "I3")!.sugestoes[0];
-  check("regra local continua como antes: automática, sem IA, 'a definir'", i3.automatica && i3.ia === null && !i3.neutraIa && i3.aDefinir);
-  const i10 = m.aguardando.find((c) => c.itemId === "I10")!.sugestoes;
-  check("IA múltiplas: 3 sugestões (2 necessidades + 1 neutra) na MESMA interpretação, confiança própria em cada", i10.length === 3 && new Set(i10.map((s) => s.ia?.interpretacaoId)).size === 1 && i10.filter((s) => s.neutraIa).length === 1 && i10.filter((s) => s.confianca).map((s) => s.confianca).sort().join() === "baixa,media");
-  check("IA: ações de origem exclusivas por sugestão e contador de ações correto", contar(m.aguardando.filter((c) => c.itemId === "I10")).acoes === 3 && i10.every((s) => s.acoes.length === 1));
-}
 
 console.log(`\n${ok} verificações OK, ${falhas} falhas`);
 process.exit(falhas ? 1 : 0);
