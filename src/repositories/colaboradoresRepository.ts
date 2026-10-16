@@ -173,3 +173,23 @@ export async function criarSolicitacaoDesligamento(nome: string, dataIso: string
   );
   if (error) throw new Error(`Falha ao registrar solicitação de desligamento: ${error.message}`);
 }
+
+export interface ResultadoEfetivacaoDesligamento {
+  movimentacaoId: string;
+  situacao: "efetivado" | "agendado" | "ja_desligado" | "nao_localizado" | "ambiguo" | "sem_dados" | "falha";
+  detalhe?: string;
+}
+
+/** Pede ao servidor (RH) que efetive no cadastro o desligamento de uma MP recém-aprovada: o servidor relê a MP no banco e só
+ * desliga se ela estiver Aprovada e a data já tiver chegado; data futura fica agendada para a rotina diária. Não toca na solicitação
+ * enviada ao SST. */
+export async function efetivarDesligamentoDaMp(movimentacaoId: string): Promise<ResultadoEfetivacaoDesligamento | null> {
+  const res = await fetch("/api/cron-notificacoes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify({ acao: "efetivar_desligamento", movimentacaoId }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "Falha ao efetivar o desligamento no cadastro.");
+  return (body.desligamentos as ResultadoEfetivacaoDesligamento[] | undefined)?.[0] ?? null;
+}

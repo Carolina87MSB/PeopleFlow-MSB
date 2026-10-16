@@ -10,9 +10,14 @@
 // Também aceita a SUPABASE_SERVICE_ROLE_KEY (segredo de servidor que já
 // existe) pra execução manual/diagnóstico. `?dryRun=1` só lista quem seria
 // notificado, sem enviar nem gravar nada.
+//
+// Também efetiva, no cadastro, os desligamentos de MPs aprovadas cuja data chegou (ver _lib/desligamentos.ts) e atende, por sessão
+// de RH, o pedido de efetivação logo após a aprovação final de uma MP de Desligamento (acao "efetivar_desligamento").
 
 import { timingSafeEqual } from "node:crypto";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { requireRH, supabaseAdmin } from "./_lib/adminAuth.js";
+import { efetivarDesligamentos } from "./_lib/desligamentos.js";
 import { executarCronExperiencia } from "./_lib/notificacoesGatilhos.js";
 
 function segredoValido(authHeader: string | string[] | undefined): boolean {
@@ -39,14 +44,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(405).json({ error: "Método não permitido." });
       return;
     }
+    const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
+
     if (!segredoValido(req.headers.authorization)) {
+      // Único caminho autenticado por sessão: o RH pede a efetivação do desligamento de UMA MP recém-aprovada
+      // (o servidor relê a MP no banco e só efetiva se ela estiver Aprovada e a data já tiver chegado).
+      const corpo = (req.method === "POST" ? req.body : null) as { acao?: string; movimentacaoId?: string } | null;
+      if (corpo?.acao === "efetivar_desligamento" && corpo.movimentacaoId) {
+        const auth = await requireRH(req.headers.authorization);
+        if (!auth.ok) {
+          res.status(auth.status).json({ error: auth.error });
+          return;
+        }
+        const desligamentos = await efetivarDesligamentos(supabaseAdmin, { hojeIso: hojeEmBrasilia(), movimentacaoId: String(corpo.movimentacaoId) });
+        res.status(200).json({ ok: true, desligamentos });
+        return;
+      }
       res.status(401).json({ error: "Não autorizado." });
       return;
     }
 
-    const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
     const experiencia = await executarCronExperiencia({ hojeIso: hojeEmBrasilia(), dryRun });
-    res.status(200).json({ ok: true, experiencia });
+    // Desligamentos aprovados cuja data chegou (inclui os que estavam com data futura): isolado para uma falha aqui não derrubar o resto.
+    let desligamentos: unknown;
+    try {
+      desligamentos = await efetivarDesligamentos(supabaseAdmin, { hojeIso: hojeEmBrasilia(), dryRun });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[api/cron-notificacoes] desligamentos", e);
+      desligamentos = { erro: e instanceof Error ? e.message : String(e) };
+    }
+    res.status(200).json({ ok: true, experiencia, desligamentos });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[api/cron-notificacoes]", err);

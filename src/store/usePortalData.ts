@@ -5,6 +5,7 @@ import {
   atualizarAdmissao as atualizarAdmissaoNoSupabase,
   criarPreCadastro as criarPreCadastroNoSupabase,
   criarSolicitacaoDesligamento as criarSolicitacaoDesligamentoNoSupabase,
+  efetivarDesligamentoDaMp,
 } from "../repositories/colaboradoresRepository";
 import { gerarAvisoPrevio } from "../repositories/avisoPrevioRepository";
 import {
@@ -810,7 +811,27 @@ export function usePortalData(): PortalData {
               desligamentoRegistrado.motivo,
               conta.email,
             );
-            msg = `Desligamento de "${desligamentoRegistrado.nome}" aprovado — agora aguarda o RH efetivar no Portal SST (anexando o ASO demissional, se aplicável).`;
+            // Efetivação cadastral NÃO depende mais do SST: data de hoje/passada → vai para Desligados agora; data futura → fica Ativo e a
+            // rotina diária efetiva no dia. A solicitação enviada ao SST (acima) segue seu fluxo (exame demissional/ASO), sem impedir isto.
+            msg = `Desligamento de "${desligamentoRegistrado.nome}" aprovado — o SST segue com a avaliação do exame demissional.`;
+            try {
+              const efetivacao = await efetivarDesligamentoDaMp(id);
+              if (efetivacao?.situacao === "efetivado") {
+                msg = `Desligamento de "${desligamentoRegistrado.nome}" aprovado e efetivado — o colaborador passou para Desligados. O SST segue com a avaliação do exame demissional.`;
+                reload();
+              } else if (efetivacao?.situacao === "agendado") {
+                const dataLabel = desligamentoRegistrado.dataIso ? formatarDataIso(desligamentoRegistrado.dataIso) : "";
+                msg = `Desligamento de "${desligamentoRegistrado.nome}" aprovado — ele passa para Desligados automaticamente em ${dataLabel}. O SST segue com a avaliação do exame demissional.`;
+              } else if (efetivacao?.situacao === "ja_desligado") {
+                msg = `Desligamento de "${desligamentoRegistrado.nome}" aprovado — o colaborador já constava como Desligado. O SST segue com a avaliação do exame demissional.`;
+              } else if (efetivacao) {
+                msg += ` Atenção: o cadastro não foi atualizado (${efetivacao.detalhe ?? efetivacao.situacao}); avise o suporte.`;
+              }
+            } catch (efetivarErr) {
+              // eslint-disable-next-line no-console
+              console.error("[aprovarEtapaFn] Falha ao efetivar o desligamento no cadastro", efetivarErr);
+              msg += " Atenção: não foi possível atualizar o cadastro agora; a rotina diária tentará novamente.";
+            }
 
             // Geração automática do Aviso Prévio Indenizado (RH, 2026-09) — só
             // quando tipoAvisoPrevio === "indenizado" (checado dentro do

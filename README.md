@@ -103,7 +103,7 @@ Ao concluir a última etapa dessas movimentações, o PeopleFlow também atualiz
 
 - **Promoção**: grava o novo cargo, e — quando o colaborador muda de departamento (ver "Promoção com/sem mudança de departamento" abaixo) — também o novo departamento e o novo gestor.
 - **Transferência**: grava o novo departamento e o novo gestor (Transferência sempre muda de departamento — é o próprio conceito do tipo, ver abaixo).
-- **Desligamento**: **não** grava `desligado = true` diretamente. Em vez disso, cria uma linha em `peopleflow_desligamento_pendente` com nome/data/motivo/quem aprovou; a efetivação real fica com o Portal SST.
+- **Desligamento**: ao aprovar a etapa final o PeopleFlow **efetiva o desligamento no cadastro** (`desligado = true`) quando a data da MP é hoje ou passada; com data futura o colaborador segue Ativo e a rotina diária (`api/cron-notificacoes.ts`) efetiva no dia (`api/_lib/desligamentos.ts`). Além disso, continua criando a linha em `peopleflow_desligamento_pendente` para o Portal SST avaliar o exame demissional/ASO — essa pendência não impede nem reverte a efetivação.
 
 Se o campo relevante do formulário ficar vazio, nada é sincronizado — a movimentação conclui normalmente sem alterar o cadastro. **Alteração Salarial não sincroniza nada**: não há coluna de salário em `colaboradores` — os campos "Salário atual"/"Novo salário" (em Alteração Salarial e agora também em Promoção) são só para constar no histórico da movimentação, preenchidos manualmente pelo gestor solicitante.
 
@@ -130,7 +130,11 @@ Antes, promover alguém para outro departamento exigia duas movimentações sepa
 
 `AtualizacaoCargoDeptoInfo.novoGestor` (`src/types/domain.ts`) carrega esse gestor de destino até a aprovação final, onde `api/atualizar-cargo-departamento.ts` grava a coluna `gestor` em `colaboradores` junto com cargo/departamento (RH-only, service_role — RLS não libera UPDATE direto do navegador).
 
-### Desligamento em duas etapas (PeopleFlow aprova, SST efetiva)
+### Desligamento: PeopleFlow efetiva o cadastro; SST cuida do exame demissional (regra de 2026-10)
+
+**Regra atual (substitui o texto "duas etapas" logo abaixo, mantido como histórico):** MP de Desligamento **aprovada** → o colaborador passa para Desligados no cadastro quando a data informada é hoje ou já passou; data futura = continua Ativo até o dia, quando a rotina diária (Vercel Cron, 11:00 UTC) efetiva sozinha. MP não aprovada nunca altera o cadastro. `desligado_by` recebe `PeopleFlow · <id da MP>` e `peopleflow_movimentacoes.sincronizado_em` marca a efetivação; quem já estava Desligado (ex.: confirmado antes no SST) nunca é reescrito. A solicitação em `peopleflow_desligamento_pendente` e o card do SST permanecem, para a avaliação do exame demissional/ASO.
+
+### (Histórico) Desligamento em duas etapas (PeopleFlow aprova, SST efetiva)
 
 Concluir a etapa final (RH) de uma movimentação de Desligamento **não desliga ninguém ainda** — só registra a solicitação em `peopleflow_desligamento_pendente` (nome, data prevista, motivo, quem aprovou), gravado direto pelo navegador (tabela exclusiva do PeopleFlow, RLS já libera `authenticated`, sem precisar de service_role).
 

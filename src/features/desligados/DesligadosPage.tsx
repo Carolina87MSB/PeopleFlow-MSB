@@ -141,7 +141,7 @@ function DesligadoDrawer({ colaborador: c, fechamento, eventos, onClose, onSalva
           <span className={styles.detalheValor}>{c.motivoDesligamento}</span>
         </div>
         <div className={styles.detalheItem}>
-          <span className={styles.detalheLabel}>Registrado por (Portal SST)</span>
+          <span className={styles.detalheLabel}>Registrado por</span>
           <span className={styles.detalheValor}>{c.desligadoBy || "—"}</span>
         </div>
       </div>
