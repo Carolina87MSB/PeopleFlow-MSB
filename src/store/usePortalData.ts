@@ -65,6 +65,7 @@ import { notificar, solicitarNotificacao } from "../repositories/notificacoesRep
 import { formatarDataAtual, formatarDataIso, formatarHoraAtual, hojeIso, tempoDeEmpresa } from "../domain/dates";
 import { GRUPO_HABILIDADES_COMPETENCIAS } from "../domain/descricaoCargo";
 import { colaboradoresAtivosEmData } from "../domain/dashboardExecutivo";
+import { colaboradoresParaFeedbackDe } from "../domain/feedback";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
 import {
   CAMPOS_DESCRICAO_CARGO,
@@ -350,8 +351,9 @@ export interface PortalData {
   /** Liderados elegíveis pra Feedback — mesma população de
    * `colaboradoresParaMatriz9Box` (RH/Diretoria: empresa toda; Gestor: quem
    * `me` avaliou como GESTOR em algum ciclo da AVD OU quem tem `gestor === me`
-   * hoje se ninguém mais já avaliou), filtrada a ativos. Fonte da tela
-   * Feedback (lista de "Registrar Feedback" por colaborador). */
+   * hoje se ninguém mais já avaliou), filtrada a ativos, MAIS sempre a equipe
+   * de hoje (`gestor === me` no cadastro). Fonte da tela Feedback (lista de
+   * "Registrar Feedback" por colaborador). */
   colaboradoresParaFeedback: Colaborador[];
   feedbacksVisiveis: Feedback[];
   podeRegistrarFeedback: (colaboradorNome: string) => boolean;
@@ -2510,7 +2512,9 @@ export function usePortalData(): PortalData {
    * a MESMA população de `colaboradoresParaMatriz9Box` (RH/Diretoria: empresa
    * toda; Gestor: quem `me` avaliou como GESTOR em algum ciclo da AVD — ver
    * `gestorAvaliador`, congelado na ficha — OU quem tem `gestor === me` hoje
-   * SE ninguém mais já avaliou essa pessoa), filtrada a ativos. Achado real:
+   * SE ninguém mais já avaliou essa pessoa), filtrada a ativos, MAIS a equipe de hoje (`gestor === me` no cadastro) sempre —
+   * ver `colaboradoresParaFeedbackDe` em domain/feedback.ts (a Fabiana reporta à Tainara e a Ana Maria à Ravena, mas
+   * ficavam de fora das listas delas por terem sido avaliadas por outro gestor). Achado real:
    * usar `colaboradoresListagem` (só gestor ATUAL) fazia a Tainara perder as
    * Auxiliares de Produção que ela avaliou no 2º Ciclo depois que o gestor
    * atual delas mudou para a Fabiana — mesmo bug já corrigido em
@@ -2519,8 +2523,8 @@ export function usePortalData(): PortalData {
    * alcança esta função (a aba já é bloqueada em GestaoDesempenhoPage.tsx),
    * mas a checagem explícita aqui é defesa em profundidade. */
   const colaboradoresParaFeedback = useMemo(
-    () => colaboradoresParaMatriz9Box.filter((c) => !c.desligado),
-    [colaboradoresParaMatriz9Box],
+    () => colaboradoresParaFeedbackDe({ perfil, me, todos: state.colaboradores, populacaoMatriz9Box: colaboradoresParaMatriz9Box }),
+    [perfil, me, state.colaboradores, colaboradoresParaMatriz9Box],
   );
 
   const feedbacksVisiveis = useMemo(() => {
