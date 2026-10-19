@@ -181,7 +181,7 @@ await db.exec(`update public.peopleflow_movimentacoes set status = 'Reprovado' w
 check("detecta MP M-2026-009 alterada (#6 e #8 falham)", (await validacao())[6] === false && (await validacao())[8] === false);
 await db.exec(`update public.peopleflow_movimentacoes set status = 'Aprovado' where id = 'M-2026-009'`);
 await db.exec(`update public.colaboradores set data_desligamento = '2026-10-02' where id = 24`);
-check("detecta data de desligamento de Leandro alterada (#9 e #11 falham)", (await validacao())[9] === false && (await validacao())[11] === false);
+check("detecta data de desligamento do colaborador 24 alterada (#9 e #11 falham)", (await validacao())[9] === false && (await validacao())[11] === false);
 await db.exec(`update public.colaboradores set data_desligamento = '2026-10-05' where id = 24`);
 await db.exec(`update public.peopleflow_pdi set status = 'Concluído', concluido_em = now() where id = 13`);
 check("detecta PDI concluído artificialmente (#14 falha)", (await validacao())[14] === false);
