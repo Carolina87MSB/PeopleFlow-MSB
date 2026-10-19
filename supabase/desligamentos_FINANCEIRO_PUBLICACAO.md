@@ -59,3 +59,23 @@ Substitui o fluxo em duas etapas (lançar → validar com fonte documental) e o 
 Reversão: código `git revert -m 1 <merge>`; migration `desligamentos_financeiro_lancamento_simples_rollback.sql` (recusa se já houver valores com origem `informado_rh`, para não perder a rastreabilidade).
 Se o código for publicado **antes** da migration, o banco recusa a gravação com a origem nova (constraint) — nada é gravado pela metade; por isso a ordem 9 → 11.
 A migration de fechamento do acesso direto à tabela (passo 6) continua separada e **não** faz parte desta etapa.
+
+## Etapa 3 — Fechamento do acesso direto (final)
+Depois da homologação do RH. Remove o acesso do **navegador** (anon/authenticated) à tabela `peopleflow_desligamentos`; o servidor (service_role) continua com acesso total.
+- **RH:** continua vendo e registrando (Conferência financeira e diálogo "Lançar e confirmar valores"), tudo pelo servidor.
+- **Diretoria:** só os totais mensais agregados (servidor); listar individual, validar e gravar → 403.
+- **Gestor:** nenhum valor financeiro (listar, agregado e gravar → 403); só quantidades, que não vêm desta tabela.
+- **Nenhum código do navegador usa a tabela** (teste estático em `tests/financeiro/teste_dominio.ts`); só `api/_lib/financeiroDesligamentos.ts` a acessa. Contadores e alertas de pendência financeira são só do RH.
+- A migration **não altera nenhuma linha, coluna, constraint ou trigger**; é atômica e se desfaz sozinha se a verificação final não confirmar o fechamento. Exige o lançamento simples já aplicado.
+- `supabase/schema.sql` (instalações novas) já nasce fechado.
+
+| # | Onde | O que | Arquivo |
+|---|---|---|---|
+| 13 | Local | Tag de retorno do código | `git tag pre-financeiro-fechar-acesso` |
+| 14 | SQL Editor | Pré-checagem (somente leitura): acesso atual, objetos dependentes (esperado: nenhum), contagens | `desligamentos_financeiro_fechar_acesso_prechecagem.sql` |
+| 15 | SQL Editor | Migration de fechamento do acesso direto | `desligamentos_financeiro_fechar_acesso.sql` |
+| 16 | SQL Editor | Validação final (somente leitura) | `desligamentos_financeiro_fechar_acesso_validacao.sql` e `publicacao_financeiro_03_validacao.local.sql` (13 verificações) |
+| 17 | Portal | Teste rápido por perfil (RH vê e registra; Diretoria só o quadro agregado; Gestor sem valores) | — |
+| 18 | Git | Merge de `feature/financeiro-fechar-acesso` em `main` + push (só testes, documentação e `schema.sql`: nenhuma mudança de comportamento do portal; o código já no ar não usa a tabela) | — |
+
+Reversão: `desligamentos_financeiro_fechar_acesso_rollback.sql` (recria a política e os privilégios anteriores; não toca nos dados).

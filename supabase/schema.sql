@@ -165,15 +165,13 @@ create table if not exists public.peopleflow_desligamentos (
 comment on table public.peopleflow_desligamentos is
   'Fechamento financeiro do desligamento (rescisão, GRRF) — preenchido pelo RH no PeopleFlow. Exclusiva deste portal; colaborador_nome referencia colaboradores.nome.';
 
+-- Valores financeiros individuais: acesso SÓ pelo servidor (service_role). O navegador (anon/authenticated) não lê nem grava esta tabela — o RH usa a
+-- Conferência financeira / diálogo "Lançar e confirmar valores" (ações `financeiro_*` em api/desenvolvimento.ts), a Diretoria recebe só totais mensais e o
+-- Gestor não recebe valores. (Em bancos já existentes isto é feito por supabase/desligamentos_financeiro_fechar_acesso.sql.)
 alter table public.peopleflow_desligamentos enable row level security;
-
 drop policy if exists "authenticated_rw_desligamentos" on public.peopleflow_desligamentos;
-create policy "authenticated_rw_desligamentos"
-  on public.peopleflow_desligamentos
-  for all
-  to authenticated
-  using (true)
-  with check (true);
+revoke all on public.peopleflow_desligamentos from public, anon, authenticated;
+grant all on public.peopleflow_desligamentos to service_role;
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- 4) Descrição de cargo — formulário oficial (POP-RH-001) por cargo

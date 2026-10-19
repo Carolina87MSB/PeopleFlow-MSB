@@ -410,15 +410,64 @@ check("sem registros 'informado_rh' o rollback roda e a origem 'informado_rh' vo
 check("a migration simples pode ser reaplicada depois do rollback", (await falha(() => db.exec(MIG2))) === null && (await falha(() => db.exec(valorInforme))) === null && (await falha(() => db.exec(`delete from public.peopleflow_desligamentos where colaborador_nome = 'Teste Constraint'`))) === null);
 
 // ═══ J. Fechar o acesso direto ═══
-secao("J. Migration de fechamento do acesso: o navegador perde o acesso direto; o servidor segue");
+secao("J. Fechamento do acesso direto: o navegador perde a tabela; o servidor segue servindo RH (ver e registrar), Diretoria (agregado) e Gestor (nada)");
 const FECHAR = rd("desligamentos_financeiro_fechar_acesso.sql");
 const lerComo = (papel, uid) => como(papel, uid, async () => (await db.query(`select count(*)::int n from public.peopleflow_desligamentos`)).rows[0].n);
+const negado = async (papel, uid, sqlTxt) => /permission denied/i.test(String(await como(papel, uid, () => falha(() => db.query(sqlTxt)))));
+const hashesFin = async () => ({
+  fech: (await um(`select md5(coalesce(string_agg(to_jsonb(x)::text, '|' order by x.colaborador_nome), '')) h, count(*)::int n from public.peopleflow_desligamentos x`)),
+  rub: (await um(`select md5(string_agg(to_jsonb(x)::text, '|' order by x.rescisao_id)) h, count(*)::int n from public.peopleflow_rescisoes_historico_rubricas x`)),
+  log: (await um(`select md5(coalesce(string_agg(to_jsonb(x)::text, '|' order by x.id), '')) h, count(*)::int n from public.peopleflow_fechamentos_log x`)),
+  colab: (await um(`select md5(string_agg(to_jsonb(x)::text, '|' order by x.id)) h from public.colaboradores x`)).h,
+});
+await db.exec(`create policy politica_extra_teste on public.peopleflow_desligamentos for select to authenticated using (true)`);
 check("ANTES: um usuário autenticado lê o fechamento direto (a lacuna que o fechamento corrige)", (await lerComo("authenticated", U.GES)) >= 3);
+const preBlocos = rd("desligamentos_financeiro_fechar_acesso_prechecagem.sql").split(/\n-- \d\) /).slice(1).map((b) => b.slice(b.indexOf("\n") + 1).replace(/;\s*$/, ""));
+const pre1 = await sql(preBlocos[0]);
+const pre2 = await sql(preBlocos[1]);
+const pre3 = await sql(preBlocos[2]);
+check("pré-checagem (somente leitura) roda: mostra o acesso aberto, NENHUM objeto dependente (view/função/política de outra tabela) e a contagem dos dados", preBlocos.length === 3 && pre1.some((r) => r.tipo === "política" && r.quem === "authenticated_rw_desligamentos") && pre1.some((r) => r.tipo === "privilégio" && r.quem === "authenticated") && pre2.length === 0 && Number(pre3[0].fechamentos) >= 3 && Number(pre3[0].rubricas) === (await um(`select count(*)::int n from public.peopleflow_rescisoes_historico_rubricas`)).n);
+const h0 = await hashesFin();
+// o fechamento exige a migration do lançamento simples aplicada
+check("pré-condição: o fechamento recusa rodar sem o lançamento simples (nada alterado)", await (async () => {
+  await db.exec(`alter table public.peopleflow_desligamentos drop constraint peopleflow_desligamentos_validacao_chk`);
+  const e = await falha(() => db.exec(FECHAR));
+  await db.exec(rd("desligamentos_financeiro_lancamento_simples.sql"));
+  return /lancamento_simples/.test(String(e)) && (await lerComo("authenticated", U.GES)) >= 3;
+})());
 check("migration de fechamento roda sem erro e é idempotente", (await falha(() => db.exec(FECHAR))) === null && (await falha(() => db.exec(FECHAR))) === null);
-check("DEPOIS: authenticated não lê nem grava (Gestor/Diretoria/RH no navegador)", /permission denied/i.test(String(await como("authenticated", U.GES, () => falha(() => db.query(`select * from public.peopleflow_desligamentos`))))) && /permission denied/i.test(String(await como("authenticated", U.RH, () => falha(() => db.query(`update public.peopleflow_desligamentos set valor_rescisao = 1`))))) && /permission denied/i.test(String(await como("authenticated", U.DIR, () => falha(() => db.query(`insert into public.peopleflow_desligamentos (colaborador_nome) values ('x')`))))));
-check("DEPOIS: anon também não; service_role (servidor) segue funcionando", /permission denied/i.test(String(await como("anon", null, () => falha(() => db.query(`select * from public.peopleflow_desligamentos`))))) && (await chamar("financeiro_listar", {})).codigo === 200);
-check("DEPOIS: o RH continua vendo os valores pelo servidor e a Diretoria os totais", (await chamar("financeiro_listar", {})).corpo.dados.fechamentos.length >= 4 && (await chamar("financeiro_agregado", {}, U.DIR)).codigo === 200);
-check("reversão do fechamento devolve o acesso anterior", (await falha(() => db.exec(rd("desligamentos_financeiro_fechar_acesso_rollback.sql")))) === null && (await lerComo("authenticated", U.GES)) >= 4);
+const h1 = await hashesFin();
+check("NENHUM dado alterado pelo fechamento: fechamentos, rubricas, trilha e cadastro idênticos (hash e contagem)", JSON.stringify(h0) === JSON.stringify(h1), JSON.stringify([h0.fech.n, h1.fech.n]));
+check("toda política foi removida (inclusive a extra) e a RLS segue ligada", Number((await um(`select count(*)::int n from pg_policies where tablename = 'peopleflow_desligamentos'`)).n) === 0 && (await um(`select relrowsecurity r from pg_class where oid = 'public.peopleflow_desligamentos'::regclass`)).r === true);
+const tab = "public.peopleflow_desligamentos";
+check("DEPOIS: RH, Diretoria e Gestor no navegador (authenticated) NÃO leem nem gravam o fechamento", await negado("authenticated", U.GES, `select * from ${tab}`) && await negado("authenticated", U.DIR, `select * from ${tab}`) && await negado("authenticated", U.RH, `select * from ${tab}`)
+  && await negado("authenticated", U.RH, `update ${tab} set valor_rescisao = 1`) && await negado("authenticated", U.RH, `insert into ${tab} (colaborador_nome) values ('x')`) && await negado("authenticated", U.RH, `delete from ${tab}`));
+check("DEPOIS: anon também não; rubricas e trilha seguem fechadas para o navegador", await negado("anon", null, `select * from ${tab}`) && await negado("anon", null, `insert into ${tab} (colaborador_nome) values ('x')`)
+  && await negado("authenticated", U.RH, `select * from public.peopleflow_rescisoes_historico_rubricas`) && await negado("authenticated", U.RH, `select * from public.peopleflow_fechamentos_log`) && await negado("anon", null, `select * from public.peopleflow_fechamentos_log`));
+// o servidor segue servindo cada perfil como definido
+const aposListar = await chamar("financeiro_listar", {});
+check("DEPOIS · RH: continua VENDO os valores (conferência) pelo servidor", aposListar.codigo === 200 && aposListar.corpo.dados.fechamentos.length >= 3 && aposListar.corpo.dados.saidas.length >= 9);
+const lrAntes = (await hashesFin()).log.n;
+const lrR = await chamar("financeiro_lancamento_confirmar", { rescisao_id: hE, confirmar_liquido: true, grrf_modo: "valor", valor_grrf: 321.09, confirmacao_rh: true });
+const lrE = await linhaDe("Eva Historica");
+check("DEPOIS · RH: continua REGISTRANDO (diálogo único) pelo servidor: GRRF confirmada sobre o líquido já validado, com trilha", lrR.codigo === 200 && lrE.rescisao.status === "validado" && lrE.grrf.status === "validado" && lrE.grrf.total === 321.09 && (await hashesFin()).log.n === lrAntes + 1);
+const mR = await chamar("financeiro_lancamento_confirmar", { colaborador_nome: "Nina Nova", valor_rescisao: 2700, grrf_modo: "valor", valor_grrf: 100, motivo: "Ajuste pós-fechamento.", confirmacao_rh: true });
+check("DEPOIS · RH: lançamento manual (sem folha) e alteração com motivo também funcionam", mR.codigo === 200 && (await fechDe("Nina Nova")).v === 2700);
+const dAgr = await chamar("financeiro_agregado", {}, U.DIR);
+check("DEPOIS · Diretoria: só totais mensais agregados (200); nenhum valor individual na resposta", dAgr.codigo === 200 && dAgr.corpo.dados.meses.length > 0 && !/Nina|Lara|Rui|Eva|Alice|Bia|colaborador|rescisaoId|liquido/i.test(JSON.stringify(dAgr.corpo)));
+check("DEPOIS · Diretoria: sem individual, sem gravação → 403", (await chamar("financeiro_listar", {}, U.DIR)).codigo === 403 && (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hE, grrf_modo: "pendente", confirmacao_rh: true }, U.DIR)).codigo === 403 && (await chamar("financeiro_rescisao_validar", { itens: [{ rescisao_id: hA }] }, U.DIR)).codigo === 403);
+check("DEPOIS · Gestor: nenhum valor financeiro (listar, agregado, gravar) → 403", (await chamar("financeiro_listar", {}, U.GES)).codigo === 403 && (await chamar("financeiro_agregado", {}, U.GES)).codigo === 403 && (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hE, grrf_modo: "pendente", confirmacao_rh: true }, U.GES)).codigo === 403);
+check("DEPOIS: colaborador sem perfil → 403, conta desligada → 403, sem token → 401", (await chamar("financeiro_listar", {}, U.COL)).codigo === 403 && (await chamar("financeiro_agregado", {}, U.DESL)).codigo === 403 && (await chamar("financeiro_listar", {}, null)).codigo === 401);
+// validação final oficial (números da massa fictícia)
+const nRub = (await hashesFin()).rub.n;
+const somas = await um(`select round(sum(liquido),2)::text l, round(sum(fgts_rescisorio),2)::text f from public.peopleflow_rescisoes_historico_rubricas`);
+const nFech = (await hashesFin()).fech.n;
+const VALF = rd("desligamentos_financeiro_fechar_acesso_validacao.sql").replace(/;\s*$/, "").replace("= 24\n", `= ${nRub}\n`).replace("96110.58", somas.l).replace("24196.05", somas.f).replaceAll(">= 19", ">= 1").replace(">= 7", `>= ${nFech}`);
+const vf = await sql(VALF);
+check("validação final oficial (adaptada à massa fictícia): tudo OK", vf.length >= 10 && vf.every((r) => r.resultado === "OK"), JSON.stringify(vf.filter((r) => r.resultado !== "OK")));
+check("reversão do fechamento devolve exatamente o acesso anterior (autenticado volta a ler) sem tocar nos dados", (await falha(() => db.exec(rd("desligamentos_financeiro_fechar_acesso_rollback.sql")))) === null && (await lerComo("authenticated", U.GES)) >= 4);
+check("e o fechamento pode ser reaplicado depois da reversão", (await falha(() => db.exec(FECHAR))) === null && (await negado("authenticated", U.GES, `select * from ${tab}`)));
+await db.exec(rd("desligamentos_financeiro_fechar_acesso_rollback.sql"));
 
 // ═══ K. Reversão da migration financeira ═══
 secao("K. Reversão da migration financeira");
