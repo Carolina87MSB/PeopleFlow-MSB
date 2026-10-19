@@ -25,6 +25,7 @@ npm test            # todos os abaixo, em sequência
 | `npm run test:desligamentos-publicacao` | Scripts locais de publicação (`supabase/publicacao_desligamentos_*.local.sql`): backup, retirada da turma, revogação de acesso, reversões, validação final — réplica com dados fictícios; pulado se os arquivos locais não existirem. |
 | `npm run test:pdi-encerramento` | PDI "Encerrado": migration (aditiva, idempotente, reversível), ação `pdi_encerrar` (só RH, só desligado, só PDI aberto, auditoria), imutabilidade no banco, triagem ignorando PDI encerrado — réplica PGlite. |
 | `npm run test:pdi-encerramento-dominio` | PDI "Encerrado": helpers, pendências, população dos dashboards e verificações estáticas das telas/store. |
+| `npm run test:pdi-encerramento-sessao` | Regressão: encerrar PDI com a conta do módulo vencida (12 h) renova a sessão antes de gravar; falha na renovação não envia nada; validações do servidor preservadas. |
 
 Apoio em `pdi-triagem/`: `base.mjs` (réplica e dados de teste), `shim.mjs` (cliente estilo supabase-js sobre o PGlite),
 `hooks.mjs`/`register.mjs`/`stub-*.mjs` (carregam o código do servidor sem a sessão real do Supabase).
