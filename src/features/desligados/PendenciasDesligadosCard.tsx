@@ -34,8 +34,9 @@ export function PendenciasDesligadosCard() {
         pdi: state.pdi,
         movimentacoes: state.movimentacoes,
         desligamentosFinanceiros: state.desligamentosFinanceiros,
+        conferencia: state.conferenciaFinanceira,
       }),
-    [state.colaboradores, state.ciclosAvaliacaoDesempenho, state.avaliacoesDesempenho, state.avaliacoesPotencial, state.pdi, state.movimentacoes, state.desligamentosFinanceiros],
+    [state.colaboradores, state.ciclosAvaliacaoDesempenho, state.avaliacoesDesempenho, state.avaliacoesPotencial, state.pdi, state.movimentacoes, state.desligamentosFinanceiros, state.conferenciaFinanceira],
   );
 
   const todas = useMemo(() => [...doFront, ...(doServidor ?? [])].sort((a, b) => a.modulo.localeCompare(b.modulo, "pt-BR") || a.colaborador.localeCompare(b.colaborador, "pt-BR")), [doFront, doServidor]);

@@ -9,6 +9,7 @@ export const initialPortalState: PortalState = {
   tipos: [],
   perfis: [],
   desligamentosFinanceiros: [],
+  conferenciaFinanceira: null,
   descricoesCargo: [],
   catalogoCompetenciasCargo: [],
   descricaoCargoCompetencias: [],
@@ -42,6 +43,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         tipos: action.tipos,
         perfis: action.perfis,
         desligamentosFinanceiros: action.desligamentosFinanceiros,
+        conferenciaFinanceira: action.conferenciaFinanceira,
         descricoesCargo: action.descricoesCargo,
         catalogoCompetenciasCargo: action.catalogoCompetenciasCargo,
         descricaoCargoCompetencias: action.descricaoCargoCompetencias,
@@ -108,13 +110,8 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
       return { ...state, descricoesCargo };
     }
 
-    case "SALVAR_FECHAMENTO_FINANCEIRO": {
-      const existe = state.desligamentosFinanceiros.some((d) => d.colaboradorNome === action.desligamento.colaboradorNome);
-      const desligamentosFinanceiros = existe
-        ? state.desligamentosFinanceiros.map((d) => (d.colaboradorNome === action.desligamento.colaboradorNome ? action.desligamento : d))
-        : [...state.desligamentosFinanceiros, action.desligamento];
-      return { ...state, desligamentosFinanceiros };
-    }
+    case "ATUALIZAR_FINANCEIRO":
+      return { ...state, desligamentosFinanceiros: action.desligamentosFinanceiros, conferenciaFinanceira: action.conferenciaFinanceira };
 
     case "RESET":
       return initialPortalState;

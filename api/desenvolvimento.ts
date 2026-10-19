@@ -26,6 +26,7 @@ import type { Colaborador } from "../src/types/domain.js";
 
 import { linhaAtiva } from "./_lib/situacaoColaboradores.js";
 import { pendenciasDesenvolvimentoDeDesligados } from "./_lib/pendenciasDesligados.js";
+import { ehAcaoFinanceira, executarFinanceiro } from "./_lib/financeiroDesligamentos.js";
 interface ColaboradorRow {
   id: number;
   nome: string;
@@ -270,6 +271,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
       res.status(200).json({ ok: true, dados: await pendenciasDesenvolvimentoDeDesligados(supabaseAdmin) });
+      return;
+    }
+    // Financeiro dos desligamentos (conferência, validação e totais do Dashboard): perfil vem do cadastro, sem a sessão do módulo; rota no mesmo arquivo
+    // para não consumir uma nova Serverless Function (limite de 12 por deploy no plano Hobby).
+    if (ehAcaoFinanceira(acao) && req.method === "POST") {
+      await executarFinanceiro(acao, req, res);
       return;
     }
     // Página /participar/:token — qualquer conta do PeopleFlow, sem sessão do módulo.

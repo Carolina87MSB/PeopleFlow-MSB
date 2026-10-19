@@ -4,6 +4,7 @@
 // Este arquivo cobre os dados que o front já carrega (AVD, potencial, PDI, movimentações, fechamento financeiro, qualidade de dados).
 // As pendências do módulo Desenvolvimento (treinamentos, necessidades, responsáveis) vêm do servidor (api/_lib/pendenciasDesligados.ts).
 
+import type { ConferenciaFinanceira } from "./custosRescisao.js";
 import { estaAtivoHoje, hojeBrasilia, normalizarDataIso, situacaoFuncionalEm } from "./situacaoFuncional.js";
 import type {
   AvaliacaoDesempenho,
@@ -33,6 +34,8 @@ export interface DadosParaPendencias {
   pdi: Pdi[];
   movimentacoes: Movimentacao[];
   desligamentosFinanceiros: DesligamentoFinanceiro[];
+  /** Conferência financeira (só o RH recebe). Quando presente, a pendência financeira passa a ser "conferência por fazer" (rescisão a validar/divergente, GRRF a registrar). */
+  conferencia?: ConferenciaFinanceira | null;
   hoje?: string;
 }
 
@@ -110,9 +113,20 @@ export function pendenciasFrontDeDesligados(d: DadosParaPendencias): PendenciaDe
   // ── Financeiro e qualidade de dados ──
   for (const c of d.colaboradores) {
     if (!desligados.has(c.nome) || !c.desligado) continue;
-    const fin = d.desligamentosFinanceiros.find((f) => f.colaboradorNome === c.nome);
-    if (!fin || fin.valorRescisao == null || fin.valorGrrf == null) {
-      out.push({ modulo: "Desligados", processo: "Fechamento financeiro", colaborador: c.nome, detalhe: "Valor da rescisão e/ou da GRRF ainda não lançado.", acaoRecomendada: "Lançar o fechamento financeiro na tela de Desligados." });
+    const linhaFin = d.conferencia?.saidas.find((l) => l.colaboradorId === c.id) ?? null;
+    if (linhaFin) {
+      const faltas: string[] = [];
+      if (linhaFin.rescisao.status === "divergente") faltas.push("rescisão divergente (valor lançado × líquido da folha)");
+      else if (linhaFin.rescisao.status !== "validado") faltas.push("rescisão (líquido da folha) a validar");
+      if (linhaFin.grrf.status === "pendente") faltas.push("GRRF a registrar");
+      if (faltas.length > 0) {
+        out.push({ modulo: "Desligados", processo: "Conferência financeira", colaborador: c.nome, detalhe: `${faltas.join("; ")}.`, acaoRecomendada: "Conferir e validar na aba Conferência financeira de Desligados.", referencia: linhaFin.rescisaoId !== null ? String(linhaFin.rescisaoId) : undefined });
+      }
+    } else {
+      const fin = d.desligamentosFinanceiros.find((f) => f.colaboradorNome === c.nome);
+      if (!fin || fin.valorRescisao == null || fin.valorGrrf == null) {
+        out.push({ modulo: "Desligados", processo: "Fechamento financeiro", colaborador: c.nome, detalhe: "Valor da rescisão e/ou da GRRF ainda não lançado.", acaoRecomendada: "Lançar o fechamento financeiro na tela de Desligados." });
+      }
     }
     if (situacaoFuncionalEm(c, hoje, "acesso", hoje).alerta === "desligado_sem_data") {
       out.push({ modulo: "Cadastro", processo: "Qualidade de dados", colaborador: c.nome, detalhe: "Marcado como desligado, mas sem data de desligamento.", acaoRecomendada: "Informar a data efetiva do desligamento (SST/RH)." });

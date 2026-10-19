@@ -1,3 +1,4 @@
+import type { ConferenciaFinanceira } from "../domain/custosRescisao";
 import type { RescisaoHistorica } from "../domain/rescisoesHistorico";
 import type {
   AvaliacaoDesempenho,
@@ -34,6 +35,8 @@ export interface PortalState {
   tipos: TipoMovimentacao[];
   perfis: Perfil2Info[];
   desligamentosFinanceiros: DesligamentoFinanceiro[];
+  /** Conferência financeira dos desligamentos (valores individuais) — só o RH recebe; os demais perfis ficam com null. */
+  conferenciaFinanceira: ConferenciaFinanceira | null;
   descricoesCargo: DescricaoCargo[];
   catalogoCompetenciasCargo: CompetenciaCargoCatalogo[];
   descricaoCargoCompetencias: DescricaoCargoCompetencia[];

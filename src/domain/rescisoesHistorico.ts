@@ -7,7 +7,7 @@
 //                              pessoa; só entra no indicador de "rescisões contratuais" e preserva a continuidade do vínculo
 //                              (a admissão efetiva para indicadores é a do estágio). Nunca altera MPs nem datas do cadastro.
 
-import type { Colaborador } from "../types/domain";
+import type { Colaborador } from "../types/domain.js";
 
 export type NaturezaRescisao = "saida_efetiva" | "conversao_estagio_clt";
 
