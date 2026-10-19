@@ -1,7 +1,8 @@
 // Integração financeira dos desligamentos — ações do SERVIDOR (roteadas por api/desenvolvimento.ts, `?acao=financeiro_*`, sem criar nova Serverless Function).
 //
 // Regras:
-//   • Os valores financeiros individuais só saem do servidor para o RH. A Diretoria recebe apenas TOTAIS MENSAIS agregados; os demais perfis, nada.
+//   • TODA informação financeira dos desligamentos (individual e agregada) só sai do servidor para o RH. Decisão do RH: a liberação de totais para a Diretoria
+//     ou para Gestores será decidida depois — até lá, Diretoria e Gestor recebem 403 em qualquer ação `financeiro_*`.
 //   • Toda gravação é do servidor (service_role), exclusiva do RH, e registra uma linha na trilha peopleflow_fechamentos_log (valor anterior, novo,
 //     origem, responsável, motivo). O fechamento financeiro já lançado NUNCA é sobrescrito sem decisão expressa do RH.
 //   • Rescisão = líquido da folha, validado pelo RH; GRRF = total efetivamente recolhido, informado pelo RH (nada é calculado a partir do saldo FGTS).
@@ -220,9 +221,9 @@ async function listar(conta: Conta, _corpo: Corpo) {
   };
 }
 
-/** Totais mensais para o Dashboard Executivo (RH e Diretoria): NENHUM valor individual sai daqui. Mesmos filtros e mesmo período do Dashboard. */
+/** Totais mensais para o Dashboard Executivo (SOMENTE RH, por decisão do RH): nenhum valor individual sai daqui. Mesmos filtros e mesmo período do Dashboard. */
 async function agregado(conta: Conta, corpo: Corpo) {
-  if (conta.perfil !== "RH" && conta.perfil !== "Diretoria") throw new ErroFin(403, "Os valores financeiros agregados são do RH e da Diretoria.");
+  exigirRH(conta);
   const str = (k: string, padrao = "Todos") => (typeof corpo[k] === "string" && corpo[k] ? String(corpo[k]) : padrao);
   const iso = (k: string): string | undefined => (typeof corpo[k] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(String(corpo[k])) ? String(corpo[k]) : undefined);
   const filtros = { setor: str("setor"), gestor: str("gestor"), cargo: str("cargo") };

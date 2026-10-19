@@ -170,8 +170,8 @@ export function DashboardPage() {
     () => desligamentosNoPeriodo(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
     [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
   );
-  // Quantidades por mês: sempre calculadas aqui (todos os perfis, mesmas regras de antes). Os VALORES vêm do servidor e só chegam ao RH e à Diretoria,
-  // como totais mensais já agregados e apenas de valores VALIDADOS pelo RH (cada pessoa uma vez, pela data efetiva do desligamento).
+  // Quantidades por mês: sempre calculadas aqui (todos os perfis, mesmas regras de antes). Os VALORES vêm do servidor e, por decisão do RH, só chegam
+  // ao RH (a liberação para Diretoria/Gestores será decidida depois), como totais mensais de valores VALIDADOS (cada pessoa uma vez, pela data efetiva).
   const custosQuantidade = useMemo(
     () =>
       custosRescisaoPorMes(
@@ -181,7 +181,7 @@ export function DashboardPage() {
       ),
     [desligadosNoPeriodoFiltrado, historicoFiltrado, periodoInicio, periodoFim],
   );
-  const veValoresFinanceiros = perfil === "RH" || perfil === "Diretoria";
+  const veValoresFinanceiros = perfil === "RH";
   const [custosServidor, setCustosServidor] = useState<CustosAgregados | null>(null);
   const [custosErro, setCustosErro] = useState<string | null>(null);
   useEffect(() => {
@@ -597,7 +597,7 @@ export function DashboardPage() {
                           <>
                             <th>Rescisão</th>
                             <th>GRRF</th>
-                            <th>Total</th>
+                            <th>Custo Total</th>
                             <th>Validado</th>
                           </>
                         )}
@@ -637,7 +637,7 @@ export function DashboardPage() {
                   <p className={styles.secaoContexto} style={{ marginTop: 8 }}>Valores financeiros indisponíveis no momento ({custosErro}). A contagem de desligamentos segue normal.</p>
                 )}
                 {!veValoresFinanceiros && (
-                  <p className={styles.secaoContexto} style={{ marginTop: 8 }}>Valores financeiros de rescisão são restritos ao RH e à Diretoria; aqui aparece apenas a quantidade de desligamentos.</p>
+                  <p className={styles.secaoContexto} style={{ marginTop: 8 }}>Valores financeiros de rescisão são restritos ao RH; aqui aparece apenas a quantidade de desligamentos.</p>
                 )}
               </div>
             ) : (

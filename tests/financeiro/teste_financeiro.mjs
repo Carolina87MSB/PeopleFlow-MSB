@@ -3,6 +3,7 @@
 // histórico sem cadastro, vínculo por nome+admissão). Nada vai ao Supabase real.
 //   cd tests && npm run test:financeiro
 import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
 import { criarCliente } from "../pdi-triagem/shim.mjs";
 import { rd, novaReplica, criarContador, REPO } from "../pdi-triagem/base.mjs";
 
@@ -102,7 +103,7 @@ const dados = (r) => r.corpo?.dados;
 const linha = (l, nome) => l.find((x) => x.nome === nome);
 
 // ═══ B. Autorização ═══
-secao("B. Autorização: RH individual · Diretoria só agregado · Gestor e demais nada");
+secao("B. Autorização: TUDO financeiro (individual e agregado) só para o RH · Diretoria, Gestor e demais nada (decisão do RH)");
 check("sem token → 401; token inválido → 401", (await chamar("financeiro_listar", {}, null)).codigo === 401 && (await chamar("financeiro_listar", {}, "xyz")).codigo === 401);
 check("colaborador sem perfil de acesso → 403", (await chamar("financeiro_listar", {}, U.COL)).codigo === 403);
 check("conta de colaborador DESLIGADO → 403", (await chamar("financeiro_agregado", {}, U.DESL)).codigo === 403);
@@ -114,9 +115,26 @@ for (const [rotulo, uid] of [["Gestor", U.GES], ["Diretoria", U.DIR]]) {
 }
 check("Gestor: totais agregados → 403 (só quantidades, que não vêm daqui)", (await chamar("financeiro_agregado", {}, U.GES)).codigo === 403);
 const aggDir = await chamar("financeiro_agregado", {}, U.DIR);
-check("Diretoria: totais agregados → 200", aggDir.codigo === 200);
-const textoAgg = JSON.stringify(aggDir.corpo);
-check("a resposta agregada NÃO contém nomes, ids, líquidos ou valores individuais", !/Alice|Bia|Caio|Eva|Fabio|Gabi|Kleber|Iara|Joca|liquido|rescisaoId|colaboradorId|fgts/i.test(textoAgg), textoAgg.slice(0, 200));
+check("Diretoria: totais agregados → 403 (por ora só o RH; a liberação será decidida depois)", aggDir.codigo === 403 && aggDir.corpo.dados === undefined && /RH/.test(aggDir.corpo.error));
+const aggRh = await chamar("financeiro_agregado", {}, U.RH);
+const textoAgg = JSON.stringify(aggRh.corpo);
+check("RH: totais agregados → 200, e a resposta NÃO contém nomes, ids, líquidos ou valores individuais", aggRh.codigo === 200 && !/Alice|Bia|Caio|Eva|Fabio|Gabi|Kleber|Iara|Joca|liquido|rescisaoId|colaboradorId|fgts/i.test(textoAgg), textoAgg.slice(0, 200));
+{
+  // TODA ação financeira do servidor recusa Diretoria, Gestor, colaborador comum e conta desligada — inclusive as ações antigas ainda expostas
+  const corposAcoes = {
+    financeiro_listar: {}, financeiro_agregado: { inicio: "2026-01-01", fim: "2026-12-31" }, financeiro_rescisao_validar: { itens: [{ rescisao_id: hA }] },
+    financeiro_rescisao_decidir: { rescisao_id: hB, decisao: "manter_lancado", motivo: "x" }, financeiro_modalidade_confirmar: { rescisao_id: hG, modalidade: "outra" },
+    financeiro_grrf_registrar: { rescisao_id: hA, total: 1, fonte: "guia_grrf" }, financeiro_fechamento_salvar: { colaborador_nome: "Iara Manual", valor_rescisao: 1 },
+    financeiro_fechamento_validar: { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "outro_documento" },
+    financeiro_lancamento_confirmar: { rescisao_id: hA, grrf_modo: "pendente", confirmacao_rh: true },
+  };
+  const acoesSrv = [...readFileSync(REPO + "api/_lib/financeiroDesligamentos.ts", "utf8").matchAll(/^  (financeiro_[a-z_]+): /gm)].map((m) => m[1]);
+  check("todas as ações financeiras do servidor estão cobertas por este teste", acoesSrv.length === Object.keys(corposAcoes).length && acoesSrv.every((a) => a in corposAcoes), acoesSrv.join());
+  const naoRh = [["Diretoria", U.DIR], ["Gestor", U.GES], ["Colaborador", U.COL], ["Desligado", U.DESL]];
+  const furos = [];
+  for (const [nome, uid] of naoRh) for (const [acao, corpo] of Object.entries(corposAcoes)) { const r = await chamar(acao, corpo, uid); if (r.codigo !== 403 || r.corpo?.dados !== undefined) furos.push(`${nome}:${acao}:${r.codigo}`); }
+  check(`TODAS as ${Object.keys(corposAcoes).length} ações financeiras recusam Diretoria, Gestor, colaborador e desligado com 403, sem devolver dados`, furos.length === 0, furos.join(" "));
+}
 check("nada foi gravado pelas tentativas recusadas", (await hashTab("peopleflow_desligamentos", "colaborador_nome")) !== null && Number((await um(`select count(*)::int n from public.peopleflow_fechamentos_log`)).n) === 0 && (await um(`select count(*)::int n from public.peopleflow_rescisoes_historico_rubricas where rescisao_status <> 'proposto'`)).n === 0);
 
 // ═══ C. Conciliação (RH) ═══
@@ -201,8 +219,7 @@ const aggPer = dados(await chamar("financeiro_agregado", { inicio: "2026-07-01",
 check("filtro de período aplica a data efetiva (só julho)", aggPer.meses.length === 1 && aggPer.meses[0].mes === "2026-07" && aggPer.meses[0].quantidade === 3);
 const aggSet = dados(await chamar("financeiro_agregado", { setor: "Logística" }));
 check("filtro de setor vale para cadastro e histórico (Logística: Caio, Joca, Gabi = 3)", aggSet.meses.reduce((a, m) => a + m.quantidade, 0) === 3, JSON.stringify(aggSet.meses.map((m) => [m.mes, m.quantidade])));
-const aggDirTot = dados(await chamar("financeiro_agregado", {}, U.DIR));
-check("Diretoria vê exatamente os mesmos totais que o RH", JSON.stringify(aggDirTot.meses) === JSON.stringify(agg.meses));
+check("Diretoria e Gestor NÃO veem os totais agregados (403); o RH vê os totais", (await chamar("financeiro_agregado", {}, U.DIR)).codigo === 403 && (await chamar("financeiro_agregado", {}, U.GES)).codigo === 403 && JSON.stringify(dados(await chamar("financeiro_agregado", {}, U.RH)).meses) === JSON.stringify(agg.meses));
 check("sem duplicidade: o total da soma mensal = soma de cada pessoa uma vez (rescisão 6300+0+5000+4000 = 15300)", agg.meses.reduce((a, m) => a + m.rescisao, 0) === 15300 && agg.meses.reduce((a, m) => a + m.grrf, 0) === 800);
 
 // ═══ H. Lançamento manual (sem folha) ═══
@@ -300,7 +317,7 @@ await db.exec(`insert into public.peopleflow_desligamentos (colaborador_nome, va
 const logDe = (nome) => sql(`select acao, valor_anterior::float a, valor_novo::float n, origem, por, motivo, detalhe from public.peopleflow_fechamentos_log where colaborador_nome = '${nome}' order by id`);
 const linhaDe = async (nome) => linha(dados(await chamar("financeiro_listar", {})).saidas, nome);
 const fechDe = (nome) => um(`select valor_rescisao::float v, valor_grrf::float g, origem, rescisao_validada_em, rescisao_validada_por, rescisao_fonte, grrf_validada_em, grrf_validada_por, grrf_fonte, grrf_nao_aplicavel, grrf_justificativa from public.peopleflow_desligamentos where colaborador_nome = '${nome}'`);
-const mesSet = async () => dados(await chamar("financeiro_agregado", {}, U.DIR)).meses.find((m) => m.mes === "2026-09") ?? { rescisao: 0, grrf: 0, total: 0, parcial: true };
+const mesSet = async () => dados(await chamar("financeiro_agregado", {}, U.RH)).meses.find((m) => m.mes === "2026-09") ?? { rescisao: 0, grrf: 0, total: 0, parcial: true };
 
 // ── validações de entrada e autorização ──
 const sem = { colaborador_nome: "Nina Nova", valor_rescisao: "2.500,50", grrf_modo: "pendente", confirmacao_rh: true };
@@ -410,7 +427,7 @@ check("sem registros 'informado_rh' o rollback roda e a origem 'informado_rh' vo
 check("a migration simples pode ser reaplicada depois do rollback", (await falha(() => db.exec(MIG2))) === null && (await falha(() => db.exec(valorInforme))) === null && (await falha(() => db.exec(`delete from public.peopleflow_desligamentos where colaborador_nome = 'Teste Constraint'`))) === null);
 
 // ═══ J. Fechar o acesso direto ═══
-secao("J. Fechamento do acesso direto: o navegador perde a tabela; o servidor segue servindo RH (ver e registrar), Diretoria (agregado) e Gestor (nada)");
+secao("J. Fechamento do acesso direto: o navegador perde a tabela; o servidor segue servindo só o RH (ver e registrar); Diretoria e Gestor nada");
 const FECHAR = rd("desligamentos_financeiro_fechar_acesso.sql");
 const lerComo = (papel, uid) => como(papel, uid, async () => (await db.query(`select count(*)::int n from public.peopleflow_desligamentos`)).rows[0].n);
 const negado = async (papel, uid, sqlTxt) => /permission denied/i.test(String(await como(papel, uid, () => falha(() => db.query(sqlTxt)))));
@@ -453,8 +470,9 @@ const lrE = await linhaDe("Eva Historica");
 check("DEPOIS · RH: continua REGISTRANDO (diálogo único) pelo servidor: GRRF confirmada sobre o líquido já validado, com trilha", lrR.codigo === 200 && lrE.rescisao.status === "validado" && lrE.grrf.status === "validado" && lrE.grrf.total === 321.09 && (await hashesFin()).log.n === lrAntes + 1);
 const mR = await chamar("financeiro_lancamento_confirmar", { colaborador_nome: "Nina Nova", valor_rescisao: 2700, grrf_modo: "valor", valor_grrf: 100, motivo: "Ajuste pós-fechamento.", confirmacao_rh: true });
 check("DEPOIS · RH: lançamento manual (sem folha) e alteração com motivo também funcionam", mR.codigo === 200 && (await fechDe("Nina Nova")).v === 2700);
-const dAgr = await chamar("financeiro_agregado", {}, U.DIR);
-check("DEPOIS · Diretoria: só totais mensais agregados (200); nenhum valor individual na resposta", dAgr.codigo === 200 && dAgr.corpo.dados.meses.length > 0 && !/Nina|Lara|Rui|Eva|Alice|Bia|colaborador|rescisaoId|liquido/i.test(JSON.stringify(dAgr.corpo)));
+const dAgr = await chamar("financeiro_agregado", {}, U.RH);
+check("DEPOIS · RH: totais agregados (200), sem nenhum valor individual na resposta", dAgr.codigo === 200 && dAgr.corpo.dados.meses.length > 0 && !/Nina|Lara|Rui|Eva|Alice|Bia|colaborador|rescisaoId|liquido/i.test(JSON.stringify(dAgr.corpo)));
+check("DEPOIS · Diretoria: nem os totais agregados → 403", (await chamar("financeiro_agregado", {}, U.DIR)).codigo === 403);
 check("DEPOIS · Diretoria: sem individual, sem gravação → 403", (await chamar("financeiro_listar", {}, U.DIR)).codigo === 403 && (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hE, grrf_modo: "pendente", confirmacao_rh: true }, U.DIR)).codigo === 403 && (await chamar("financeiro_rescisao_validar", { itens: [{ rescisao_id: hA }] }, U.DIR)).codigo === 403);
 check("DEPOIS · Gestor: nenhum valor financeiro (listar, agregado, gravar) → 403", (await chamar("financeiro_listar", {}, U.GES)).codigo === 403 && (await chamar("financeiro_agregado", {}, U.GES)).codigo === 403 && (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hE, grrf_modo: "pendente", confirmacao_rh: true }, U.GES)).codigo === 403);
 check("DEPOIS: colaborador sem perfil → 403, conta desligada → 403, sem token → 401", (await chamar("financeiro_listar", {}, U.COL)).codigo === 403 && (await chamar("financeiro_agregado", {}, U.DESL)).codigo === 403 && (await chamar("financeiro_listar", {}, null)).codigo === 401);
@@ -462,7 +480,7 @@ check("DEPOIS: colaborador sem perfil → 403, conta desligada → 403, sem toke
 const nRub = (await hashesFin()).rub.n;
 const somas = await um(`select round(sum(liquido),2)::text l, round(sum(fgts_rescisorio),2)::text f from public.peopleflow_rescisoes_historico_rubricas`);
 const nFech = (await hashesFin()).fech.n;
-const VALF = rd("desligamentos_financeiro_fechar_acesso_validacao.sql").replace(/;\s*$/, "").replace("= 24\n", `= ${nRub}\n`).replace("96110.58", somas.l).replace("24196.05", somas.f).replaceAll(">= 19", ">= 1").replace(">= 7", `>= ${nFech}`);
+const VALF = rd("desligamentos_financeiro_fechar_acesso_validacao.sql").replace(/;\s*$/, "").replace(/= 24(\r?\n)/, `= ${nRub}$1`).replace("96110.58", somas.l).replace("24196.05", somas.f).replaceAll(">= 19", ">= 1").replace(">= 7", `>= ${nFech}`);
 const vf = await sql(VALF);
 check("validação final oficial (adaptada à massa fictícia): tudo OK", vf.length >= 10 && vf.every((r) => r.resultado === "OK"), JSON.stringify(vf.filter((r) => r.resultado !== "OK")));
 check("reversão do fechamento devolve exatamente o acesso anterior (autenticado volta a ler) sem tocar nos dados", (await falha(() => db.exec(rd("desligamentos_financeiro_fechar_acesso_rollback.sql")))) === null && (await lerComo("authenticated", U.GES)) >= 4);

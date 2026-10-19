@@ -8,7 +8,7 @@ Nada disto roda em produção sem a autorização expressa do RH para cada etapa
 - **Lançamento manual** (desligamento futuro, sem folha importada): salvar apenas LANÇA o valor. Ele só passa a valer depois da **validação expressa do RH, por componente**, com fonte documental, responsável e data. Alterar um valor já validado desfaz a validação daquele componente. GRRF "não aplicável" = R$ 0,00 resolvido, com justificativa registrada; um 0 lançado, sozinho, é GRRF pendente.
 - **Pendências financeiras** = pessoas únicas (cadastro e histórico da folha) com rescisão ou GRRF ainda não validadas; quem tem os dois pendentes conta uma vez. A Conferência mostra os dois componentes separadamente.
 - **Cadastro do desligado e Dashboard são alimentados pela mesma validação** (sem digitação duplicada). Dashboard: só valores validados, por mês efetivo, com cobertura e total parcial identificado; cada pessoa uma vez (cadastro × histórico); conversões de estágio nunca entram.
-- **Acesso:** valores individuais e gravações só pelo servidor e só para o RH; a Diretoria recebe apenas totais mensais; o Gestor vê só quantidades. O acesso direto do navegador à tabela `peopleflow_desligamentos` é fechado em migration separada, depois do deploy.
+- **Acesso:** valores individuais e gravações só pelo servidor e só para o RH; a Diretoria recebe apenas totais mensais; o Gestor vê só quantidades. **(Substituído na Etapa 4: por decisão do RH, por ora só o RH vê qualquer informação financeira.)** O acesso direto do navegador à tabela `peopleflow_desligamentos` é fechado em migration separada, depois do deploy.
 - Sem nova Serverless Function: as ações `financeiro_*` rodam dentro de `api/desenvolvimento.ts` (a pasta `api/` segue com 11 arquivos; limite de 12 no plano Hobby da Vercel).
 
 ## Sequência
@@ -79,3 +79,13 @@ Depois da homologação do RH. Remove o acesso do **navegador** (anon/authentica
 | 18 | Git | Merge de `feature/financeiro-fechar-acesso` em `main` + push (só testes, documentação e `schema.sql`: nenhuma mudança de comportamento do portal; o código já no ar não usa a tabela) | — |
 
 Reversão: `desligamentos_financeiro_fechar_acesso_rollback.sql` (recria a política e os privilégios anteriores; não toca nos dados).
+
+## Etapa 4 — Informação financeira só para o RH (temporário)
+Decisão do RH: **por enquanto somente o RH** visualiza informações financeiras de desligamentos — individuais **e agregadas**. A liberação para Diretoria e/ou Gestores será decidida depois pelo RH.
+- **Servidor:** `financeiro_agregado` passou a exigir o RH (como as demais ações). Diretoria, Gestor, colaborador e conta desligada recebem 403 em **todas** as ações `financeiro_*`, sem dados (teste percorre as 9 ações).
+- **Interface:** o Dashboard só busca e mostra valores para o RH (Diretoria/Gestor veem apenas a quantidade de desligamentos); a lista e a gaveta de Desligados escondem o status e o fechamento financeiro de quem não é RH. A coluna "Total" do quadro passou a "Custo Total".
+- **Sem mudança de dados:** nenhuma migration, nenhum valor alterado, nenhuma validação automática. Conferência financeira e lançamento simplificado do RH inalterados.
+- **Para liberar depois:** basta trocar `exigirRH` por uma regra de perfil em `agregado` (e `veValoresFinanceiros` no Dashboard) — nada no banco.
+- **Atenção ao período:** o Dashboard abre com os **últimos 30 dias**; para ver todos os meses (19 líquidos = R$ 89.311,10), ajustar o período (ex.: 01/01/2026 até hoje).
+
+Publicação: só código (merge + push). Reversão: `git revert -m 1 <merge>`.
