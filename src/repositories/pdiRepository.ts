@@ -4,7 +4,7 @@
 
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { SupabaseNotConfiguredError } from "./colaboradoresRepository";
-import { gravar } from "../features/desenvolvimento/devRepository";
+import { gravar, iniciarSessao } from "../features/desenvolvimento/devRepository";
 import type { Pdi, PdiAcao, PdiItem, ResponsavelPdi, StatusItemPdi, StatusPdi, TipoCompetenciaPdi } from "../types/domain";
 
 interface PdiRow {
@@ -349,6 +349,11 @@ export async function salvarPdi(pdi: Pdi, updatedAtAnterior: string): Promise<Pd
  * mesmo desligado e que o plano está aberto, grava só o cabeçalho (status, motivo, data e responsável) e registra a auditoria. Itens, ações,
  * evidências e sugestões não são tocados. Devolve apenas os campos do cabeçalho que mudaram. */
 export async function encerrarPdiPorDesligamento(pdiId: number, motivo: string): Promise<Pick<Pdi, "status" | "encerradoPor" | "encerradoEm" | "encerradoMotivo" | "updatedAt">> {
+  // A ação roda sob a "conta do módulo" (validade de 12 h, renovada ao entrar no Desenvolvimento — `iniciarSessao`). A tela do PDI não passa por lá,
+  // então renova a sessão aqui, antes de gravar (mesmo padrão de features/cargos/HabilidadesTecnicasCargo.tsx). Se a renovação falhar, o erro sobe e o
+  // encerramento NÃO é enviado: nada é gravado. As validações de perfil RH, colaborador desligado e PDI aberto continuam sendo do servidor.
+  const sessao = await iniciarSessao();
+  if (!sessao.instalado) throw new Error("O módulo Desenvolvimento não está instalado neste ambiente: o PDI não foi encerrado.");
   const dados = await gravar<{ status: string; encerrado_por: string; encerrado_em: string; encerrado_motivo: string; updated_at: string }>("pdi_encerrar", { pdi_id: pdiId, motivo });
   return { status: dados.status as StatusPdi, encerradoPor: dados.encerrado_por ?? "", encerradoEm: dados.encerrado_em ?? null, encerradoMotivo: dados.encerrado_motivo ?? "", updatedAt: dados.updated_at };
 }
