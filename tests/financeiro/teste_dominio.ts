@@ -114,7 +114,10 @@ check("o navegador NÃO acessa mais a tabela peopleflow_desligamentos direto (ne
 const repo = src("src/repositories/financeiroRepository.ts");
 check("o repositório financeiro só fala com o servidor (ações financeiro_*), sem cliente Supabase direto", /gravar</.test(repo) && !/supabase\.from\(/.test(repo));
 const dash = src("src/features/dashboard/DashboardPage.tsx");
-check("Dashboard: valores só para RH e Diretoria (servidor); Gestor recebe apenas quantidades", /veValoresFinanceiros = perfil === "RH" \|\| perfil === "Diretoria"/.test(dash) && /if \(!veValoresFinanceiros\) return;/.test(dash) && /restritos ao RH e à Diretoria/.test(dash));
+check("Dashboard: valores financeiros SÓ para o RH (decisão do RH); Diretoria e Gestor recebem apenas quantidades e nem chamam o servidor", /veValoresFinanceiros = perfil === "RH";/.test(dash) && !/veValoresFinanceiros = perfil === "RH" \|\|/.test(dash) && /if \(!veValoresFinanceiros\) return;/.test(dash) && /restritos ao RH;/.test(dash) && !/restritos ao RH e à Diretoria/.test(dash));
+check("Dashboard: colunas Rescisão, GRRF e Custo Total, com total parcial (*) e cobertura 'x de y'", /<th>Rescisão<\/th>/.test(dash) && /<th>GRRF<\/th>/.test(dash) && /<th>Custo Total<\/th>/.test(dash) && /Total parcial/.test(dash) && /rescisaoValidadas\} de \{coberturaCustos\.saidas\}/.test(dash) && /grrfResolvidas\} de \{coberturaCustos\.saidas\}/.test(dash));
+const paginaDesl = src("src/features/desligados/DesligadosPage.tsx");
+check("Desligados: nem o status financeiro nem a seção de fechamento aparecem para quem não é RH", /perfil === "RH" && <th>Status financeiro<\/th>/.test(paginaDesl) && /ehRH && \(/.test(paginaDesl) && /ehRH=\{perfil === "RH"\}/.test(paginaDesl));
 check("Dashboard: total parcial identificado e cobertura exibida", /Total parcial/.test(dash) && /Cobertura: rescisão validada em/.test(dash) && /\(parcial\)/.test(dash));
 check("Dashboard: conversões de estágio não entram nos custos (aviso e filtro no servidor)", /Conversões de estágio para CLT não entram/.test(dash));
 const page = src("src/features/desligados/DesligadosPage.tsx");
@@ -142,7 +145,7 @@ check("schema.sql (instalações novas) já nasce com o fechamento: sem polític
 check("a origem interna é exibida como 'Informado e confirmado pelo RH', não como conferência de documento", /ROTULO_INFORMADO_RH/.test(confTsx) && ROTULO_INFORMADO_RH === "Informado e confirmado pelo RH" && FONTE_INFORMADO_RH === "informado_rh");
 check("Desligados: aba Conferência financeira só para o RH; gaveta lê a folha validada, sem digitação dupla", /perfil === "RH" && \(\s*<div className=\{confStyles\.abas\}/.test(page) && /Conferência financeira/.test(page) && /em lote/.test(page));
 const srv = src("api/_lib/financeiroDesligamentos.ts");
-check("servidor: valores individuais e gravações só para o RH; agregado para RH e Diretoria", /function exigirRH/.test(srv) && /perfil !== "RH" && conta\.perfil !== "Diretoria"/.test(srv));
+check("servidor: valores individuais, agregados e gravações só para o RH (nenhuma exceção para Diretoria)", /function exigirRH/.test(srv) && !/perfil !== "RH" && conta\.perfil !== "Diretoria"/.test(srv) && /async function agregado\(conta: Conta, corpo: Corpo\) \{\s*exigirRH\(conta\);/.test(srv));
 check("servidor: nada é calculado/presumido a partir de saldo FGTS ou percentuais", !/0\.4|\* 0\.0|multa.*saldo/i.test(srv.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));
 check("servidor: trilha em toda gravação e fechamento existente nunca sobrescrito sem confirmação", /registrar\(conta/.test(srv) && /confirmar_substituicao/.test(srv) && /decida entre manter o lançado ou adotar a folha/.test(srv));
 check("sem nova Serverless Function: rota dentro de api/desenvolvimento.ts (≤ 11 arquivos em api/)", /executarFinanceiro\(acao, req, res\)/.test(src("api/desenvolvimento.ts")) && readdirSync(join(raiz, "api")).filter((n) => n.endsWith(".ts")).length <= 11);

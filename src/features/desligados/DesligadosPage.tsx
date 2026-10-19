@@ -61,7 +61,7 @@ export function DesligadosPage() {
                 <th>Departamento</th>
                 <th>Data de desligamento</th>
                 <th>Motivo</th>
-                <th>Status financeiro</th>
+                {perfil === "RH" && <th>Status financeiro</th>}
               </tr>
             </thead>
             <tbody>
@@ -89,6 +89,7 @@ export function DesligadosPage() {
                     <td>{c.depto}</td>
                     <td>{c.dataDesligamento}</td>
                     <td>{c.motivoDesligamento}</td>
+                    {perfil === "RH" && (
                     <td>
                       {rotuloFin === "Validado" || rotuloFin === "Completo" ? (
                         <Badge bg="var(--color-success-bg)" fg="var(--color-success-fg)" dot="var(--color-success)">
@@ -104,6 +105,7 @@ export function DesligadosPage() {
                         </Badge>
                       )}
                     </td>
+                    )}
                   </tr>
                 );
               })}
@@ -118,6 +120,7 @@ export function DesligadosPage() {
         <DesligadoDrawer
           colaborador={colaboradorSelecionado}
           linha={linhaDe(colaboradorSelecionado)}
+          ehRH={perfil === "RH"}
           onIrConferencia={() => {
             setSelecionado(null);
             setAba("conferencia");
@@ -132,13 +135,15 @@ export function DesligadosPage() {
 
 interface DesligadoDrawerProps {
   colaborador: Colaborador;
+  /** Informação financeira dos desligamentos: só o RH (por decisão do RH, por ora). */
+  ehRH: boolean;
   linha: LinhaConferencia | null;
   onIrConferencia: () => void;
   eventos: ReturnType<typeof construirEventos>;
   onClose: () => void;
 }
 
-function DesligadoDrawer({ colaborador: c, linha, onIrConferencia, eventos, onClose }: DesligadoDrawerProps) {
+function DesligadoDrawer({ colaborador: c, ehRH, linha, onIrConferencia, eventos, onClose }: DesligadoDrawerProps) {
   const money = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const [dialogoManual, setDialogoManual] = useState(false);
   const [mensagemManual, setMensagemManual] = useState<string | null>(null);
@@ -179,47 +184,51 @@ function DesligadoDrawer({ colaborador: c, linha, onIrConferencia, eventos, onCl
         </div>
       </div>
 
-      <h4 className={styles.sectionTitle}>Fechamento financeiro</h4>
-      {linha ? (
+      {ehRH && (
         <>
-          <div className={styles.financeiroGrid}>
-            <div className={styles.detalheItem}>
-              <span className={styles.detalheLabel}>Valor da Rescisão (líquido)</span>
-              <span className={styles.detalheValor}>
-                {linha.rescisao.status === "validado"
-                  ? `${money(linha.rescisao.valor ?? 0)} — confirmada`
-                  : linha.rescisaoId !== null
-                    ? `${money(linha.liquidoFolha ?? 0)} — a confirmar`
-                    : linha.rescisao.lancado !== null
-                      ? `${money(linha.rescisao.lancado)} — a confirmar`
-                      : "Sem valor"}
-              </span>
-              {linha.rescisao.status === "divergente" && linha.rescisao.lancado !== null && <span className={styles.detalheLabel}>Divergente: lançado {money(linha.rescisao.lancado)}</span>}
+        <h4 className={styles.sectionTitle}>Fechamento financeiro</h4>
+        {linha ? (
+          <>
+            <div className={styles.financeiroGrid}>
+              <div className={styles.detalheItem}>
+                <span className={styles.detalheLabel}>Valor da Rescisão (líquido)</span>
+                <span className={styles.detalheValor}>
+                  {linha.rescisao.status === "validado"
+                    ? `${money(linha.rescisao.valor ?? 0)} — confirmada`
+                    : linha.rescisaoId !== null
+                      ? `${money(linha.liquidoFolha ?? 0)} — a confirmar`
+                      : linha.rescisao.lancado !== null
+                        ? `${money(linha.rescisao.lancado)} — a confirmar`
+                        : "Sem valor"}
+                </span>
+                {linha.rescisao.status === "divergente" && linha.rescisao.lancado !== null && <span className={styles.detalheLabel}>Divergente: lançado {money(linha.rescisao.lancado)}</span>}
+              </div>
+              <div className={styles.detalheItem}>
+                <span className={styles.detalheLabel}>Valor da GRRF (total da guia)</span>
+                <span className={styles.detalheValor}>
+                  {linha.grrf.status === "validado" ? `${money(linha.grrf.total ?? 0)} — confirmada` : linha.grrf.status === "nao_aplicavel" ? "Não aplicável (justificada)" : "Pendente"}
+                </span>
+              </div>
             </div>
-            <div className={styles.detalheItem}>
-              <span className={styles.detalheLabel}>Valor da GRRF (total da guia)</span>
-              <span className={styles.detalheValor}>
-                {linha.grrf.status === "validado" ? `${money(linha.grrf.total ?? 0)} — confirmada` : linha.grrf.status === "nao_aplicavel" ? "Não aplicável (justificada)" : "Pendente"}
-              </span>
-            </div>
-          </div>
-          <Button variant="primary" onClick={() => setDialogoManual(true)} className={styles.salvarBtn}>
-            Lançar e confirmar valores
-          </Button>
-          {linha.rescisaoId !== null && (
-            <p className={styles.semHistorico}>
-              Os líquidos da folha também podem ser confirmados em lote na{" "}
-              <button type="button" onClick={onIrConferencia} style={{ background: "none", border: 0, padding: 0, color: "var(--color-brand)", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
-                Conferência financeira
-              </button>
-              .
-            </p>
-          )}
-          {mensagemManual && <p className={styles.semHistorico}>{mensagemManual}</p>}
-          {dialogoManual && <DialogoLancarConfirmar linha={linha} onClose={() => setDialogoManual(false)} onMensagem={setMensagemManual} />}
+            <Button variant="primary" onClick={() => setDialogoManual(true)} className={styles.salvarBtn}>
+              Lançar e confirmar valores
+            </Button>
+            {linha.rescisaoId !== null && (
+              <p className={styles.semHistorico}>
+                Os líquidos da folha também podem ser confirmados em lote na{" "}
+                <button type="button" onClick={onIrConferencia} style={{ background: "none", border: 0, padding: 0, color: "var(--color-brand)", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
+                  Conferência financeira
+                </button>
+                .
+              </p>
+            )}
+            {mensagemManual && <p className={styles.semHistorico}>{mensagemManual}</p>}
+            {dialogoManual && <DialogoLancarConfirmar linha={linha} onClose={() => setDialogoManual(false)} onMensagem={setMensagemManual} />}
+          </>
+        ) : (
+          <p className={styles.semHistorico}>Os valores financeiros individuais só ficam disponíveis para o RH, depois de carregada a Conferência financeira.</p>
+        )}
         </>
-      ) : (
-        <p className={styles.semHistorico}>Os valores financeiros individuais só ficam disponíveis para o RH, depois de carregada a Conferência financeira.</p>
       )}
 
       <h4 className={styles.sectionTitle}>Histórico ({eventos.length})</h4>

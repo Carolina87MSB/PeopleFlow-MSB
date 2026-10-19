@@ -1,5 +1,5 @@
 // Camada de acesso ao financeiro dos desligamentos — TUDO pelo servidor (api/desenvolvimento.ts, ações `financeiro_*`).
-// O navegador não lê nem grava mais `peopleflow_desligamentos` direto: o RH recebe os valores individuais (conferência), a Diretoria só os totais
+// O navegador não lê nem grava mais `peopleflow_desligamentos` direto: o RH recebe os valores individuais (conferência), (por decisão do RH, por ora) a Diretoria e os Gestores nada: nem totais
 // mensais e os demais perfis nada. A carga inicial NUNCA derruba o portal: sem permissão (não-RH) ou com falha, devolve vazio.
 
 import { gravar } from "../features/desenvolvimento/devRepository";
@@ -48,7 +48,7 @@ export interface CustosAgregados {
   cobertura: CoberturaFinanceira;
 }
 
-/** Totais mensais do quadro "Custos de Rescisão por mês" (RH e Diretoria) — só agregados, nenhum valor individual. */
+/** Totais mensais do quadro "Custos de Rescisão por mês" — SOMENTE RH por ora (o servidor recusa os demais perfis); só agregados, nenhum valor individual. */
 export async function getCustosAgregados(f: FiltrosCustos): Promise<CustosAgregados> {
   return gravar<CustosAgregados>("financeiro_agregado", { ...f });
 }
