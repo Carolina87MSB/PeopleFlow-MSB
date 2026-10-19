@@ -28,6 +28,7 @@ import type {
   Vaga,
 } from "../types/domain";
 
+import type { ConferenciaFinanceira } from "../domain/custosRescisao";
 export type PortalAction =
   | {
       type: "CARREGAR_DADOS";
@@ -37,6 +38,7 @@ export type PortalAction =
       tipos: TipoMovimentacao[];
       perfis: Perfil2Info[];
       desligamentosFinanceiros: DesligamentoFinanceiro[];
+      conferenciaFinanceira: ConferenciaFinanceira | null;
       descricoesCargo: DescricaoCargo[];
       catalogoCompetenciasCargo: CompetenciaCargoCatalogo[];
       descricaoCargoCompetencias: DescricaoCargoCompetencia[];
@@ -75,7 +77,7 @@ export type PortalAction =
   | { type: "ATUALIZAR_CARTA_MOVIMENTACAO"; id: string; carta: CartaMovimentacao }
   | { type: "CRIAR_MOVIMENTACAO"; movimentacao: Movimentacao }
   | { type: "REGISTRAR_CARGO_CUSTOM"; cargo: CargoCustom }
-  | { type: "SALVAR_FECHAMENTO_FINANCEIRO"; desligamento: DesligamentoFinanceiro }
+  | { type: "ATUALIZAR_FINANCEIRO"; desligamentosFinanceiros: DesligamentoFinanceiro[]; conferenciaFinanceira: ConferenciaFinanceira | null }
   | { type: "ATUALIZAR_DESCRICAO_CARGO"; descricao: DescricaoCargo }
   | { type: "ATUALIZAR_ADMISSAO_COLABORADOR"; nome: string; admissao: string; admissaoIso: string; tempoDeEmpresa: string }
   | { type: "ATUALIZAR_CONFIG_AVALIACAO_DESEMPENHO"; config: ConfigAvaliacaoDesempenho }

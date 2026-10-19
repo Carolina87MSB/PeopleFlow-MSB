@@ -17,7 +17,20 @@ import {
   registrarPreenchimento as registrarPreenchimentoNoSupabase,
   reservarVaga as reservarVagaNoSupabase,
 } from "../repositories/vagasRepository";
-import { salvarFechamentoFinanceiro as salvarFechamentoNoSupabase } from "../repositories/desligadosRepository";
+import {
+  confirmarModalidade as confirmarModalidadeNoServidor,
+  decidirDivergencia as decidirDivergenciaNoServidor,
+  getFinanceiroDesligados,
+  registrarGrrf as registrarGrrfNoServidor,
+  salvarFechamentoManual,
+  validarLancamentoManual as validarLancamentoManualNoServidor,
+  validarRescisoes as validarRescisoesNoServidor,
+  type ItemValidacao,
+  type RegistroGrrf,
+  type ResultadoValidacao,
+  type ValidacaoManual,
+} from "../repositories/financeiroRepository";
+import type { ConferenciaFinanceira, DecisaoDivergencia } from "../domain/custosRescisao";
 import {
   COLUNA_POR_CAMPO,
   getHistoricoDescricaoCargo,
@@ -253,6 +266,15 @@ export interface PortalData {
   /** Botão "Novo Cargo" (RH-only) — cria só nome/depto/gestor, 0 ocupantes. */
   criarCargoCustom: (nome: string, depto: string, gestor: string) => Promise<{ ok: true } | { ok: false }>;
   salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
+  /** Conferência financeira dos desligamentos (valores individuais): só o RH recebe; demais perfis ficam com null. */
+  conferenciaFinanceira: ConferenciaFinanceira | null;
+  /** Valida o LÍQUIDO da folha como Rescisão (individual ou em lote). Divergência e líquido R$ 0,00 voltam como resultado, sem gravar. */
+  validarRescisoes: (itens: ItemValidacao[]) => Promise<{ ok: true; resultados: ResultadoValidacao[] } | { ok: false; error: string }>;
+  decidirDivergencia: (p: { rescisaoId: number; decisao: DecisaoDivergencia; motivo: string; zeroConferido?: boolean }) => Promise<{ ok: true } | { ok: false; error: string }>;
+  registrarGrrf: (p: RegistroGrrf) => Promise<{ ok: true } | { ok: false; error: string }>;
+  confirmarModalidade: (rescisaoId: number, modalidade: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Confirmação expressa do RH de um componente do lançamento manual (desligamento sem folha): fonte documental, responsável e data. */
+  validarLancamentoManual: (p: ValidacaoManual) => Promise<{ ok: true } | { ok: false; error: string }>;
   atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
   /** Catálogo fechado das 23 competências comportamentais oficiais (RH,
@@ -560,10 +582,14 @@ export function usePortalData(): PortalData {
 
   const desligados = useMemo(() => colaboradoresDesligados(state.colaboradores), [state.colaboradores]);
 
-  const pendenciasFinanceirasCount = useMemo(
-    () => desligados.filter((c) => pendenteFechamento(c.nome, state.desligamentosFinanceiros)).length,
-    [desligados, state.desligamentosFinanceiros],
-  );
+  // Pendência financeira = alguma conferência por fazer (rescisão não validada ou GRRF pendente). Só o RH enxerga os valores; para os demais perfis é 0.
+  const pendenciasFinanceirasCount = useMemo(() => {
+    if (perfil !== "RH") return 0;
+    const conf = state.conferenciaFinanceira;
+    // pessoas ÚNICAS com algum componente por validar (cadastro e histórico da folha); quem tem rescisão e GRRF pendentes conta uma vez
+    if (conf) return conf.saidas.filter((l) => l.rescisao.status !== "validado" || l.grrf.status === "pendente").length;
+    return desligados.filter((c) => pendenteFechamento(c.nome, state.desligamentosFinanceiros)).length;
+  }, [perfil, desligados, state.desligamentosFinanceiros, state.conferenciaFinanceira]);
 
   const pendenciasAvaliacaoExperiencia = useMemo(() => {
     const todas = pendenciasAvaliacaoExperienciaDomain(
@@ -1626,22 +1652,75 @@ export function usePortalData(): PortalData {
     [dispatch, flash],
   );
 
-  const salvarFechamentoFinanceiroFn = useCallback(
-    async (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => {
+  const recarregarFinanceiroFn = useCallback(async () => {
+    const f = await getFinanceiroDesligados();
+    dispatch({ type: "ATUALIZAR_FINANCEIRO", desligamentosFinanceiros: f.fechamentos, conferenciaFinanceira: f.conferencia });
+  }, [dispatch]);
+
+  /** Executa uma ação financeira no servidor e recarrega os dados do RH. `flashErro: false` deixa a tela decidir (ex.: pedir confirmação de substituição). */
+  const comFinanceiro = useCallback(
+    async <T,>(fn: () => Promise<T>, opcoes: { mensagem?: string; flashErro?: boolean } = {}): Promise<{ ok: true; dados: T } | { ok: false; error: string }> => {
       try {
-        await salvarFechamentoNoSupabase(colaboradorNome, valorRescisao, valorGrrf, me);
-        dispatch({
-          type: "SALVAR_FECHAMENTO_FINANCEIRO",
-          desligamento: { colaboradorNome, valorRescisao, valorGrrf, updatedAt: new Date().toISOString(), updatedBy: me },
-        });
-        flash("Fechamento financeiro salvo.");
-        return { ok: true as const };
+        const dados = await fn();
+        await recarregarFinanceiroFn();
+        if (opcoes.mensagem) flash(opcoes.mensagem);
+        return { ok: true as const, dados };
       } catch (err) {
-        flash(err instanceof Error ? err.message : "Falha ao salvar fechamento financeiro.");
-        return { ok: false as const };
+        const error = err instanceof Error ? err.message : "Falha na operação financeira.";
+        if (opcoes.flashErro !== false) flash(error);
+        return { ok: false as const, error };
       }
     },
-    [dispatch, me, flash],
+    [flash, recarregarFinanceiroFn],
+  );
+
+  // Lançamento manual (só para desligamento SEM rescisão importada da folha); grava pelo servidor, exclusivo do RH.
+  const salvarFechamentoFinanceiroFn = useCallback(
+    async (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => {
+      const r = await comFinanceiro(() => salvarFechamentoManual(colaboradorNome, valorRescisao, valorGrrf), { mensagem: "Fechamento financeiro salvo." });
+      return r.ok ? { ok: true as const } : { ok: false as const };
+    },
+    [comFinanceiro],
+  );
+
+  const validarRescisoesFn = useCallback(
+    async (itens: ItemValidacao[]) => {
+      const r = await comFinanceiro(() => validarRescisoesNoServidor(itens));
+      return r.ok ? { ok: true as const, resultados: r.dados } : r;
+    },
+    [comFinanceiro],
+  );
+
+  const decidirDivergenciaFn = useCallback(
+    async (p: { rescisaoId: number; decisao: DecisaoDivergencia; motivo: string; zeroConferido?: boolean }) => {
+      const r = await comFinanceiro(() => decidirDivergenciaNoServidor({ rescisao_id: p.rescisaoId, decisao: p.decisao, motivo: p.motivo, zero_conferido: p.zeroConferido }), { mensagem: "Decisão registrada." });
+      return r.ok ? { ok: true as const } : r;
+    },
+    [comFinanceiro],
+  );
+
+  const registrarGrrfFn = useCallback(
+    async (p: RegistroGrrf) => {
+      const r = await comFinanceiro(() => registrarGrrfNoServidor(p), { mensagem: "GRRF registrada.", flashErro: false });
+      return r.ok ? { ok: true as const } : r;
+    },
+    [comFinanceiro],
+  );
+
+  const validarLancamentoManualFn = useCallback(
+    async (p: ValidacaoManual) => {
+      const r = await comFinanceiro(() => validarLancamentoManualNoServidor(p), { mensagem: "Validação registrada.", flashErro: false });
+      return r.ok ? { ok: true as const } : r;
+    },
+    [comFinanceiro],
+  );
+
+  const confirmarModalidadeFn = useCallback(
+    async (rescisaoId: number, modalidade: string) => {
+      const r = await comFinanceiro(() => confirmarModalidadeNoServidor({ rescisao_id: rescisaoId, modalidade }), { mensagem: "Modalidade confirmada." });
+      return r.ok ? { ok: true as const } : r;
+    },
+    [comFinanceiro],
   );
 
   const criarAvaliacaoExperienciaFn = useCallback(
@@ -2892,6 +2971,12 @@ export function usePortalData(): PortalData {
     criarMovimentacao: criarMovimentacaoFn,
     criarCargoCustom: criarCargoCustomFn,
     salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,
+    conferenciaFinanceira: state.conferenciaFinanceira,
+    validarRescisoes: validarRescisoesFn,
+    decidirDivergencia: decidirDivergenciaFn,
+    registrarGrrf: registrarGrrfFn,
+    confirmarModalidade: confirmarModalidadeFn,
+    validarLancamentoManual: validarLancamentoManualFn,
     atualizarCampoDescricaoCargo: atualizarCampoDescricaoCargoFn,
     carregarHistoricoDescricaoCargo: carregarHistoricoDescricaoCargoFn,
     catalogoCompetenciasCargo: state.catalogoCompetenciasCargo,

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, Check, CheckCircle2, Pencil, Plus, Search, X } from "lucide-react";
 import { Header } from "../../components/layout/Header";
@@ -21,6 +21,7 @@ import {
   type FiltrosAtributosDashboard,
 } from "../../domain/dashboardExecutivo";
 import { custosRescisaoPorMes, pendenteFechamento } from "../../domain/desligados";
+import { getCustosAgregados, type CustosAgregados } from "../../repositories/financeiroRepository";
 import { filtrarHistorico, prepararHistorico } from "../../domain/rescisoesHistorico";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { pendenciasAvaliacaoExperiencia as pendenciasAvaliacaoExperienciaDomain } from "../../domain/avaliacaoExperiencia";
@@ -48,6 +49,7 @@ export function DashboardPage() {
     podeCriar,
     descricoesCargo,
     desligamentosFinanceiros,
+    conferenciaFinanceira,
     configDashboard,
     atualizarConfigDashboard,
     aprovarEtapa,
@@ -168,17 +170,49 @@ export function DashboardPage() {
     () => desligamentosNoPeriodo(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
     [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
   );
-  const custosRescisao = useMemo(
+  // Quantidades por mês: sempre calculadas aqui (todos os perfis, mesmas regras de antes). Os VALORES vêm do servidor e só chegam ao RH e à Diretoria,
+  // como totais mensais já agregados e apenas de valores VALIDADOS pelo RH (cada pessoa uma vez, pela data efetiva do desligamento).
+  const custosQuantidade = useMemo(
     () =>
       custosRescisaoPorMes(
         desligadosNoPeriodoFiltrado,
-        desligamentosFinanceiros,
+        [],
         historicoFiltrado.saidasSemCadastro.filter((r) => r.demissaoIso >= periodoInicio && r.demissaoIso <= periodoFim),
       ),
-    [desligadosNoPeriodoFiltrado, desligamentosFinanceiros, historicoFiltrado, periodoInicio, periodoFim],
+    [desligadosNoPeriodoFiltrado, historicoFiltrado, periodoInicio, periodoFim],
   );
+  const veValoresFinanceiros = perfil === "RH" || perfil === "Diretoria";
+  const [custosServidor, setCustosServidor] = useState<CustosAgregados | null>(null);
+  const [custosErro, setCustosErro] = useState<string | null>(null);
+  useEffect(() => {
+    if (!veValoresFinanceiros) return;
+    let vivo = true;
+    getCustosAgregados({ inicio: periodoInicio, fim: periodoFim, setor: setorFiltro, gestor: gestorFiltro, cargo: cargoFiltro })
+      .then((d) => {
+        if (!vivo) return;
+        setCustosServidor(d);
+        setCustosErro(null);
+      })
+      .catch((e: unknown) => {
+        if (!vivo) return;
+        setCustosServidor(null);
+        setCustosErro(e instanceof Error ? e.message : "Valores financeiros indisponíveis.");
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [veValoresFinanceiros, periodoInicio, periodoFim, setorFiltro, gestorFiltro, cargoFiltro, conferenciaFinanceira]);
+  const custosRescisao = useMemo(
+    () =>
+      custosServidor
+        ? custosServidor.meses
+        : custosQuantidade.map((m) => ({ mes: m.mes, mesLabel: m.mesLabel, quantidade: m.quantidade, rescisao: 0, grrf: 0, total: 0, rescisaoValidadas: 0, grrfResolvidas: 0, parcial: true })),
+    [custosServidor, custosQuantidade],
+  );
+  const mostrarValores = veValoresFinanceiros && custosServidor !== null;
   const custoRescisaoTotal = custosRescisao.reduce((acc, m) => acc + m.total, 0);
   const qtdDesligamentosTotal = custosRescisao.reduce((acc, m) => acc + m.quantidade, 0);
+  const coberturaCustos = custosServidor?.cobertura ?? null;
 
   // Bloco 2 — Alertas Operacionais, nenhum reaproveitando os getters globais/
   // sub-escopados de usePortalData como estão (ver plano — Diretoria/Gestor
@@ -191,10 +225,14 @@ export function DashboardPage() {
     () => agregarCargos(colaboradoresVisiveisFiltrados, state.cargosCustom).filter((c) => !descricoesCargo.some((d) => d.cargoNome === c.nome)),
     [colaboradoresVisiveisFiltrados, state.cargosCustom, descricoesCargo],
   );
-  const desligamentosPendentesAlerta = useMemo(
-    () => colaboradoresExecutivoFiltrados.filter((c) => c.desligado && pendenteFechamento(c.nome, desligamentosFinanceiros)).length,
-    [colaboradoresExecutivoFiltrados, desligamentosFinanceiros],
-  );
+  const desligamentosPendentesAlerta = useMemo(() => {
+    if (perfil !== "RH") return 0;
+    const nomes = new Set(colaboradoresExecutivoFiltrados.filter((c) => c.desligado).map((c) => c.nome));
+    const idsHistorico = new Set(historicoFiltrado.saidasSemCadastro.map((r) => `h:${r.id}`));
+    // pessoas únicas com rescisão ou GRRF por validar (cadastro e histórico da folha); rescisão e GRRF pendentes da mesma pessoa contam uma vez
+    if (conferenciaFinanceira) return conferenciaFinanceira.saidas.filter((l) => ((l.origem === "cadastro" && nomes.has(l.nome)) || idsHistorico.has(l.chave)) && (l.rescisao.status !== "validado" || l.grrf.status === "pendente")).length;
+    return colaboradoresExecutivoFiltrados.filter((c) => c.desligado && pendenteFechamento(c.nome, desligamentosFinanceiros)).length;
+  }, [perfil, colaboradoresExecutivoFiltrados, historicoFiltrado, conferenciaFinanceira, desligamentosFinanceiros]);
   const pendenciasAprovacaoAlerta = useMemo(() => {
     const nomes = new Set(colaboradoresVisiveisFiltrados.map((c) => c.nome));
     return state.movimentacoes.filter((m) => m.status === "Em Aprovação" && nomes.has(m.colaborador)).length;
@@ -521,7 +559,8 @@ export function DashboardPage() {
             <h2 className={styles.secaoTitulo}>Turnover e Custos</h2>
             {custosRescisao.length > 0 && (
               <span className={styles.secaoContexto}>
-                {qtdDesligamentosTotal} desligamento{qtdDesligamentosTotal === 1 ? "" : "s"} · {money(custoRescisaoTotal)}
+                {qtdDesligamentosTotal} desligamento{qtdDesligamentosTotal === 1 ? "" : "s"}
+                {mostrarValores ? ` · ${money(custoRescisaoTotal)}${coberturaCustos && !coberturaCustos.completa ? " (parcial)" : ""}` : ""}
               </span>
             )}
           </div>
@@ -545,7 +584,7 @@ export function DashboardPage() {
                   <h3 className={styles.cardTitle}>Custos de Rescisão por mês</h3>
                 </div>
                 <BarChart
-                  data={custosRescisao.map((m) => ({ label: m.mesLabel, value: m.total, annotation: String(m.quantidade) }))}
+                  data={custosRescisao.map((m) => ({ label: m.mesLabel, value: mostrarValores ? m.total : m.quantidade, annotation: mostrarValores ? `${m.quantidade}${m.parcial ? " · parcial" : ""}` : String(m.quantidade) }))}
                   color="var(--color-danger)"
                 />
                 <div className={`${tableStyles.wrap} ${styles.custoTableWrap}`}>
@@ -554,9 +593,14 @@ export function DashboardPage() {
                       <tr>
                         <th>Mês</th>
                         <th>Desligamentos</th>
-                        <th>Rescisão</th>
-                        <th>GRRF</th>
-                        <th>Total</th>
+                        {mostrarValores && (
+                          <>
+                            <th>Rescisão</th>
+                            <th>GRRF</th>
+                            <th>Total</th>
+                            <th>Validado</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -564,21 +608,36 @@ export function DashboardPage() {
                         <tr key={m.mes}>
                           <td>{m.mesLabel}</td>
                           <td>{m.quantidade}</td>
-                          <td>{money(m.rescisao)}</td>
-                          <td>{money(m.grrf)}</td>
-                          <td>
-                            <strong>{money(m.total)}</strong>
-                          </td>
+                          {mostrarValores && (
+                            <>
+                              <td>{money(m.rescisao)}</td>
+                              <td>{money(m.grrf)}</td>
+                              <td>
+                                <strong>{money(m.total)}</strong>
+                                {m.parcial && <span title="Total parcial: há valores ainda não validados pelo RH"> *</span>}
+                              </td>
+                              <td title="Rescisão validada · GRRF resolvida (de cada mês)">
+                                {m.rescisaoValidadas}/{m.quantidade} · {m.grrfResolvidas}/{m.quantidade}
+                              </td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                {historicoFiltrado.saidasSemCadastro.length > 0 && (
+                {mostrarValores && coberturaCustos && (
                   <p className={styles.secaoContexto} style={{ marginTop: 8 }}>
-                    Os valores vêm do fechamento financeiro lançado pelo RH. Saídas registradas só no histórico da folha entram na contagem de desligamentos, mas ainda não têm valor: as rubricas do relatório
-                    (salário, proventos, descontos, líquido, FGTS) aguardam validação do RH e não são somadas.
+                    Só valores <strong>validados pelo RH</strong> são somados (Rescisão = líquido da folha; GRRF = total recolhido). Cobertura: rescisão validada em{" "}
+                    {coberturaCustos.rescisaoValidadas} de {coberturaCustos.saidas} desligamentos · GRRF resolvida em {coberturaCustos.grrfResolvidas} de {coberturaCustos.saidas}.
+                    {!coberturaCustos.completa && " * Total parcial: o que falta validar não entra na soma."} Conversões de estágio para CLT não entram nos custos.
                   </p>
+                )}
+                {mostrarValores === false && veValoresFinanceiros && custosErro && (
+                  <p className={styles.secaoContexto} style={{ marginTop: 8 }}>Valores financeiros indisponíveis no momento ({custosErro}). A contagem de desligamentos segue normal.</p>
+                )}
+                {!veValoresFinanceiros && (
+                  <p className={styles.secaoContexto} style={{ marginTop: 8 }}>Valores financeiros de rescisão são restritos ao RH e à Diretoria; aqui aparece apenas a quantidade de desligamentos.</p>
                 )}
               </div>
             ) : (

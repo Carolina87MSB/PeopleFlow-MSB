@@ -23,6 +23,7 @@ export function criarCliente(db, { papel, uid = null, sessao = null }) {
     }
     insert(p) { this.op = "insert"; this.payload = p; return this; }
     update(p) { this.op = "update"; this.payload = p; return this; }
+    upsert(p, o = {}) { this.op = "upsert"; this.payload = p; this.conflito = String(o.onConflict ?? "").split(",").map((c) => c.trim()).filter(Boolean); return this; }
     eq(c, v) { this.filtros.push([c, "=", v]); return this; }
     neq(c, v) { this.filtros.push([c, "<>", v]); return this; }
     in(c, v) { this.filtros.push([c, "in", v]); return this; }
@@ -62,10 +63,14 @@ export function criarCliente(db, { papel, uid = null, sessao = null }) {
           if (this.rng) sql += ` limit ${this.rng[1] - this.rng[0] + 1} offset ${this.rng[0]}`;
           else if (this.lim != null) sql += ` limit ${this.lim}`;
         }
-      } else if (this.op === "insert") {
+      } else if (this.op === "insert" || this.op === "upsert") {
         const linhas = Array.isArray(this.payload) ? this.payload : [this.payload];
         const chaves = [...new Set(linhas.flatMap((l) => Object.keys(l)))];
         sql = `insert into public.${q(this.tabela)} (${chaves.map(q).join(", ")}) values ${linhas.map((l) => "(" + chaves.map((k) => (k in l ? p(val(l[k])) : "default")).join(", ") + ")").join(", ")}`;
+        if (this.op === "upsert") {
+          const atualiza = chaves.filter((k) => !this.conflito.includes(k));
+          sql += ` on conflict (${this.conflito.map(q).join(", ")}) do ${atualiza.length ? "update set " + atualiza.map((k) => `${q(k)} = excluded.${q(k)}`).join(", ") : "nothing"}`;
+        }
         if (this.retorna) sql += ` returning ${this.colunas()}`;
       } else {
         const chaves = Object.keys(this.payload);
@@ -118,7 +123,7 @@ export function criarCliente(db, { papel, uid = null, sessao = null }) {
     auth: {
       getSession: async () => ({ data: { session: sessao ?? { access_token: "token-de-teste" } } }),
       // usado por exigirConta() do servidor: o token de teste é "tok:<uuid>"
-      getUser: async (token) => (String(token).startsWith("tok:") ? { data: { user: { id: String(token).slice(4) } }, error: null } : { data: { user: null }, error: { message: "inválido" } }),
+      getUser: async (token) => (String(token).startsWith("tok:") ? { data: { user: { id: String(token).slice(4), email: globalThis.__EMAIL_DE?.[String(token).slice(4)] } }, error: null } : { data: { user: null }, error: { message: "inválido" } }),
     },
   };
 }

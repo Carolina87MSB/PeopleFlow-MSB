@@ -13,23 +13,7 @@ import { HISTORICO_VAZIO, type HistoricoPreparado } from "./rescisoesHistorico";
 import { normalizarDataIso, situacaoFuncionalEm } from "./situacaoFuncional";
 import type { AvaliacaoDesempenho, CicloAvaliacaoDesempenho, Colaborador } from "../types/domain";
 
-export interface FiltrosAtributosDashboard {
-  setor: string;
-  gestor: string;
-  cargo: string;
-}
-
-/** Setor/Gestor/Cargo usados aqui são sempre o valor ATUAL do colaborador — não
- * existe rastreio histórico de mudança de setor/cargo neste app (mesma
- * simplificação já aceita em agregarDepartamentos()/agregarCargos()). */
-export function filtrarPorAtributos(colaboradores: Colaborador[], filtros: FiltrosAtributosDashboard): Colaborador[] {
-  return colaboradores.filter(
-    (c) =>
-      (filtros.setor === "Todos" || c.depto === filtros.setor) &&
-      (filtros.gestor === "Todos" || c.gestor === filtros.gestor) &&
-      (filtros.cargo === "Todos" || c.cargo === filtros.cargo),
-  );
-}
+export { filtrarPorAtributos, type FiltrosAtributosDashboard } from "./filtrosAtributos";
 
 // ── Quadro de pessoas (base de TODOS os indicadores de headcount/admissões/desligamentos/turnover) ──────────────────────────────
 // Uma "pessoa do quadro" vem do cadastro (colaboradores) ou, se saiu da empresa e nunca teve cadastro, do histórico de rescisões.

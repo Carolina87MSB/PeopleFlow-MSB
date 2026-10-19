@@ -781,7 +781,15 @@ export type AcaoGravacao =
   | "lnt_necessidade_reconsiderar"
   | "lnt_ciclo_fechar"
   | "lnt_ciclo_reabrir"
-  | "pdi_encerrar";
+  | "pdi_encerrar"
+  | "financeiro_listar"
+  | "financeiro_agregado"
+  | "financeiro_rescisao_validar"
+  | "financeiro_rescisao_decidir"
+  | "financeiro_modalidade_confirmar"
+  | "financeiro_grrf_registrar"
+  | "financeiro_fechamento_salvar"
+  | "financeiro_fechamento_validar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {

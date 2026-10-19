@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { getColaboradores } from "../repositories/colaboradoresRepository";
 import { getCargosCustom } from "../repositories/cargosCustomRepository";
-import { getDesligamentosFinanceiros } from "../repositories/desligadosRepository";
+import { getFinanceiroDesligados } from "../repositories/financeiroRepository";
 import { getDescricoesCargo } from "../repositories/descricoesCargoRepository";
 import { getCatalogoCompetenciasCargo, getDescricaoCargoCompetencias } from "../repositories/competenciasCargoRepository";
 import { efetivarSincronizacoesPendentes, getMovimentacoes } from "../repositories/movimentacoesRepository";
@@ -65,7 +65,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
       getCargosCustom(),
       getTiposMovimentacao(),
       getPerfis(),
-      getDesligamentosFinanceiros(),
+      getFinanceiroDesligados(),
       getDescricoesCargo(),
       getCatalogoCompetenciasCargo(),
       getDescricaoCargoCompetencias(),
@@ -94,7 +94,7 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
           cargosCustom,
           tipos,
           perfis,
-          desligamentosFinanceiros,
+          financeiro,
           descricoesCargo,
           catalogoCompetenciasCargo,
           descricaoCargoCompetencias,
@@ -131,7 +131,8 @@ export function PortalStoreProvider({ children }: { children: ReactNode }) {
             cargosCustom,
             tipos,
             perfis,
-            desligamentosFinanceiros,
+            desligamentosFinanceiros: financeiro.fechamentos,
+            conferenciaFinanceira: financeiro.conferencia,
             descricoesCargo,
             catalogoCompetenciasCargo,
             descricaoCargoCompetencias,
