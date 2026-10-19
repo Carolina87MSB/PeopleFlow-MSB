@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button, Card, Drawer, FilterChips, tableStyles } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import { usePortalStore } from "../../store/PortalStoreContext";
+import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import {
   gravar,
   listarGrupos,
@@ -69,7 +70,7 @@ export function NecessidadesAba() {
   // Opções dos filtros a partir de dados já carregados (sem consultas extras).
   const departamentos = useMemo(() => [...new Set(pessoas.map((p) => p.departamento).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR")), [pessoas]);
   const gestores = useMemo(() => {
-    const nomes = new Set(state.colaboradores.filter((c) => !c.desligado).map((c) => c.gestor));
+    const nomes = new Set(state.colaboradores.filter((c) => estaAtivoHoje(c, "acesso")).map((c) => c.gestor));
     return pessoas.filter((p) => nomes.has(p.nome));
   }, [state.colaboradores, pessoas]);
 

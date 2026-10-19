@@ -4,6 +4,7 @@
 // salário vigente já existente (salarioVigente() em domain/salario.ts) —
 // nunca uma segunda estrutura de salário. Ver README > "Reajuste Salarial".
 
+import { situacaoFuncionalEm } from "./situacaoFuncional";
 import type { Colaborador, Movimentacao, ReajusteSalarial, SalarioBase } from "../types/domain";
 import { norm } from "./hierarquia";
 import { formatarValorMonetario, salarioVigente } from "./salario";
@@ -209,9 +210,14 @@ export function validarLinhaReajuste(
   }
 
   const nomeAlvo = NOME_OVERRIDES[norm(linha.colaborador)] ?? linha.colaborador;
-  const colaborador = colaboradores.find((c) => norm(c.nome) === norm(nomeAlvo));
+  const candidatos = colaboradores.filter((c) => norm(c.nome) === norm(nomeAlvo));
+  // Entre homônimos, vale quem estava no quadro na competência do reajuste; se ninguém estava (todos desligados antes), a linha é recusada.
+  const colaborador = candidatos.find((c) => situacaoFuncionalEm(c, competenciaIso, "operacional").situacao !== "desligado") ?? candidatos[0];
   if (!colaborador) {
     return { ...vazio, status: "naoEncontrado", motivo: "Nome não encontrado no cadastro de colaboradores." };
+  }
+  if (situacaoFuncionalEm(colaborador, competenciaIso, "operacional").situacao === "desligado") {
+    return { ...vazio, colaboradorNome: colaborador.nome, status: "invalido", motivo: "Colaborador já desligado na data da competência — reajuste não se aplica." };
   }
 
   const jaExiste = reajustesExistentes.some(

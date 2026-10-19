@@ -22,6 +22,7 @@ import { MSB_LOGO_PNG_BASE64 } from "./msbLogo.js";
 import { buildEmailHtml } from "../../src/domain/emailTemplate.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
 
+import { COLUNAS_SITUACAO, emailDeColaboradorDesligado, type LinhaSituacao } from "./situacaoColaboradores.js";
 export type TipoNotificacao = "mp_aguardando_acao" | "experiencia_vencimento" | "vaga_aprovacao";
 
 export const CATALOGO_NOTIFICACOES: Record<TipoNotificacao, { pendencia: string; referenciaTipo: string }> = {
@@ -128,6 +129,16 @@ export type ResolverEmail = (nomeCompleto: string) => Promise<ResolucaoEmail>;
  * pra todas as avaliações do dia). */
 export function criarResolvedorDeEmail(admin: SupabaseClient = supabaseAdmin): ResolverEmail {
   let usuarios: Set<string> | null = null;
+  let cadastro: ({ nome: string } & LinhaSituacao)[] | null = null;
+
+  /** Cadastro de colaboradores lido uma única vez: serve para NÃO notificar quem já saiu da empresa. */
+  async function carregarCadastro(): Promise<({ nome: string } & LinhaSituacao)[]> {
+    if (cadastro) return cadastro;
+    const { data, error } = await admin.from("colaboradores").select(`nome, ${COLUNAS_SITUACAO}`);
+    if (error) throw new Error(`Falha ao ler o cadastro de colaboradores: ${error.message}`);
+    cadastro = (data ?? []) as ({ nome: string } & LinhaSituacao)[];
+    return cadastro;
+  }
 
   async function carregarUsuarios(): Promise<Set<string>> {
     if (usuarios) return usuarios;
@@ -144,6 +155,9 @@ export function criarResolvedorDeEmail(admin: SupabaseClient = supabaseAdmin): R
 
   return async (nomeCompleto: string) => {
     const email = emailOf(nomeCompleto).toLowerCase();
+    if (emailDeColaboradorDesligado(email, await carregarCadastro())) {
+      return { email, erro: `${nomeCompleto} consta como colaborador(a) desligado(a): a notificação operacional não é enviada.` };
+    }
     const existentes = await carregarUsuarios();
     return existentes.has(email)
       ? { email }

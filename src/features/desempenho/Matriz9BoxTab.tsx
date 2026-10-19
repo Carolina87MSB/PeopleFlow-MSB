@@ -2,6 +2,7 @@ import { Fragment, useCallback, useMemo, useState } from "react";
 import { HelpCircle } from "lucide-react";
 import { EmptyState, Modal } from "../../components/ui";
 import { posicionarMatriz9Box } from "../../domain/matriz9Box";
+import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import type { PosicaoMatriz9Box } from "../../domain/matriz9Box";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { EXPLICACAO_DESEMPENHO, EXPLICACAO_POTENCIAL, ORIENTACAO_GERAL_9BOX, orientacaoDoQuadrante } from "../../domain/orientacaoMatriz9Box";
@@ -98,7 +99,7 @@ export function Matriz9BoxTab() {
   // gestor/cargo aqui, senão cada dropdown ficaria restrito pelas escolhas
   // dos outros dois.
   const colaboradoresParaOpcoes = useMemo(
-    () => colaboradoresParaMatriz9Box.filter((c) => !c.desligado),
+    () => colaboradoresParaMatriz9Box.filter((c) => estaAtivoHoje(c, "acesso")),
     [colaboradoresParaMatriz9Box],
   );
 
@@ -122,7 +123,7 @@ export function Matriz9BoxTab() {
           (departamentoFiltro === "Todos" || c.depto === departamentoFiltro) &&
           (gestorFiltro === "Todos" || liderancaDoCiclo(c) === gestorFiltro) &&
           (cargoFiltro === "Todos" || c.cargo === cargoFiltro) &&
-          (statusFiltro === "Todos" || (statusFiltro === "Ativo" ? !c.desligado : c.desligado)),
+          (statusFiltro === "Todos" || (statusFiltro === "Ativo" ? estaAtivoHoje(c, "acesso") : !estaAtivoHoje(c, "acesso"))),
       ),
     [colaboradoresParaMatriz9Box, liderancaDoCiclo, departamentoFiltro, gestorFiltro, cargoFiltro, statusFiltro],
   );

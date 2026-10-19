@@ -2,6 +2,7 @@
 // depende de nenhum tipo/lógica de AVD/PDI (ver types/domain.ts > Feedback):
 // é um histórico de acompanhamento contínuo, não um artefato de ciclo.
 
+import { estaAtivoHoje } from "./situacaoFuncional";
 import type { Colaborador, Feedback, Perfil, TemaFeedback } from "../types/domain";
 
 export const TEMAS_FEEDBACK: TemaFeedback[] = [
@@ -32,7 +33,7 @@ export function colaboradoresParaFeedbackDe(entrada: { perfil: Perfil; me: strin
   const nomes = new Set<string>();
   const out: Colaborador[] = [];
   for (const c of [...populacaoMatriz9Box, ...(perfil === "RH" ? [] : todos.filter((x) => x.gestor === me))]) {
-    if (c.desligado || nomes.has(c.nome)) continue;
+    if (!estaAtivoHoje(c, "acesso") || nomes.has(c.nome)) continue;
     nomes.add(c.nome);
     out.push(c);
   }

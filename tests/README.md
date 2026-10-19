@@ -16,6 +16,12 @@ npm test            # todos os abaixo, em sequência
 | `npm run test:1b-ajustes` | Falhas injetadas (quedas entre writes, auditoria, limpeza), recuperação de necessidade sem vínculo e concorrência. |
 | `npm run test:8a` | Fundação de dados 8A (colunas, guardas, rollback) na réplica. |
 | `npm run test:temas` | Triagem temática local: catálogo e regras de agrupamento, visão por temas (sem duplicar item/decisão), contagens únicas, volume (≥ 2.000 ações), ausência de rede/IA e controle de acesso RH. Não precisa de banco. |
+| `npm run test:feedback` | Tela Feedback: a equipe de hoje (gestor no cadastro) sempre aparece, sem tirar quem já estava na lista. |
+| `npm run test:desligamento` | Efetivação cadastral do desligamento ao aprovar a MP (passado/hoje/futuro, MP não aprovada, idempotência, SST). |
+| `npm run test:desligamentos-sql` | Migration `desligamentos_historico_e_situacao.sql` na réplica: paridade da regra de situação funcional TS × SQL, estrutura, guardas, idempotência, ausência de dupla contagem, permissões e reversão. |
+| `npm run test:desligamentos-quadro` | Regra central (datas, afiliada, futuro, sem data) e indicadores de quadro com o histórico: headcount, admissões, desligamentos, rescisões contratuais, turnover e efetivações de estágio. |
+| `npm run test:desligamentos-modulos` | Acessos, seletores, hierarquia, AVD/potencial, dashboards de desempenho, e-mails, atualização por nome, relatório de pendências e proteção das MPs de efetivação. |
+| `npm run test:desligamentos-views` | Adoção da regra central na view de conformidade (guardada, idempotente, reversível). |
 
 Apoio em `pdi-triagem/`: `base.mjs` (réplica e dados de teste), `shim.mjs` (cliente estilo supabase-js sobre o PGlite),
 `hooks.mjs`/`register.mjs`/`stub-*.mjs` (carregam o código do servidor sem a sessão real do Supabase).

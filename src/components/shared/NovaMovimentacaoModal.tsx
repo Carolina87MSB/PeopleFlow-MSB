@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
 import { blankForm } from "../../domain/formMovimentacao";
-import { contarPorGestor } from "../../domain/agregados";
+import { gestoresSelecionaveis } from "../../domain/agregados";
+import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import { ehGestorDoDepartamento, gestorDoDepartamento } from "../../domain/hierarquia";
 import { descreverVagaParaSelecao, vagaDisponivelParaPreenchimento } from "../../domain/vagas";
 import { usePortalStore } from "../../store/PortalStoreContext";
@@ -29,7 +30,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
   // uma movimentação pode ser aberta para qualquer colaborador ativo da empresa,
   // não só para quem está sob a gestão direta/indireta de quem está solicitando.
   const colaboradoresParaSelecao = useMemo(
-    () => colaboradores.filter((c) => !c.desligado).sort((a, b) => a.nome.localeCompare(b.nome)),
+    () => colaboradores.filter((c) => estaAtivoHoje(c, "operacional")).sort((a, b) => a.nome.localeCompare(b.nome)),
     [colaboradores],
   );
 
@@ -41,7 +42,7 @@ export function NovaMovimentacaoModal({ onClose }: { onClose: () => void }) {
     () => [...new Set([...colaboradores.map((c) => c.depto), ...state.cargosCustom.map((c) => c.depto)])].sort(),
     [colaboradores, state.cargosCustom],
   );
-  const gestores = useMemo(() => [...contarPorGestor(colaboradores).keys()].sort(), [colaboradores]);
+  const gestores = useMemo(() => gestoresSelecionaveis(colaboradores), [colaboradores]);
   const cargosExistentes = useMemo(
     () => [...new Set([...colaboradores.map((c) => c.cargo), ...state.cargosCustom.map((c) => c.nome)])].filter(Boolean).sort(),
     [colaboradores, state.cargosCustom],

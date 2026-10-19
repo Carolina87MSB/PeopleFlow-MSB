@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireRH, supabaseAdmin } from "./_lib/adminAuth.js";
 
+import { alvoPorNome } from "./_lib/situacaoColaboradores.js";
 /** Único ponto de escrita do PeopleFlow na tabela `colaboradores` (compartilhada
  * com o SST) — RLS só libera SELECT para `authenticated`, então a atualização
  * precisa passar pela service_role key aqui no servidor. Igual em espírito ao
@@ -31,7 +32,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const { error, data } = await supabaseAdmin.from("colaboradores").update({ admissao }).eq("nome", nome).select("nome");
+    const alvo = await alvoPorNome(supabaseAdmin, nome);
+    if (!alvo.ok) {
+      res.status(alvo.status).json({ error: alvo.error });
+      return;
+    }
+    const { error, data } = await supabaseAdmin.from("colaboradores").update({ admissao }).in("id", alvo.ids).select("nome");
     if (error) {
       res.status(500).json({ error: error.message });
       return;

@@ -17,6 +17,7 @@ import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPd
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
 import { criarTriagemPdi } from "./pdiTriagemAcoes.js";
 
+import { COLUNAS_SITUACAO, linhaAtiva } from "./situacaoColaboradores.js";
 export interface ContaDev {
   userId: string;
   colaboradorId: number;
@@ -481,14 +482,15 @@ const COLS_NEC =
 
 /** Colaborador ativo + fotografia de departamento e gestor (id) na data do registro. */
 async function lerColaboradorParaNecessidade(colaboradorId: number) {
-  const { data: c, error } = await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento, gestor, desligado").eq("id", colaboradorId).maybeSingle();
+  const { data: c, error } = await supabaseAdmin.from("colaboradores").select(`id, nome, cargo, departamento, gestor, ${COLUNAS_SITUACAO}`).eq("id", colaboradorId).maybeSingle();
   if (error) erroBanco(error, "Colaborador");
-  if (!c || c.desligado) throw new ErroHttp(422, "Colaborador não encontrado ou desligado.");
+  if (!c || !linhaAtiva(c)) throw new ErroHttp(422, "Colaborador não encontrado ou desligado.");
   let gestorId: number | null = null;
   if (c.gestor) {
-    const { data: g, error: gErro } = await supabaseAdmin.from("colaboradores").select("id").eq("nome", c.gestor).eq("desligado", false);
+    const { data: g, error: gErro } = await supabaseAdmin.from("colaboradores").select(`id, ${COLUNAS_SITUACAO}`).eq("nome", c.gestor);
     if (gErro) erroBanco(gErro, "Gestor");
-    if (g && g.length === 1) gestorId = g[0].id as number;
+    const ativosDoNome = (g ?? []).filter((x) => linhaAtiva(x));
+    if (ativosDoNome.length === 1) gestorId = ativosDoNome[0].id as number;
   }
   return { id: c.id as number, cargo: c.cargo as string, departamento: (c.departamento as string) || null, gestorId };
 }
@@ -748,9 +750,9 @@ async function idsNoEscopo(conta: ContaDev): Promise<Set<number>> {
 
 async function exigirColaboradoresAtivos(ids: number[]) {
   if (ids.length === 0) return;
-  const { data, error } = await supabaseAdmin.from("colaboradores").select("id, desligado").in("id", ids);
+  const { data, error } = await supabaseAdmin.from("colaboradores").select(`id, ${COLUNAS_SITUACAO}`).in("id", ids);
   if (error) erroBanco(error, "Colaborador");
-  const ativos = new Set((data ?? []).filter((c) => !c.desligado).map((c) => Number(c.id)));
+  const ativos = new Set((data ?? []).filter((c) => linhaAtiva(c)).map((c) => Number(c.id)));
   const faltando = ids.filter((i) => !ativos.has(i));
   if (faltando.length) throw new ErroHttp(422, "Há colaborador inexistente ou desligado na seleção.");
 }
@@ -1144,10 +1146,10 @@ async function participanteRemover(conta: ContaDev, corpo: Corpo) {
 async function participantesOpcoes(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
   if (!(await podeGerirParticipantes(conta, t))) throw new ErroHttp(403, "Sem permissão para montar a turma deste treinamento.");
-  const { data, error } = await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento, desligado");
+  const { data, error } = await supabaseAdmin.from("colaboradores").select(`id, nome, cargo, departamento, ${COLUNAS_SITUACAO}`);
   if (error) erroBanco(error, "Colaboradores");
   return (data ?? [])
-    .filter((c) => !c.desligado)
+    .filter((c) => linhaAtiva(c))
     .map((c) => ({ id: Number(c.id), nome: String(c.nome), cargo: (c.cargo as string | null) ?? "", departamento: (c.departamento as string | null) ?? "" }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
@@ -1166,7 +1168,13 @@ async function faltantesDe(t: Treinamento) {
     if (pErro) erroBanco(pErro, "Participantes");
     for (const p of ps ?? []) if (!p.removido_em) jaRepondo.add(Number(p.colaborador_id));
   }
-  return ausentes.filter((p) => !jaRepondo.has(Number(p.colaborador_id)));
+  // Quem já saiu da empresa não volta para a lista de reposição (o registro de ausência continua no histórico).
+  const candidatos = ausentes.filter((p) => !jaRepondo.has(Number(p.colaborador_id)));
+  if (candidatos.length === 0) return candidatos;
+  const { data: situacoes, error: sErro } = await supabaseAdmin.from("colaboradores").select(`id, ${COLUNAS_SITUACAO}`).in("id", candidatos.map((p) => Number(p.colaborador_id)));
+  if (sErro) erroBanco(sErro, "Colaboradores");
+  const ativosIds = new Set((situacoes ?? []).filter((c) => linhaAtiva(c)).map((c) => Number(c.id)));
+  return candidatos.filter((p) => ativosIds.has(Number(p.colaborador_id)));
 }
 
 async function exigirPodeRepor(conta: ContaDev, t: Treinamento) {
@@ -1426,9 +1434,10 @@ async function responsaveisGestaoListar(conta: ContaDev) {
   const { data, error } = await q;
   if (error) erroBanco(error, "Responsáveis da gestão");
   const ids = [...new Set((data ?? []).flatMap((r) => [Number(r.gestor_colaborador_id), Number(r.colaborador_id)]))];
-  const { data: pessoas } = ids.length ? await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento").in("id", ids) : { data: [] };
+  const { data: pessoas } = ids.length ? await supabaseAdmin.from("colaboradores").select(`id, nome, cargo, departamento, ${COLUNAS_SITUACAO}`).in("id", ids) : { data: [] };
   const p = new Map((pessoas ?? []).map((c) => [Number(c.id), c]));
-  return (data ?? []).map((r) => ({
+  // indicação de quem já saiu (o responsável OU o gestor que indicou) não aparece como vigente: não é pendência de ninguém
+  return (data ?? []).filter((r) => [r.gestor_colaborador_id, r.colaborador_id].every((id) => { const c = p.get(Number(id)); return !c || linhaAtiva(c); })).map((r) => ({
     id: Number(r.id),
     indicado_em: r.indicado_em,
     gestor: { id: Number(r.gestor_colaborador_id), nome: String(p.get(Number(r.gestor_colaborador_id))?.nome ?? "") },
@@ -1876,9 +1885,9 @@ async function identificarParticipante(req: VercelRequest) {
   const { data: acesso } = await supabaseAdmin.from("module_access").select("modulo").eq("user_id", u.user.id).eq("modulo", "peopleflow").maybeSingle();
   if (!acesso) throw new ErroHttp(403, "Conta sem acesso ao PeopleFlow. Procure o responsável pelo treinamento.");
   const email = u.user.email.toLowerCase();
-  const { data: colabs, error: cErro } = await supabaseAdmin.from("colaboradores").select("id, nome").eq("desligado", false);
+  const { data: colabs, error: cErro } = await supabaseAdmin.from("colaboradores").select(`id, nome, ${COLUNAS_SITUACAO}`);
   if (cErro) erroBanco(cErro, "Colaborador");
-  const meus = (colabs ?? []).filter((c) => emailOf(c.nome as string) === email);
+  const meus = (colabs ?? []).filter((c) => linhaAtiva(c) && emailOf(c.nome as string) === email);
   if (meus.length !== 1) throw new ErroHttp(409, "Não foi possível identificar você no cadastro. Procure o responsável pelo treinamento.");
   return { userId: u.user.id, colaboradorId: Number(meus[0].id), primeiroNome: String(meus[0].nome).split(" ")[0] };
 }

@@ -30,6 +30,7 @@
 import { createHash } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import type { ContaDev } from "./desenvolvimentoAcoes.js";
+import { COLUNAS_SITUACAO, linhaAtiva } from "./situacaoColaboradores.js";
 import {
   MOTIVO_PADRAO_MANTER_NO_PDI,
   VERSAO_REGRA_LOCAL,
@@ -475,8 +476,9 @@ export function criarTriagemPdi(d: DepsTriagemPdi) {
     // Colaborador: confere quando o PDI ainda permite identificá-lo de forma única (se o item saiu do PDI, a ligação por ids basta).
     const ctx = await lerContextoItem(sug.pdi_item_id).catch(() => null);
     if (ctx) {
-      const { data: pessoas, error: pErro } = await supabaseAdmin.from("colaboradores").select("id").eq("nome", ctx.pdi.colaborador_nome).eq("desligado", false);
+      const { data: candidatas, error: pErro } = await supabaseAdmin.from("colaboradores").select(`id, ${COLUNAS_SITUACAO}`).eq("nome", ctx.pdi.colaborador_nome);
       if (pErro) erroBanco(pErro, "Colaborador");
+      const pessoas = (candidatas ?? []).filter((x) => linhaAtiva(x));
       if (pessoas && pessoas.length === 1 && pessoas[0].id !== nec.colaborador_id) throw erro(409, "A necessidade já criada é de outro colaborador. Não é seguro concluir automaticamente: peça apoio técnico.");
     }
     const textoFinal = String(nec.descricao);
@@ -545,8 +547,9 @@ export function criarTriagemPdi(d: DepsTriagemPdi) {
     const principal = escolherAcaoPrincipal(naPdi);
 
     // O PDI identifica a pessoa por nome; aqui o vínculo passa a ser por id (homônimo → não vincula).
-    const { data: pessoas, error: pErro } = await supabaseAdmin.from("colaboradores").select("id").eq("nome", ctx.pdi.colaborador_nome).eq("desligado", false);
+    const { data: candidatas, error: pErro } = await supabaseAdmin.from("colaboradores").select(`id, ${COLUNAS_SITUACAO}`).eq("nome", ctx.pdi.colaborador_nome);
     if (pErro) erroBanco(pErro, "Colaborador");
+    const pessoas = (candidatas ?? []).filter((x) => linhaAtiva(x));
     if (!pessoas || pessoas.length !== 1) throw erro(409, "Não foi possível identificar o colaborador do PDI de forma única.");
     const colab = await lerColaboradorParaNecessidade(pessoas[0].id as number);
 

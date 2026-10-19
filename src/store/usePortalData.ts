@@ -100,7 +100,7 @@ import {
   gerarIdAvaliacaoExperiencia,
   pendenciasAvaliacaoExperiencia as pendenciasAvaliacaoExperienciaDomain,
 } from "../domain/avaliacaoExperiencia";
-import { cargoSobLiderancaDe, descendants, ehDiretorIndustrial } from "../domain/hierarquia";
+import { cargoSobLiderancaDe, descendants, ehDiretorIndustrial, gestorAtivoDe, gestorDesligado } from "../domain/hierarquia";
 import {
   darCienciaGestor as darCienciaGestorCartaDomain,
   emitirCarta as emitirCartaDomain,
@@ -1932,7 +1932,7 @@ export function usePortalData(): PortalData {
         colaboradorNome: c.nome,
         cargo: c.cargo,
         departamento: c.depto,
-        gestorAvaliador: c.gestor || "",
+        gestorAvaliador: gestorAtivoDe(state.colaboradores, c) ?? (c.gestor || ""),
         respostas: PERGUNTAS_POTENCIAL.map((p) => ({ perguntaId: p.id, pergunta: p.pergunta, nota: null })),
         comentario: "",
         status: "Não iniciada",
@@ -2001,18 +2001,20 @@ export function usePortalData(): PortalData {
           tipo: "GESTOR",
           colaboradorNome: c.nome,
           avaliado: c.nome,
-          gestorAvaliador: c.gestor || "",
+          gestorAvaliador: gestorAtivoDe(state.colaboradores, c) ?? (c.gestor || ""),
           resultadosComportamentais: snapshotComportamental(competenciasComportamentaisAtivas),
           resultadosKpis: snapshotKpis(kpisDoCargo),
         });
 
-        if (c.gestor) {
+        // Líder avaliado = gestor imediato ATIVO (se o cadastrado já saiu, sobe a árvore): ninguém avalia a liderança de quem já foi desligado.
+        const liderAtivo = gestorAtivoDe(state.colaboradores, c) ?? c.gestor;
+        if (liderAtivo) {
           avaliacoes.push({
             ...base,
             id: gerarIdAvaliacaoDesempenho(),
             tipo: "LIDERANCA",
             colaboradorNome: c.nome,
-            avaliado: c.gestor,
+            avaliado: liderAtivo,
             gestorAvaliador: c.nome,
             resultadosComportamentais: snapshotComportamental(competenciasLiderancaAtivas),
             resultadosKpis: [],
@@ -2263,6 +2265,8 @@ export function usePortalData(): PortalData {
       // não o estado local — protege contra RH+gestor concluindo a mesma
       // avaliação quase ao mesmo tempo).
       async function gerarPdiSeNecessario(avaliacaoConcluida: AvaliacaoDesempenho) {
+        // Quem já saiu da empresa não recebe PDI novo (a ficha concluída continua valendo como histórico de desempenho).
+        if (gestorDesligado(state.colaboradores, avaliacaoConcluida.colaboradorNome)) return;
         const kpisPorId = new Map(state.kpisCargo.map((k) => [k.id, k]));
         const notaMinima = state.configAvaliacaoDesempenho?.notaMinimaPdi ?? 3;
         const agora = new Date().toISOString();
@@ -2395,6 +2399,7 @@ export function usePortalData(): PortalData {
       me,
       flash,
       state.avaliacoesDesempenho,
+      state.colaboradores,
       state.kpisCargo,
       state.configAvaliacaoDesempenho,
       state.pdiBiblioteca,

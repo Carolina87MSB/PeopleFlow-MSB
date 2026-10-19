@@ -7,10 +7,11 @@ import { tipoColor } from "../../domain/colors";
 import { Header } from "../../components/layout/Header";
 import { usePortalData } from "../../store/usePortalData";
 import type { Colaborador } from "../../types/domain";
+import { PendenciasDesligadosCard } from "./PendenciasDesligadosCard";
 import styles from "./DesligadosPage.module.css";
 
 export function DesligadosPage() {
-  const { desligados, desligamentosFinanceiros, movimentacoes, podeVerCadastros, salvarFechamentoFinanceiro } = usePortalData();
+  const { perfil, desligados, desligamentosFinanceiros, movimentacoes, podeVerCadastros, salvarFechamentoFinanceiro } = usePortalData();
   const [selecionado, setSelecionado] = useState<string | null>(null);
 
   const desligadosOrdenados = useMemo(
@@ -75,6 +76,8 @@ export function DesligadosPage() {
           </table>
         </div>
       )}
+
+      {perfil === "RH" && <PendenciasDesligadosCard />}
 
       {colaboradorSelecionado && (
         <DesligadoDrawer

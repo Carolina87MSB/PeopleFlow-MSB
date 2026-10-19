@@ -17,6 +17,7 @@
 
 import { supabaseAdmin } from "./adminAuth.js";
 import type { ContaDev } from "./desenvolvimentoAcoes.js";
+import { COLUNAS_SITUACAO, linhaAtiva, type LinhaSituacao } from "./situacaoColaboradores.js";
 import {
   CATEGORIAS_LNT,
   PRIORIDADES_LNT,
@@ -254,9 +255,9 @@ async function necessidadesVivas(ids: number[]): Promise<Map<number, Necessidade
 async function desligados(colaboradorIds: number[]): Promise<Set<number>> {
   const s = new Set<number>();
   for (const lote of emLotes([...new Set(colaboradorIds)])) {
-    const { data, error } = await supabaseAdmin.from("colaboradores").select("id, desligado").in("id", lote);
+    const { data, error } = await supabaseAdmin.from("colaboradores").select(`id, ${COLUNAS_SITUACAO}`).in("id", lote);
     if (error) erroBanco(error, "Colaboradores");
-    for (const c of (data ?? []) as { id: number; desligado: boolean | null }[]) if (c.desligado) s.add(c.id);
+    for (const c of (data ?? []) as ({ id: number } & LinhaSituacao)[]) if (!linhaAtiva(c)) s.add(c.id);
   }
   return s;
 }
