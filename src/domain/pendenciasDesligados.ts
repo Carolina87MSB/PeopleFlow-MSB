@@ -122,7 +122,8 @@ export function pendenciasFrontDeDesligados(d: DadosParaPendencias): PendenciaDe
       if (faltas.length > 0) {
         out.push({ modulo: "Desligados", processo: "Conferência financeira", colaborador: c.nome, detalhe: `${faltas.join("; ")}.`, acaoRecomendada: "Conferir e validar na aba Conferência financeira de Desligados.", referencia: linhaFin.rescisaoId !== null ? String(linhaFin.rescisaoId) : undefined });
       }
-    } else {
+    } else if (!d.conferencia) {
+      // sem a conferência carregada (ex.: servidor indisponível): mantém a regra antiga (valor lançado ou não)
       const fin = d.desligamentosFinanceiros.find((f) => f.colaboradorNome === c.nome);
       if (!fin || fin.valorRescisao == null || fin.valorGrrf == null) {
         out.push({ modulo: "Desligados", processo: "Fechamento financeiro", colaborador: c.nome, detalhe: "Valor da rescisão e/ou da GRRF ainda não lançado.", acaoRecomendada: "Lançar o fechamento financeiro na tela de Desligados." });
@@ -130,6 +131,16 @@ export function pendenciasFrontDeDesligados(d: DadosParaPendencias): PendenciaDe
     }
     if (situacaoFuncionalEm(c, hoje, "acesso", hoje).alerta === "desligado_sem_data") {
       out.push({ modulo: "Cadastro", processo: "Qualidade de dados", colaborador: c.nome, detalhe: "Marcado como desligado, mas sem data de desligamento.", acaoRecomendada: "Informar a data efetiva do desligamento (SST/RH)." });
+    }
+  }
+  // Desligamentos que só existem no histórico da folha (sem cadastro): também têm componentes por validar — uma pendência por pessoa.
+  for (const l of d.conferencia?.saidas ?? []) {
+    if (l.origem !== "historico") continue;
+    const faltas: string[] = [];
+    if (l.rescisao.status !== "validado") faltas.push("rescisão (líquido da folha) a validar");
+    if (l.grrf.status === "pendente") faltas.push("GRRF a registrar");
+    if (faltas.length > 0) {
+      out.push({ modulo: "Desligados", processo: "Conferência financeira", colaborador: l.nome, detalhe: `${faltas.join("; ")}.`, acaoRecomendada: "Conferir e validar na aba Conferência financeira de Desligados.", referencia: l.rescisaoId !== null ? String(l.rescisaoId) : undefined });
     }
   }
   return out;

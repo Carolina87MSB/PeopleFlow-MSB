@@ -788,7 +788,8 @@ export type AcaoGravacao =
   | "financeiro_rescisao_decidir"
   | "financeiro_modalidade_confirmar"
   | "financeiro_grrf_registrar"
-  | "financeiro_fechamento_salvar";
+  | "financeiro_fechamento_salvar"
+  | "financeiro_fechamento_validar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {

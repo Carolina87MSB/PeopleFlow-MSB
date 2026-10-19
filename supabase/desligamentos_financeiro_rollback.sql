@@ -17,7 +17,7 @@ begin
      where rescisao_status <> 'proposto' or grrf_status <> 'pendente' or modalidade_confirmada is not null or zero_conferido_em is not null;
   end if;
   if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'peopleflow_desligamentos' and column_name = 'origem') then
-    select count(*) into v_fechamentos from public.peopleflow_desligamentos where origem <> 'manual' or validado_em is not null or rescisao_historico_id is not null;
+    select count(*) into v_fechamentos from public.peopleflow_desligamentos where origem <> 'manual' or rescisao_validada_em is not null or grrf_validada_em is not null or rescisao_historico_id is not null;
   end if;
   if to_regclass('public.peopleflow_fechamentos_log') is not null then
     select count(*) into v_log from public.peopleflow_fechamentos_log;
@@ -45,9 +45,11 @@ alter table public.peopleflow_rescisoes_historico_rubricas
   drop column if exists grrf_fonte, drop column if exists grrf_validada_em, drop column if exists grrf_validada_por, drop column if exists grrf_observacao;
 
 drop index if exists public.peopleflow_desligamentos_rescisao_idx;
-alter table public.peopleflow_desligamentos drop constraint if exists peopleflow_desligamentos_origem_chk;
+alter table public.peopleflow_desligamentos drop constraint if exists peopleflow_desligamentos_origem_chk, drop constraint if exists peopleflow_desligamentos_validacao_chk;
 alter table public.peopleflow_desligamentos
-  drop column if exists origem, drop column if exists rescisao_historico_id, drop column if exists validado_em, drop column if exists validado_por;
+  drop column if exists origem, drop column if exists rescisao_historico_id,
+  drop column if exists rescisao_validada_em, drop column if exists rescisao_validada_por, drop column if exists rescisao_fonte,
+  drop column if exists grrf_validada_em, drop column if exists grrf_validada_por, drop column if exists grrf_fonte, drop column if exists grrf_nao_aplicavel, drop column if exists grrf_justificativa;
 
 drop trigger if exists peopleflow_fechamentos_log_guard on public.peopleflow_fechamentos_log;
 drop table if exists public.peopleflow_fechamentos_log;

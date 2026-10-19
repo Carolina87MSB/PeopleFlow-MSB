@@ -8,7 +8,7 @@ import { Header } from "../../components/layout/Header";
 import { usePortalData } from "../../store/usePortalData";
 import type { Colaborador } from "../../types/domain";
 import { PendenciasDesligadosCard } from "./PendenciasDesligadosCard";
-import { ConferenciaFinanceira } from "./ConferenciaFinanceira";
+import { ConferenciaFinanceira, DialogoValidarManual } from "./ConferenciaFinanceira";
 import confStyles from "./ConferenciaFinanceira.module.css";
 import type { LinhaConferencia } from "../../domain/custosRescisao";
 import styles from "./DesligadosPage.module.css";
@@ -144,6 +144,8 @@ interface DesligadoDrawerProps {
 
 function DesligadoDrawer({ colaborador: c, fechamento, linha, onIrConferencia, eventos, onClose, onSalvar }: DesligadoDrawerProps) {
   const money = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const [dialogoManual, setDialogoManual] = useState<"rescisao" | "grrf" | null>(null);
+  const [mensagemManual, setMensagemManual] = useState<string | null>(null);
   const [valorRescisao, setValorRescisao] = useState(fechamento?.valorRescisao != null ? String(fechamento.valorRescisao) : "");
   const [valorGrrf, setValorGrrf] = useState(fechamento?.valorGrrf != null ? String(fechamento.valorGrrf) : "");
   const [salvando, setSalvando] = useState(false);
@@ -230,10 +232,36 @@ function DesligadoDrawer({ colaborador: c, fechamento, linha, onIrConferencia, e
               <input value={valorGrrf} onChange={(e) => setValorGrrf(e.target.value)} placeholder="0,00" inputMode="decimal" />
             </label>
           </div>
-          <p className={styles.semHistorico}>Sem rescisão importada da folha: lançamento manual do RH (vale como validado ao salvar).</p>
+          <p className={styles.semHistorico}>Sem rescisão importada da folha: lançamento manual do RH. Salvar apenas LANÇA o valor — ele só passa a valer nos custos depois da validação expressa abaixo, com a fonte documental.</p>
           <Button variant="primary" onClick={handleSalvar} disabled={salvando} className={styles.salvarBtn}>
-            {salvando ? "Salvando..." : "Salvar fechamento"}
+            {salvando ? "Salvando..." : "Salvar lançamento"}
           </Button>
+          {linha && (
+            <div className={styles.financeiroGrid} style={{ marginTop: 14 }}>
+              <div className={styles.detalheItem}>
+                <span className={styles.detalheLabel}>Rescisão</span>
+                <span className={styles.detalheValor}>
+                  {linha.rescisao.status === "validado" ? `Validada por ${linha.rescisao.validadaPor ?? "—"}` : linha.rescisao.lancado !== null ? "Lançada — a validar" : "Sem lançamento"}
+                </span>
+                {linha.rescisao.status === "pendente" && linha.rescisao.lancado !== null && (
+                  <Button variant="secondary" onClick={() => setDialogoManual("rescisao")}>Validar rescisão…</Button>
+                )}
+              </div>
+              <div className={styles.detalheItem}>
+                <span className={styles.detalheLabel}>GRRF</span>
+                <span className={styles.detalheValor}>
+                  {linha.grrf.status === "validado" ? `Validada por ${linha.grrf.validadaPor ?? "—"}` : linha.grrf.status === "nao_aplicavel" ? "Não aplicável (justificada)" : linha.grrf.lancado !== null ? "Lançada — a validar" : "Pendente"}
+                </span>
+                {linha.grrf.status === "pendente" && (
+                  <Button variant="secondary" onClick={() => setDialogoManual("grrf")}>Validar GRRF…</Button>
+                )}
+              </div>
+            </div>
+          )}
+          {mensagemManual && <p className={styles.semHistorico}>{mensagemManual}</p>}
+          {linha && dialogoManual && (
+            <DialogoValidarManual linha={linha} componente={dialogoManual} onClose={() => setDialogoManual(null)} onMensagem={setMensagemManual} />
+          )}
         </>
       )}
 

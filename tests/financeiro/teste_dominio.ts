@@ -29,7 +29,8 @@ const rub = (id: number, liquido: number, extra: Partial<RubricaFinanceira> = {}
   rescisaoId: id, liquido, fgtsRescisorio: 50, saldoFgts: 0, rescisaoStatus: "proposto", rescisaoDecisao: null, rescisaoValorValidado: null, rescisaoValidadaEm: null, rescisaoValidadaPor: null, zeroConferido: false, modalidadeConfirmada: null,
   grrfStatus: "pendente", grrfDeposito: null, grrfMulta: null, grrfTotal: null, grrfFonte: null, grrfValidadaEm: null, grrfValidadaPor: null, ...extra,
 });
-const fech = (nome: string, r: number | null, g: number | null, extra: Partial<FechamentoFinanceiro> = {}): FechamentoFinanceiro => ({ colaboradorNome: nome, valorRescisao: r, valorGrrf: g, origem: "manual", rescisaoHistoricoId: null, validadoEm: null, validadoPor: null, updatedAt: "", updatedBy: "RH", ...extra });
+const fech = (nome: string, r: number | null, g: number | null, extra: Partial<FechamentoFinanceiro> = {}): FechamentoFinanceiro => ({ colaboradorNome: nome, valorRescisao: r, valorGrrf: g, origem: "manual", rescisaoHistoricoId: null, rescisaoValidadaEm: null, rescisaoValidadaPor: null, rescisaoFonte: null, grrfValidadaEm: null, grrfValidadaPor: null, grrfFonte: null, grrfNaoAplicavel: false, grrfJustificativa: null, updatedAt: "", updatedBy: "RH", ...extra });
+const manualValidado: Partial<FechamentoFinanceiro> = { rescisaoValidadaEm: "2026-10-01T00:00:00Z", rescisaoValidadaPor: "RH", rescisaoFonte: "demonstrativo_rescisao", grrfValidadaEm: "2026-10-01T00:00:00Z", grrfValidadaPor: "RH", grrfNaoAplicavel: true, grrfJustificativa: "pedido de demissão: sem GRRF" };
 const validada = (v: number): Partial<RubricaFinanceira> => ({ rescisaoStatus: "validado", rescisaoValorValidado: v, rescisaoValidadaEm: "2026-10-19T12:00:00Z", rescisaoValidadaPor: "RH" });
 const grrfOk = (t: number): Partial<RubricaFinanceira> => ({ grrfStatus: "validado", grrfTotal: t, grrfFonte: "guia_grrf", grrfValidadaEm: "2026-10-19T12:00:00Z", grrfValidadaPor: "RH" });
 
@@ -51,7 +52,7 @@ const historicoCompleto = [
   hist(31, "Edu Ativo", "2026-07-31", "conversao_estagio_clt", 5),
 ];
 const rubricas = [rub(11, 1000, validada(1000)), rub(12, 2000), rub(13, 900, { ...validada(900), ...grrfOk(0), grrfStatus: "nao_aplicavel" }), rub(21, 4000, { ...validada(4000), ...grrfOk(500) }), rub(22, 1500), rub(31, 3647.25)];
-const fechamentos = [fech("Ana", 1000, 0), fech("Beto", 3500, 0), fech("Fabi Manual", 2500.5, 0, { validadoEm: "2026-10-01T00:00:00Z", validadoPor: "RH" })];
+const fechamentos = [fech("Ana", 1000, 0), fech("Beto", 3500, 0), fech("Fabi Manual", 2500.5, 0, manualValidado)];
 const preparado = prepararHistorico(historicoCompleto, colaboradores);
 const saidas = apurarSaidas({ colaboradores, historicoCompleto, historicoPreparado: preparado, rubricas, fechamentos });
 const por = (nome: string) => saidas.find((s) => s.nome === nome)!;
@@ -66,7 +67,14 @@ check("mês pela data efetiva (cadastro e histórico)", por("Ana").mes === "2026
 check("Ana: lançado = líquido e validado → Rescisão validada 1000; GRRF pendente (lançada 0 não conta)", por("Ana").rescisao.status === "validado" && por("Ana").rescisao.valor === 1000 && por("Ana").grrf.status === "pendente" && por("Ana").grrf.lancado === 0);
 check("Beto: lançado 3500 × líquido 2000, não validado → DIVERGENTE (não soma nada)", por("Beto").rescisao.status === "divergente" && por("Beto").rescisao.valor === null && por("Beto").rescisao.lancado === 3500);
 check("Caio: GRRF 'não aplicável' vale 0 e conta como resolvida", por("Caio Sem Id").grrf.status === "nao_aplicavel" && por("Caio Sem Id").grrf.total === 0);
-check("Fabi (sem folha): lançamento manual validado vale", por("Fabi Manual").rescisao.status === "validado" && por("Fabi Manual").rescisao.valor === 2500.5);
+check("Fabi (sem folha): lançamento manual VALIDADO (fonte, responsável, data) vale; GRRF não aplicável justificada = resolvida com R$ 0,00", por("Fabi Manual").rescisao.status === "validado" && por("Fabi Manual").rescisao.valor === 2500.5 && por("Fabi Manual").rescisao.fonte === "demonstrativo_rescisao" && por("Fabi Manual").grrf.status === "nao_aplicavel" && por("Fabi Manual").grrf.total === 0);
+{
+  // lançar NÃO valida: valor lançado, sem confirmação, fica pendente (e GRRF lançada 0 não é GRRF resolvida)
+  const so = apurarSaidas({ colaboradores: [col(20, "Lia Lançada", { desligado: true, dataDesligamento: "01/out/2026" })], historicoCompleto: [], historicoPreparado: prepararHistorico([], []), rubricas: [], fechamentos: [fech("Lia Lançada", 500, 0)] })[0];
+  check("lançamento manual SEM validação: rescisão e GRRF pendentes (nada soma; 0 lançado não resolve a GRRF)", so.rescisao.status === "pendente" && so.rescisao.lancado === 500 && so.rescisao.valor === null && so.grrf.status === "pendente" && so.grrf.lancado === 0 && agregarCustosPorMes([so])[0].total === 0);
+  const naoConf = apurarSaidas({ colaboradores: [col(21, "Mia Incompleta", { desligado: true, dataDesligamento: "01/out/2026" })], historicoCompleto: [], historicoPreparado: prepararHistorico([], []), rubricas: [], fechamentos: [fech("Mia Incompleta", 500, 0, { grrfNaoAplicavel: true })] })[0];
+  check("'não aplicável' sem a confirmação registrada (data/responsável) NÃO resolve a GRRF", naoConf.grrf.status === "pendente");
+}
 check("Hist Dois: nada validado → pendente nos dois componentes", por("Hist Dois").rescisao.status === "pendente" && por("Hist Dois").grrf.status === "pendente");
 check("manter o lançado: validado com o valor lançado, não com o líquido", apurarSaidas({ colaboradores, historicoCompleto, historicoPreparado: preparado, rubricas: rubricas.map((r) => (r.rescisaoId === 12 ? { ...r, ...validada(3500), rescisaoDecisao: "manter_lancado" as const } : r)), fechamentos }).find((s) => s.nome === "Beto")!.rescisao.valor === 3500);
 
@@ -80,7 +88,7 @@ check("setembro (manual validado): rescisão 2500,50; GRRF lançada 0 validada j
 const cob = coberturaDe(saidas);
 check("cobertura: 5 de 6 rescisões validadas (Beto não); GRRF resolvida em 3 (Caio, Hist Um, Fabi); incompleta", cob.saidas === 6 && cob.rescisaoValidadas === 4 && cob.grrfResolvidas === 3 && cob.completa === false, JSON.stringify(cob));
 check("período: filtra pela data efetiva", apurarSaidas({ colaboradores, historicoCompleto, historicoPreparado: preparado, rubricas, fechamentos, inicioIso: "2026-07-01", fimIso: "2026-07-31" }).length === 2);
-check("arredonda em centavos (sem erro de ponto flutuante)", agregarCustosPorMes(apurarSaidas({ colaboradores: [col(8, "Z", { desligado: true, dataDesligamento: "01/jun/2026" }), col(9, "Y", { desligado: true, dataDesligamento: "02/jun/2026" })], historicoCompleto: [], historicoPreparado: prepararHistorico([], []), rubricas: [], fechamentos: [fech("Z", 0.1, 0, { validadoEm: "x", validadoPor: "RH" }), fech("Y", 0.2, 0, { validadoEm: "x", validadoPor: "RH" })] }))[0].rescisao === 0.3);
+check("arredonda em centavos (sem erro de ponto flutuante)", agregarCustosPorMes(apurarSaidas({ colaboradores: [col(8, "Z", { desligado: true, dataDesligamento: "01/jun/2026" }), col(9, "Y", { desligado: true, dataDesligamento: "02/jun/2026" })], historicoCompleto: [], historicoPreparado: prepararHistorico([], []), rubricas: [], fechamentos: [fech("Z", 0.1, 0, manualValidado), fech("Y", 0.2, 0, manualValidado)] }))[0].rescisao === 0.3);
 
 // ── pendências dos desligados com a conferência ──
 const conferencia = { instalado: true, saidas, conversoes: [], cobertura: cob };
@@ -88,7 +96,8 @@ const pend = pendenciasFrontDeDesligados({
   colaboradores, ciclos: [], avaliacoesDesempenho: [], avaliacoesPotencial: [], pdi: [], movimentacoes: [], desligamentosFinanceiros: [], conferencia, hoje: "2026-10-19",
 } as never).filter((p) => p.modulo === "Desligados");
 const nomes = pend.map((p) => p.colaborador).sort();
-check("pendência financeira = conferência por fazer: Ana (GRRF), Beto (divergente), Hist/Dora/Gil não entram; Caio e Fabi completos ficam de fora", nomes.join() === ["Ana", "Beto"].join() || nomes.join() === "Ana,Beto" || (nomes.includes("Ana") && nomes.includes("Beto") && !nomes.includes("Caio Sem Id") && !nomes.includes("Fabi Manual")), nomes.join());
+check("pendência financeira = pessoas ÚNICAS com componente por validar: Ana (GRRF), Beto (divergente) e Hist Dois (rescisão E GRRF → conta uma vez); completos ficam de fora", nomes.join() === "Ana,Beto,Hist Dois", nomes.join());
+check("Hist Dois (rescisão e GRRF pendentes) aparece UMA vez, com os dois componentes no detalhe", pend.filter((p) => p.colaborador === "Hist Dois").length === 1 && /rescisão.*GRRF/.test(pend.find((p) => p.colaborador === "Hist Dois")!.detalhe));
 check("o detalhe diz o que falta (GRRF a registrar / rescisão divergente)", pend.find((p) => p.colaborador === "Ana")!.detalhe.includes("GRRF a registrar") && pend.find((p) => p.colaborador === "Beto")!.detalhe.includes("divergente"));
 
 // ── verificações estáticas ──
@@ -109,6 +118,10 @@ check("Dashboard: valores só para RH e Diretoria (servidor); Gestor recebe apen
 check("Dashboard: total parcial identificado e cobertura exibida", /Total parcial/.test(dash) && /Cobertura: rescisão validada em/.test(dash) && /\(parcial\)/.test(dash));
 check("Dashboard: conversões de estágio não entram nos custos (aviso e filtro no servidor)", /Conversões de estágio para CLT não entram/.test(dash));
 const page = src("src/features/desligados/DesligadosPage.tsx");
+const hook = src("src/store/usePortalData.ts");
+check("contador de pendências financeiras: pessoas únicas (cadastro e histórico), sem duplicar rescisão + GRRF pendentes", /conf\.saidas\.filter\(\(l\) => l\.rescisao\.status !== "validado" \|\| l\.grrf\.status === "pendente"\)\.length/.test(hook));
+check("Dashboard: alerta de desligamentos pendentes inclui o histórico da folha do recorte, uma vez por pessoa", /idsHistorico\.has\(l\.chave\)/.test(dash));
+check("Desligados: salvar lançamento manual NÃO valida; validação expressa com fonte à parte", /Salvar apenas LANÇA o valor/.test(page) && /Validar rescisão…/.test(page));
 check("Desligados: aba Conferência financeira só para o RH; gaveta lê a folha validada, sem digitação dupla", /perfil === "RH" && \(\s*<div className=\{confStyles\.abas\}/.test(page) && /Os valores vêm da folha de rescisão/.test(page));
 const srv = src("api/_lib/financeiroDesligamentos.ts");
 check("servidor: valores individuais e gravações só para o RH; agregado para RH e Diretoria", /function exigirRH/.test(srv) && /perfil !== "RH" && conta\.perfil !== "Diretoria"/.test(srv));

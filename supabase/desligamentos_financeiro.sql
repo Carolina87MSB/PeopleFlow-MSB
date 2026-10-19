@@ -10,8 +10,9 @@
 --        • modalidade confirmada pelo RH (para linhas em que o relatório não informa o tipo de rescisão).
 --      Os valores importados da folha (salário, proventos, descontos, líquido, FGTS) passam a ser IMUTÁVEIS (trigger); conversões de estágio
 --      para CLT nunca recebem validação financeira (trigger).
---   2. peopleflow_desligamentos (fechamento financeiro por colaborador): 4 colunas anuláveis — origem ('manual' | 'folha'), rescisao_historico_id,
---      validado_em, validado_por. Os fechamentos existentes ficam intactos (origem 'manual', sem validação).
+--   2. peopleflow_desligamentos (fechamento financeiro por colaborador): colunas anuláveis de origem ('manual' | 'folha'), vínculo com a rescisão e
+--      VALIDAÇÃO POR COMPONENTE com fonte documental, responsável e data (rescisão e GRRF; GRRF 'não aplicável' exige justificativa). Um lançamento
+--      manual NUNCA vale como validado só por ser preenchido: precisa da confirmação expressa do RH. Os fechamentos existentes ficam intactos.
 --   3. peopleflow_fechamentos_log (só servidor, somente inserção): trilha de toda gravação financeira — valor anterior, valor novo, origem,
 --      ação, responsável, data e motivo.
 --
@@ -130,16 +131,34 @@ create trigger peopleflow_rubricas_guard before insert or update on public.peopl
 alter table public.peopleflow_desligamentos
   add column if not exists origem text not null default 'manual',
   add column if not exists rescisao_historico_id bigint references public.peopleflow_rescisoes_historico (id),
-  add column if not exists validado_em timestamptz,
-  add column if not exists validado_por text;
+  add column if not exists rescisao_validada_em timestamptz,
+  add column if not exists rescisao_validada_por text,
+  add column if not exists rescisao_fonte text,
+  add column if not exists grrf_validada_em timestamptz,
+  add column if not exists grrf_validada_por text,
+  add column if not exists grrf_fonte text,
+  add column if not exists grrf_nao_aplicavel boolean not null default false,
+  add column if not exists grrf_justificativa text;
 
 comment on column public.peopleflow_desligamentos.origem is '''manual'' (lançado pelo RH na tela) | ''folha'' (criado a partir da folha de rescisão validada pelo RH).';
-comment on column public.peopleflow_desligamentos.validado_em is 'Preenchido quando o RH validou o lançamento (fechamentos antigos ficam sem validação até a conferência).';
+comment on column public.peopleflow_desligamentos.rescisao_validada_em is 'Quando o RH confirmou o valor da rescisão (com fonte documental). Fechamentos antigos ficam sem validação até a conferência.';
+comment on column public.peopleflow_desligamentos.grrf_validada_em is 'Quando o RH confirmou a GRRF (valor com fonte documental) ou declarou que não se aplica (com justificativa). 0 lançado, por si só, NÃO é GRRF resolvida.';
 
 do $mig$
 begin
   if not exists (select 1 from pg_constraint where conname = 'peopleflow_desligamentos_origem_chk' and conrelid = 'public.peopleflow_desligamentos'::regclass) then
     alter table public.peopleflow_desligamentos add constraint peopleflow_desligamentos_origem_chk check (origem in ('manual', 'folha'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'peopleflow_desligamentos_validacao_chk' and conrelid = 'public.peopleflow_desligamentos'::regclass) then
+    alter table public.peopleflow_desligamentos add constraint peopleflow_desligamentos_validacao_chk check (
+      (rescisao_validada_em is null and rescisao_validada_por is null and rescisao_fonte is null
+        or rescisao_validada_em is not null and btrim(coalesce(rescisao_validada_por, '')) <> '' and rescisao_fonte is not null and rescisao_fonte in ('folha_rescisao', 'demonstrativo_rescisao', 'outro_documento') and valor_rescisao is not null)
+      and
+      (grrf_validada_em is null and grrf_validada_por is null and grrf_fonte is null and grrf_nao_aplicavel = false and grrf_justificativa is null
+        or grrf_validada_em is not null and btrim(coalesce(grrf_validada_por, '')) <> '' and valor_grrf is not null
+           and ((grrf_nao_aplicavel and valor_grrf = 0 and btrim(coalesce(grrf_justificativa, '')) <> '' and grrf_fonte is null)
+                or (not grrf_nao_aplicavel and grrf_fonte is not null and grrf_fonte in ('guia_grrf', 'demonstrativo_rescisao', 'outro_documento'))))
+    );
   end if;
 end
 $mig$;
@@ -150,7 +169,7 @@ create table if not exists public.peopleflow_fechamentos_log (
   id bigint generated always as identity primary key,
   em timestamptz not null default now(),
   por text not null,
-  acao text not null check (acao in ('validar_rescisao', 'decidir_divergencia', 'registrar_grrf', 'grrf_nao_aplicavel', 'confirmar_modalidade', 'lancamento_manual', 'conferir_zero')),
+  acao text not null check (acao in ('validar_rescisao', 'decidir_divergencia', 'registrar_grrf', 'grrf_nao_aplicavel', 'confirmar_modalidade', 'lancamento_manual', 'validar_lancamento', 'conferir_zero')),
   colaborador_nome text,
   rescisao_id bigint references public.peopleflow_rescisoes_historico (id),
   campo text,

@@ -80,7 +80,7 @@ const MIG = rd("desligamentos_financeiro.sql");
 check("migration roda sem erro", (await falha(() => db.exec(MIG))) === null);
 check("migration é idempotente", (await falha(() => db.exec(MIG))) === null);
 check("fechamentos existentes e cadastro intactos; histórico intacto", (await hashTab("colaboradores", "id")) === antes.colab && (await hashTab("peopleflow_rescisoes_historico", "id")) === antes.hist);
-check("os 3 fechamentos existentes seguem com os mesmos valores (origem manual, sem validação)", (await sql(`select colaborador_nome, valor_rescisao::float v, valor_grrf::float g, origem, validado_em from public.peopleflow_desligamentos order by 1`)).every((f) => f.origem === "manual" && f.validado_em === null) && Number((await um(`select valor_rescisao::float v from public.peopleflow_desligamentos where colaborador_nome = 'Bia Diverge'`)).v) === 3500);
+check("os 3 fechamentos existentes seguem com os mesmos valores (origem manual, sem validação)", (await sql(`select colaborador_nome, valor_rescisao::float v, valor_grrf::float g, origem, rescisao_validada_em, grrf_validada_em from public.peopleflow_desligamentos order by 1`)).every((f) => f.origem === "manual" && f.rescisao_validada_em === null && f.grrf_validada_em === null) && Number((await um(`select valor_rescisao::float v from public.peopleflow_desligamentos where colaborador_nome = 'Bia Diverge'`)).v) === 3500);
 const VAL = rd("desligamentos_financeiro_validacao.sql").split("-- Informativo")[0].replace(/;\s*$/, "");
 const valRes = await sql(VAL.replace("= 24", "= 9").replace("= 96110.58", "= 19847.25").replace("= 24196.05", "= 1920.00"));
 check("validação oficial (ajustada à massa fictícia): tudo OK", valRes.every((r) => r.resultado === "OK"), JSON.stringify(valRes.filter((r) => r.resultado !== "OK")));
@@ -140,8 +140,8 @@ const res = Object.fromEntries(v1.resultados.map((x) => [x.rescisao_id, x.result
 check("lote: Alice, Caio e Eva validadas; Bia DIVERGENTE e Fabio CONFERIR_ZERO recusadas; conversão recusada", res[hA] === "validada" && res[hC] === "validada" && res[hE] === "validada" && res[hB] === "divergente" && res[hF] === "conferir_zero" && res[hH] === "recusada", JSON.stringify(res));
 const rubA = await um(`select rescisao_status, rescisao_valor_validado::float v, rescisao_validada_por from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hA}`);
 check("validação grava valor, responsável e data; o líquido importado segue imutável", rubA.rescisao_status === "validado" && rubA.v === 1000 && rubA.rescisao_validada_por === "Helena Recursos");
-const fA = await um(`select valor_rescisao::float v, origem, validado_por from public.peopleflow_desligamentos where colaborador_nome = 'Alice Saiu'`);
-check("Alice: fechamento existente PRESERVADO (valor igual, origem manual) e agora marcado como validado", fA.v === 1000 && fA.origem === "manual" && fA.validado_por === "Helena Recursos");
+const fA = await um(`select valor_rescisao::float v, origem, rescisao_validada_por, rescisao_fonte, grrf_validada_em from public.peopleflow_desligamentos where colaborador_nome = 'Alice Saiu'`);
+check("Alice: fechamento existente PRESERVADO (valor igual, origem manual); rescisão validada (fonte folha, responsável); GRRF segue sem validação", fA.v === 1000 && fA.origem === "manual" && fA.rescisao_validada_por === "Helena Recursos" && fA.rescisao_fonte === "folha_rescisao" && fA.grrf_validada_em === null);
 const fC = await um(`select valor_rescisao::float v, valor_grrf, origem, rescisao_historico_id from public.peopleflow_desligamentos where colaborador_nome = 'Caio Novo'`);
 check("Caio (sem fechamento): o cadastro é ALIMENTADO com o líquido (origem folha, ligado à rescisão), sem digitação", fC.v === 5000 && fC.valor_grrf === null && fC.origem === "folha" && Number(fC.rescisao_historico_id) === hC);
 check("Eva (histórico sem cadastro): validada sem criar fechamento nem cadastro", Number((await um(`select count(*)::int n from public.peopleflow_desligamentos where colaborador_nome = 'Eva Historica'`)).n) === 0 && Number((await um(`select count(*)::int n from public.colaboradores where nome = 'Eva Historica'`)).n) === 0);
@@ -206,15 +206,50 @@ check("Diretoria vê exatamente os mesmos totais que o RH", JSON.stringify(aggDi
 check("sem duplicidade: o total da soma mensal = soma de cada pessoa uma vez (rescisão 6300+0+5000+4000 = 15300)", agg.meses.reduce((a, m) => a + m.rescisao, 0) === 15300 && agg.meses.reduce((a, m) => a + m.grrf, 0) === 800);
 
 // ═══ H. Lançamento manual (sem folha) ═══
-secao("H. Lançamento manual: só para desligamento SEM rescisão importada; validado por ser do RH");
-check("com rescisão da folha → 409 (use a Conferência financeira)", (await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Alice Saiu", valor_rescisao: 9, valor_grrf: 9 })).codigo === 409);
+secao("H. Lançamento manual: LANÇAR não valida; a validação é expressa, com fonte documental, e cada componente tem a sua");
+check("com rescisão da folha → 409 ao lançar e ao validar (use a Conferência financeira)", (await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Alice Saiu", valor_rescisao: 9, valor_grrf: 9 })).codigo === 409 && (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Alice Saiu", componente: "rescisao", fonte: "outro_documento" })).codigo === 409);
 check("colaborador ativo / inexistente → 422", (await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Hugo Convertido", valor_rescisao: 1 })).codigo === 422 && (await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Ninguém", valor_rescisao: 1 })).codigo === 422);
 check("valor negativo → 422", (await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Iara Manual", valor_rescisao: -5 })).codigo === 422);
+check("Gestor e Diretoria não validam lançamentos → 403", (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "outro_documento" }, U.GES)).codigo === 403 && (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "outro_documento" }, U.DIR)).codigo === 403);
 const ms = await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Iara Manual", valor_rescisao: "2.500,50", valor_grrf: 0 });
-const fI = await um(`select valor_rescisao::float v, valor_grrf::float g, origem, validado_por from public.peopleflow_desligamentos where colaborador_nome = 'Iara Manual'`);
-check("Iara: lançamento manual grava (vírgula decimal aceita), origem manual, validado pelo RH, com trilha", ms.codigo === 200 && fI.v === 2500.5 && fI.g === 0 && fI.origem === "manual" && fI.validado_por === "Helena Recursos" && Number((await um(`select count(*)::int n from public.peopleflow_fechamentos_log where colaborador_nome = 'Iara Manual' and acao = 'lancamento_manual'`)).n) === 2);
+const linI = async () => linha(dados(await chamar("financeiro_listar", {})).saidas, "Iara Manual");
+const rowI = () => um(`select valor_rescisao::float v, valor_grrf::float g, origem, rescisao_validada_em, rescisao_validada_por, rescisao_fonte, grrf_validada_em, grrf_validada_por, grrf_fonte, grrf_nao_aplicavel, grrf_justificativa from public.peopleflow_desligamentos where colaborador_nome = 'Iara Manual'`);
+const fI = await rowI();
+check("lançar grava (vírgula decimal aceita), origem manual e NÃO valida nada (nem a rescisão, nem a GRRF 0)", ms.codigo === 200 && fI.v === 2500.5 && fI.g === 0 && fI.origem === "manual" && fI.rescisao_validada_em === null && fI.grrf_validada_em === null && ms.corpo.dados.validado === false);
+let lI = await linI();
+check("na conferência: rescisão 'pendente' (lançado 2.500,50) e GRRF 'pendente' (0 lançado NÃO resolve a GRRF)", lI.rescisao.status === "pendente" && lI.rescisao.lancado === 2500.5 && lI.grrf.status === "pendente" && lI.grrf.lancado === 0);
+const aggP = dados(await chamar("financeiro_agregado", {}));
+check("o lançamento ainda não validado NÃO entra nos custos (setembro: rescisão 0, parcial)", aggP.meses.find((m) => m.mes === "2026-09").rescisao === 0 && aggP.meses.find((m) => m.mes === "2026-09").parcial === true);
+check("validar sem fonte → 422; fonte inválida → 422", (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao" })).codigo === 422 && (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "folha_rescisao" })).codigo === 422);
+check("componente inválido → 422", (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "xyz", fonte: "outro_documento" })).codigo === 422);
+const vr = await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "demonstrativo_rescisao", observacao: "Conferido no demonstrativo impresso." });
+const fI2 = await rowI();
+check("rescisão validada com FONTE documental, responsável e data", vr.codigo === 200 && fI2.rescisao_fonte === "demonstrativo_rescisao" && fI2.rescisao_validada_por === "Helena Recursos" && fI2.rescisao_validada_em !== null);
+check("validar de novo → 422 (sem nova trilha)", (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "demonstrativo_rescisao" })).codigo === 422);
+lI = await linI();
+check("validar a rescisão NÃO resolve a GRRF: continua pendente (componentes independentes)", lI.rescisao.status === "validado" && lI.rescisao.fonte === "demonstrativo_rescisao" && lI.grrf.status === "pendente");
+check("GRRF 'não aplicável' sem justificativa → 422 (não se confunde com pendente)", (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "grrf", nao_aplicavel: true })).codigo === 422);
+const vna = await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "grrf", nao_aplicavel: true, justificativa: "Pedido de demissão: sem GRRF na guia." });
+const fI3 = await rowI();
+lI = await linI();
+check("GRRF 'não aplicável' com justificativa: resolvida com R$ 0,00 (responsável, data e justificativa registrados)", vna.codigo === 200 && fI3.grrf_nao_aplicavel === true && fI3.g === 0 && /sem GRRF/.test(fI3.grrf_justificativa) && fI3.grrf_validada_por === "Helena Recursos" && lI.grrf.status === "nao_aplicavel" && lI.grrf.total === 0);
+// um novo valor de GRRF desfaz a resolução anterior e exige nova confirmação com fonte
+await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Iara Manual", valor_rescisao: 2500.5, valor_grrf: 300 });
+const fI4 = await rowI();
+lI = await linI();
+check("alterar o valor da GRRF desfaz a resolução dela (volta a pendente), mantendo a rescisão já validada (valor igual)", fI4.grrf_validada_em === null && fI4.grrf_nao_aplicavel === false && fI4.grrf_justificativa === null && lI.grrf.status === "pendente" && lI.rescisao.status === "validado");
+const vg = await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "grrf", fonte: "guia_grrf" });
+lI = await linI();
+check("GRRF lançada 300 validada com a fonte (guia); status do componente próprio", vg.codigo === 200 && lI.grrf.status === "validado" && lI.grrf.total === 300 && lI.grrf.fonte === "guia_grrf");
 const aggI = dados(await chamar("financeiro_agregado", {}));
-check("o lançamento manual validado entra no mês efetivo (setembro: 2500,50 + GRRF 0)", aggI.meses.find((m) => m.mes === "2026-09").rescisao === 2500.5 && aggI.meses.find((m) => m.mes === "2026-09").parcial === false);
+check("depois da validação expressa o lançamento entra no mês efetivo (setembro: 2500,50 + 300 = 2800,50; completo)", aggI.meses.find((m) => m.mes === "2026-09").rescisao === 2500.5 && aggI.meses.find((m) => m.mes === "2026-09").grrf === 300 && aggI.meses.find((m) => m.mes === "2026-09").total === 2800.5 && aggI.meses.find((m) => m.mes === "2026-09").parcial === false);
+await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Iara Manual", valor_rescisao: 0, valor_grrf: 300 });
+check("alterar a rescisão desfaz a validação dela; valor 0 exige conferência expressa para validar", (await linI()).rescisao.status === "pendente" && (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "outro_documento" })).codigo === 422 && (await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "outro_documento", zero_conferido: true })).codigo === 200);
+await chamar("financeiro_fechamento_salvar", { colaborador_nome: "Iara Manual", valor_rescisao: 2500.5, valor_grrf: 300 });
+await chamar("financeiro_fechamento_validar", { colaborador_nome: "Iara Manual", componente: "rescisao", fonte: "demonstrativo_rescisao" });
+const logsI = await sql(`select acao, count(*)::int n from public.peopleflow_fechamentos_log where colaborador_nome = 'Iara Manual' group by 1`);
+check("trilha: lançamentos, validações, 'não aplicável' e desfazimentos registrados", logsI.some((l) => l.acao === "lancamento_manual") && logsI.some((l) => l.acao === "validar_lancamento" && l.n >= 3) && logsI.some((l) => l.acao === "grrf_nao_aplicavel"));
+check("constraint do banco: validar sem fonte documental é impossível (CHECK)", /validacao_chk/.test(String(await falha(() => db.exec(`insert into public.peopleflow_desligamentos (colaborador_nome, valor_rescisao, rescisao_validada_em, rescisao_validada_por) values ('Zzz Teste', 1, now(), 'x')`)))) && /validacao_chk/.test(String(await falha(() => db.exec(`insert into public.peopleflow_desligamentos (colaborador_nome, valor_grrf, grrf_validada_em, grrf_validada_por, grrf_nao_aplicavel) values ('Zzz Teste', 0, now(), 'x', true)`)))));
 
 // ═══ I. Preservação ═══
 secao("I. Preservação: cadastro, histórico, MPs, importados e trilha");

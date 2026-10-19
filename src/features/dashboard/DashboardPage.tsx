@@ -228,9 +228,11 @@ export function DashboardPage() {
   const desligamentosPendentesAlerta = useMemo(() => {
     if (perfil !== "RH") return 0;
     const nomes = new Set(colaboradoresExecutivoFiltrados.filter((c) => c.desligado).map((c) => c.nome));
-    if (conferenciaFinanceira) return conferenciaFinanceira.saidas.filter((l) => l.origem === "cadastro" && nomes.has(l.nome) && (l.rescisao.status !== "validado" || l.grrf.status === "pendente")).length;
+    const idsHistorico = new Set(historicoFiltrado.saidasSemCadastro.map((r) => `h:${r.id}`));
+    // pessoas únicas com rescisão ou GRRF por validar (cadastro e histórico da folha); rescisão e GRRF pendentes da mesma pessoa contam uma vez
+    if (conferenciaFinanceira) return conferenciaFinanceira.saidas.filter((l) => ((l.origem === "cadastro" && nomes.has(l.nome)) || idsHistorico.has(l.chave)) && (l.rescisao.status !== "validado" || l.grrf.status === "pendente")).length;
     return colaboradoresExecutivoFiltrados.filter((c) => c.desligado && pendenteFechamento(c.nome, desligamentosFinanceiros)).length;
-  }, [perfil, colaboradoresExecutivoFiltrados, conferenciaFinanceira, desligamentosFinanceiros]);
+  }, [perfil, colaboradoresExecutivoFiltrados, historicoFiltrado, conferenciaFinanceira, desligamentosFinanceiros]);
   const pendenciasAprovacaoAlerta = useMemo(() => {
     const nomes = new Set(colaboradoresVisiveisFiltrados.map((c) => c.nome));
     return state.movimentacoes.filter((m) => m.status === "Em Aprovação" && nomes.has(m.colaborador)).length;

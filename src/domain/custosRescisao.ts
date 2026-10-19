@@ -47,8 +47,16 @@ export interface FechamentoFinanceiro {
   valorGrrf: number | null;
   origem: "manual" | "folha";
   rescisaoHistoricoId: number | null;
-  validadoEm: string | null;
-  validadoPor: string | null;
+  /** Validação por componente, com fonte documental, responsável e data. Lançar um valor NÃO valida: precisa da confirmação expressa do RH. */
+  rescisaoValidadaEm: string | null;
+  rescisaoValidadaPor: string | null;
+  rescisaoFonte: string | null;
+  grrfValidadaEm: string | null;
+  grrfValidadaPor: string | null;
+  grrfFonte: string | null;
+  /** GRRF declarada "não aplicável" (R$ 0,00 resolvido, com justificativa) — diferente de GRRF pendente ou lançada 0. */
+  grrfNaoAplicavel: boolean;
+  grrfJustificativa: string | null;
   updatedAt: string;
   updatedBy: string;
 }
@@ -81,6 +89,7 @@ export interface LinhaConferencia {
     zeroConferido: boolean;
     validadaPor: string | null;
     validadaEm: string | null;
+    fonte: string | null;
   };
   grrf: {
     status: StatusGrrf;
@@ -101,16 +110,16 @@ function rescisaoDe(rubrica: RubricaFinanceira | null, fech: FechamentoFinanceir
   const lancado = fech?.valorRescisao ?? null;
   if (rubrica) {
     if (rubrica.rescisaoStatus === "validado") {
-      return { status: "validado", valor: rubrica.rescisaoValorValidado, lancado, decisao: rubrica.rescisaoDecisao, zeroConferido: rubrica.zeroConferido, validadaPor: rubrica.rescisaoValidadaPor, validadaEm: rubrica.rescisaoValidadaEm };
+      return { status: "validado", valor: rubrica.rescisaoValorValidado, lancado, decisao: rubrica.rescisaoDecisao, zeroConferido: rubrica.zeroConferido, validadaPor: rubrica.rescisaoValidadaPor, validadaEm: rubrica.rescisaoValidadaEm, fonte: "folha_rescisao" };
     }
     const divergente = lancado !== null && !iguais(lancado, rubrica.liquido);
-    return { status: divergente ? "divergente" : "pendente", valor: null, lancado, decisao: null, zeroConferido: rubrica.zeroConferido, validadaPor: null, validadaEm: null };
+    return { status: divergente ? "divergente" : "pendente", valor: null, lancado, decisao: null, zeroConferido: rubrica.zeroConferido, validadaPor: null, validadaEm: null, fonte: null };
   }
-  // pessoa do cadastro sem rescisão importada da folha: o lançamento manual do RH vale quando foi validado (gravado pelo servidor)
-  if (fech && fech.validadoEm && fech.valorRescisao !== null) {
-    return { status: "validado", valor: fech.valorRescisao, lancado, decisao: null, zeroConferido: false, validadaPor: fech.validadoPor, validadaEm: fech.validadoEm };
+  // pessoa do cadastro sem rescisão importada da folha: o lançamento manual só vale depois da confirmação expressa do RH (fonte, responsável e data)
+  if (fech && fech.rescisaoValidadaEm && fech.valorRescisao !== null) {
+    return { status: "validado", valor: fech.valorRescisao, lancado, decisao: null, zeroConferido: fech.valorRescisao === 0, validadaPor: fech.rescisaoValidadaPor, validadaEm: fech.rescisaoValidadaEm, fonte: fech.rescisaoFonte };
   }
-  return { status: "pendente", valor: null, lancado, decisao: null, zeroConferido: false, validadaPor: null, validadaEm: null };
+  return { status: "pendente", valor: null, lancado, decisao: null, zeroConferido: false, validadaPor: null, validadaEm: null, fonte: null };
 }
 
 function grrfDe(rubrica: RubricaFinanceira | null, fech: FechamentoFinanceiro | null): LinhaConferencia["grrf"] {
@@ -124,8 +133,9 @@ function grrfDe(rubrica: RubricaFinanceira | null, fech: FechamentoFinanceiro | 
     }
     return { status: "pendente", total: null, deposito: null, multa: null, fonte: null, lancado, validadaPor: null, validadaEm: null };
   }
-  if (fech && fech.validadoEm && fech.valorGrrf !== null) {
-    return { status: "validado", total: fech.valorGrrf, deposito: null, multa: null, fonte: null, lancado, validadaPor: fech.validadoPor, validadaEm: fech.validadoEm };
+  if (fech && fech.grrfValidadaEm && fech.valorGrrf !== null) {
+    if (fech.grrfNaoAplicavel) return { status: "nao_aplicavel", total: 0, deposito: null, multa: null, fonte: null, lancado, validadaPor: fech.grrfValidadaPor, validadaEm: fech.grrfValidadaEm };
+    return { status: "validado", total: fech.valorGrrf, deposito: null, multa: null, fonte: fech.grrfFonte as FonteGrrf | null, lancado, validadaPor: fech.grrfValidadaPor, validadaEm: fech.grrfValidadaEm };
   }
   return { status: "pendente", total: null, deposito: null, multa: null, fonte: null, lancado, validadaPor: null, validadaEm: null };
 }
@@ -196,7 +206,7 @@ function montarLinha(p: { chave: string; origem: LinhaConferencia["origem"]; nat
     liquidoFolha: p.rubrica?.liquido ?? null,
     fgtsRescisorioFolha: p.rubrica?.fgtsRescisorio ?? null,
     saldoFgtsFolha: p.rubrica?.saldoFgts ?? null,
-    rescisao: conversao ? { status: "pendente", valor: null, lancado: null, decisao: null, zeroConferido: false, validadaPor: null, validadaEm: null } : rescisaoDe(p.rubrica, p.fech),
+    rescisao: conversao ? { status: "pendente", valor: null, lancado: null, decisao: null, zeroConferido: false, validadaPor: null, validadaEm: null, fonte: null } : rescisaoDe(p.rubrica, p.fech),
     grrf: conversao ? { status: "pendente", total: null, deposito: null, multa: null, fonte: null, lancado: null, validadaPor: null, validadaEm: null } : grrfDe(p.rubrica, p.fech),
     fechamentoOrigem: p.fech?.origem ?? null,
   };

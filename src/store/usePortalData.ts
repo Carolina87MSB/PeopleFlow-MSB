@@ -23,10 +23,12 @@ import {
   getFinanceiroDesligados,
   registrarGrrf as registrarGrrfNoServidor,
   salvarFechamentoManual,
+  validarLancamentoManual as validarLancamentoManualNoServidor,
   validarRescisoes as validarRescisoesNoServidor,
   type ItemValidacao,
   type RegistroGrrf,
   type ResultadoValidacao,
+  type ValidacaoManual,
 } from "../repositories/financeiroRepository";
 import type { ConferenciaFinanceira, DecisaoDivergencia } from "../domain/custosRescisao";
 import {
@@ -271,6 +273,8 @@ export interface PortalData {
   decidirDivergencia: (p: { rescisaoId: number; decisao: DecisaoDivergencia; motivo: string; zeroConferido?: boolean }) => Promise<{ ok: true } | { ok: false; error: string }>;
   registrarGrrf: (p: RegistroGrrf) => Promise<{ ok: true } | { ok: false; error: string }>;
   confirmarModalidade: (rescisaoId: number, modalidade: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Confirmação expressa do RH de um componente do lançamento manual (desligamento sem folha): fonte documental, responsável e data. */
+  validarLancamentoManual: (p: ValidacaoManual) => Promise<{ ok: true } | { ok: false; error: string }>;
   atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
   /** Catálogo fechado das 23 competências comportamentais oficiais (RH,
@@ -582,7 +586,8 @@ export function usePortalData(): PortalData {
   const pendenciasFinanceirasCount = useMemo(() => {
     if (perfil !== "RH") return 0;
     const conf = state.conferenciaFinanceira;
-    if (conf) return conf.saidas.filter((l) => l.origem === "cadastro" && (l.rescisao.status !== "validado" || l.grrf.status === "pendente")).length;
+    // pessoas ÚNICAS com algum componente por validar (cadastro e histórico da folha); quem tem rescisão e GRRF pendentes conta uma vez
+    if (conf) return conf.saidas.filter((l) => l.rescisao.status !== "validado" || l.grrf.status === "pendente").length;
     return desligados.filter((c) => pendenteFechamento(c.nome, state.desligamentosFinanceiros)).length;
   }, [perfil, desligados, state.desligamentosFinanceiros, state.conferenciaFinanceira]);
 
@@ -1697,6 +1702,14 @@ export function usePortalData(): PortalData {
   const registrarGrrfFn = useCallback(
     async (p: RegistroGrrf) => {
       const r = await comFinanceiro(() => registrarGrrfNoServidor(p), { mensagem: "GRRF registrada.", flashErro: false });
+      return r.ok ? { ok: true as const } : r;
+    },
+    [comFinanceiro],
+  );
+
+  const validarLancamentoManualFn = useCallback(
+    async (p: ValidacaoManual) => {
+      const r = await comFinanceiro(() => validarLancamentoManualNoServidor(p), { mensagem: "Validação registrada.", flashErro: false });
       return r.ok ? { ok: true as const } : r;
     },
     [comFinanceiro],
@@ -2963,6 +2976,7 @@ export function usePortalData(): PortalData {
     decidirDivergencia: decidirDivergenciaFn,
     registrarGrrf: registrarGrrfFn,
     confirmarModalidade: confirmarModalidadeFn,
+    validarLancamentoManual: validarLancamentoManualFn,
     atualizarCampoDescricaoCargo: atualizarCampoDescricaoCargoFn,
     carregarHistoricoDescricaoCargo: carregarHistoricoDescricaoCargoFn,
     catalogoCompetenciasCargo: state.catalogoCompetenciasCargo,

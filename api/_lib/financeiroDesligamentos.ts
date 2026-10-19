@@ -181,8 +181,14 @@ async function carregarBase(colaboradores: Colaborador[]): Promise<Base> {
     valorGrrf: num(x.valor_grrf),
     origem: ((x.origem as string | undefined) ?? "manual") as FechamentoFinanceiro["origem"],
     rescisaoHistoricoId: x.rescisao_historico_id === null || x.rescisao_historico_id === undefined ? null : Number(x.rescisao_historico_id),
-    validadoEm: (x.validado_em as string | null | undefined) ?? null,
-    validadoPor: (x.validado_por as string | null | undefined) ?? null,
+    rescisaoValidadaEm: (x.rescisao_validada_em as string | null | undefined) ?? null,
+    rescisaoValidadaPor: (x.rescisao_validada_por as string | null | undefined) ?? null,
+    rescisaoFonte: (x.rescisao_fonte as string | null | undefined) ?? null,
+    grrfValidadaEm: (x.grrf_validada_em as string | null | undefined) ?? null,
+    grrfValidadaPor: (x.grrf_validada_por as string | null | undefined) ?? null,
+    grrfFonte: (x.grrf_fonte as string | null | undefined) ?? null,
+    grrfNaoAplicavel: Boolean(x.grrf_nao_aplicavel),
+    grrfJustificativa: (x.grrf_justificativa as string | null | undefined) ?? null,
     updatedAt: String(x.updated_at ?? ""),
     updatedBy: String(x.updated_by ?? ""),
   }));
@@ -261,7 +267,7 @@ function idObrigatorio(corpo: Corpo, campo: string, rotulo: string): number {
 }
 
 interface LogEntrada {
-  acao: "validar_rescisao" | "decidir_divergencia" | "registrar_grrf" | "grrf_nao_aplicavel" | "confirmar_modalidade" | "lancamento_manual" | "conferir_zero";
+  acao: "validar_rescisao" | "decidir_divergencia" | "registrar_grrf" | "grrf_nao_aplicavel" | "confirmar_modalidade" | "lancamento_manual" | "validar_lancamento" | "conferir_zero";
   colaboradorNome?: string | null;
   rescisaoId?: number | null;
   campo?: string;
@@ -309,13 +315,31 @@ async function alvoDaRescisao(base: Base, rescisaoId: number): Promise<Alvo> {
 
 const iguais = (a: number, b: number) => Math.abs(a - b) < 0.005;
 
-async function gravarFechamento(conta: Conta, a: Alvo, campos: { valor_rescisao?: number | null; valor_grrf?: number | null }, validado: boolean) {
+interface ValidacaoFechamento {
+  rescisao?: { fonte: "folha_rescisao" | "demonstrativo_rescisao" | "outro_documento" };
+  grrf?: { fonte: FonteGrrf | null; naoAplicavel?: boolean; justificativa?: string };
+}
+
+/** Cria ou atualiza o fechamento do desligado ligado à folha. Valores só mudam quando passados em `campos`; a validação por componente (fonte,
+ * responsável, data) só é gravada quando a ação correspondente do RH a pede — nunca por efeito colateral. */
+async function gravarFechamento(conta: Conta, a: Alvo, campos: { valor_rescisao?: number | null; valor_grrf?: number | null }, validacao: ValidacaoFechamento = {}) {
   if (!a.colaborador) return;
   const agora = new Date().toISOString();
+  const extra: Record<string, unknown> = {};
+  if (validacao.rescisao) Object.assign(extra, { rescisao_validada_em: agora, rescisao_validada_por: conta.nome, rescisao_fonte: validacao.rescisao.fonte });
+  if (validacao.grrf) {
+    Object.assign(extra, {
+      grrf_validada_em: agora,
+      grrf_validada_por: conta.nome,
+      grrf_fonte: validacao.grrf.naoAplicavel ? null : validacao.grrf.fonte,
+      grrf_nao_aplicavel: Boolean(validacao.grrf.naoAplicavel),
+      grrf_justificativa: validacao.grrf.naoAplicavel ? validacao.grrf.justificativa ?? null : null,
+    });
+  }
   if (a.fechamento) {
     const { error } = await supabaseAdmin
       .from("peopleflow_desligamentos")
-      .update({ ...campos, rescisao_historico_id: a.h.id, ...(validado ? { validado_em: agora, validado_por: conta.nome } : {}), updated_at: agora, updated_by: conta.nome })
+      .update({ ...campos, rescisao_historico_id: a.h.id, ...extra, updated_at: agora, updated_by: conta.nome })
       .eq("colaborador_nome", a.colaborador.nome);
     if (error) erroBanco(error, "Fechamento financeiro");
   } else {
@@ -325,7 +349,7 @@ async function gravarFechamento(conta: Conta, a: Alvo, campos: { valor_rescisao?
       valor_grrf: campos.valor_grrf ?? null,
       origem: "folha",
       rescisao_historico_id: a.h.id,
-      ...(validado ? { validado_em: agora, validado_por: conta.nome } : {}),
+      ...extra,
       updated_at: agora,
       updated_by: conta.nome,
     });
@@ -382,7 +406,7 @@ async function rescisaoValidar(conta: Conta, corpo: Corpo) {
       continue;
     }
     const agora = new Date().toISOString();
-    await gravarFechamento(conta, a, lancado === null ? { valor_rescisao: liquido } : {}, true);
+    await gravarFechamento(conta, a, lancado === null ? { valor_rescisao: liquido } : {}, { rescisao: { fonte: "folha_rescisao" } });
     const { error } = await supabaseAdmin
       .from("peopleflow_rescisoes_historico_rubricas")
       .update({
@@ -416,7 +440,7 @@ async function rescisaoDecidir(conta: Conta, corpo: Corpo) {
   const valor = decisao === "adotar_folha" ? a.rubrica.liquido : lancado;
   if (valor === 0 && corpo.zero_conferido !== true) throw new ErroFin(422, "O valor resultante é R$ 0,00: confirme expressamente que conferiu o demonstrativo.");
   const agora = new Date().toISOString();
-  await gravarFechamento(conta, a, decisao === "adotar_folha" ? { valor_rescisao: valor } : {}, true);
+  await gravarFechamento(conta, a, decisao === "adotar_folha" ? { valor_rescisao: valor } : {}, { rescisao: { fonte: decisao === "adotar_folha" ? "folha_rescisao" : "outro_documento" } });
   const { error } = await supabaseAdmin
     .from("peopleflow_rescisoes_historico_rubricas")
     .update({
@@ -480,7 +504,7 @@ async function grrfRegistrar(conta: Conta, corpo: Corpo) {
   if (corpo.nao_aplicavel === true) {
     const motivo = texto(corpo, "motivo", { obrigatorio: true, rotulo: "o motivo (por que não há GRRF nesta rescisão)" });
     if (lancado !== null && lancado !== 0 && corpo.confirmar_substituicao !== true) throw new ErroFin(409, `Já existe GRRF lançada de ${lancado.toFixed(2)}: confirme a substituição.`);
-    await gravarFechamento(conta, a, { valor_grrf: 0 }, false);
+    await gravarFechamento(conta, a, { valor_grrf: 0 }, { grrf: { fonte: null, naoAplicavel: true, justificativa: motivo } });
     const { error } = await supabaseAdmin
       .from("peopleflow_rescisoes_historico_rubricas")
       .update({ grrf_status: "nao_aplicavel", grrf_total: 0, grrf_deposito: null, grrf_multa: null, grrf_fonte: null, grrf_validada_em: agora, grrf_validada_por: conta.nome, grrf_observacao: motivo })
@@ -499,7 +523,7 @@ async function grrfRegistrar(conta: Conta, corpo: Corpo) {
   const observacao = texto(corpo, "observacao", { max: 1000 });
   if (anteriorValidado && !observacao) throw new ErroFin(422, "A GRRF desta rescisão já foi registrada: informe o motivo da correção.");
   if (lancado !== null && !iguais(lancado, total) && corpo.confirmar_substituicao !== true) throw new ErroFin(409, `Já existe GRRF lançada de ${lancado.toFixed(2)} diferente de ${total.toFixed(2)}: confirme a substituição.`);
-  await gravarFechamento(conta, a, { valor_grrf: total }, false);
+  await gravarFechamento(conta, a, { valor_grrf: total }, { grrf: { fonte } });
   const { error } = await supabaseAdmin
     .from("peopleflow_rescisoes_historico_rubricas")
     .update({ grrf_status: "validado", grrf_total: total, grrf_deposito: deposito, grrf_multa: multa, grrf_fonte: fonte, grrf_validada_em: agora, grrf_validada_por: conta.nome, grrf_observacao: observacao || null })
@@ -520,32 +544,41 @@ async function grrfRegistrar(conta: Conta, corpo: Corpo) {
 }
 
 /** Lançamento manual (desligamentos SEM rescisão importada da folha): é a única via de digitação, e vale como validado porque o RH o registrou. */
+const FONTES_RESCISAO = ["demonstrativo_rescisao", "outro_documento"] as const;
+
+function desligadoSemFolha(base: Base, nome: string) {
+  const desligados = base.colaboradores.filter((c) => c.nome === nome && c.desligado);
+  if (desligados.length !== 1) throw new ErroFin(422, "Colaborador desligado não encontrado (ou há mais de um com este nome).");
+  const c = desligados[0];
+  const folha = base.historico.find((h) => h.natureza === "saida_efetiva" && (h.colaboradorId === c.id || (h.colaboradorId === null && h.nomeNormalizado === normalizarNomeHistorico(nome) && h.admissaoIso === c.admissaoIso)));
+  if (folha) throw new ErroFin(409, "Este desligamento tem rescisão importada da folha: use a Conferência financeira (os valores vêm da folha e são validados lá).");
+  return c;
+}
+
+/** Lançamento manual (desligamentos SEM rescisão importada da folha): grava os valores como LANÇADOS — não validados. A validação é uma confirmação
+ * expressa à parte (financeiro_fechamento_validar), com fonte documental. Mudar um valor já validado desfaz a validação daquele componente. */
 async function fechamentoSalvar(conta: Conta, corpo: Corpo) {
   exigirRH(conta);
   const nome = texto(corpo, "colaborador_nome", { obrigatorio: true, rotulo: "o colaborador" });
   const valorRescisao = valorMonetario(corpo.valor_rescisao, "o valor da rescisão");
   const valorGrrf = valorMonetario(corpo.valor_grrf, "o valor da GRRF");
   const base = await carregarBase(conta.colaboradores);
-  const desligados = base.colaboradores.filter((c) => c.nome === nome && c.desligado);
-  if (desligados.length !== 1) throw new ErroFin(422, "Colaborador desligado não encontrado (ou há mais de um com este nome).");
-  const c = desligados[0];
-  const folha = base.historico.find((h) => h.natureza === "saida_efetiva" && (h.colaboradorId === c.id || (h.colaboradorId === null && h.nomeNormalizado === normalizarNomeHistorico(nome) && h.admissaoIso === c.admissaoIso)));
-  if (folha) throw new ErroFin(409, "Este desligamento tem rescisão importada da folha: use a Conferência financeira (os valores vêm da folha e são validados lá).");
+  desligadoSemFolha(base, nome);
   const existente = base.fechamentos.find((f) => f.colaboradorNome === nome) ?? null;
   const agora = new Date().toISOString();
-  const { error } = await supabaseAdmin.from("peopleflow_desligamentos").upsert(
-    {
-      colaborador_nome: nome,
-      valor_rescisao: valorRescisao,
-      valor_grrf: valorGrrf,
-      origem: existente?.origem ?? "manual",
-      validado_em: base.instalado ? agora : undefined,
-      validado_por: base.instalado ? conta.nome : undefined,
-      updated_at: agora,
-      updated_by: conta.nome,
-    },
-    { onConflict: "colaborador_nome" },
-  );
+  const registro: Record<string, unknown> = {
+    colaborador_nome: nome,
+    valor_rescisao: valorRescisao,
+    valor_grrf: valorGrrf,
+    origem: existente?.origem ?? "manual",
+    updated_at: agora,
+    updated_by: conta.nome,
+  };
+  if (base.instalado) {
+    if (valorRescisao !== (existente?.valorRescisao ?? null)) Object.assign(registro, { rescisao_validada_em: null, rescisao_validada_por: null, rescisao_fonte: null });
+    if (valorGrrf !== (existente?.valorGrrf ?? null)) Object.assign(registro, { grrf_validada_em: null, grrf_validada_por: null, grrf_fonte: null, grrf_nao_aplicavel: false, grrf_justificativa: null });
+  }
+  const { error } = await supabaseAdmin.from("peopleflow_desligamentos").upsert(registro, { onConflict: "colaborador_nome" });
   if (error) erroBanco(error, "Fechamento financeiro");
   if (valorRescisao !== (existente?.valorRescisao ?? null)) {
     await registrar(conta, { acao: "lancamento_manual", colaboradorNome: nome, campo: "valor_rescisao", anterior: existente?.valorRescisao ?? null, novo: valorRescisao, origem: "manual" });
@@ -553,7 +586,53 @@ async function fechamentoSalvar(conta: Conta, corpo: Corpo) {
   if (valorGrrf !== (existente?.valorGrrf ?? null)) {
     await registrar(conta, { acao: "lancamento_manual", colaboradorNome: nome, campo: "valor_grrf", anterior: existente?.valorGrrf ?? null, novo: valorGrrf, origem: "manual" });
   }
-  return { colaborador_nome: nome, valor_rescisao: valorRescisao, valor_grrf: valorGrrf };
+  return { colaborador_nome: nome, valor_rescisao: valorRescisao, valor_grrf: valorGrrf, validado: false };
+}
+
+/** Confirmação EXPRESSA do RH de um componente do lançamento manual: fonte documental, responsável e data. GRRF "não aplicável" exige justificativa
+ * (e vale R$ 0,00 resolvido); um 0 lançado, sozinho, nunca resolve a GRRF. */
+async function fechamentoValidar(conta: Conta, corpo: Corpo) {
+  exigirRH(conta);
+  const nome = texto(corpo, "colaborador_nome", { obrigatorio: true, rotulo: "o colaborador" });
+  const componente = texto(corpo, "componente", { obrigatorio: true, rotulo: "o componente" });
+  if (componente !== "rescisao" && componente !== "grrf") throw new ErroFin(422, "Componente inválido.");
+  const base = await carregarBase(conta.colaboradores);
+  if (!base.instalado) throw new ErroFin(409, "A migration da integração financeira ainda não foi aplicada neste ambiente.");
+  desligadoSemFolha(base, nome);
+  const fech = base.fechamentos.find((f) => f.colaboradorNome === nome) ?? null;
+  const agora = new Date().toISOString();
+  if (componente === "rescisao") {
+    if (!fech || fech.valorRescisao === null) throw new ErroFin(422, "Lance o valor da rescisão antes de validar.");
+    if (fech.rescisaoValidadaEm) throw new ErroFin(422, "Esta rescisão já foi validada.");
+    const fonte = texto(corpo, "fonte", { obrigatorio: true, rotulo: "a fonte documental" });
+    if (!(FONTES_RESCISAO as readonly string[]).includes(fonte)) throw new ErroFin(422, "Fonte inválida.");
+    if (fech.valorRescisao === 0 && corpo.zero_conferido !== true) throw new ErroFin(422, "O valor é R$ 0,00: confirme expressamente que conferiu o documento.");
+    const { error } = await supabaseAdmin.from("peopleflow_desligamentos").update({ rescisao_validada_em: agora, rescisao_validada_por: conta.nome, rescisao_fonte: fonte }).eq("colaborador_nome", nome).is("rescisao_validada_em", null);
+    if (error) erroBanco(error, "Validação da rescisão");
+    await registrar(conta, { acao: "validar_lancamento", colaboradorNome: nome, campo: "valor_rescisao", anterior: fech.valorRescisao, novo: fech.valorRescisao, origem: fonte, motivo: texto(corpo, "observacao", { max: 1000 }) || undefined });
+    return { colaborador_nome: nome, componente, validado: true };
+  }
+  if (!fech || fech.valorGrrf === null) {
+    if (corpo.nao_aplicavel !== true) throw new ErroFin(422, "Lance o valor da GRRF antes de validar (ou declare que não se aplica, com justificativa).");
+  }
+  if (fech?.grrfValidadaEm) throw new ErroFin(422, "Esta GRRF já foi validada.");
+  if (corpo.nao_aplicavel === true) {
+    const justificativa = texto(corpo, "justificativa", { obrigatorio: true, rotulo: "a justificativa (por que não há GRRF nesta rescisão)" });
+    if (fech?.valorGrrf !== null && fech?.valorGrrf !== undefined && fech.valorGrrf !== 0 && corpo.confirmar_substituicao !== true) throw new ErroFin(409, `Já existe GRRF lançada de ${fech.valorGrrf.toFixed(2)}: confirme a substituição por "não aplicável".`);
+    const { error } = await supabaseAdmin.from("peopleflow_desligamentos").upsert(
+      { colaborador_nome: nome, valor_rescisao: fech?.valorRescisao ?? null, valor_grrf: 0, origem: fech?.origem ?? "manual", grrf_validada_em: agora, grrf_validada_por: conta.nome, grrf_fonte: null, grrf_nao_aplicavel: true, grrf_justificativa: justificativa, updated_at: agora, updated_by: conta.nome },
+      { onConflict: "colaborador_nome" },
+    );
+    if (error) erroBanco(error, "GRRF");
+    await registrar(conta, { acao: "grrf_nao_aplicavel", colaboradorNome: nome, campo: "valor_grrf", anterior: fech?.valorGrrf ?? null, novo: 0, origem: "rh", motivo: justificativa });
+    return { colaborador_nome: nome, componente, validado: true, nao_aplicavel: true };
+  }
+  const fonte = texto(corpo, "fonte", { obrigatorio: true, rotulo: "a fonte documental" }) as FonteGrrf;
+  if (!FONTES.includes(fonte)) throw new ErroFin(422, "Fonte inválida.");
+  const { error } = await supabaseAdmin.from("peopleflow_desligamentos").update({ grrf_validada_em: agora, grrf_validada_por: conta.nome, grrf_fonte: fonte, grrf_nao_aplicavel: false, grrf_justificativa: null }).eq("colaborador_nome", nome).is("grrf_validada_em", null);
+  if (error) erroBanco(error, "Validação da GRRF");
+  await registrar(conta, { acao: "validar_lancamento", colaboradorNome: nome, campo: "valor_grrf", anterior: fech!.valorGrrf, novo: fech!.valorGrrf, origem: fonte, motivo: texto(corpo, "observacao", { max: 1000 }) || undefined });
+  return { colaborador_nome: nome, componente, validado: true };
 }
 
 const ACOES: Record<string, (conta: Conta, corpo: Corpo) => Promise<unknown>> = {
@@ -564,6 +643,7 @@ const ACOES: Record<string, (conta: Conta, corpo: Corpo) => Promise<unknown>> = 
   financeiro_modalidade_confirmar: modalidadeConfirmar,
   financeiro_grrf_registrar: grrfRegistrar,
   financeiro_fechamento_salvar: fechamentoSalvar,
+  financeiro_fechamento_validar: fechamentoValidar,
 };
 
 export function ehAcaoFinanceira(acao: string): boolean {

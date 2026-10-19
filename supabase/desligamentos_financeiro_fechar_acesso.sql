@@ -9,7 +9,7 @@ begin
   if to_regclass('public.peopleflow_desligamentos') is null then
     raise exception 'PRÉ-CONDIÇÃO: peopleflow_desligamentos não existe — nada foi alterado.';
   end if;
-  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'peopleflow_desligamentos' and column_name = 'validado_em') then
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'peopleflow_desligamentos' and column_name = 'rescisao_validada_em') then
     raise exception 'PRÉ-CONDIÇÃO: aplique antes supabase/desligamentos_financeiro.sql — nada foi alterado.';
   end if;
 end

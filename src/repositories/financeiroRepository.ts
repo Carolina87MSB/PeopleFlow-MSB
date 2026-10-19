@@ -94,3 +94,19 @@ export async function registrarGrrf(p: RegistroGrrf): Promise<void> {
 export async function salvarFechamentoManual(colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null): Promise<void> {
   await gravar("financeiro_fechamento_salvar", { colaborador_nome: colaboradorNome, valor_rescisao: valorRescisao, valor_grrf: valorGrrf });
 }
+
+export interface ValidacaoManual {
+  colaborador_nome: string;
+  componente: "rescisao" | "grrf";
+  fonte?: string;
+  observacao?: string;
+  nao_aplicavel?: boolean;
+  justificativa?: string;
+  zero_conferido?: boolean;
+  confirmar_substituicao?: boolean;
+}
+
+/** Confirmação expressa do RH de um componente do lançamento manual (sem folha): fonte documental, responsável e data ficam no servidor. */
+export async function validarLancamentoManual(p: ValidacaoManual): Promise<void> {
+  await gravar("financeiro_fechamento_validar", { ...p });
+}

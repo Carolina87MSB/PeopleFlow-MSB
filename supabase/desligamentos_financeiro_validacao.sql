@@ -4,9 +4,9 @@ with checagens as (
   select 'rubricas: colunas de validação da rescisão e da GRRF' as verificacao,
          (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'peopleflow_rescisoes_historico_rubricas'
             and column_name in ('rescisao_status', 'rescisao_valor_validado', 'rescisao_decisao', 'grrf_status', 'grrf_deposito', 'grrf_multa', 'grrf_total', 'grrf_fonte', 'modalidade_confirmada', 'zero_conferido_em')) = 10 as ok
-  union all select 'fechamentos: colunas origem e validação', (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'peopleflow_desligamentos' and column_name in ('origem', 'rescisao_historico_id', 'validado_em', 'validado_por')) = 4
-  union all select 'constraints de consistência (rescisão, GRRF, modalidade, origem)', (select count(*) from pg_constraint where conname in
-      ('peopleflow_rubricas_rescisao_status_chk', 'peopleflow_rubricas_grrf_status_chk', 'peopleflow_rubricas_modalidade_chk', 'peopleflow_desligamentos_origem_chk') and convalidated) = 4
+  union all select 'fechamentos: colunas origem e validação', (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'peopleflow_desligamentos' and column_name in ('origem', 'rescisao_historico_id', 'rescisao_validada_em', 'rescisao_validada_por', 'rescisao_fonte', 'grrf_validada_em', 'grrf_validada_por', 'grrf_fonte', 'grrf_nao_aplicavel', 'grrf_justificativa')) = 10
+  union all select 'constraints de consistência (rescisão, GRRF, modalidade, origem, validação do fechamento)', (select count(*) from pg_constraint where conname in
+      ('peopleflow_rubricas_rescisao_status_chk', 'peopleflow_rubricas_grrf_status_chk', 'peopleflow_rubricas_modalidade_chk', 'peopleflow_desligamentos_origem_chk', 'peopleflow_desligamentos_validacao_chk') and convalidated) = 5
   union all select 'trigger: valores importados da folha imutáveis / conversão sem validação', exists (select 1 from pg_trigger where tgname = 'peopleflow_rubricas_guard' and not tgisinternal)
   union all select 'trilha somente inserção (trigger)', exists (select 1 from pg_trigger where tgname = 'peopleflow_fechamentos_log_guard' and not tgisinternal)
   union all select 'trilha: RLS ligada e sem acesso para anon/authenticated', (select relrowsecurity from pg_class where oid = 'public.peopleflow_fechamentos_log'::regclass)

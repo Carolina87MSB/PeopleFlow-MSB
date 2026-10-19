@@ -48,7 +48,7 @@ function ChipGrrf({ l }: { l: LinhaConferencia }) {
   return <Badge bg="var(--color-warning-bg)" fg="var(--color-warning-fg)" dot="var(--color-warning)">Pendente</Badge>;
 }
 
-type Dialogo = { tipo: "zero" | "decidir" | "grrf"; linha: LinhaConferencia } | null;
+type Dialogo = { tipo: "zero" | "decidir" | "grrf"; linha: LinhaConferencia } | { tipo: "manual"; linha: LinhaConferencia; componente: "rescisao" | "grrf" } | null;
 
 export function ConferenciaFinanceira() {
   const { conferenciaFinanceira: conf, validarRescisoes } = usePortalData();
@@ -185,8 +185,19 @@ export function ConferenciaFinanceira() {
                 <td>
                   {l.rescisaoId === null ? (
                     <>
-                      {l.rescisao.valor !== null ? <span className={styles.valor}>{money(l.rescisao.valor)}</span> : "—"}
-                      <span className={styles.sub}>Lançamento manual (sem folha importada)</span>
+                      {l.rescisao.status === "validado" && l.rescisao.valor !== null ? (
+                        <>
+                          <span className={styles.valor}>{money(l.rescisao.valor)}</span> <ChipRescisao l={l} />
+                          <span className={styles.sub}>Validada por {l.rescisao.validadaPor ?? "—"} · fonte: {l.rescisao.fonte === "demonstrativo_rescisao" ? "demonstrativo" : "outro documento"}</span>
+                        </>
+                      ) : l.rescisao.lancado !== null ? (
+                        <>
+                          <span className={styles.valor}>{money(l.rescisao.lancado)}</span> <ChipRescisao l={l} />
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                      <span className={styles.sub}>Lançamento manual (sem folha importada): só vale depois de validado</span>
                     </>
                   ) : (
                     <>
@@ -223,6 +234,16 @@ export function ConferenciaFinanceira() {
                     {l.rescisaoId !== null && (
                       <Button variant="secondary" disabled={!conf.instalado} onClick={() => setDialogo({ tipo: "grrf", linha: l })}>
                         {l.grrf.status === "pendente" ? "Registrar GRRF" : "Corrigir GRRF"}
+                      </Button>
+                    )}
+                    {l.rescisaoId === null && l.colaboradorId !== null && l.rescisao.status === "pendente" && (
+                      <Button variant="primary" disabled={!conf.instalado || l.rescisao.lancado === null} title={l.rescisao.lancado === null ? "Lance o valor na gaveta do desligado antes de validar." : undefined} onClick={() => setDialogo({ tipo: "manual", linha: l, componente: "rescisao" })}>
+                        Validar rescisão
+                      </Button>
+                    )}
+                    {l.rescisaoId === null && l.colaboradorId !== null && l.grrf.status === "pendente" && (
+                      <Button variant="secondary" disabled={!conf.instalado} onClick={() => setDialogo({ tipo: "manual", linha: l, componente: "grrf" })}>
+                        Validar GRRF
                       </Button>
                     )}
                   </div>
@@ -265,6 +286,7 @@ export function ConferenciaFinanceira() {
       {dialogo?.tipo === "zero" && <DialogoZero linha={dialogo.linha} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
       {dialogo?.tipo === "decidir" && <DialogoDecidir linha={dialogo.linha} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
       {dialogo?.tipo === "grrf" && <DialogoGrrf linha={dialogo.linha} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
+      {dialogo?.tipo === "manual" && <DialogoValidarManual linha={dialogo.linha} componente={dialogo.componente} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
     </div>
   );
 }
@@ -434,6 +456,92 @@ function DialogoGrrf({ linha: l, onClose, onMensagem }: { linha: LinhaConferenci
         <label className={styles.opcao}>
           <input type="checkbox" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} />
           <span>Confirmo substituir o valor de GRRF já lançado no cadastro (o valor anterior fica registrado na trilha).</span>
+        </label>
+      )}
+      {erro && <div className={styles.erro}>{erro}</div>}
+    </Modal>
+  );
+}
+
+/** Confirmação EXPRESSA de um lançamento manual (desligamento sem folha importada): o valor só passa a valer depois desta confirmação, com a fonte
+ * documental (responsável e data ficam no servidor). GRRF "não se aplica" exige justificativa; um 0 lançado, sozinho, não resolve a GRRF. */
+export function DialogoValidarManual({ linha: l, componente, onClose, onMensagem }: { linha: LinhaConferencia; componente: "rescisao" | "grrf"; onClose: () => void; onMensagem: (m: string) => void }) {
+  const { validarLancamentoManual } = usePortalData();
+  const ehRescisao = componente === "rescisao";
+  const valor = ehRescisao ? l.rescisao.lancado : l.grrf.lancado;
+  const [naoAplicavel, setNaoAplicavel] = useState(false);
+  const [fonte, setFonte] = useState<string>(ehRescisao ? "demonstrativo_rescisao" : "guia_grrf");
+  const [observacao, setObservacao] = useState("");
+  const [justificativa, setJustificativa] = useState("");
+  const [zero, setZero] = useState(false);
+  const [substituir, setSubstituir] = useState(false);
+  const [pedeSubstituicao, setPedeSubstituicao] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const exigeZero = !naoAplicavel && valor === 0;
+  const podeEnviar = !ocupado && (naoAplicavel ? justificativa.trim().length > 0 : valor !== null && (!exigeZero || zero)) && (!pedeSubstituicao || substituir);
+  const fontes: [string, string][] = ehRescisao ? [["demonstrativo_rescisao", "Demonstrativo da rescisão"], ["outro_documento", "Outro documento"]] : FONTES;
+
+  async function confirmar() {
+    if (l.colaboradorId === null) return;
+    setOcupado(true);
+    setErro(null);
+    const r = await validarLancamentoManual({
+      colaborador_nome: l.nome,
+      componente,
+      ...(naoAplicavel ? { nao_aplicavel: true, justificativa: justificativa.trim(), confirmar_substituicao: substituir || undefined } : { fonte, observacao: observacao.trim() || undefined, zero_conferido: zero || undefined }),
+    });
+    setOcupado(false);
+    if (r.ok) {
+      onMensagem(`${ehRescisao ? "Rescisão" : naoAplicavel ? "GRRF (não aplicável)" : "GRRF"} de ${l.nome} validada.`);
+      onClose();
+    } else {
+      if (/confirme a substituição/i.test(r.error)) setPedeSubstituicao(true);
+      setErro(r.error);
+    }
+  }
+
+  return (
+    <Modal title={ehRescisao ? "Validar rescisão lançada" : "Validar GRRF lançada"} subtitle={`${l.nome} · ${formatarDataIso(l.dataEfetivaIso)}`} onClose={onClose} width={520}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={!podeEnviar} onClick={confirmar}>{ocupado ? "Gravando..." : "Confirmar validação"}</Button></>}>
+      <div className={styles.referencia}>
+        Valor lançado: <strong>{valor === null ? "—" : money(valor)}</strong>. Lançar um valor não o valida: confirme que ele confere com o documento, informando a fonte. A data e o responsável da validação ficam registrados.
+      </div>
+      {!ehRescisao && (
+        <label className={styles.opcao}>
+          <input type="checkbox" checked={naoAplicavel} onChange={(e) => setNaoAplicavel(e.target.checked)} />
+          <span>Não há GRRF a recolher nesta rescisão (R$ 0,00 resolvido) — exige justificativa</span>
+        </label>
+      )}
+      {naoAplicavel ? (
+        <label className={styles.campoDialogo}>
+          Justificativa *
+          <textarea rows={2} value={justificativa} maxLength={1000} onChange={(e) => setJustificativa(e.target.value)} />
+        </label>
+      ) : (
+        <>
+          <label className={styles.campoDialogo}>
+            Fonte documental *
+            <select value={fonte} onChange={(e) => setFonte(e.target.value)}>
+              {fontes.map(([k, rot]) => <option key={k} value={k}>{rot}</option>)}
+            </select>
+          </label>
+          <label className={styles.campoDialogo}>
+            Observação (opcional)
+            <textarea rows={2} value={observacao} maxLength={1000} onChange={(e) => setObservacao(e.target.value)} />
+          </label>
+          {exigeZero && (
+            <label className={styles.opcao}>
+              <input type="checkbox" checked={zero} onChange={(e) => setZero(e.target.checked)} />
+              <span>Conferi o documento e confirmo que o valor é R$ 0,00.</span>
+            </label>
+          )}
+        </>
+      )}
+      {pedeSubstituicao && (
+        <label className={styles.opcao}>
+          <input type="checkbox" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} />
+          <span>Confirmo substituir a GRRF lançada por "não aplicável" (o valor anterior fica na trilha).</span>
         </label>
       )}
       {erro && <div className={styles.erro}>{erro}</div>}
