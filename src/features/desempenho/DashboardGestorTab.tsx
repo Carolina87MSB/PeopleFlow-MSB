@@ -13,6 +13,7 @@ import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { baixarArquivo, gerarCsv, type SecaoCsv } from "../../lib/exportacaoCsv";
 import { usePortalData } from "../../store/usePortalData";
 import { populacaoDashboard, type FiltrosDashboard } from "../../domain/dashboardDesempenho";
+import { pdiFinalizado } from "../../domain/pdi";
 import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import type { StatusAvaliacaoDesempenho, StatusPdi } from "../../types/domain";
 import { Matriz9BoxDistribuicao } from "./Matriz9BoxDistribuicao";
@@ -77,7 +78,7 @@ export function DashboardGestorTab() {
     [avaliacoesPotencial, nomesPopulacao, nomesDesligadosEquipe],
   );
   const pdiPopulacao = useMemo(
-    () => populacaoDashboard(pdi, nomesPopulacao, nomesDesligadosEquipe, (p) => p.status === "Concluído"),
+    () => populacaoDashboard(pdi, nomesPopulacao, nomesDesligadosEquipe, pdiFinalizado),
     [pdi, nomesPopulacao, nomesDesligadosEquipe],
   );
 
@@ -131,7 +132,7 @@ export function DashboardGestorTab() {
       );
     });
   }, [pdiPopulacao, colaboradoresEquipe, colaboradoresParaMatriz9Box, nomesPopulacao, departamentoFiltro, cargoFiltro]);
-  const pdisPorStatus: Record<StatusPdi, number> = { "Não iniciado": 0, "Em andamento": 0, Concluído: 0 };
+  const pdisPorStatus: Record<StatusPdi, number> = { "Não iniciado": 0, "Em andamento": 0, Concluído: 0, Encerrado: 0 };
   for (const p of pdisFiltrados) pdisPorStatus[p.status] += 1;
 
   function exportarCsv() {
@@ -146,6 +147,7 @@ export function DashboardGestorTab() {
           ["Não iniciado", pdisPorStatus["Não iniciado"]],
           ["Em andamento", pdisPorStatus["Em andamento"]],
           ["Concluído", pdisPorStatus.Concluído],
+          ["Encerrado (desligamento)", pdisPorStatus.Encerrado],
         ],
       },
       {
@@ -221,6 +223,7 @@ export function DashboardGestorTab() {
         <KpiCard label="PDIs não iniciados" value={pdisPorStatus["Não iniciado"]} />
         <KpiCard label="PDIs em andamento" value={pdisPorStatus["Em andamento"]} />
         <KpiCard label="PDIs concluídos" value={pdisPorStatus.Concluído} />
+        <KpiCard label="PDIs encerrados" value={pdisPorStatus.Encerrado} />
       </div>
 
       <div className={styles.mainGrid}>

@@ -66,3 +66,23 @@ export function validarNotaMinimaPdi(valor: number): { ok: true } | { ok: false;
   }
   return { ok: true };
 }
+
+/** PDI encerrado por decisão do RH (ex.: desligamento): imutável, só leitura para todos — inclusive RH. Não é "Concluído". */
+export function pdiEstaEncerrado(pdi: { status: StatusPdi }): boolean {
+  return pdi.status === "Encerrado";
+}
+
+/** Só um plano ainda aberto pode ser encerrado: "Concluído" já tem o seu fim e "Encerrado" é definitivo. */
+export function pdiPodeSerEncerrado(pdi: { status: StatusPdi }): boolean {
+  return pdi.status === "Não iniciado" || pdi.status === "Em andamento";
+}
+
+/** PDI que já terminou por algum caminho (concluído ou encerrado) — usado onde antes bastava `status === "Concluído"`. */
+export function pdiFinalizado(pdi: { status: StatusPdi }): boolean {
+  return pdi.status === "Concluído" || pdi.status === "Encerrado";
+}
+
+/** Motivo sugerido na tela (o RH pode editar antes de confirmar). */
+export function motivoSugeridoEncerramentoPdi(dataDesligamentoBr: string): string {
+  return dataDesligamentoBr && dataDesligamentoBr !== "—" ? `Colaborador desligado em ${dataDesligamentoBr}.` : "Colaborador desligado.";
+}

@@ -4,6 +4,7 @@
 
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import { SupabaseNotConfiguredError } from "./colaboradoresRepository";
+import { gravar } from "../features/desenvolvimento/devRepository";
 import type { Pdi, PdiAcao, PdiItem, ResponsavelPdi, StatusItemPdi, StatusPdi, TipoCompetenciaPdi } from "../types/domain";
 
 interface PdiRow {
@@ -17,6 +18,9 @@ interface PdiRow {
   comentarios: string | null;
   concluido_por: string | null;
   concluido_em: string | null;
+  encerrado_por: string | null;
+  encerrado_em: string | null;
+  encerrado_motivo: string | null;
   sem_competencia_desenvolvimento: boolean | null;
   criado_em: string;
   updated_at: string;
@@ -70,6 +74,9 @@ function fromRowPdi(row: PdiRow): Pdi {
     comentarios: row.comentarios ?? "",
     concluidoPor: row.concluido_por ?? "",
     concluidoEm: row.concluido_em,
+    encerradoPor: row.encerrado_por ?? "",
+    encerradoEm: row.encerrado_em ?? null,
+    encerradoMotivo: row.encerrado_motivo ?? "",
     semCompetenciaDesenvolvimento: row.sem_competencia_desenvolvimento ?? false,
     itens: [],
     criadoEm: row.criado_em,
@@ -336,4 +343,12 @@ export async function salvarPdi(pdi: Pdi, updatedAtAnterior: string): Promise<Pd
   }
 
   return { ...fromRowPdi(atualizado as PdiRow), itens: pdi.itens };
+}
+
+/** Encerra o PDI de colaborador DESLIGADO (RH). A gravação é do servidor (ação `pdi_encerrar`): confere o perfil RH, que o colaborador está
+ * mesmo desligado e que o plano está aberto, grava só o cabeçalho (status, motivo, data e responsável) e registra a auditoria. Itens, ações,
+ * evidências e sugestões não são tocados. Devolve apenas os campos do cabeçalho que mudaram. */
+export async function encerrarPdiPorDesligamento(pdiId: number, motivo: string): Promise<Pick<Pdi, "status" | "encerradoPor" | "encerradoEm" | "encerradoMotivo" | "updatedAt">> {
+  const dados = await gravar<{ status: string; encerrado_por: string; encerrado_em: string; encerrado_motivo: string; updated_at: string }>("pdi_encerrar", { pdi_id: pdiId, motivo });
+  return { status: dados.status as StatusPdi, encerradoPor: dados.encerrado_por ?? "", encerradoEm: dados.encerrado_em ?? null, encerradoMotivo: dados.encerrado_motivo ?? "", updatedAt: dados.updated_at };
 }

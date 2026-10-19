@@ -16,6 +16,7 @@ import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { baixarArquivo, gerarCsv, type SecaoCsv } from "../../lib/exportacaoCsv";
 import { usePortalData } from "../../store/usePortalData";
 import { populacaoDashboard, type FiltrosDashboard } from "../../domain/dashboardDesempenho";
+import { pdiFinalizado } from "../../domain/pdi";
 import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import type { StatusAvaliacaoDesempenho, StatusPdi } from "../../types/domain";
 import { Matriz9BoxDistribuicao } from "./Matriz9BoxDistribuicao";
@@ -71,7 +72,7 @@ export function DashboardRHTab() {
     () => populacaoDashboard(avaliacoesPotencial, nomesPopulacao, nomesDesligados, (a) => a.status === "Concluída"),
     [avaliacoesPotencial, nomesPopulacao, nomesDesligados],
   );
-  const pdiPopulacao = useMemo(() => populacaoDashboard(pdi, nomesPopulacao, nomesDesligados, (p) => p.status === "Concluído"), [pdi, nomesPopulacao, nomesDesligados]);
+  const pdiPopulacao = useMemo(() => populacaoDashboard(pdi, nomesPopulacao, nomesDesligados, pdiFinalizado), [pdi, nomesPopulacao, nomesDesligados]);
 
   const filtros: FiltrosDashboard = useMemo(
     () => ({ cicloId, departamento: departamentoFiltro, gestor: gestorFiltro, cargo: cargoFiltro, statusAvaliacao: statusFiltro }),
@@ -144,7 +145,7 @@ export function DashboardRHTab() {
       );
     });
   }, [pdiPopulacao, colaboradoresListagem, todosOsColaboradores, nomesPopulacao, departamentoFiltro, gestorFiltro, cargoFiltro]);
-  const pdisPorStatus: Record<StatusPdi, number> = { "Não iniciado": 0, "Em andamento": 0, Concluído: 0 };
+  const pdisPorStatus: Record<StatusPdi, number> = { "Não iniciado": 0, "Em andamento": 0, Concluído: 0, Encerrado: 0 };
   for (const p of pdisFiltrados) pdisPorStatus[p.status] += 1;
 
   function exportarCsv() {
@@ -171,6 +172,7 @@ export function DashboardRHTab() {
         linhas: [
           ["Em andamento", pdisPorStatus["Em andamento"]],
           ["Concluído", pdisPorStatus.Concluído],
+          ["Encerrado (desligamento)", pdisPorStatus.Encerrado],
         ],
       },
     ];
@@ -245,6 +247,7 @@ export function DashboardRHTab() {
         <KpiCard label="Devolutivas pendentes" value={devolutivasPendentes} highlight={devolutivasPendentes > 0} />
         <KpiCard label="PDIs em andamento" value={pdisPorStatus["Em andamento"]} />
         <KpiCard label="PDIs concluídos" value={pdisPorStatus.Concluído} />
+        <KpiCard label="PDIs encerrados" value={pdisPorStatus.Encerrado} />
       </div>
 
       <div className={styles.mainGrid}>

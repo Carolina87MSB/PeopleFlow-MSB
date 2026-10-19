@@ -957,8 +957,10 @@ export interface AvaliacaoPotencial {
  * terminou). Ver domain/calibracao.ts. */
 export type StatusCalibracao = "Não iniciada" | "Aguardando Calibração" | "Homologada";
 
-/** Status do plano de PDI inteiro (diferente do status de cada item/ação). */
-export type StatusPdi = "Não iniciado" | "Em andamento" | "Concluído";
+/** Status do plano de PDI inteiro (diferente do status de cada item/ação).
+ * "Encerrado" ≠ "Concluído": o plano foi ENCERRADO por decisão do RH (hoje: só por desligamento do colaborador), sem que as ações
+ * tenham sido cumpridas — itens, ações, evidências e histórico permanecem exatamente como estavam e o plano fica imutável. */
+export type StatusPdi = "Não iniciado" | "Em andamento" | "Concluído" | "Encerrado";
 
 /** Status de um item ou de uma ação do PDI — mesma escala pros dois níveis. */
 export type StatusItemPdi = "Não iniciada" | "Em andamento" | "Concluída" | "Cancelada";
@@ -1051,6 +1053,10 @@ export interface Pdi {
   comentarios: string;
   concluidoPor: string;
   concluidoEm: string | null;
+  /** Encerramento por decisão do RH (status "Encerrado"): quem, quando e por quê. Gravados só pelo servidor (ação pdi_encerrar). */
+  encerradoPor: string;
+  encerradoEm: string | null;
+  encerradoMotivo: string;
   /** Declaração do gestor de que não há nenhuma competência/KPI a
    * desenvolver neste ciclo — único jeito de concluir um PDI com `itens`
    * vazio (ver `pdiPodeSerConcluido()` em domain/pdi.ts). Sem efeito quando

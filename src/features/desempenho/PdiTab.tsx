@@ -8,6 +8,7 @@ const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
   "Não iniciado": { bg: "var(--color-surface, #f6fafb)", fg: "var(--color-muted)" },
   "Em andamento": { bg: "var(--color-warning-bg, #fbeee0)", fg: "var(--color-warning-fg, #a3672a)" },
   Concluído: { bg: "var(--color-success-bg)", fg: "var(--color-success-fg)" },
+  Encerrado: { bg: "var(--color-surface, #f6fafb)", fg: "var(--color-muted)" },
 };
 
 /** Plano de Desenvolvimento Individual — gerado automaticamente na conclusão
@@ -69,7 +70,7 @@ export function PdiTab() {
         <div className={styles.filtroCampo}>
           <span className={styles.label}>Status</span>
           <select className={styles.select} value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
-            {["Todos", "Não iniciado", "Em andamento", "Concluído"].map((o) => (
+            {["Todos", "Não iniciado", "Em andamento", "Concluído", "Encerrado"].map((o) => (
               <option key={o} value={o}>
                 {o}
               </option>

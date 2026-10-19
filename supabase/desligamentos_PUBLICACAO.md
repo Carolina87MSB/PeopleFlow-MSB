@@ -28,8 +28,8 @@ O código tolera a migration ausente (a leitura do histórico devolve vazio), po
 - Tudo: o schema `backup_desligamentos_20261019` guarda o estado anterior das tabelas afetadas.
 
 ## Roteiro de validação funcional (perfil RH, ambiente real)
-1. **Dashboard Executivo** (01/01–19/10/2026): Admissões 26 · Desligamentos 22 · Conversões 2 · Rescisões contratuais 24 · Turnover 40,00% · HC 58→62; nenhum valor financeiro; Marcelo e Ítalo seguem no quadro.
-2. **Desligados**: lista os 7 já no cadastro; card de pendências com 9 itens (eram 12; os 3 da turma saem no passo 5) — inclui a divergência de data da MP do colaborador 24; somente leitura.
+1. **Dashboard Executivo** (01/01–19/10/2026, cadastro de 19/10 às 12:38): Admissões 27 · Desligamentos 22 · Conversões 2 · Rescisões contratuais 24 · Turnover 40,50% · HC 58→63 (média 60,5); nenhum valor financeiro; Marcelo e Ítalo seguem no quadro. (A simulação anterior — 26 / 62 / 40,00% — foi feita antes do registro de uma admissão de 05/10 no cadastro; novas admissões ou saídas no cadastro mudam estes números.)
+2. **Desligados**: lista os 7 já no cadastro; card de pendências com **5 itens** — 3 fechamentos financeiros sem lançamento (colaboradores 24, 40 e 59; os outros 4 já têm fechamento), 1 divergência de data da MP do colaborador 24 e 1 PDI em andamento do colaborador 40; somente leitura. Depois do encerramento do PDI (ver `pdi_encerramento_PUBLICACAO.md`) passam a ser 4.
 3. **Colaboradores**: nenhum desligado aparece como ativo; Marcelo/Ítalo ativos.
 4. **MPs / Aprovadas**: M-2026-009 e as MPs de efetivação inalteradas; M-2026-027 com a data original.
 5. **Desenvolvimento → TRN-2026-0001**: 60 inscritos; os 3 retirados constam como histórico.
