@@ -3,6 +3,7 @@ import { Search } from "lucide-react";
 import { EmptyState, tableStyles } from "../../components/ui";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { montarHistoricoColaborador } from "../../domain/historicoDesempenho";
+import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import { usePortalData } from "../../store/usePortalData";
 import type { Colaborador } from "../../types/domain";
 import { HistoricoDrawer } from "./HistoricoDrawer";
@@ -76,7 +77,7 @@ export function HistoricoTab() {
           (gestorFiltro === "Todos" || c.gestor === gestorFiltro) &&
           (setorFiltro === "Todos" || c.depto === setorFiltro) &&
           (cargoFiltro === "Todos" || c.cargo === cargoFiltro) &&
-          (statusFiltro === "Todos" || (statusFiltro === "Ativo" ? !c.desligado : c.desligado)) &&
+          (statusFiltro === "Todos" || (statusFiltro === "Ativo" ? estaAtivoHoje(c, "acesso") : !estaAtivoHoje(c, "acesso"))) &&
           (nomesComFichaNoCiclo === null || nomesComFichaNoCiclo.has(c.nome)),
       ),
     [colaboradoresParaHistorico, busca, gestorFiltro, setorFiltro, cargoFiltro, statusFiltro, nomesComFichaNoCiclo],

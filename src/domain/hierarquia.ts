@@ -1,4 +1,5 @@
 import { hojeIso, mesesCompletos } from "./dates.js";
+import { estaAtivoHoje } from "./situacaoFuncional.js";
 import type { CargoCustom, Colaborador, Conta, Perfil } from "../types/domain.js";
 
 const DIACRITICS = new RegExp("[" + String.fromCharCode(0x0300) + "-" + String.fromCharCode(0x036f) + "]", "g");
@@ -77,10 +78,12 @@ export function perfilOf(colaborador: Colaborador, gestoresImediatos: Set<string
  * (tela /acessos) e qual perfil a conta assume ao logar.
  */
 export function buildAccess(colaboradores: Colaborador[]): Conta[] {
+  // Inclui a coluna `gestor` de desligados, de propósito: um gestor cujo único liderado saiu continua sendo gestor (precisa abrir a MP de
+  // substituição). Perfil de gestão é função, não depende de ter equipe ativa hoje.
   const gestoresImediatos = new Set(colaboradores.map((c) => c.gestor));
 
   return colaboradores
-    .filter((c) => !c.desligado)
+    .filter((c) => estaAtivoHoje(c, "acesso"))
     .filter((c) => {
       const perfil = perfilOf(c, gestoresImediatos);
       return perfil === "RH" || perfil === "Diretoria" || perfil === "Gestor";
@@ -106,11 +109,13 @@ export function buildAccess(colaboradores: Colaborador[]): Conta[] {
  * "Acessos AVD" em GestaoDesempenhoPage.tsx.
  */
 export function buildAccessAvd(colaboradores: Colaborador[]): Conta[] {
+  // Inclui a coluna `gestor` de desligados, de propósito: um gestor cujo único liderado saiu continua sendo gestor (precisa abrir a MP de
+  // substituição). Perfil de gestão é função, não depende de ter equipe ativa hoje.
   const gestoresImediatos = new Set(colaboradores.map((c) => c.gestor));
   const hoje = hojeIso();
 
   return colaboradores
-    .filter((c) => !c.desligado)
+    .filter((c) => estaAtivoHoje(c, "acesso"))
     .filter((c) => perfilOf(c, gestoresImediatos) === "Colaborador")
     .filter((c) => mesesCompletos(c.admissaoIso, hoje) >= 6)
     .map((c) => ({
@@ -131,9 +136,14 @@ export function buildAccessAvd(colaboradores: Colaborador[]): Conta[] {
  * comum, um departamento por gestor, sempre resolve sem ambiguidade).
  */
 export function gestorDoDepartamento(colaboradores: Colaborador[], depto: string, cargosCustom: CargoCustom[] = []): string | null {
+  // Só conta quem está ATIVO no departamento, e só elege como gestor quem também está ativo (um desligado não "lidera" o depto).
+  // Departamento sem nenhuma pessoa ativa mantém o comportamento antigo (conta todos), para não ficar sem gestor de destino.
+  const doDepto = colaboradores.filter((c) => c.depto === depto);
+  const ativosDoDepto = doDepto.filter((c) => estaAtivoHoje(c, "acesso"));
+  const base = ativosDoDepto.length > 0 ? ativosDoDepto : doDepto;
   const contagem = new Map<string, number>();
-  colaboradores.forEach((c) => {
-    if (c.depto !== depto || !c.gestor) return;
+  base.forEach((c) => {
+    if (!c.gestor || gestorDesligado(colaboradores, c.gestor)) return;
     contagem.set(c.gestor, (contagem.get(c.gestor) || 0) + 1);
   });
   let melhor: string | null = null;
@@ -162,7 +172,11 @@ export function gestorDoDepartamento(colaboradores: Colaborador[], depto: string
  * (ver validarForm em domain/formMovimentacao.ts). */
 export function ehGestorDoDepartamento(colaboradores: Colaborador[], depto: string, nome: string, cargosCustom: CargoCustom[] = []): boolean {
   if (!nome) return false;
-  if (colaboradores.some((c) => c.depto === depto && c.gestor === nome)) return true;
+  if (gestorDesligado(colaboradores, nome)) return false;
+  const doDepto = colaboradores.filter((c) => c.depto === depto);
+  const ativosDoDepto = doDepto.filter((c) => estaAtivoHoje(c, "acesso"));
+  // quem lidera pelo menos 1 pessoa ATIVA do depto; depto sem ativos mantém a regra antiga
+  if ((ativosDoDepto.length > 0 ? ativosDoDepto : doDepto).some((c) => c.gestor === nome)) return true;
   return cargosCustom.some((c) => c.depto === depto && c.gestor === nome);
 }
 
@@ -175,6 +189,28 @@ export function ehGestorDoDepartamento(colaboradores: Colaborador[], depto: stri
 export function cargoSobLiderancaDe(colaboradores: Colaborador[], cargoNome: string, scopeSet: Set<string> | null): boolean {
   if (!scopeSet) return false;
   return colaboradores.some((c) => c.cargo === cargoNome && scopeSet.has(c.nome));
+}
+
+/** `nome` consta no cadastro, mas só como DESLIGADO (nenhum registro ativo com esse nome). Nome que não está no cadastro não é "desligado". */
+export function gestorDesligado(colaboradores: Colaborador[], nome: string): boolean {
+  const registros = colaboradores.filter((c) => c.nome === nome);
+  return registros.length > 0 && !registros.some((c) => estaAtivoHoje(c, "acesso"));
+}
+
+/** Gestor imediato ATIVO de `colab`: se o gestor cadastrado já saiu, sobe a árvore até o primeiro ancestral ativo (sem laços).
+ * Gestor que não está no cadastro é mantido como está (não dá para julgar). `null` se ninguém ativo for encontrado. Só para ITENS NOVOS
+ * (nova MP, novo ciclo): nunca reescreve o que já foi registrado. */
+export function gestorAtivoDe(colaboradores: Colaborador[], colab: Colaborador | undefined): string | null {
+  if (!colab) return null;
+  const visitados = new Set<string>([colab.nome]);
+  let g = colab.gestor;
+  while (g && !visitados.has(g)) {
+    visitados.add(g);
+    const registros = colaboradores.filter((c) => c.nome === g);
+    if (registros.length === 0 || registros.some((c) => estaAtivoHoje(c, "acesso"))) return g;
+    g = registros[0].gestor;
+  }
+  return null;
 }
 
 /** Walks the manager tree to find every employee reporting up to `nome`, directly or transitively. */

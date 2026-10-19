@@ -3,6 +3,7 @@ import { Sparkles } from "lucide-react";
 import { Button, Card, FilterChips } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import { usePortalStore } from "../../store/PortalStoreContext";
+import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import { useDesenvolvimento } from "./contexto";
 import { Carregando, Erro, EstadoVazio } from "./componentes";
 import { plural } from "./lntRotulos";
@@ -38,7 +39,7 @@ export function SugestoesPdiAba() {
   const [erroAcao, setErroAcao] = useState<string | null>(null);
 
   // Departamento pelo cadastro oficial (colaboradores já carregados pelo PeopleFlow).
-  const deptoPorNome = useMemo(() => new Map(state.colaboradores.filter((c) => !c.desligado).map((c) => [c.nome, c.depto])), [state.colaboradores]);
+  const deptoPorNome = useMemo(() => new Map(state.colaboradores.filter((c) => estaAtivoHoje(c, "acesso")).map((c) => [c.nome, c.depto])), [state.colaboradores]);
   // A Necessidade exige vínculo por id: nome ausente ou repetido (homônimo) não permite confirmar.
   // Pessoa de nome único → id do cadastro (chave estável das contagens). Nome repetido não entra: o item usa o id do próprio PDI.
   const idPorNomeUnico = useMemo(() => {

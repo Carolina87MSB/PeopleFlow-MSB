@@ -2,6 +2,7 @@
 // dependência de UI/Supabase. Ver README > "Gestão de Desempenho" para as
 // regras de negócio por trás de cada fórmula.
 
+import { hojeBrasilia, situacaoFuncionalEm } from "./situacaoFuncional";
 import { norm } from "./hierarquia";
 import type {
   AvaliacaoDesempenho,
@@ -282,8 +283,14 @@ export function validarConfigAvaliacaoDesempenho(
 export function elegivelParaCicloAvaliacaoDesempenho(
   colaborador: Colaborador,
   dataCorteAdmissaoIso: string,
+  /** Data de referência do ciclo (hoje, na abertura). Desligamento com data futura continua elegível até a data. */
+  referenciaIso: string = hojeBrasilia(),
 ): { elegivel: boolean; motivo?: string } {
-  if (colaborador.desligado) return { elegivel: false, motivo: "Colaborador desligado" };
+  // Regra central de situação funcional (escopo operacional): desligado só deixa de ser elegível a partir da data efetiva; afiliada
+  // nunca é elegível (não é colaboradora da MSB). A admissão continua sendo checada pela data de corte do ciclo, mais abaixo.
+  const situacao = situacaoFuncionalEm(colaborador, referenciaIso, "operacional", referenciaIso).situacao;
+  if (situacao === "desligado") return { elegivel: false, motivo: "Colaborador desligado" };
+  if (situacao === "fora_do_quadro") return { elegivel: false, motivo: "Empresa afiliada — não é colaborador(a) da MSB" };
 
   // Regra da RH, 2026-09: vínculo PJ não participa de ciclo de AVD — vale só
   // pra ciclos abertos a partir de agora (fichas de PJ já geradas em ciclos

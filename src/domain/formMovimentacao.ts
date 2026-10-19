@@ -1,5 +1,5 @@
 import { formatarDataAtual, formatarDataIso, formatarHoraAtual } from "./dates";
-import { ehGestorDoDepartamento, gestorDoDepartamento } from "./hierarquia";
+import { ehGestorDoDepartamento, gestorDoDepartamento, gestorAtivoDe } from "./hierarquia";
 import { calcularPercentual, montarEtapas, nextId } from "./workflow";
 import type {
   CargoCustom,
@@ -197,7 +197,8 @@ export function construirMovimentacao(f: NovaMovimentacaoForm, ctx: FormContext)
   // `me` É o gestor do departamento de destino, então ele mesmo vira o
   // aprovador dessa etapa (ver montarEtapas() em workflow.ts — a etapa
   // continua existindo, só muda quem a resolve).
-  let solic = colab ? colab.gestor : "A definir";
+  // Gestor solicitante = gestor imediato ATIVO (se o cadastrado já saiu, sobe a árvore): a etapa nunca nasce atribuída a um desligado.
+  let solic = colab ? (gestorAtivoDe(colaboradores, colab) ?? colab.gestor) : "A definir";
 
   if (f.tipo === "PRO") {
     if (f.proMudaDepto === "Sim") {

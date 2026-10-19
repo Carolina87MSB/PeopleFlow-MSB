@@ -9,6 +9,7 @@ import { buildAccess, descendants } from "../../src/domain/hierarquia.js";
 import { tempoDeEmpresa } from "../../src/domain/dates.js";
 import type { Colaborador } from "../../src/types/domain.js";
 
+import { COLUNAS_SITUACAO, emailDeColaboradorDesligado } from "./situacaoColaboradores.js";
 const url = process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -178,5 +179,13 @@ export async function requireAuth(authHeader: string | string[] | undefined): Pr
   if (userError || !userData.user?.email) {
     return { ok: false, status: 401, error: "Sessão inválida ou expirada." };
   }
-  return { ok: true, email: userData.user.email.toLowerCase() };
+  const email = userData.user.email.toLowerCase();
+  // Conta de quem já saiu da empresa: o cadastro prova que o e-mail é de colaborador(a) desligado(a) e ninguém ativo o usa → recusa.
+  // E-mail que não bate com ninguém do cadastro não é bloqueado. Não exclui nem desativa o usuário no Supabase Auth (reversível).
+  const { data: linhas, error: linhasError } = await supabaseAdmin.from("colaboradores").select(`nome, ${COLUNAS_SITUACAO}`);
+  if (linhasError) return { ok: false, status: 500, error: linhasError.message };
+  if (emailDeColaboradorDesligado(email, (linhas ?? []) as { nome: string }[])) {
+    return { ok: false, status: 403, error: "Conta de colaborador(a) desligado(a): sem acesso." };
+  }
+  return { ok: true, email };
 }

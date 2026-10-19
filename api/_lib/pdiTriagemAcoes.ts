@@ -30,6 +30,7 @@
 import { createHash } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import type { ContaDev } from "./desenvolvimentoAcoes.js";
+import { COLUNAS_SITUACAO, linhaAtiva } from "./situacaoColaboradores.js";
 import {
   MOTIVO_PADRAO_MANTER_NO_PDI,
   VERSAO_REGRA_LOCAL,
@@ -412,13 +413,17 @@ export function criarTriagemPdi(d: DepsTriagemPdi) {
     const { data: pdis, error: pErro } = await supabaseAdmin.from("peopleflow_pdi").select("id, colaborador_nome, ciclo").limit(5000);
     if (pErro) erroBanco(pErro, "PDI");
     const pdiPorId = new Map(((pdis ?? []) as CabecalhoPdi[]).map((p) => [p.id, p]));
+    // PDI de quem já saiu da empresa fica como histórico: não gera sugestão nem necessidade nova (o plano NÃO é concluído nem alterado).
+    const { data: pessoas, error: cErro } = await supabaseAdmin.from("colaboradores").select(`nome, ${COLUNAS_SITUACAO}`);
+    if (cErro) erroBanco(cErro, "Colaboradores");
+    const nomesAtivos = new Set((pessoas ?? []).filter((c) => linhaAtiva(c)).map((c) => String(c.nome)));
 
     const plano: { ctx: ContextoItem; acoes: AcaoPdi[] }[] = [];
     for (const item of (itens ?? []) as ItemPdi[]) {
       const todas = porItem.get(item.id) ?? [];
       const livres = todas.filter((a) => acaoEmAberto(a.status, a.descricao) && !indisp.has(a.id));
       const pdi = pdiPorId.get(item.pdi_id);
-      if (livres.length > 0 && pdi) plano.push({ ctx: { item, pdi, acoes: todas }, acoes: livres });
+      if (livres.length > 0 && pdi && nomesAtivos.has(pdi.colaborador_nome)) plano.push({ ctx: { item, pdi, acoes: todas }, acoes: livres });
     }
     const residuos = { incompletas_recolhidas: incompletas.recolhidas, incompletas_pendentes: incompletas.pendentes };
     if (plano.length === 0) return { interpretacao_id: null, itens: 0, sugestoes: 0, auditoria: "ok" as EstadoAuditoria, ...residuos };
@@ -475,8 +480,9 @@ export function criarTriagemPdi(d: DepsTriagemPdi) {
     // Colaborador: confere quando o PDI ainda permite identificá-lo de forma única (se o item saiu do PDI, a ligação por ids basta).
     const ctx = await lerContextoItem(sug.pdi_item_id).catch(() => null);
     if (ctx) {
-      const { data: pessoas, error: pErro } = await supabaseAdmin.from("colaboradores").select("id").eq("nome", ctx.pdi.colaborador_nome).eq("desligado", false);
+      const { data: candidatas, error: pErro } = await supabaseAdmin.from("colaboradores").select(`id, ${COLUNAS_SITUACAO}`).eq("nome", ctx.pdi.colaborador_nome);
       if (pErro) erroBanco(pErro, "Colaborador");
+      const pessoas = (candidatas ?? []).filter((x) => linhaAtiva(x));
       if (pessoas && pessoas.length === 1 && pessoas[0].id !== nec.colaborador_id) throw erro(409, "A necessidade já criada é de outro colaborador. Não é seguro concluir automaticamente: peça apoio técnico.");
     }
     const textoFinal = String(nec.descricao);
@@ -545,8 +551,9 @@ export function criarTriagemPdi(d: DepsTriagemPdi) {
     const principal = escolherAcaoPrincipal(naPdi);
 
     // O PDI identifica a pessoa por nome; aqui o vínculo passa a ser por id (homônimo → não vincula).
-    const { data: pessoas, error: pErro } = await supabaseAdmin.from("colaboradores").select("id").eq("nome", ctx.pdi.colaborador_nome).eq("desligado", false);
+    const { data: candidatas, error: pErro } = await supabaseAdmin.from("colaboradores").select(`id, ${COLUNAS_SITUACAO}`).eq("nome", ctx.pdi.colaborador_nome);
     if (pErro) erroBanco(pErro, "Colaborador");
+    const pessoas = (candidatas ?? []).filter((x) => linhaAtiva(x));
     if (!pessoas || pessoas.length !== 1) throw erro(409, "Não foi possível identificar o colaborador do PDI de forma única.");
     const colab = await lerColaboradorParaNecessidade(pessoas[0].id as number);
 

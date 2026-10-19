@@ -28,6 +28,7 @@ export const initialPortalState: PortalState = {
   reajustesSalariais: [],
   feedbacks: [],
   vagas: [],
+  rescisoesHistorico: [],
 };
 
 export function portalReducer(state: PortalState, action: PortalAction): PortalState {
@@ -60,6 +61,7 @@ export function portalReducer(state: PortalState, action: PortalAction): PortalS
         reajustesSalariais: action.reajustesSalariais,
         feedbacks: action.feedbacks,
         vagas: action.vagas,
+        rescisoesHistorico: action.rescisoesHistorico,
       };
 
     case "ADICIONAR_COMPETENCIA_CARGO":

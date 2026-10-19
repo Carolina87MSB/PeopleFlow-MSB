@@ -143,18 +143,20 @@ export async function executarCronExperiencia(
 ): Promise<ResumoCronExperiencia> {
   const supabase = client(deps);
   const [colabs, avals, disp] = await Promise.all([
-    supabase.from("colaboradores").select("nome, vinculo, gestor, admissao, desligado"),
+    supabase.from("colaboradores").select("nome, vinculo, gestor, admissao, desligado, data_desligamento, empresa_afiliada"),
     supabase.from("peopleflow_avaliacoes_experiencia").select("colaborador_nome, etapa"),
     supabase.from("peopleflow_avaliacoes_experiencia_dispensas").select("colaborador_nome"),
   ]);
   for (const r of [colabs, avals, disp]) if (r.error) throw new Error(r.error.message);
 
-  const colaboradores = (colabs.data ?? []).map((c: { nome: string; vinculo: string | null; gestor: string | null; admissao: string | null; desligado: boolean | null }) => ({
+  const colaboradores = (colabs.data ?? []).map((c: { nome: string; vinculo: string | null; gestor: string | null; admissao: string | null; desligado: boolean | null; data_desligamento?: string | null; empresa_afiliada?: boolean | null }) => ({
     nome: c.nome,
     vinculo: c.vinculo ?? "—",
     gestor: c.gestor ?? "",
     admissaoIso: c.admissao ?? "",
     desligado: c.desligado ?? false,
+    dataDesligamento: c.data_desligamento ?? "",
+    empresaAfiliada: c.empresa_afiliada ?? false,
   }));
   const avaliacoes = (avals.data ?? []).map((a: { colaborador_nome: string; etapa: string }) => ({
     colaboradorNome: a.colaborador_nome,

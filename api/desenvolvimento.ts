@@ -18,12 +18,14 @@
 // Nunca escreve em tabelas existentes do PeopleFlow.
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { supabaseAdmin } from "./_lib/adminAuth.js";
+import { requireRH, supabaseAdmin } from "./_lib/adminAuth.js";
 import { ehAcaoDeGravacao, ehAcaoDePresencaQr, executarAcao, executarLeituraDC, executarPresencaQr } from "./_lib/desenvolvimentoAcoes.js";
 import { buildAccess, descendants, emailOf } from "../src/domain/hierarquia.js";
 import { tempoDeEmpresa } from "../src/domain/dates.js";
 import type { Colaborador } from "../src/types/domain.js";
 
+import { linhaAtiva } from "./_lib/situacaoColaboradores.js";
+import { pendenciasDesenvolvimentoDeDesligados } from "./_lib/pendenciasDesligados.js";
 interface ColaboradorRow {
   id: number;
   nome: string;
@@ -119,7 +121,7 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
   const linhas = rows as ColaboradorRow[];
   const colaboradores = linhas.map(toColaborador);
   const contaPrincipal = buildAccess(colaboradores).find((a) => a.email === email);
-  const ativos = linhas.filter((r) => !r.desligado);
+  const ativos = linhas.filter((r) => linhaAtiva(r));
 
   // RH e Gestor: regras do PeopleFlow. Demais perfis (Colaborador/Diretoria):
   // perfil "Responsavel" — SOMENTE Gestão de Treinamentos — para quem foi
@@ -160,7 +162,7 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
   }
 
   // O PeopleFlow identifica pessoas por nome; aqui o vínculo passa a ser por id.
-  const minhas = linhas.filter((r) => r.nome === nomeConta && !r.desligado);
+  const minhas = linhas.filter((r) => r.nome === nomeConta && linhaAtiva(r));
   if (minhas.length !== 1) {
     res.status(409).json({ error: "Não foi possível identificar o colaborador desta conta de forma única. Fale com o RH.", codigo: "identificacao_ambigua" });
     return;
@@ -258,6 +260,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Descrição de Cargo: leitura das habilidades técnicas — qualquer conta do PeopleFlow (como a própria DC).
     if (acao === "dc_habilidades_listar" && req.method === "POST") {
       await executarLeituraDC(req, res);
+      return;
+    }
+    // Pendências de Desenvolvimento ligadas a colaboradores desligados — só RH (sessão do PeopleFlow, sem exigir a sessão do módulo); somente leitura.
+    if (acao === "pendencias_desligados" && req.method === "POST") {
+      const auth = await requireRH(req.headers.authorization);
+      if (!auth.ok) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      res.status(200).json({ ok: true, dados: await pendenciasDesenvolvimentoDeDesligados(supabaseAdmin) });
       return;
     }
     // Página /participar/:token — qualquer conta do PeopleFlow, sem sessão do módulo.

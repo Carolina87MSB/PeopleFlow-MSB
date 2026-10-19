@@ -1,4 +1,5 @@
 import type { CargoAgregado, CargoCustom, Colaborador, DepartamentoAgregado } from "../types/domain";
+import { estaAtivoHoje } from "./situacaoFuncional";
 
 export function agregarDepartamentos(colaboradores: Colaborador[]): DepartamentoAgregado[] {
   const map = new Map<string, DepartamentoAgregado>();
@@ -19,6 +20,15 @@ export function contarPorGestor(colaboradores: Colaborador[]): Map<string, numbe
   const gestorCount = new Map<string, number>();
   colaboradores.forEach((c) => gestorCount.set(c.gestor, (gestorCount.get(c.gestor) || 0) + 1));
   return gestorCount;
+}
+
+/** Gestores que podem ser escolhidos em formulários (admissão, novo cargo…): nomes que aparecem na coluna `gestor` de alguém — mesmo de
+ * pessoas já desligadas, pois quem perdeu o único liderado continua gestor — EXCETO quem consta no cadastro apenas como desligado. */
+export function gestoresSelecionaveis(colaboradores: Colaborador[]): string[] {
+  const desligados = new Set<string>();
+  const ativos = new Set<string>();
+  colaboradores.forEach((c) => (estaAtivoHoje(c, "acesso") ? ativos : desligados).add(c.nome));
+  return [...contarPorGestor(colaboradores).keys()].filter((n) => n && (ativos.has(n) || !desligados.has(n))).sort();
 }
 
 export function agregarCargos(colaboradores: Colaborador[], cargosCustom: CargoCustom[] = []): CargoAgregado[] {

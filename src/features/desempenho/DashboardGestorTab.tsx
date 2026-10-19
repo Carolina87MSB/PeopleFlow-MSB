@@ -12,7 +12,8 @@ import {
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { baixarArquivo, gerarCsv, type SecaoCsv } from "../../lib/exportacaoCsv";
 import { usePortalData } from "../../store/usePortalData";
-import type { FiltrosDashboard } from "../../domain/dashboardDesempenho";
+import { populacaoDashboard, type FiltrosDashboard } from "../../domain/dashboardDesempenho";
+import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import type { StatusAvaliacaoDesempenho, StatusPdi } from "../../types/domain";
 import { Matriz9BoxDistribuicao } from "./Matriz9BoxDistribuicao";
 import { RankingLista } from "./RankingLista";
@@ -48,7 +49,12 @@ export function DashboardGestorTab() {
   // de gestor depois do 2º Ciclo e sumiam da visão de Tainara, que foi quem
   // realmente as avaliou).
   const colaboradoresEquipe = useMemo(
-    () => colaboradoresParaMatriz9Box.filter((c) => !c.desligado),
+    () => colaboradoresParaMatriz9Box.filter((c) => estaAtivoHoje(c, "acesso")),
+    [colaboradoresParaMatriz9Box],
+  );
+  // Quem já saiu mas foi avaliado por este gestor mantém no dashboard o que foi CONCLUÍDO (histórico preservado).
+  const nomesDesligadosEquipe = useMemo(
+    () => new Set(colaboradoresParaMatriz9Box.filter((c) => !estaAtivoHoje(c, "acesso")).map((c) => c.nome)),
     [colaboradoresParaMatriz9Box],
   );
 
@@ -63,14 +69,17 @@ export function DashboardGestorTab() {
 
   const nomesPopulacao = useMemo(() => new Set(colaboradoresEquipe.map((c) => c.nome)), [colaboradoresEquipe]);
   const fichasPopulacao = useMemo(
-    () => avaliacoesDesempenho.filter((f) => nomesPopulacao.has(f.colaboradorNome)),
-    [avaliacoesDesempenho, nomesPopulacao],
+    () => populacaoDashboard(avaliacoesDesempenho, nomesPopulacao, nomesDesligadosEquipe, (f) => f.status === "Concluída"),
+    [avaliacoesDesempenho, nomesPopulacao, nomesDesligadosEquipe],
   );
   const potencialPopulacao = useMemo(
-    () => avaliacoesPotencial.filter((a) => nomesPopulacao.has(a.colaboradorNome)),
-    [avaliacoesPotencial, nomesPopulacao],
+    () => populacaoDashboard(avaliacoesPotencial, nomesPopulacao, nomesDesligadosEquipe, (a) => a.status === "Concluída"),
+    [avaliacoesPotencial, nomesPopulacao, nomesDesligadosEquipe],
   );
-  const pdiPopulacao = useMemo(() => pdi.filter((p) => nomesPopulacao.has(p.colaboradorNome)), [pdi, nomesPopulacao]);
+  const pdiPopulacao = useMemo(
+    () => populacaoDashboard(pdi, nomesPopulacao, nomesDesligadosEquipe, (p) => p.status === "Concluído"),
+    [pdi, nomesPopulacao, nomesDesligadosEquipe],
+  );
 
   // Sem filtro de gestor aqui — a população já vem restrita à própria
   // equipe (colaboradoresEquipe), então um sub-filtro por gestor seria
@@ -112,7 +121,7 @@ export function DashboardGestorTab() {
   const devolutivasPendentes = fichasHomologadas.filter((f) => !f.devolutivaRealizada).length;
 
   const pdisFiltrados = useMemo(() => {
-    const colaboradoresPorNome = new Map(colaboradoresEquipe.map((c) => [c.nome, c]));
+    const colaboradoresPorNome = new Map([...colaboradoresParaMatriz9Box.filter((c) => !nomesPopulacao.has(c.nome)), ...colaboradoresEquipe].map((c) => [c.nome, c]));
     return pdiPopulacao.filter((p) => {
       const colaborador = colaboradoresPorNome.get(p.colaboradorNome);
       if (!colaborador) return false;
@@ -121,7 +130,7 @@ export function DashboardGestorTab() {
         (cargoFiltro === "Todos" || colaborador.cargo === cargoFiltro)
       );
     });
-  }, [pdiPopulacao, colaboradoresEquipe, departamentoFiltro, cargoFiltro]);
+  }, [pdiPopulacao, colaboradoresEquipe, colaboradoresParaMatriz9Box, nomesPopulacao, departamentoFiltro, cargoFiltro]);
   const pdisPorStatus: Record<StatusPdi, number> = { "Não iniciado": 0, "Em andamento": 0, Concluído: 0 };
   for (const p of pdisFiltrados) pdisPorStatus[p.status] += 1;
 

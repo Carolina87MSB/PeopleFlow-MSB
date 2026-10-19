@@ -1,3 +1,4 @@
+import type { RescisaoHistorica } from "../domain/rescisoesHistorico";
 import type {
   AvaliacaoDesempenho,
   AvaliacaoExperiencia,
@@ -52,4 +53,6 @@ export interface PortalState {
   reajustesSalariais: ReajusteSalarial[];
   feedbacks: Feedback[];
   vagas: Vaga[];
+  /** Histórico de rescisões da folha (indicadores do Dashboard Executivo); vazio se a migration ainda não foi aplicada. */
+  rescisoesHistorico: RescisaoHistorica[];
 }

@@ -13,6 +13,17 @@ import type {
   StatusAvaliacaoDesempenho,
 } from "../types/domain";
 
+/** População de um dashboard de desempenho: quem está ATIVO hoje + quem já saiu mas tem o item CONCLUÍDO (o histórico de resultados não
+ * some porque a pessoa foi desligada). Item PENDENTE de quem saiu fica de fora: não é pendência real de ninguém. */
+export function populacaoDashboard<T extends { colaboradorNome: string }>(
+  itens: T[],
+  nomesAtivos: Set<string>,
+  nomesDesligados: Set<string>,
+  concluido: (item: T) => boolean,
+): T[] {
+  return itens.filter((i) => nomesAtivos.has(i.colaboradorNome) || (nomesDesligados.has(i.colaboradorNome) && concluido(i)));
+}
+
 export interface FiltrosDashboard {
   /** "" = "Todos" — só relevante pra evolucaoPorCiclo(), que ignora este filtro por definição; os outros 2 blocos de "foto do momento" (média/distribuição/Matriz 9 Box) sempre recebem um ciclo real (o `<select>` de ciclo dos dashboards nunca oferece "Todos", pra não contar a mesma pessoa 2x). */
   cicloId: string;

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { Button, Modal } from "../../components/ui";
-import { contarPorGestor } from "../../domain/agregados";
+import { gestoresSelecionaveis } from "../../domain/agregados";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import styles from "./NovoCargoModal.module.css";
@@ -37,7 +37,7 @@ export function NovoCargoModal({ onClose }: NovoCargoModalProps) {
     () => [...new Set([...colaboradores.map((c) => c.depto), ...state.cargosCustom.map((c) => c.depto)])].sort(),
     [colaboradores, state.cargosCustom],
   );
-  const gestores = useMemo(() => [...contarPorGestor(colaboradores).keys()].sort(), [colaboradores]);
+  const gestores = useMemo(() => gestoresSelecionaveis(colaboradores), [colaboradores]);
 
   function abrirNovoDepto() {
     setModoNovoDepto(true);

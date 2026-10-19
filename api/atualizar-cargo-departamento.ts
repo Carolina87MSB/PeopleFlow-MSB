@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireRH, supabaseAdmin } from "./_lib/adminAuth.js";
 
+import { alvoPorNome } from "./_lib/situacaoColaboradores.js";
 /** Sincroniza cargo/departamento/gestor em `colaboradores` quando uma movimentação
  * de Promoção, Transferência ou Mudança de Função é concluída — RH-only, mesma
  * service_role key das demais functions administrativas (RLS não libera
@@ -38,7 +39,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const { error, data } = await supabaseAdmin.from("colaboradores").update(patch).eq("nome", nome).select("nome");
+    const alvo = await alvoPorNome(supabaseAdmin, nome);
+    if (!alvo.ok) {
+      res.status(alvo.status).json({ error: alvo.error });
+      return;
+    }
+    const { error, data } = await supabaseAdmin.from("colaboradores").update(patch).in("id", alvo.ids).select("nome");
     if (error) {
       res.status(500).json({ error: error.message });
       return;

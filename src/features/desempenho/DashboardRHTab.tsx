@@ -15,7 +15,8 @@ import {
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { baixarArquivo, gerarCsv, type SecaoCsv } from "../../lib/exportacaoCsv";
 import { usePortalData } from "../../store/usePortalData";
-import type { FiltrosDashboard } from "../../domain/dashboardDesempenho";
+import { populacaoDashboard, type FiltrosDashboard } from "../../domain/dashboardDesempenho";
+import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import type { StatusAvaliacaoDesempenho, StatusPdi } from "../../types/domain";
 import { Matriz9BoxDistribuicao } from "./Matriz9BoxDistribuicao";
 import { RankingLista } from "./RankingLista";
@@ -29,6 +30,7 @@ const STATUS_AVALIACAO: (StatusAvaliacaoDesempenho | "Todos")[] = ["Todos", "Nã
 export function DashboardRHTab() {
   const {
     colaboradoresListagem,
+    colaboradores: todosOsColaboradores,
     avaliacoesDesempenho,
     avaliacoesPotencial,
     ciclosAvaliacaoDesempenho,
@@ -56,15 +58,20 @@ export function DashboardRHTab() {
   );
 
   const nomesPopulacao = useMemo(() => new Set(colaboradoresListagem.map((c) => c.nome)), [colaboradoresListagem]);
+  // Quem já saiu (e não é afiliada) mantém no dashboard o que foi CONCLUÍDO — o histórico de desempenho não muda porque a situação atual é "Desligado".
+  const nomesDesligados = useMemo(
+    () => new Set(todosOsColaboradores.filter((c) => !estaAtivoHoje(c, "acesso")).map((c) => c.nome).filter((n) => !nomesPopulacao.has(n))),
+    [todosOsColaboradores, nomesPopulacao],
+  );
   const fichasPopulacao = useMemo(
-    () => avaliacoesDesempenho.filter((f) => nomesPopulacao.has(f.colaboradorNome)),
-    [avaliacoesDesempenho, nomesPopulacao],
+    () => populacaoDashboard(avaliacoesDesempenho, nomesPopulacao, nomesDesligados, (f) => f.status === "Concluída"),
+    [avaliacoesDesempenho, nomesPopulacao, nomesDesligados],
   );
   const potencialPopulacao = useMemo(
-    () => avaliacoesPotencial.filter((a) => nomesPopulacao.has(a.colaboradorNome)),
-    [avaliacoesPotencial, nomesPopulacao],
+    () => populacaoDashboard(avaliacoesPotencial, nomesPopulacao, nomesDesligados, (a) => a.status === "Concluída"),
+    [avaliacoesPotencial, nomesPopulacao, nomesDesligados],
   );
-  const pdiPopulacao = useMemo(() => pdi.filter((p) => nomesPopulacao.has(p.colaboradorNome)), [pdi, nomesPopulacao]);
+  const pdiPopulacao = useMemo(() => populacaoDashboard(pdi, nomesPopulacao, nomesDesligados, (p) => p.status === "Concluído"), [pdi, nomesPopulacao, nomesDesligados]);
 
   const filtros: FiltrosDashboard = useMemo(
     () => ({ cicloId, departamento: departamentoFiltro, gestor: gestorFiltro, cargo: cargoFiltro, statusAvaliacao: statusFiltro }),
@@ -125,7 +132,8 @@ export function DashboardRHTab() {
   const devolutivasPendentes = fichasHomologadas.filter((f) => !f.devolutivaRealizada).length;
 
   const pdisFiltrados = useMemo(() => {
-    const colaboradoresPorNome = new Map(colaboradoresListagem.map((c) => [c.nome, c]));
+    // ativos por último: em caso de nome repetido, o registro ativo prevalece sobre o desligado
+    const colaboradoresPorNome = new Map([...todosOsColaboradores.filter((c) => !nomesPopulacao.has(c.nome)), ...colaboradoresListagem].map((c) => [c.nome, c]));
     return pdiPopulacao.filter((p) => {
       const colaborador = colaboradoresPorNome.get(p.colaboradorNome);
       if (!colaborador) return false;
@@ -135,7 +143,7 @@ export function DashboardRHTab() {
         (cargoFiltro === "Todos" || colaborador.cargo === cargoFiltro)
       );
     });
-  }, [pdiPopulacao, colaboradoresListagem, departamentoFiltro, gestorFiltro, cargoFiltro]);
+  }, [pdiPopulacao, colaboradoresListagem, todosOsColaboradores, nomesPopulacao, departamentoFiltro, gestorFiltro, cargoFiltro]);
   const pdisPorStatus: Record<StatusPdi, number> = { "Não iniciado": 0, "Em andamento": 0, Concluído: 0 };
   for (const p of pdisFiltrados) pdisPorStatus[p.status] += 1;
 

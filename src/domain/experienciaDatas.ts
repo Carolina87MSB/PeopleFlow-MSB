@@ -6,6 +6,7 @@
 // avaliacaoExperiencia.ts e continuam exportados de lá (re-export) — nenhuma
 // tela mudou.
 
+import { estaAtivoHoje } from "./situacaoFuncional.js";
 import type { AvaliacaoExperiencia, Colaborador, DispensaAvaliacaoExperiencia, EtapaAvaliacaoExperiencia } from "../types/domain.js";
 
 /** Data (ISO "aaaa-mm-dd") em que uma etapa do contrato de experiência cai,
@@ -43,8 +44,12 @@ export function etapaConcluida(
  * dispensado (já avaliado fora do sistema antes da implantação do módulo).
  * Fonte ÚNICA dessa regra — pendenciasAvaliacaoExperiencia() e o aviso de
  * vencimento por e-mail usam esta mesma função. */
-export function foraDaExperiencia(c: Pick<Colaborador, "nome" | "vinculo" | "desligado">, dispensados: Set<string>): boolean {
-  return c.desligado || c.vinculo === "PJ" || dispensados.has(c.nome);
+export function foraDaExperiencia(
+  c: Pick<Colaborador, "nome" | "vinculo" | "desligado"> & Partial<Pick<Colaborador, "dataDesligamento" | "admissaoIso" | "empresaAfiliada">>,
+  dispensados: Set<string>,
+): boolean {
+  // "desligado" pela regra central (datas futuras continuam ativas até o dia; sem data = desligado)
+  return !estaAtivoHoje(c, "acesso") || c.vinculo === "PJ" || dispensados.has(c.nome);
 }
 
 /** Diferença em dias inteiros entre duas datas ISO "aaaa-mm-dd" (b − a), por
