@@ -410,9 +410,10 @@ export function criarTriagemPdi(d: DepsTriagemPdi) {
 
     const abertas = [...porItem.values()].flat().filter((a) => acaoEmAberto(a.status, a.descricao)).map((a) => a.id);
     const indisp = await acoesIndisponiveis(abertas);
-    const { data: pdis, error: pErro } = await supabaseAdmin.from("peopleflow_pdi").select("id, colaborador_nome, ciclo").limit(5000);
+    const { data: pdis, error: pErro } = await supabaseAdmin.from("peopleflow_pdi").select("id, colaborador_nome, ciclo, status").limit(5000);
     if (pErro) erroBanco(pErro, "PDI");
-    const pdiPorId = new Map(((pdis ?? []) as CabecalhoPdi[]).map((p) => [p.id, p]));
+    // PDI encerrado (ex.: por desligamento) é histórico imutável: nunca gera sugestão nem necessidade
+    const pdiPorId = new Map(((pdis ?? []) as (CabecalhoPdi & { status: string })[]).filter((p) => p.status !== "Encerrado").map((p) => [p.id, p]));
     // PDI de quem já saiu da empresa fica como histórico: não gera sugestão nem necessidade nova (o plano NÃO é concluído nem alterado).
     const { data: pessoas, error: cErro } = await supabaseAdmin.from("colaboradores").select(`nome, ${COLUNAS_SITUACAO}`);
     if (cErro) erroBanco(cErro, "Colaboradores");

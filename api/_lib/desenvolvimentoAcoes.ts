@@ -15,6 +15,7 @@ import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
+import { ACOES_PDI_ENCERRAMENTO } from "./pdiEncerramentoAcoes.js";
 import { criarTriagemPdi } from "./pdiTriagemAcoes.js";
 
 import { COLUNAS_SITUACAO, linhaAtiva } from "./situacaoColaboradores.js";
@@ -2271,6 +2272,8 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   eficacia_registrar: eficaciaRegistrar,
   // LNT (Fase 6 — núcleo): ações só do RH, em api/_lib/lntAcoes.ts.
   ...ACOES_LNT,
+  // PDI: encerramento por desligamento (RH) — api/_lib/pdiEncerramentoAcoes.ts.
+  ...ACOES_PDI_ENCERRAMENTO,
 };
 
 export function ehAcaoDeGravacao(acao: string): boolean {

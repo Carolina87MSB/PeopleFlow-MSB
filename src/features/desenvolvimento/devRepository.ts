@@ -780,7 +780,8 @@ export type AcaoGravacao =
   | "lnt_necessidade_nao_priorizar"
   | "lnt_necessidade_reconsiderar"
   | "lnt_ciclo_fechar"
-  | "lnt_ciclo_reabrir";
+  | "lnt_ciclo_reabrir"
+  | "pdi_encerrar";
 
 export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/desenvolvimento?acao=${acao}`, {

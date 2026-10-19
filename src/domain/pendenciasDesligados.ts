@@ -73,7 +73,7 @@ export function pendenciasFrontDeDesligados(d: DadosParaPendencias): PendenciaDe
 
   // ── PDI em andamento de quem saiu ──
   for (const p of d.pdi) {
-    if (p.status === "Concluído" || !desligados.has(p.colaboradorNome)) continue;
+    if (p.status === "Concluído" || p.status === "Encerrado" || !desligados.has(p.colaboradorNome)) continue;
     out.push({ modulo: "PDI", processo: `PDI ${p.ciclo || ""}`.trim(), colaborador: p.colaboradorNome, detalhe: `PDI "${p.status}" de colaborador(a) desligado(a).`, acaoRecomendada: "Decisão do RH: arquivar/encerrar o PDI ou mantê-lo apenas como histórico.", referencia: String(p.id) });
   }
 

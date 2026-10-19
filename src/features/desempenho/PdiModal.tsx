@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Paperclip, Plus, Trash2, X } from "lucide-react";
 import { Badge, Button, Modal } from "../../components/ui";
-import { gerarIdPdiAcao, gerarIdPdiItem, pdiPodeSerConcluido, statusPdiAoSalvar, sugerirObjetivoEAcoes } from "../../domain/pdi";
+import { gerarIdPdiAcao, gerarIdPdiItem, motivoSugeridoEncerramentoPdi, pdiPodeSerConcluido, pdiPodeSerEncerrado, statusPdiAoSalvar, sugerirObjetivoEAcoes } from "../../domain/pdi";
+import { estaAtivoHoje } from "../../domain/situacaoFuncional";
 import { formatarDataHora } from "../../domain/dates";
 import { getEvidenciaPdiAcaoSignedUrl, removerEvidenciaPdiAcao, uploadEvidenciaPdiAcao } from "../../repositories/pdiRepository";
 import { usePortalData } from "../../store/usePortalData";
@@ -89,20 +90,26 @@ function acaoVazia(itemId: string): PdiAcao {
  * acompanhamento de execução — ações propostas, status/observações/datas
  * de cada item, comentários gerais — nunca os itens estruturais acima. */
 export function PdiModal({ pdi, onClose }: PdiModalProps) {
-  const { colaboradores, competenciasComportamentais, kpisCargo, pdiBiblioteca, perfil, conta, podeEditarPdi, podeAtualizarExecucaoPdi, salvarPdi, reabrirPdi } =
+  const { colaboradores, competenciasComportamentais, kpisCargo, pdiBiblioteca, perfil, conta, podeEditarPdi, podeAtualizarExecucaoPdi, salvarPdi, reabrirPdi, encerrarPdiPorDesligamento } =
     usePortalData();
 
   const podeEditar = podeEditarPdi(pdi);
   const podeExecucao = podeAtualizarExecucaoPdi(pdi);
   const [rascunho, setRascunho] = useState<Pdi>(() => ({ ...pdi, itens: pdi.itens.map((i) => ({ ...i, acoes: i.acoes.map((a) => ({ ...a })) })) }));
   const [novaChave, setNovaChave] = useState("");
-  const [salvando, setSalvando] = useState<"salvar" | "concluir" | "reabrir" | null>(null);
+  const [salvando, setSalvando] = useState<"salvar" | "concluir" | "reabrir" | "encerrar" | null>(null);
+  const [encerrando, setEncerrando] = useState(false);
+  const [motivoEncerramento, setMotivoEncerramento] = useState("");
   // Itens cujo campo "Observações" foi aberto nesta sessão mesmo estando
   // vazio (clique em "Adicionar observação") — sem isso, a caixa de texto
   // sumiria de novo a cada re-render enquanto o usuário ainda não digitou nada.
   const [observacoesAbertas, setObservacoesAbertas] = useState<Set<string>>(new Set());
 
   const colaborador = colaboradores.find((c) => c.nome === pdi.colaboradorNome);
+  // "desligado" = o cadastro prova que saiu (nenhum registro ativo com este nome) — mesma regra central usada no servidor
+  const registrosDoNome = colaboradores.filter((c) => c.nome === pdi.colaboradorNome);
+  const colaboradorDesligado = registrosDoNome.length > 0 && !registrosDoNome.some((c) => estaAtivoHoje(c, "acesso"));
+  const dataDesligamento = registrosDoNome.find((c) => c.desligado)?.dataDesligamento ?? "";
   const competenciasDisponiveis = competenciasComportamentais.filter((c) => c.ativo && c.categoria !== "Lideranca");
   const kpisDisponiveis = colaborador ? kpisCargo.filter((k) => k.cargoNome === colaborador.cargo) : [];
 
@@ -198,7 +205,23 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
     if (result.ok) setRascunho({ ...result.pdi, itens: result.pdi.itens.map((i) => ({ ...i, acoes: i.acoes.map((a) => ({ ...a })) })) });
   }
 
+  function abrirEncerramento() {
+    setMotivoEncerramento(motivoSugeridoEncerramentoPdi(dataDesligamento));
+    setEncerrando(true);
+  }
+
+  async function handleEncerrar() {
+    setSalvando("encerrar");
+    const result = await encerrarPdiPorDesligamento(rascunho, motivoEncerramento.trim());
+    setSalvando(null);
+    if (result.ok) {
+      setEncerrando(false);
+      setRascunho({ ...result.pdi, itens: result.pdi.itens.map((i) => ({ ...i, acoes: i.acoes.map((a) => ({ ...a })) })) });
+    }
+  }
+
   const podeConcluir = podeEditar && rascunho.status !== "Concluído" && pdiPodeSerConcluido(rascunho);
+  const podeEncerrar = perfil === "RH" && colaboradorDesligado && pdiPodeSerEncerrado(rascunho);
 
   return (
     <Modal
@@ -212,9 +235,14 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
       onClose={onClose}
       width={680}
     >
-      {(rascunho.status === "Concluído" || !podeExecucao) && (
+      {(rascunho.status === "Concluído" || rascunho.status === "Encerrado" || !podeExecucao) && (
         <div className={styles.statusRow}>
-          {rascunho.status === "Concluído" ? (
+          {rascunho.status === "Encerrado" ? (
+            <span className={styles.trancada}>
+              Encerrado por {rascunho.encerradoPor || "—"} em {formatarDataHora(rascunho.encerradoEm)}. Motivo: {rascunho.encerradoMotivo || "—"}. Itens, ações e
+              histórico foram preservados; o plano não pode mais ser alterado.
+            </span>
+          ) : rascunho.status === "Concluído" ? (
             <span className={styles.trancada}>
               Concluído por {rascunho.concluidoPor || "—"} em {formatarDataHora(rascunho.concluidoEm)}.
             </span>
@@ -390,7 +418,31 @@ export function PdiModal({ pdi, onClose }: PdiModalProps) {
         <textarea className={styles.textarea} rows={2} value={rascunho.comentarios} onChange={(e) => setRascunho((r) => ({ ...r, comentarios: e.target.value }))} disabled={!podeExecucao} />
       </div>
 
+      {encerrando && podeEncerrar && (
+        <div className={styles.campo}>
+          <span className={styles.labelSimples}>Motivo do encerramento</span>
+          <textarea className={styles.textarea} rows={2} value={motivoEncerramento} maxLength={1000} onChange={(e) => setMotivoEncerramento(e.target.value)} disabled={salvando !== null} />
+          <span className={styles.explicacao}>
+            O PDI passa a "Encerrado" (não "Concluído"). Itens, ações, evidências e histórico são preservados — as ações não são concluídas nem canceladas — e o plano
+            deixa de aceitar alterações. Esta decisão não pode ser desfeita pela tela.
+          </span>
+          <div className={styles.edicaoAcoes}>
+            <Button variant="secondary" onClick={() => setEncerrando(false)} disabled={salvando !== null}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={handleEncerrar} disabled={salvando !== null || !motivoEncerramento.trim()}>
+              {salvando === "encerrar" ? "Encerrando..." : "Confirmar encerramento"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className={styles.edicaoAcoes}>
+        {podeEncerrar && !encerrando && (
+          <Button variant="danger" onClick={abrirEncerramento} disabled={salvando !== null}>
+            Encerrar por desligamento
+          </Button>
+        )}
         {perfil === "RH" && rascunho.status === "Concluído" && (
           <Button variant="danger" onClick={handleReabrir} disabled={salvando !== null}>
             {salvando === "reabrir" ? "Reabrindo..." : "Reabrir PDI"}

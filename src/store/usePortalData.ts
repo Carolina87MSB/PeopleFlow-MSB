@@ -52,7 +52,7 @@ import {
   encerrarCiclo as encerrarCicloNoSupabase,
 } from "../repositories/ciclosAvaliacaoDesempenhoRepository";
 import { registrarLogAvaliacaoDesempenho as registrarLogAvaliacaoDesempenhoNoSupabase } from "../repositories/logAvaliacaoDesempenhoRepository";
-import { criarPdi as criarPdiNoSupabase, salvarPdi as salvarPdiNoSupabase } from "../repositories/pdiRepository";
+import { criarPdi as criarPdiNoSupabase, encerrarPdiPorDesligamento as encerrarPdiNoServidor, salvarPdi as salvarPdiNoSupabase } from "../repositories/pdiRepository";
 import { atualizarFeedback as atualizarFeedbackNoSupabase, registrarFeedback as registrarFeedbackNoSupabase } from "../repositories/feedbacksRepository";
 import {
   excluirItemBiblioteca as excluirItemBibliotecaNoSupabase,
@@ -346,6 +346,8 @@ export interface PortalData {
   salvarPdi: (pdi: Pdi) => Promise<{ ok: true; pdi: Pdi } | { ok: false }>;
   /** RH-only — volta um PDI concluído pra "Em andamento", limpando concluidoPor/Em. */
   reabrirPdi: (pdi: Pdi) => Promise<{ ok: true; pdi: Pdi } | { ok: false }>;
+  /** RH-only — encerra o PDI de colaborador DESLIGADO (status "Encerrado", com motivo). Não conclui nem cancela ações; o plano fica imutável. */
+  encerrarPdiPorDesligamento: (pdi: Pdi, motivo: string) => Promise<{ ok: true; pdi: Pdi } | { ok: false }>;
   pdiBiblioteca: PdiBibliotecaItem[];
   salvarItemBibliotecaPdi: (item: PdiBibliotecaItem) => Promise<{ ok: true } | { ok: false }>;
   excluirItemBibliotecaPdi: (chave: string, tipoCompetencia: TipoCompetenciaPdi) => Promise<{ ok: true } | { ok: false }>;
@@ -699,6 +701,7 @@ export function usePortalData(): PortalData {
    * execução — ver `podeAtualizarExecucaoPdiFn`, logo abaixo. */
   const podeEditarPdiFn = useCallback(
     (pdi: Pdi) => {
+      if (pdi.status === "Encerrado") return false; // encerrado é imutável, até para o RH
       if (perfil === "RH") return true;
       if (pdi.status === "Concluído") return false;
       return pdi.gestorResponsavel === me;
@@ -726,6 +729,7 @@ export function usePortalData(): PortalData {
    * situação, não só pra esses três. */
   const podeAtualizarExecucaoPdiFn = useCallback(
     (pdi: Pdi) => {
+      if (pdi.status === "Encerrado") return false;
       if (podeEditarPdiFn(pdi)) return true;
       if (pdi.status === "Concluído") return false;
       return colaboradorPorNome.get(pdi.colaboradorNome)?.gestor === me;
@@ -2372,6 +2376,9 @@ export function usePortalData(): PortalData {
           comentarios: "",
           concluidoPor: "",
           concluidoEm: null,
+          encerradoPor: "",
+          encerradoEm: null,
+          encerradoMotivo: "",
           semCompetenciaDesenvolvimento: false,
           itens,
           criadoEm: agora,
@@ -2456,6 +2463,10 @@ export function usePortalData(): PortalData {
   const salvarPdiFn = useCallback(
     async (pdi: Pdi) => {
       const anterior = state.pdi.find((p) => p.id === pdi.id);
+      if (anterior?.status === "Encerrado" || pdi.status === "Encerrado") {
+        flash("PDI encerrado não pode ser alterado.");
+        return { ok: false as const };
+      }
       const concluindoAgora = pdi.status === "Concluído" && anterior?.status !== "Concluído";
       const atualizado: Pdi = {
         ...pdi,
@@ -2487,6 +2498,10 @@ export function usePortalData(): PortalData {
         flash("Só o RH pode reabrir um PDI.");
         return { ok: false as const };
       }
+      if (pdi.status === "Encerrado") {
+        flash("PDI encerrado não pode ser reaberto.");
+        return { ok: false as const };
+      }
       const reaberto: Pdi = { ...pdi, status: "Em andamento", concluidoPor: "", concluidoEm: null };
       try {
         const salvo = await salvarPdiNoSupabase(reaberto, pdi.updatedAt);
@@ -2496,6 +2511,28 @@ export function usePortalData(): PortalData {
         return { ok: true as const, pdi: salvo };
       } catch (err) {
         flash(err instanceof Error ? err.message : "Falha ao reabrir o PDI.");
+        return { ok: false as const };
+      }
+    },
+    [dispatch, me, flash, perfil],
+  );
+
+  const encerrarPdiPorDesligamentoFn = useCallback(
+    async (pdi: Pdi, motivo: string) => {
+      if (perfil !== "RH") {
+        flash("Só o RH pode encerrar um PDI.");
+        return { ok: false as const };
+      }
+      try {
+        const encerrado = await encerrarPdiNoServidor(pdi.id, motivo);
+        // só o cabeçalho muda; itens/ações/evidências do estado local são mantidos como estão
+        const atualizado: Pdi = { ...pdi, ...encerrado, itens: pdi.itens };
+        dispatch({ type: "ATUALIZAR_PDI", pdi: atualizado });
+        flash("PDI encerrado.");
+        void registrarLogAvaliacaoDesempenhoNoSupabase({ cicloId: atualizado.cicloId, avaliacaoId: atualizado.avaliacaoId, acao: "PDI_ENCERRADO", usuario: me });
+        return { ok: true as const, pdi: atualizado };
+      } catch (err) {
+        flash(err instanceof Error ? err.message : "Falha ao encerrar o PDI.");
         return { ok: false as const };
       }
     },
@@ -2891,6 +2928,7 @@ export function usePortalData(): PortalData {
     podeAtualizarExecucaoPdi: podeAtualizarExecucaoPdiFn,
     salvarPdi: salvarPdiFn,
     reabrirPdi: reabrirPdiFn,
+    encerrarPdiPorDesligamento: encerrarPdiPorDesligamentoFn,
     pdiBiblioteca: state.pdiBiblioteca,
     salvarItemBibliotecaPdi: salvarItemBibliotecaPdiFn,
     excluirItemBibliotecaPdi: excluirItemBibliotecaPdiFn,
