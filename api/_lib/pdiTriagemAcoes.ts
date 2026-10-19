@@ -413,13 +413,17 @@ export function criarTriagemPdi(d: DepsTriagemPdi) {
     const { data: pdis, error: pErro } = await supabaseAdmin.from("peopleflow_pdi").select("id, colaborador_nome, ciclo").limit(5000);
     if (pErro) erroBanco(pErro, "PDI");
     const pdiPorId = new Map(((pdis ?? []) as CabecalhoPdi[]).map((p) => [p.id, p]));
+    // PDI de quem já saiu da empresa fica como histórico: não gera sugestão nem necessidade nova (o plano NÃO é concluído nem alterado).
+    const { data: pessoas, error: cErro } = await supabaseAdmin.from("colaboradores").select(`nome, ${COLUNAS_SITUACAO}`);
+    if (cErro) erroBanco(cErro, "Colaboradores");
+    const nomesAtivos = new Set((pessoas ?? []).filter((c) => linhaAtiva(c)).map((c) => String(c.nome)));
 
     const plano: { ctx: ContextoItem; acoes: AcaoPdi[] }[] = [];
     for (const item of (itens ?? []) as ItemPdi[]) {
       const todas = porItem.get(item.id) ?? [];
       const livres = todas.filter((a) => acaoEmAberto(a.status, a.descricao) && !indisp.has(a.id));
       const pdi = pdiPorId.get(item.pdi_id);
-      if (livres.length > 0 && pdi) plano.push({ ctx: { item, pdi, acoes: todas }, acoes: livres });
+      if (livres.length > 0 && pdi && nomesAtivos.has(pdi.colaborador_nome)) plano.push({ ctx: { item, pdi, acoes: todas }, acoes: livres });
     }
     const residuos = { incompletas_recolhidas: incompletas.recolhidas, incompletas_pendentes: incompletas.pendentes };
     if (plano.length === 0) return { interpretacao_id: null, itens: 0, sugestoes: 0, auditoria: "ok" as EstadoAuditoria, ...residuos };

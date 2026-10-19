@@ -22,6 +22,7 @@ npm test            # todos os abaixo, em sequência
 | `npm run test:desligamentos-quadro` | Regra central (datas, afiliada, futuro, sem data) e indicadores de quadro com o histórico: headcount, admissões, desligamentos, rescisões contratuais, turnover e efetivações de estágio. |
 | `npm run test:desligamentos-modulos` | Acessos, seletores, hierarquia, AVD/potencial, dashboards de desempenho, e-mails, atualização por nome, relatório de pendências e proteção das MPs de efetivação. |
 | `npm run test:desligamentos-views` | Adoção da regra central na view de conformidade (guardada, idempotente, reversível). |
+| `npm run test:desligamentos-publicacao` | Scripts locais de publicação (`supabase/publicacao_desligamentos_*.local.sql`): backup, retirada da turma, revogação de acesso, reversões, validação final — réplica com dados fictícios; pulado se os arquivos locais não existirem. |
 
 Apoio em `pdi-triagem/`: `base.mjs` (réplica e dados de teste), `shim.mjs` (cliente estilo supabase-js sobre o PGlite),
 `hooks.mjs`/`register.mjs`/`stub-*.mjs` (carregam o código do servidor sem a sessão real do Supabase).

@@ -2,7 +2,7 @@
 // Nada vai ao banco de produção. Roda o código de servidor REAL (api/_lib/desenvolvimentoAcoes.ts → executarAcao).
 import { pathToFileURL } from "node:url";
 import { criarCliente } from "./shim.mjs";
-import { rd, novaReplica, semearPdi, criarContador, REPO, U_RH, U_G1 } from "./base.mjs";
+import { rd, novaReplica, semearPdi, criarContador, PDI, REPO, U_RH, U_G1 } from "./base.mjs";
 
 const C = criarContador();
 const { check, secao } = C;
@@ -234,6 +234,21 @@ check("nenhuma necessidade criada sem decisão do RH: toda necessidade de origem
 const aud = await sql(`select acao, count(*)::int n from public.peopleflow_dev_auditoria where acao like 'pdi_%' or acao = 'necessidade_do_pdi' group by 1 order by 1`);
 console.log("   eventos de auditoria:", aud.map((a) => `${a.acao}=${a.n}`).join(", "));
 check("eventos de auditoria previstos existem: interpretação executada, sugestão criada, confirmada, editada e confirmada, mantida, separada, regenerada", ["pdi_interpretacao_executada", "pdi_sugestao_criada", "pdi_sugestao_confirmada", "pdi_sugestao_editada_e_confirmada", "pdi_sugestao_mantida_no_pdi", "pdi_sugestao_separada", "pdi_sugestao_regenerada"].every((e) => aud.some((a) => a.acao === e)));
+
+// ═══ 10. PDI de quem saiu da empresa ═══
+secao("10. PDI de colaborador desligado: histórico preservado, nenhuma pendência operacional nova");
+await db.exec(`insert into public.colaboradores (nome, cargo, departamento, gestor, desligado, data_desligamento) values ('Rita Desligada', 'Auxiliar', 'Produção', 'Gil Gestor', true, '2026-09-30')`);
+const pDes = (await um(PDI.pdi("Rita Desligada"))).id;
+await db.exec(`insert into public.peopleflow_pdi_itens (id, pdi_id, competencia_nome, tipo_competencia, objetivo_desenvolvimento) values ('D1', ${pDes}, 'Comunicação', 'Comportamental', 'Comunicar com clareza em alinhamentos.');
+  insert into public.peopleflow_pdi_acoes (id, item_id, descricao, status, ordem) values ('DA1', 'D1', 'treinar apresentação', 'Pendente', 1)`);
+const fotoDes = () => um(`select (select count(*) from public.peopleflow_dev_pdi_sugestoes)::int s, (select count(*) from public.peopleflow_dev_necessidades)::int n, (select md5(string_agg(to_jsonb(x)::text, '|' order by x.id)) from public.peopleflow_pdi x where x.id = ${pDes}) h`);
+const antesDes = await fotoDes();
+const gDes = await ok("pdi_triagem_gerar", {});
+check("gerar para todos NÃO cria sugestão para o item do desligado", (await sugDoItem("D1")).length === 0 && gDes.itens === 0);
+const gDes2 = await ok("pdi_triagem_gerar", { pdi_item_ids: ["D1"] });
+check("gerar pedindo o item do desligado também não cria nada", gDes2.itens === 0 && gDes2.sugestoes === 0 && (await sugDoItem("D1")).length === 0);
+const depoisDes = await fotoDes();
+check("nenhuma sugestão/necessidade nova e o PDI do desligado permanece exatamente como estava (não concluído artificialmente)", depoisDes.s === antesDes.s && depoisDes.n === antesDes.n && depoisDes.h === antesDes.h);
 
 console.log(`\nRESUMO: ${C.ok} verificações OK, ${C.falhas} falha(s)`);
 process.exit(C.falhas ? 1 : 0);
