@@ -37,3 +37,25 @@ O código novo tolera a migration ausente apenas em leitura (a tela avisa "migra
 3. Registrar a GRRF por guia/demonstrativo (depósito, multa, total); confirmar a modalidade da rescisão que não a informa no relatório.
 4. Dashboard Executivo: quadro "Custos de Rescisão por mês" com Rescisão, GRRF, Total, cobertura e `*` nos totais parciais.
 5. Gaveta de cada desligado: valores vindos da folha (sem digitar de novo).
+
+## Etapa 2 — Lançamento simples (diálogo único)
+Substitui o fluxo em duas etapas (lançar → validar com fonte documental) e o registro de GRRF com depósito/multa/fonte por **um único diálogo "Lançar e confirmar valores"**:
+- **Valor da Rescisão** = líquido a pagar ao colaborador. **Valor da GRRF** = total da guia de FGTS rescisório a pagar pela empresa. Sem anexos, TRCT, guia, fonte documental nem depósito/multa separados.
+- A **confirmação expressa do RH salva e valida numa única operação** (usuário, data e trilha automáticos). A origem fica registrada internamente como `informado_rh` ("Informado e confirmado pelo RH") — não é apresentada como conferência de documento.
+- GRRF pode ficar **pendente** (sem valor disponível) ou **não aplicável** (R$ 0,00 resolvido, com justificativa obrigatória). Um 0 informado como valor não resolve a GRRF.
+- **Alterar valor já confirmado** exige novo motivo e nova confirmação; o valor, o responsável, a data e a origem anteriores ficam na trilha (`peopleflow_fechamentos_log`, somente inserção).
+- Desligamento com folha: a Rescisão é o líquido da folha (imutável); o diálogo pode confirmá-lo junto. Divergência com lançamento anterior e líquido R$ 0,00 seguem exigindo decisão/conferência expressa; a modalidade ausente segue sendo exigida para a GRRF.
+- Dashboard: reflete automaticamente os valores confirmados, sem duplicidade, com totais parciais marcados (`*`) e cobertura "x de y".
+- As ações antigas (`financeiro_grrf_registrar`, `financeiro_fechamento_salvar`, `financeiro_fechamento_validar`) permanecem no servidor por compatibilidade e testes, mas a interface não as usa mais.
+
+| # | Onde | O que | Arquivo |
+|---|---|---|---|
+| 8 | Local | Tag de retorno do código | `git tag pre-financeiro-lancamento-simples` |
+| 9 | SQL Editor | Migration aditiva: amplia as origens aceitas (`informado_rh`) em `peopleflow_desligamentos_validacao_chk` e `peopleflow_rubricas_grrf_chk`. **Nenhuma linha é alterada**; responsável, data e consistência seguem exigidos | `desligamentos_financeiro_lancamento_simples.sql` |
+| 10 | SQL Editor | Validação (somente leitura): constraints ampliadas e validadas, 24 rubricas, ≥ 19 líquidos validados, 7 fechamentos, trilha intacta | `desligamentos_financeiro_lancamento_simples_validacao.sql` |
+| 11 | Git | Merge de `feature/financeiro-lancamento-simples` em `main` + push (Vercel publica). **A migration (9) precisa estar aplicada antes** | — |
+| 12 | Portal (RH) | Homologação: abrir um desligado → "Lançar e confirmar valores"; conferir Dashboard | — |
+
+Reversão: código `git revert -m 1 <merge>`; migration `desligamentos_financeiro_lancamento_simples_rollback.sql` (recusa se já houver valores com origem `informado_rh`, para não perder a rastreabilidade).
+Se o código for publicado **antes** da migration, o banco recusa a gravação com a origem nova (constraint) — nada é gravado pela metade; por isso a ordem 9 → 11.
+A migration de fechamento do acesso direto à tabela (passo 6) continua separada e **não** faz parte desta etapa.

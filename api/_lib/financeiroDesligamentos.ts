@@ -316,7 +316,7 @@ async function alvoDaRescisao(base: Base, rescisaoId: number): Promise<Alvo> {
 const iguais = (a: number, b: number) => Math.abs(a - b) < 0.005;
 
 interface ValidacaoFechamento {
-  rescisao?: { fonte: "folha_rescisao" | "demonstrativo_rescisao" | "outro_documento" };
+  rescisao?: { fonte: "folha_rescisao" | "demonstrativo_rescisao" | "outro_documento" | "informado_rh" };
   grrf?: { fonte: FonteGrrf | null; naoAplicavel?: boolean; justificativa?: string };
 }
 
@@ -635,6 +635,161 @@ async function fechamentoValidar(conta: Conta, corpo: Corpo) {
   return { colaborador_nome: nome, componente, validado: true };
 }
 
+// ── Lançamento simples: UM diálogo, UMA operação (salva e confirma Rescisão e GRRF) ─────────────────────
+const FONTE_RH = "informado_rh" as const;
+
+interface ConfirmacaoAnterior {
+  valor: number | null;
+  por: string | null;
+  em: string | null;
+  fonte: string | null;
+  nao_aplicavel?: boolean;
+  justificativa?: string | null;
+}
+
+/** Lança e confirma, numa única operação, os valores financeiros de um desligamento:
+ *  • Rescisão = líquido a pagar ao colaborador; GRRF = total da guia de FGTS rescisório a pagar pela empresa.
+ *  • Sem anexos, sem fonte documental a escolher, sem depósito/multa separados. A origem interna é 'informado_rh' ("Informado e confirmado pelo RH").
+ *  • A confirmação expressa (`confirmacao_rh: true`) salva e valida de uma vez; usuário, data e trilha de auditoria são automáticos.
+ *  • GRRF pode ficar pendente, ou "não aplicável" (R$ 0,00 resolvido) com justificativa obrigatória. Um 0 informado como valor NÃO resolve a GRRF.
+ *  • Alterar um valor já confirmado exige novo motivo e nova confirmação; a confirmação anterior (valor, responsável, data, origem) fica na trilha.
+ *  • Desligamento com rescisão importada da folha: a Rescisão é o líquido da folha (imutável) — o diálogo pode confirmá-lo junto; divergência com
+ *    lançamento anterior e líquido R$ 0,00 seguem exigindo decisão/conferência expressa. */
+async function lancamentoConfirmar(conta: Conta, corpo: Corpo) {
+  exigirRH(conta);
+  if (corpo.confirmacao_rh !== true) throw new ErroFin(422, "A confirmação expressa do RH é obrigatória para salvar e validar os valores.");
+  const modo = texto(corpo, "grrf_modo", { obrigatorio: true, rotulo: "a situação da GRRF" });
+  if (modo !== "valor" && modo !== "pendente" && modo !== "nao_aplicavel") throw new ErroFin(422, "Situação da GRRF inválida.");
+  const motivo = texto(corpo, "motivo", { max: 1000 });
+  const justificativa = modo === "nao_aplicavel" ? texto(corpo, "justificativa", { obrigatorio: true, rotulo: "a justificativa (por que não há GRRF nesta rescisão)" }) : "";
+  const totalGrrf = modo === "valor" ? (valorMonetario(corpo.valor_grrf, "o valor da GRRF (total da guia de FGTS rescisório)", true) as number) : null;
+  if (modo === "valor" && totalGrrf === 0) throw new ErroFin(422, "GRRF de R$ 0,00 não se informa como valor: marque \"Não aplicável\" e justifique.");
+  const base = await carregarBase(conta.colaboradores);
+  if (!base.instalado) throw new ErroFin(409, "A migration da integração financeira ainda não foi aplicada neste ambiente.");
+  const agora = new Date().toISOString();
+
+  const semFolha = corpo.rescisao_id === undefined || corpo.rescisao_id === null || corpo.rescisao_id === "";
+  if (!semFolha) return lancamentoConfirmarFolha(conta, corpo, base, { modo, motivo, justificativa, totalGrrf, agora });
+
+  // ── desligamento SEM rescisão importada: os dois valores são digitados pelo RH ──
+  const nome = texto(corpo, "colaborador_nome", { obrigatorio: true, rotulo: "o colaborador" });
+  desligadoSemFolha(base, nome);
+  const fech = base.fechamentos.find((f) => f.colaboradorNome === nome) ?? null;
+  const campos: Record<string, unknown> = {};
+  const trilha: Parameters<typeof registrar>[1][] = [];
+
+  // Rescisão (líquido a pagar ao colaborador)
+  const rescValidada = Boolean(fech?.rescisaoValidadaEm) && fech?.valorRescisao !== null && fech?.valorRescisao !== undefined;
+  const novoResc = valorMonetario(corpo.valor_rescisao, "o valor da rescisão (líquido a pagar ao colaborador)");
+  if (novoResc === null && !rescValidada) throw new ErroFin(422, "Informe o valor da rescisão (líquido a pagar ao colaborador).");
+  const rescMudou = novoResc !== null && (!rescValidada || !iguais(novoResc, fech!.valorRescisao as number));
+  if (rescMudou) {
+    if (rescValidada && !motivo) throw new ErroFin(422, "A rescisão já estava confirmada: informe o motivo da alteração para confirmar o novo valor.");
+    if (novoResc === 0 && corpo.zero_conferido !== true) throw new ErroFin(422, "O valor da rescisão é R$ 0,00: confirme expressamente que está correto.");
+    const anterior: ConfirmacaoAnterior | null = rescValidada ? { valor: fech!.valorRescisao, por: fech!.rescisaoValidadaPor, em: fech!.rescisaoValidadaEm, fonte: fech!.rescisaoFonte } : null;
+    Object.assign(campos, { valor_rescisao: novoResc, rescisao_validada_em: agora, rescisao_validada_por: conta.nome, rescisao_fonte: FONTE_RH });
+    trilha.push({ acao: "validar_lancamento", colaboradorNome: nome, campo: "valor_rescisao", anterior: fech?.valorRescisao ?? null, novo: novoResc, origem: FONTE_RH, motivo: motivo || undefined, detalhe: { fluxo: "lancamento_simples", alteracao: rescValidada, confirmacao_anterior: anterior } });
+  }
+
+  // GRRF (total da guia de FGTS rescisório a pagar pela empresa)
+  const grrfValidada = Boolean(fech?.grrfValidadaEm);
+  const grrfAnterior: ConfirmacaoAnterior | null = grrfValidada ? { valor: fech!.valorGrrf, por: fech!.grrfValidadaPor, em: fech!.grrfValidadaEm, fonte: fech!.grrfFonte, nao_aplicavel: fech!.grrfNaoAplicavel, justificativa: fech!.grrfJustificativa } : null;
+  if (modo === "pendente") {
+    if (grrfValidada) throw new ErroFin(422, "A GRRF já está confirmada: para alterar, informe o novo valor ou marque \"Não aplicável\".");
+  } else if (modo === "valor") {
+    const igual = grrfValidada && !fech!.grrfNaoAplicavel && fech!.valorGrrf !== null && iguais(totalGrrf as number, fech!.valorGrrf);
+    if (!igual) {
+      if (grrfValidada && !motivo) throw new ErroFin(422, "A GRRF já estava confirmada: informe o motivo da alteração para confirmar o novo valor.");
+      Object.assign(campos, { valor_grrf: totalGrrf, grrf_validada_em: agora, grrf_validada_por: conta.nome, grrf_fonte: FONTE_RH, grrf_nao_aplicavel: false, grrf_justificativa: null });
+      trilha.push({ acao: "validar_lancamento", colaboradorNome: nome, campo: "valor_grrf", anterior: fech?.valorGrrf ?? null, novo: totalGrrf, origem: FONTE_RH, motivo: motivo || undefined, detalhe: { fluxo: "lancamento_simples", alteracao: grrfValidada, confirmacao_anterior: grrfAnterior } });
+    }
+  } else {
+    const igual = grrfValidada && fech!.grrfNaoAplicavel && (fech!.grrfJustificativa ?? "") === justificativa;
+    if (!igual) {
+      if (grrfValidada && !motivo) throw new ErroFin(422, "A GRRF já estava confirmada: informe o motivo da alteração para marcá-la como não aplicável.");
+      Object.assign(campos, { valor_grrf: 0, grrf_validada_em: agora, grrf_validada_por: conta.nome, grrf_fonte: null, grrf_nao_aplicavel: true, grrf_justificativa: justificativa });
+      trilha.push({ acao: "grrf_nao_aplicavel", colaboradorNome: nome, campo: "valor_grrf", anterior: fech?.valorGrrf ?? null, novo: 0, origem: FONTE_RH, motivo: justificativa, detalhe: { fluxo: "lancamento_simples", alteracao: grrfValidada, motivo_alteracao: motivo || null, confirmacao_anterior: grrfAnterior } });
+    }
+  }
+  if (trilha.length === 0) throw new ErroFin(422, "Nenhuma alteração a confirmar: os valores informados já estão confirmados.");
+
+  // uma única gravação: valores + validação (responsável, data, origem) juntos; o CHECK do banco recusa qualquer combinação incompleta
+  const registro = { colaborador_nome: nome, valor_rescisao: fech?.valorRescisao ?? null, valor_grrf: fech?.valorGrrf ?? null, origem: fech?.origem ?? "manual", ...campos, updated_at: agora, updated_by: conta.nome };
+  const { error } = await supabaseAdmin.from("peopleflow_desligamentos").upsert(registro, { onConflict: "colaborador_nome" });
+  if (error) erroBanco(error, "Fechamento financeiro");
+  for (const t of trilha) await registrar(conta, t);
+  return { colaborador_nome: nome, rescisao_confirmada: "valor_rescisao" in campos, grrf: modo, confirmado_por: conta.nome, confirmado_em: agora };
+}
+
+async function lancamentoConfirmarFolha(
+  conta: Conta,
+  corpo: Corpo,
+  base: Base,
+  p: { modo: "valor" | "pendente" | "nao_aplicavel"; motivo: string; justificativa: string; totalGrrf: number | null; agora: string },
+) {
+  const id = idObrigatorio(corpo, "rescisao_id", "Rescisão");
+  let a = await alvoDaRescisao(base, id);
+  const nome = a.colaborador?.nome ?? a.h.nome;
+  const confirmarLiquido = corpo.confirmar_liquido === true && a.rubrica.rescisaoStatus === "proposto";
+  const grrfJa = a.rubrica.grrfStatus !== "pendente";
+  let faz = confirmarLiquido;
+
+  // valida a GRRF ANTES de gravar qualquer coisa
+  let grrfMuda = false;
+  if (p.modo === "pendente") {
+    if (grrfJa) throw new ErroFin(422, "A GRRF já está confirmada: para alterar, informe o novo valor ou marque \"Não aplicável\".");
+  } else {
+    if (!a.h.tipoRescisao.trim() && !a.rubrica.modalidadeConfirmada) throw new ErroFin(422, "O relatório não informa a modalidade desta rescisão: confirme a modalidade antes de registrar a GRRF.");
+    if (p.modo === "valor") grrfMuda = !(a.rubrica.grrfStatus === "validado" && a.rubrica.grrfTotal !== null && iguais(p.totalGrrf as number, a.rubrica.grrfTotal));
+    else grrfMuda = a.rubrica.grrfStatus !== "nao_aplicavel" || (a.fechamento?.grrfJustificativa ?? null) !== p.justificativa;
+    if (grrfMuda && grrfJa && !p.motivo) throw new ErroFin(422, "A GRRF já estava confirmada: informe o motivo da alteração para confirmar o novo valor.");
+    faz = faz || grrfMuda;
+  }
+  if (!faz) throw new ErroFin(422, "Nenhuma alteração a confirmar: os valores informados já estão confirmados.");
+
+  // Rescisão: confirma o líquido da folha (mesmas travas da validação em lote: divergência e zero exigem decisão/conferência expressa)
+  if (confirmarLiquido) {
+    const r = await rescisaoValidar(conta, { itens: [{ rescisao_id: id, zero_conferido: corpo.zero_conferido === true }] });
+    const item = (r as { resultados: ResultadoItem[] }).resultados[0];
+    if (item.resultado !== "validada" && item.resultado !== "ja_validada") throw new ErroFin(422, item.detalhe ?? "Não foi possível confirmar a rescisão.");
+    // a confirmação do líquido pode ter criado o fechamento da pessoa: recarrega para a GRRF atualizar a mesma linha (e não inserir outra)
+    a = await alvoDaRescisao(await carregarBase(conta.colaboradores), id);
+  }
+
+  if (grrfMuda) {
+    const anterior = { status: a.rubrica.grrfStatus, total: a.rubrica.grrfTotal, fonte: a.rubrica.grrfFonte, por: a.rubrica.grrfValidadaPor, em: a.rubrica.grrfValidadaEm };
+    const naoAplicavel = p.modo === "nao_aplicavel";
+    const total = naoAplicavel ? 0 : (p.totalGrrf as number);
+    await gravarFechamento(conta, a, { valor_grrf: total }, { grrf: { fonte: naoAplicavel ? null : FONTE_RH, naoAplicavel, justificativa: naoAplicavel ? p.justificativa : undefined } });
+    const { error } = await supabaseAdmin
+      .from("peopleflow_rescisoes_historico_rubricas")
+      .update({
+        grrf_status: naoAplicavel ? "nao_aplicavel" : "validado",
+        grrf_total: total,
+        grrf_deposito: null,
+        grrf_multa: null,
+        grrf_fonte: naoAplicavel ? null : FONTE_RH,
+        grrf_validada_em: p.agora,
+        grrf_validada_por: conta.nome,
+        grrf_observacao: naoAplicavel ? p.justificativa : p.motivo || null,
+      })
+      .eq("rescisao_id", id);
+    if (error) erroBanco(error, "GRRF");
+    await registrar(conta, {
+      acao: naoAplicavel ? "grrf_nao_aplicavel" : "registrar_grrf",
+      colaboradorNome: nome,
+      rescisaoId: id,
+      campo: "valor_grrf",
+      anterior: a.rubrica.grrfTotal ?? a.fechamento?.valorGrrf ?? null,
+      novo: total,
+      origem: FONTE_RH,
+      motivo: naoAplicavel ? p.justificativa : p.motivo || undefined,
+      detalhe: { fluxo: "lancamento_simples", alteracao: grrfJa, motivo_alteracao: p.motivo || null, confirmacao_anterior: grrfJa ? anterior : null },
+    });
+  }
+  return { rescisao_id: id, rescisao_confirmada: confirmarLiquido, grrf: p.modo, confirmado_por: conta.nome, confirmado_em: p.agora };
+}
+
 const ACOES: Record<string, (conta: Conta, corpo: Corpo) => Promise<unknown>> = {
   financeiro_listar: listar,
   financeiro_agregado: agregado,
@@ -644,6 +799,7 @@ const ACOES: Record<string, (conta: Conta, corpo: Corpo) => Promise<unknown>> = 
   financeiro_grrf_registrar: grrfRegistrar,
   financeiro_fechamento_salvar: fechamentoSalvar,
   financeiro_fechamento_validar: fechamentoValidar,
+  financeiro_lancamento_confirmar: lancamentoConfirmar,
 };
 
 export function ehAcaoFinanceira(acao: string): boolean {

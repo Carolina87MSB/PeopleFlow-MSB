@@ -3,7 +3,7 @@
 //   cd tests && npm run test:financeiro-dominio
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { agregarCustosPorMes, apurarSaidas, coberturaDe, listarConversoes, type FechamentoFinanceiro, type RubricaFinanceira } from "../../src/domain/custosRescisao.ts";
+import { FONTE_INFORMADO_RH, ROTULO_INFORMADO_RH, agregarCustosPorMes, apurarSaidas, coberturaDe, listarConversoes, type FechamentoFinanceiro, type RubricaFinanceira } from "../../src/domain/custosRescisao.ts";
 import { pendenciasFrontDeDesligados } from "../../src/domain/pendenciasDesligados.ts";
 import { prepararHistorico, type RescisaoHistorica } from "../../src/domain/rescisoesHistorico.ts";
 import type { Colaborador } from "../../src/types/domain.ts";
@@ -30,7 +30,7 @@ const rub = (id: number, liquido: number, extra: Partial<RubricaFinanceira> = {}
   grrfStatus: "pendente", grrfDeposito: null, grrfMulta: null, grrfTotal: null, grrfFonte: null, grrfValidadaEm: null, grrfValidadaPor: null, ...extra,
 });
 const fech = (nome: string, r: number | null, g: number | null, extra: Partial<FechamentoFinanceiro> = {}): FechamentoFinanceiro => ({ colaboradorNome: nome, valorRescisao: r, valorGrrf: g, origem: "manual", rescisaoHistoricoId: null, rescisaoValidadaEm: null, rescisaoValidadaPor: null, rescisaoFonte: null, grrfValidadaEm: null, grrfValidadaPor: null, grrfFonte: null, grrfNaoAplicavel: false, grrfJustificativa: null, updatedAt: "", updatedBy: "RH", ...extra });
-const manualValidado: Partial<FechamentoFinanceiro> = { rescisaoValidadaEm: "2026-10-01T00:00:00Z", rescisaoValidadaPor: "RH", rescisaoFonte: "demonstrativo_rescisao", grrfValidadaEm: "2026-10-01T00:00:00Z", grrfValidadaPor: "RH", grrfNaoAplicavel: true, grrfJustificativa: "pedido de demissão: sem GRRF" };
+const manualValidado: Partial<FechamentoFinanceiro> = { rescisaoValidadaEm: "2026-10-01T00:00:00Z", rescisaoValidadaPor: "RH", rescisaoFonte: "informado_rh", grrfValidadaEm: "2026-10-01T00:00:00Z", grrfValidadaPor: "RH", grrfNaoAplicavel: true, grrfJustificativa: "pedido de demissão: sem GRRF" };
 const validada = (v: number): Partial<RubricaFinanceira> => ({ rescisaoStatus: "validado", rescisaoValorValidado: v, rescisaoValidadaEm: "2026-10-19T12:00:00Z", rescisaoValidadaPor: "RH" });
 const grrfOk = (t: number): Partial<RubricaFinanceira> => ({ grrfStatus: "validado", grrfTotal: t, grrfFonte: "guia_grrf", grrfValidadaEm: "2026-10-19T12:00:00Z", grrfValidadaPor: "RH" });
 
@@ -67,7 +67,7 @@ check("mês pela data efetiva (cadastro e histórico)", por("Ana").mes === "2026
 check("Ana: lançado = líquido e validado → Rescisão validada 1000; GRRF pendente (lançada 0 não conta)", por("Ana").rescisao.status === "validado" && por("Ana").rescisao.valor === 1000 && por("Ana").grrf.status === "pendente" && por("Ana").grrf.lancado === 0);
 check("Beto: lançado 3500 × líquido 2000, não validado → DIVERGENTE (não soma nada)", por("Beto").rescisao.status === "divergente" && por("Beto").rescisao.valor === null && por("Beto").rescisao.lancado === 3500);
 check("Caio: GRRF 'não aplicável' vale 0 e conta como resolvida", por("Caio Sem Id").grrf.status === "nao_aplicavel" && por("Caio Sem Id").grrf.total === 0);
-check("Fabi (sem folha): lançamento manual VALIDADO (fonte, responsável, data) vale; GRRF não aplicável justificada = resolvida com R$ 0,00", por("Fabi Manual").rescisao.status === "validado" && por("Fabi Manual").rescisao.valor === 2500.5 && por("Fabi Manual").rescisao.fonte === "demonstrativo_rescisao" && por("Fabi Manual").grrf.status === "nao_aplicavel" && por("Fabi Manual").grrf.total === 0);
+check("Fabi (sem folha): lançamento manual VALIDADO (fonte, responsável, data) vale; GRRF não aplicável justificada = resolvida com R$ 0,00", por("Fabi Manual").rescisao.status === "validado" && por("Fabi Manual").rescisao.valor === 2500.5 && por("Fabi Manual").rescisao.fonte === "informado_rh" && por("Fabi Manual").grrf.status === "nao_aplicavel" && por("Fabi Manual").grrf.total === 0);
 {
   // lançar NÃO valida: valor lançado, sem confirmação, fica pendente (e GRRF lançada 0 não é GRRF resolvida)
   const so = apurarSaidas({ colaboradores: [col(20, "Lia Lançada", { desligado: true, dataDesligamento: "01/out/2026" })], historicoCompleto: [], historicoPreparado: prepararHistorico([], []), rubricas: [], fechamentos: [fech("Lia Lançada", 500, 0)] })[0];
@@ -121,8 +121,15 @@ const page = src("src/features/desligados/DesligadosPage.tsx");
 const hook = src("src/store/usePortalData.ts");
 check("contador de pendências financeiras: pessoas únicas (cadastro e histórico), sem duplicar rescisão + GRRF pendentes", /conf\.saidas\.filter\(\(l\) => l\.rescisao\.status !== "validado" \|\| l\.grrf\.status === "pendente"\)\.length/.test(hook));
 check("Dashboard: alerta de desligamentos pendentes inclui o histórico da folha do recorte, uma vez por pessoa", /idsHistorico\.has\(l\.chave\)/.test(dash));
-check("Desligados: salvar lançamento manual NÃO valida; validação expressa com fonte à parte", /Salvar apenas LANÇA o valor/.test(page) && /Validar rescisão…/.test(page));
-check("Desligados: aba Conferência financeira só para o RH; gaveta lê a folha validada, sem digitação dupla", /perfil === "RH" && \(\s*<div className=\{confStyles\.abas\}/.test(page) && /Os valores vêm da folha de rescisão/.test(page));
+const confTsx = src("src/features/desligados/ConferenciaFinanceira.tsx");
+check("Desligados: UM diálogo 'Lançar e confirmar' (gaveta e conferência), sem 'Salvar lançamento' nem validação em duas etapas", /Lançar e confirmar valores/.test(page) && /DialogoLancarConfirmar/.test(page) && !/Salvar lançamento|Validar rescisão…|Validar GRRF…|DialogoValidarManual|DialogoGrrf/.test(page + confTsx));
+check("diálogo: sem seletor de fonte documental, anexo, TRCT, guia ou campos de depósito/multa", !/Fonte documental|Fonte do valor|type="file"|TRCT|Depósito rescisório|Multa rescisória/.test(confTsx.slice(confTsx.indexOf("export function DialogoLancarConfirmar"))));
+const dlg = confTsx.slice(confTsx.indexOf("export function DialogoLancarConfirmar"));
+check("diálogo: campos 'Valor da Rescisão' (líquido a pagar ao colaborador) e 'Valor da GRRF' (total da guia de FGTS rescisório a pagar pela empresa)", /Valor da Rescisão/.test(dlg) && /Líquido a pagar ao colaborador/.test(dlg) && /Valor da GRRF/.test(dlg) && /Total da guia de FGTS rescisório a pagar pela empresa/.test(dlg));
+check("diálogo: GRRF pendente, 'não aplicável' com justificativa obrigatória e confirmação expressa antes de salvar", /Ainda pendente/.test(dlg) && /Não aplicável/.test(dlg) && /justificativa\.trim\(\)\.length > 0/.test(dlg) && /confirmacao_rh: true/.test(dlg) && /disabled=\{!podeEnviar\}/.test(dlg));
+check("diálogo: alterar valor já confirmado exige motivo (e a trilha preserva o anterior no servidor)", /Motivo da alteração/.test(dlg) && /pedeMotivo/.test(dlg) && /\(!pedeMotivo \|\| motivo\.trim\(\)\.length > 0\)/.test(dlg));
+check("a origem interna é exibida como 'Informado e confirmado pelo RH', não como conferência de documento", /ROTULO_INFORMADO_RH/.test(confTsx) && ROTULO_INFORMADO_RH === "Informado e confirmado pelo RH" && FONTE_INFORMADO_RH === "informado_rh");
+check("Desligados: aba Conferência financeira só para o RH; gaveta lê a folha validada, sem digitação dupla", /perfil === "RH" && \(\s*<div className=\{confStyles\.abas\}/.test(page) && /Conferência financeira/.test(page) && /em lote/.test(page));
 const srv = src("api/_lib/financeiroDesligamentos.ts");
 check("servidor: valores individuais e gravações só para o RH; agregado para RH e Diretoria", /function exigirRH/.test(srv) && /perfil !== "RH" && conta\.perfil !== "Diretoria"/.test(srv));
 check("servidor: nada é calculado/presumido a partir de saldo FGTS ou percentuais", !/0\.4|\* 0\.0|multa.*saldo/i.test(srv.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));

@@ -254,9 +254,160 @@ check("constraint do banco: validar sem fonte documental é impossível (CHECK)"
 // ═══ I. Preservação ═══
 secao("I. Preservação: cadastro, histórico, MPs, importados e trilha");
 check("colaboradores e histórico de rescisões idênticos ao início", (await hashTab("colaboradores", "id")) === antes.colab && (await hashTab("peopleflow_rescisoes_historico", "id")) === antes.hist);
-check("valores importados da folha idênticos (24→9 linhas, mesmos números)", (await um(`select md5(string_agg(concat_ws('|', rescisao_id, saldo_fgts, salario, proventos, descontos, liquido, fgts_rescisorio), ';' order by rescisao_id)) h from public.peopleflow_rescisoes_historico_rubricas`)).h === antesRub);
+check("valores importados da folha idênticos (24→9 linhas, mesmos números)", (await um(`select md5(string_agg(concat_ws('|', rescisao_id, saldo_fgts, salario, proventos, descontos, liquido, fgts_rescisorio), ';' order by rescisao_id)) h from public.peopleflow_rescisoes_historico_rubricas `)).h === antesRub);
 check("a trilha é somente inserção (update/delete recusados)", /somente inserção/.test(String(await falha(() => db.exec(`update public.peopleflow_fechamentos_log set por = 'x'`)))) && /somente inserção/.test(String(await falha(() => db.exec(`delete from public.peopleflow_fechamentos_log`)))));
 check("conversão de estágio segue sem nenhuma validação", (await um(`select rescisao_status r, grrf_status g from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hH}`)).r === "proposto");
+
+// ═══ L. Lançamento simples: um diálogo, uma operação (lança e confirma), origem "Informado e confirmado pelo RH" ═══
+secao("L. Lançamento simples: migration aditiva + ação única que salva e confirma Rescisão e GRRF");
+const instantaneoAntes = {
+  fech: (await sql(`select md5(to_jsonb(x)::text) h, colaborador_nome from public.peopleflow_desligamentos x order by colaborador_nome`)),
+  rub: (await um(`select md5(string_agg(to_jsonb(x)::text, '|' order by x.rescisao_id)) h from public.peopleflow_rescisoes_historico_rubricas x`)).h,
+  logN: Number((await um(`select count(*)::int n from public.peopleflow_fechamentos_log`)).n),
+};
+const valorInforme = `insert into public.peopleflow_desligamentos (colaborador_nome, valor_rescisao, rescisao_validada_em, rescisao_validada_por, rescisao_fonte) values ('Teste Constraint', 10, now(), 'RH', 'informado_rh')`;
+check("ANTES da migration simples: a origem 'informado_rh' é recusada pelo CHECK existente (por isso a migration nova é necessária)", /validacao_chk/.test(String(await falha(() => db.exec(valorInforme)))));
+const MIG2 = rd("desligamentos_financeiro_lancamento_simples.sql");
+check("migration simples roda sem erro e é idempotente", (await falha(() => db.exec(MIG2))) === null && (await falha(() => db.exec(MIG2))) === null);
+const depoisFech = await sql(`select md5(to_jsonb(x)::text) h, colaborador_nome from public.peopleflow_desligamentos x order by colaborador_nome`);
+check("nenhum fechamento existente foi alterado pela migration; rubricas importadas e trilha idênticas", JSON.stringify(depoisFech) === JSON.stringify(instantaneoAntes.fech)
+  && (await um(`select md5(string_agg(to_jsonb(x)::text, '|' order by x.rescisao_id)) h from public.peopleflow_rescisoes_historico_rubricas x`)).h === instantaneoAntes.rub
+  && Number((await um(`select count(*)::int n from public.peopleflow_fechamentos_log`)).n) === instantaneoAntes.logN);
+// as proteções de responsável, data e consistência continuam exatamente iguais
+const tenta = (cols, vals) => falha(() => db.exec(`insert into public.peopleflow_desligamentos (colaborador_nome, ${cols}) values ('Teste Constraint', ${vals})`));
+check("DEPOIS: 'informado_rh' com responsável e data é aceito (e removido em seguida)", (await falha(() => db.exec(valorInforme))) === null && (await falha(() => db.exec(`delete from public.peopleflow_desligamentos where colaborador_nome = 'Teste Constraint'`))) === null);
+check("DEPOIS: continua recusado — validar SEM responsável (nulo e em branco)", /validacao_chk/.test(String(await tenta("valor_rescisao, rescisao_validada_em, rescisao_fonte", "10, now(), 'informado_rh'"))) && /validacao_chk/.test(String(await tenta("valor_rescisao, rescisao_validada_em, rescisao_validada_por, rescisao_fonte", "10, now(), '   ', 'informado_rh'"))));
+check("DEPOIS: continua recusado — responsável sem data, e origem inventada", /validacao_chk/.test(String(await tenta("valor_rescisao, rescisao_validada_por, rescisao_fonte", "10, 'RH', 'informado_rh'"))) && /validacao_chk/.test(String(await tenta("valor_rescisao, rescisao_validada_em, rescisao_validada_por, rescisao_fonte", "10, now(), 'RH', 'qualquer_coisa'"))));
+check("DEPOIS: continua recusado — validar sem valor; GRRF validada sem valor ou sem origem", /validacao_chk/.test(String(await tenta("rescisao_validada_em, rescisao_validada_por, rescisao_fonte", "now(), 'RH', 'informado_rh'"))) && /validacao_chk/.test(String(await tenta("valor_grrf, grrf_validada_em, grrf_validada_por", "100, now(), 'RH'"))) && /validacao_chk/.test(String(await tenta("grrf_validada_em, grrf_validada_por, grrf_fonte", "now(), 'RH', 'informado_rh'"))));
+check("DEPOIS: continua recusado — 'não aplicável' sem justificativa, com valor diferente de 0 ou com origem", /validacao_chk/.test(String(await tenta("valor_grrf, grrf_validada_em, grrf_validada_por, grrf_nao_aplicavel", "0, now(), 'RH', true"))) && /validacao_chk/.test(String(await tenta("valor_grrf, grrf_validada_em, grrf_validada_por, grrf_nao_aplicavel, grrf_justificativa", "50, now(), 'RH', true, 'x'"))) && /validacao_chk/.test(String(await tenta("valor_grrf, grrf_validada_em, grrf_validada_por, grrf_nao_aplicavel, grrf_justificativa, grrf_fonte", "0, now(), 'RH', true, 'x', 'informado_rh'"))));
+check("DEPOIS: rubricas — grrf_fonte inventada continua recusada; 'informado_rh' aceita só com total, data e responsável", /grrf_chk/.test(String(await falha(() => db.exec(`update public.peopleflow_rescisoes_historico_rubricas set grrf_fonte = 'inventada' where rescisao_id = ${hJ}`)))) && /grrf_status_chk/.test(String(await falha(() => db.exec(`update public.peopleflow_rescisoes_historico_rubricas set grrf_status = 'validado', grrf_total = 10, grrf_fonte = 'informado_rh' where rescisao_id = ${hJ}`)))));
+
+// ── massa fictícia deste bloco ──
+await ins("Nina Nova", "Auxiliar", "Produção", "Gil Gestor", "2025-07-07", true, "2026-09-15");
+await ins("Rui Rapido", "Auxiliar", "Produção", "Gil Gestor", "2025-07-08", true, "2026-09-16");
+await ins("Zeca Zero", "Auxiliar", "Logística", "Gil Gestor", "2025-07-09", true, "2026-09-17");
+const idLara = await ins("Lara Folha", "Auxiliar", "Produção", "Gil Gestor", "2025-08-01", true, "2026-09-18");
+const idPedro = await ins("Pedro Zero", "Auxiliar", "Produção", "Gil Gestor", "2025-08-02", true, "2026-09-19");
+const idDora = await ins("Dora Diverge", "Auxiliar", "Logística", "Gil Gestor", "2025-08-03", true, "2026-09-20");
+const idMarta = await ins("Marta SemTipo", "Auxiliar", "Logística", "Gil Gestor", "2025-08-04", true, "2026-09-21");
+const hLara = await histIns(401, "Lara Folha", "2025-08-01", "2026-09-18", "Pedido de demissão sem justa causa", "Produção", "saida_efetiva", idLara); await rubIns(hLara, 3000, 200);
+const hPedro = await histIns(402, "Pedro Zero", "2025-08-02", "2026-09-19", "Pedido de demissão sem justa causa", "Produção", "saida_efetiva", idPedro); await rubIns(hPedro, 0, 50);
+const hDora = await histIns(403, "Dora Diverge", "2025-08-03", "2026-09-20", "Pedido de demissão sem justa causa", "Logística", "saida_efetiva", idDora); await rubIns(hDora, 1200, 90);
+const hMarta = await histIns(404, "Marta SemTipo", "2025-08-04", "2026-09-21", "", "Logística", "saida_efetiva", idMarta); await rubIns(hMarta, 1700, 110);
+const hSolo = await histIns(405, "Hist Solo", "2024-09-01", "2026-09-22", "Demitido sem justa causa", "Produção", "saida_efetiva", null); await rubIns(hSolo, 2100, 150);
+await db.exec(`insert into public.peopleflow_desligamentos (colaborador_nome, valor_rescisao, valor_grrf, updated_by) values ('Dora Diverge', 999, null, 'RH')`);
+
+const logDe = (nome) => sql(`select acao, valor_anterior::float a, valor_novo::float n, origem, por, motivo, detalhe from public.peopleflow_fechamentos_log where colaborador_nome = '${nome}' order by id`);
+const linhaDe = async (nome) => linha(dados(await chamar("financeiro_listar", {})).saidas, nome);
+const fechDe = (nome) => um(`select valor_rescisao::float v, valor_grrf::float g, origem, rescisao_validada_em, rescisao_validada_por, rescisao_fonte, grrf_validada_em, grrf_validada_por, grrf_fonte, grrf_nao_aplicavel, grrf_justificativa from public.peopleflow_desligamentos where colaborador_nome = '${nome}'`);
+const mesSet = async () => dados(await chamar("financeiro_agregado", {}, U.DIR)).meses.find((m) => m.mes === "2026-09") ?? { rescisao: 0, grrf: 0, total: 0, parcial: true };
+
+// ── validações de entrada e autorização ──
+const sem = { colaborador_nome: "Nina Nova", valor_rescisao: "2.500,50", grrf_modo: "pendente", confirmacao_rh: true };
+check("sem a confirmação expressa do RH → 422 e nada é gravado", (await chamar("financeiro_lancamento_confirmar", { ...sem, confirmacao_rh: undefined })).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...sem, confirmacao_rh: "true" })).codigo === 422 && (await fechDe("Nina Nova")) === undefined);
+check("Gestor e Diretoria → 403; sem token → 401", (await chamar("financeiro_lancamento_confirmar", sem, U.GES)).codigo === 403 && (await chamar("financeiro_lancamento_confirmar", sem, U.DIR)).codigo === 403 && (await chamar("financeiro_lancamento_confirmar", sem, null)).codigo === 401);
+check("situação da GRRF ausente ou inválida → 422", (await chamar("financeiro_lancamento_confirmar", { ...sem, grrf_modo: undefined })).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...sem, grrf_modo: "tanto_faz" })).codigo === 422);
+check("primeira confirmação sem valor de rescisão → 422; valor negativo → 422", (await chamar("financeiro_lancamento_confirmar", { ...sem, valor_rescisao: undefined })).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...sem, valor_rescisao: -1 })).codigo === 422);
+check("colaborador com rescisão da folha não entra pelo caminho manual → 409; ativo/inexistente → 422", (await chamar("financeiro_lancamento_confirmar", { ...sem, colaborador_nome: "Lara Folha" })).codigo === 409 && (await chamar("financeiro_lancamento_confirmar", { ...sem, colaborador_nome: "Hugo Convertido" })).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...sem, colaborador_nome: "Ninguém" })).codigo === 422);
+check("GRRF: valor R$ 0,00 não resolve (usar 'não aplicável'); sem valor ou justificativa → 422", (await chamar("financeiro_lancamento_confirmar", { ...sem, grrf_modo: "valor", valor_grrf: 0 })).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...sem, grrf_modo: "valor" })).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...sem, grrf_modo: "nao_aplicavel" })).codigo === 422);
+check("nenhuma tentativa recusada gravou nada (fechamento nem trilha)", (await fechDe("Nina Nova")) === undefined && (await logDe("Nina Nova")).length === 0);
+
+// ── sem folha: Rescisão confirmada, GRRF pendente ──
+const antesSet = await mesSet();
+const r1 = await chamar("financeiro_lancamento_confirmar", sem);
+const f1 = await fechDe("Nina Nova");
+check("UMA operação lança e confirma a Rescisão (vírgula decimal aceita); usuário, data e origem automáticos", r1.codigo === 200 && f1.v === 2500.5 && f1.rescisao_validada_por === "Helena Recursos" && f1.rescisao_validada_em !== null && f1.rescisao_fonte === "informado_rh" && f1.origem === "manual");
+check("GRRF pode permanecer PENDENTE: nada lançado, nada confirmado", f1.g === null && f1.grrf_validada_em === null && f1.grrf_fonte === null && f1.grrf_nao_aplicavel === false);
+let ln = await linhaDe("Nina Nova");
+check("na conferência: rescisão validada (origem informada pelo RH) e GRRF pendente", ln.rescisao.status === "validado" && ln.rescisao.valor === 2500.5 && ln.rescisao.fonte === "informado_rh" && ln.rescisao.validadaPor === "Helena Recursos" && ln.grrf.status === "pendente");
+const s1 = await mesSet();
+check("Dashboard reflete automaticamente a rescisão confirmada (sem a GRRF) e marca o mês como PARCIAL", Math.round((s1.rescisao - antesSet.rescisao) * 100) === 250050 && s1.grrf === antesSet.grrf && s1.parcial === true);
+check("reenviar os mesmos valores → 422 (nada duplicado na trilha nem no Dashboard)", (await chamar("financeiro_lancamento_confirmar", sem)).codigo === 422 && (await mesSet()).total === s1.total && (await logDe("Nina Nova")).length === 1);
+
+// ── sem folha: GRRF confirmada depois ──
+const r2 = await chamar("financeiro_lancamento_confirmar", { colaborador_nome: "Nina Nova", valor_rescisao: 2500.5, grrf_modo: "valor", valor_grrf: "800,00", confirmacao_rh: true });
+const f2 = await fechDe("Nina Nova");
+check("a GRRF é informada e confirmada depois, sem mexer na rescisão já confirmada (mesmo valor = sem exigir motivo)", r2.codigo === 200 && f2.g === 800 && f2.grrf_fonte === "informado_rh" && f2.grrf_validada_por === "Helena Recursos" && f2.grrf_nao_aplicavel === false && f2.v === 2500.5 && String(f2.rescisao_validada_em) === String(f1.rescisao_validada_em));
+const s2 = await mesSet();
+check("Dashboard soma a GRRF confirmada uma única vez (sem duplicar a rescisão)", Math.round((s2.grrf - s1.grrf) * 100) === 80000 && s2.rescisao === s1.rescisao && Math.round((s2.total - s1.total) * 100) === 80000);
+
+// ── alteração posterior: novo motivo, nova confirmação, histórico preservado ──
+const alt = { colaborador_nome: "Nina Nova", valor_rescisao: 2600, grrf_modo: "valor", valor_grrf: 800, confirmacao_rh: true };
+check("alterar valor JÁ CONFIRMADO sem motivo → 422 e nada muda", (await chamar("financeiro_lancamento_confirmar", alt)).codigo === 422 && (await fechDe("Nina Nova")).v === 2500.5);
+const r3 = await chamar("financeiro_lancamento_confirmar", { ...alt, motivo: "Demonstrativo corrigido pelo DP." });
+const f3 = await fechDe("Nina Nova");
+const log3 = await logDe("Nina Nova");
+check("com motivo: novo valor confirmado de novo (nova data/responsável)", r3.codigo === 200 && f3.v === 2600 && f3.rescisao_validada_por === "Helena Recursos" && f3.rescisao_fonte === "informado_rh" && f3.g === 800);
+const logAlt = log3.find((l) => l.a === 2500.5 && l.n === 2600);
+check("HISTÓRICO PRESERVADO: a trilha guarda o valor anterior, o novo, o motivo e a confirmação anterior (responsável, data, origem)", logAlt && logAlt.motivo === "Demonstrativo corrigido pelo DP." && logAlt.detalhe.confirmacao_anterior.valor === 2500.5 && logAlt.detalhe.confirmacao_anterior.por === "Helena Recursos" && logAlt.detalhe.confirmacao_anterior.fonte === "informado_rh" && logAlt.detalhe.alteracao === true && logAlt.detalhe.fluxo === "lancamento_simples");
+check("toda linha da trilha tem responsável e origem 'informado_rh'", log3.length === 3 && log3.every((l) => l.por === "Helena Recursos" && l.origem === "informado_rh"));
+check("GRRF já confirmada não volta a 'pendente' por este caminho → 422", (await chamar("financeiro_lancamento_confirmar", { ...alt, motivo: "x", grrf_modo: "pendente" })).codigo === 422);
+check("GRRF 'não aplicável' sobre valor confirmado: exige justificativa E motivo", (await chamar("financeiro_lancamento_confirmar", { ...alt, grrf_modo: "nao_aplicavel", motivo: "ajuste" })).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...alt, grrf_modo: "nao_aplicavel", justificativa: "Pedido de demissão: sem GRRF." })).codigo === 422);
+const r4 = await chamar("financeiro_lancamento_confirmar", { ...alt, grrf_modo: "nao_aplicavel", justificativa: "Pedido de demissão: sem GRRF.", motivo: "Guia não existe para esta modalidade." });
+const f4 = await fechDe("Nina Nova");
+check("com justificativa e motivo: GRRF 'não aplicável' (R$ 0,00 resolvido, sem origem de documento)", r4.codigo === 200 && f4.grrf_nao_aplicavel === true && f4.g === 0 && f4.grrf_fonte === null && /sem GRRF/.test(f4.grrf_justificativa) && f4.grrf_validada_por === "Helena Recursos");
+const log4 = (await logDe("Nina Nova")).find((l) => l.acao === "grrf_nao_aplicavel");
+check("e a GRRF de 800 anterior continua na trilha, com quem confirmou e quando", log4 && log4.a === 800 && log4.n === 0 && log4.detalhe.confirmacao_anterior.valor === 800 && log4.detalhe.confirmacao_anterior.por === "Helena Recursos" && log4.detalhe.confirmacao_anterior.em);
+ln = await linhaDe("Nina Nova");
+check("conferência: GRRF 'não aplicável' = resolvida com R$ 0,00 (diferente de pendente)", ln.grrf.status === "nao_aplicavel" && ln.grrf.total === 0 && ln.rescisao.valor === 2600);
+const s4 = await mesSet();
+check("Dashboard acompanha a alteração (rescisão 2.600, GRRF fora do total)", Math.round((s4.rescisao - antesSet.rescisao) * 100) === 260000 && s4.grrf === antesSet.grrf);
+
+// ── rescisão e GRRF 'não aplicável' juntas; rescisão zero ──
+const r5 = await chamar("financeiro_lancamento_confirmar", { colaborador_nome: "Rui Rapido", valor_rescisao: 1000, grrf_modo: "nao_aplicavel", justificativa: "Término de contrato: sem GRRF.", confirmacao_rh: true });
+const f5 = await fechDe("Rui Rapido");
+const l5 = await logDe("Rui Rapido");
+check("rescisão + GRRF 'não aplicável' (com justificativa) numa operação só", r5.codigo === 200 && f5.v === 1000 && f5.rescisao_fonte === "informado_rh" && f5.grrf_nao_aplicavel === true && f5.g === 0 && f5.grrf_fonte === null && l5.length === 2 && l5.every((l) => l.por === "Helena Recursos"));
+check("rescisão R$ 0,00 exige confirmação expressa; com ela é aceita", (await chamar("financeiro_lancamento_confirmar", { colaborador_nome: "Zeca Zero", valor_rescisao: 0, grrf_modo: "pendente", confirmacao_rh: true })).codigo === 422 && (await fechDe("Zeca Zero")) === undefined
+  && (await chamar("financeiro_lancamento_confirmar", { colaborador_nome: "Zeca Zero", valor_rescisao: 0, grrf_modo: "pendente", zero_conferido: true, confirmacao_rh: true })).codigo === 200 && (await fechDe("Zeca Zero")).rescisao_validada_em !== null);
+
+// ── com folha: o líquido da folha é a rescisão; GRRF informada e confirmada junto ──
+check("conversão de estágio → 422 (não é desligamento)", (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hH, confirmar_liquido: true, grrf_modo: "pendente", confirmacao_rh: true })).codigo === 422);
+const folhaBase = { rescisao_id: hLara, confirmar_liquido: true, grrf_modo: "valor", valor_grrf: 450, confirmacao_rh: true };
+const r6 = await chamar("financeiro_lancamento_confirmar", folhaBase);
+const rubL = await um(`select rescisao_status, rescisao_valor_validado::float v, rescisao_validada_por, grrf_status, grrf_total::float t, grrf_fonte, grrf_deposito, grrf_multa, grrf_validada_por, grrf_validada_em from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hLara}`);
+check("folha: confirma o líquido (3.000) e a GRRF (450) numa operação; sem depósito/multa/anexos; origem informada pelo RH", r6.codigo === 200 && rubL.rescisao_status === "validado" && rubL.v === 3000 && rubL.rescisao_validada_por === "Helena Recursos" && rubL.grrf_status === "validado" && rubL.t === 450 && rubL.grrf_fonte === "informado_rh" && rubL.grrf_deposito === null && rubL.grrf_multa === null && rubL.grrf_validada_por === "Helena Recursos");
+const fL = await fechDe("Lara Folha");
+check("folha: fechamento da pessoa criado/atualizado com os dois valores confirmados (rescisão pela folha, GRRF informada pelo RH)", fL.v === 3000 && fL.g === 450 && fL.origem === "folha" && fL.rescisao_fonte === "folha_rescisao" && fL.grrf_fonte === "informado_rh" && fL.grrf_validada_por === "Helena Recursos");
+const lgL = await logDe("Lara Folha");
+check("folha: trilha com a validação do líquido e o registro da GRRF", lgL.some((l) => l.acao === "validar_rescisao") && lgL.some((l) => l.acao === "registrar_grrf" && l.n === 450 && l.origem === "informado_rh" && l.por === "Helena Recursos"));
+check("folha: reenviar o mesmo → 422; alterar a GRRF sem motivo → 422; pendente de volta → 422", (await chamar("financeiro_lancamento_confirmar", folhaBase)).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...folhaBase, confirmar_liquido: undefined, valor_grrf: 500 })).codigo === 422 && (await chamar("financeiro_lancamento_confirmar", { ...folhaBase, grrf_modo: "pendente", motivo: "x" })).codigo === 422);
+check("folha: alterar a GRRF com motivo → ok; a confirmação anterior (450) fica na trilha", (await chamar("financeiro_lancamento_confirmar", { ...folhaBase, confirmar_liquido: undefined, valor_grrf: 500, motivo: "Guia retificada." })).codigo === 200
+  && (await um(`select grrf_total::float t from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hLara}`)).t === 500
+  && (await logDe("Lara Folha")).some((l) => l.acao === "registrar_grrf" && l.a === 450 && l.n === 500 && l.motivo === "Guia retificada." && l.detalhe.confirmacao_anterior.total === 450 && l.detalhe.confirmacao_anterior.por === "Helena Recursos"));
+check("o líquido importado da folha segue IMUTÁVEL (3.000): um valor de rescisão digitado para rescisão da folha não muda nada", (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hLara, valor_rescisao: 1, grrf_modo: "valor", valor_grrf: 500, confirmacao_rh: true })).codigo === 422 && (await um(`select liquido::float l from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hLara}`)).l === 3000);
+
+// líquido zero e divergência continuam exigindo decisão expressa
+const rz = await chamar("financeiro_lancamento_confirmar", { rescisao_id: hPedro, confirmar_liquido: true, grrf_modo: "pendente", confirmacao_rh: true });
+check("folha: líquido R$ 0,00 sem conferência expressa → 422 e nada gravado", rz.codigo === 422 && (await um(`select rescisao_status s from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hPedro}`)).s === "proposto");
+check("folha: com a conferência expressa o líquido zero é confirmado", (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hPedro, confirmar_liquido: true, zero_conferido: true, grrf_modo: "pendente", confirmacao_rh: true })).codigo === 200 && (await um(`select rescisao_status s, zero_conferido_em z from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hPedro}`)).z !== null);
+const rd1 = await chamar("financeiro_lancamento_confirmar", { rescisao_id: hDora, confirmar_liquido: true, grrf_modo: "valor", valor_grrf: 300, confirmacao_rh: true });
+check("folha: divergência (lançado 999 × líquido 1.200) NÃO é confirmada pelo diálogo (decisão expressa) e a GRRF não é gravada junto", rd1.codigo === 422 && /diverg|decida/i.test(rd1.corpo.error) && (await um(`select rescisao_status s, grrf_status g from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hDora}`)).g === "pendente");
+check("folha: sem tentar confirmar o líquido, a GRRF pode ser confirmada mesmo com divergência; o lançamento divergente é preservado", (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hDora, grrf_modo: "valor", valor_grrf: 300, confirmacao_rh: true })).codigo === 200
+  && (await um(`select rescisao_status s, grrf_status g from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hDora}`)).s === "proposto" && (await fechDe("Dora Diverge")).v === 999);
+
+// modalidade ausente segue sendo exigida para a GRRF, mas não para confirmar o líquido
+check("folha: sem modalidade, GRRF → 422; só o líquido (GRRF pendente) é confirmado normalmente", (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hMarta, grrf_modo: "valor", valor_grrf: 200, confirmacao_rh: true })).codigo === 422
+  && (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hMarta, confirmar_liquido: true, grrf_modo: "pendente", confirmacao_rh: true })).codigo === 200);
+check("folha: depois de confirmada a modalidade, a GRRF entra", (await chamar("financeiro_modalidade_confirmar", { rescisao_id: hMarta, modalidade: "pedido_demissao" })).codigo === 200 && (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hMarta, grrf_modo: "valor", valor_grrf: 200, confirmacao_rh: true })).codigo === 200);
+// histórico sem cadastro
+check("histórico sem cadastro: confirma líquido e GRRF só nas rubricas (sem criar fechamento)", (await chamar("financeiro_lancamento_confirmar", { rescisao_id: hSolo, confirmar_liquido: true, grrf_modo: "nao_aplicavel", justificativa: "Sem GRRF.", confirmacao_rh: true })).codigo === 200
+  && (await um(`select rescisao_status s, grrf_status g from public.peopleflow_rescisoes_historico_rubricas where rescisao_id = ${hSolo}`)).g === "nao_aplicavel" && (await fechDe("Hist Solo")) === undefined);
+
+// ── preservação ──
+const preservado = await sql(`select md5(to_jsonb(x)::text) h, colaborador_nome from public.peopleflow_desligamentos x where colaborador_nome in ('Alice Saiu','Bia Diverge','Joca Dois','Iara Manual') order by colaborador_nome`);
+check("fechamentos anteriores (validados ou lançados) e valores importados intactos", JSON.stringify(preservado) === JSON.stringify(instantaneoAntes.fech.filter((f) => ["Alice Saiu", "Bia Diverge", "Joca Dois", "Iara Manual"].includes(f.colaborador_nome))) && (await um(`select count(*)::int n from public.peopleflow_rescisoes_historico_rubricas where rescisao_id in (${hA}, ${hB}, ${hJ}) and (liquido <> case rescisao_id when ${hA} then 1000 when ${hB} then 2000 else 1800 end)`)).n === 0);
+check("Gestor e Diretoria seguem sem acesso aos valores individuais depois da nova ação", (await chamar("financeiro_listar", {}, U.GES)).codigo === 403 && (await chamar("financeiro_listar", {}, U.DIR)).codigo === 403 && !/Nina|Lara|Rui|2500|2600/.test(JSON.stringify((await chamar("financeiro_agregado", {}, U.DIR)).corpo)));
+
+// ── rollback da migration simples ──
+const RB2 = rd("desligamentos_financeiro_lancamento_simples_rollback.sql");
+check("rollback da migration simples é RECUSADO enquanto existir valor confirmado como 'informado_rh' (nada alterado)", /rastreabilidade/.test(String(await falha(() => db.exec(RB2)))) && (await falha(() => db.exec(valorInforme))) === null && (await falha(() => db.exec(`delete from public.peopleflow_desligamentos where colaborador_nome = 'Teste Constraint'`))) === null);
+// sem registros 'informado_rh' o rollback é possível e restaura exatamente as listas antigas
+const fechInformados = await sql(`select colaborador_nome from public.peopleflow_desligamentos where rescisao_fonte = 'informado_rh' or grrf_fonte = 'informado_rh'`);
+await db.exec(`update public.peopleflow_desligamentos set rescisao_validada_em = null, rescisao_validada_por = null, rescisao_fonte = null, grrf_validada_em = null, grrf_validada_por = null, grrf_fonte = null, grrf_nao_aplicavel = false, grrf_justificativa = null where rescisao_fonte = 'informado_rh' or grrf_fonte = 'informado_rh' or grrf_nao_aplicavel`);
+await db.exec(`update public.peopleflow_rescisoes_historico_rubricas set grrf_status = 'pendente', grrf_total = null, grrf_deposito = null, grrf_multa = null, grrf_fonte = null, grrf_validada_em = null, grrf_validada_por = null where grrf_fonte = 'informado_rh' or grrf_status = 'nao_aplicavel'`);
+check("sem registros 'informado_rh' o rollback roda e a origem 'informado_rh' volta a ser recusada", fechInformados.length >= 3 && (await falha(() => db.exec(RB2))) === null && /validacao_chk/.test(String(await falha(() => db.exec(valorInforme)))));
+check("a migration simples pode ser reaplicada depois do rollback", (await falha(() => db.exec(MIG2))) === null && (await falha(() => db.exec(valorInforme))) === null && (await falha(() => db.exec(`delete from public.peopleflow_desligamentos where colaborador_nome = 'Teste Constraint'`))) === null);
 
 // ═══ J. Fechar o acesso direto ═══
 secao("J. Migration de fechamento do acesso: o navegador perde o acesso direto; o servidor segue");
@@ -275,7 +426,7 @@ const rb = rd("desligamentos_financeiro_rollback.sql");
 check("com validações/trilha a reversão é RECUSADA (nada apagado)", /REVERSÃO RECUSADA/.test(String(await falha(() => db.exec(rb)))) && Number((await um(`select count(*)::int n from public.peopleflow_fechamentos_log`)).n) > 0);
 check("com autorização explícita remove as estruturas e preserva os valores originais", (await falha(() => db.exec(rb.replace("v_permitir_perda constant boolean := false", "v_permitir_perda constant boolean := true")))) === null
   && (await um(`select count(*)::int n from information_schema.columns where table_name = 'peopleflow_rescisoes_historico_rubricas' and column_name like 'grrf_%'`)).n === 0
-  && (await um(`select md5(string_agg(concat_ws('|', rescisao_id, saldo_fgts, salario, proventos, descontos, liquido, fgts_rescisorio), ';' order by rescisao_id)) h from public.peopleflow_rescisoes_historico_rubricas`)).h === antesRub
+  && (await um(`select md5(string_agg(concat_ws('|', rescisao_id, saldo_fgts, salario, proventos, descontos, liquido, fgts_rescisorio), ';' order by rescisao_id)) h from public.peopleflow_rescisoes_historico_rubricas where rescisao_id <= ${hH}`)).h === antesRub
   && Number((await um(`select valor_rescisao::float v from public.peopleflow_desligamentos where colaborador_nome = 'Bia Diverge'`)).v) === 3500);
 check("e a migration pode ser reaplicada depois da reversão", (await falha(() => db.exec(MIG))) === null);
 
