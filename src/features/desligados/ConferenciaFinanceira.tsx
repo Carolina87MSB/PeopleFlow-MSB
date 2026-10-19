@@ -4,7 +4,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, FilterChips, Modal, tableStyles } from "../../components/ui";
 import { formatarDataIso } from "../../domain/dates";
-import type { FonteGrrf, LinhaConferencia } from "../../domain/custosRescisao";
+import { FONTE_INFORMADO_RH, ROTULO_INFORMADO_RH, type LinhaConferencia } from "../../domain/custosRescisao";
 import { usePortalData } from "../../store/usePortalData";
 import styles from "./ConferenciaFinanceira.module.css";
 
@@ -27,11 +27,6 @@ const MODALIDADES: [string, string][] = [
   ["termino_estagio", "Término de estágio"],
   ["outra", "Outra"],
 ];
-const FONTES: [FonteGrrf, string][] = [
-  ["guia_grrf", "Guia da GRRF"],
-  ["demonstrativo_rescisao", "Demonstrativo da rescisão"],
-  ["outro_documento", "Outro documento"],
-];
 
 const SITUACOES = ["Todas", "Pendentes", "Divergentes", "GRRF pendente", "Validadas"];
 const ORIGENS = ["Todas", "Cadastro", "Histórico"];
@@ -48,7 +43,7 @@ function ChipGrrf({ l }: { l: LinhaConferencia }) {
   return <Badge bg="var(--color-warning-bg)" fg="var(--color-warning-fg)" dot="var(--color-warning)">Pendente</Badge>;
 }
 
-type Dialogo = { tipo: "zero" | "decidir" | "grrf"; linha: LinhaConferencia } | { tipo: "manual"; linha: LinhaConferencia; componente: "rescisao" | "grrf" } | null;
+type Dialogo = { tipo: "zero" | "decidir" | "lancar"; linha: LinhaConferencia } | null;
 
 export function ConferenciaFinanceira() {
   const { conferenciaFinanceira: conf, validarRescisoes } = usePortalData();
@@ -188,7 +183,7 @@ export function ConferenciaFinanceira() {
                       {l.rescisao.status === "validado" && l.rescisao.valor !== null ? (
                         <>
                           <span className={styles.valor}>{money(l.rescisao.valor)}</span> <ChipRescisao l={l} />
-                          <span className={styles.sub}>Validada por {l.rescisao.validadaPor ?? "—"} · fonte: {l.rescisao.fonte === "demonstrativo_rescisao" ? "demonstrativo" : "outro documento"}</span>
+                          <span className={styles.sub}>Confirmada por {l.rescisao.validadaPor ?? "—"} · {l.rescisao.fonte === FONTE_INFORMADO_RH ? ROTULO_INFORMADO_RH : "Informada pelo RH"}</span>
                         </>
                       ) : l.rescisao.lancado !== null ? (
                         <>
@@ -197,7 +192,7 @@ export function ConferenciaFinanceira() {
                       ) : (
                         "—"
                       )}
-                      <span className={styles.sub}>Lançamento manual (sem folha importada): só vale depois de validado</span>
+                      <span className={styles.sub}>Sem folha importada: só vale depois de confirmado pelo RH</span>
                     </>
                   ) : (
                     <>
@@ -214,6 +209,7 @@ export function ConferenciaFinanceira() {
                     <>
                       <span className={styles.valor}>{money(l.grrf.total ?? 0)}</span> <ChipGrrf l={l} />
                       {(l.grrf.deposito !== null || l.grrf.multa !== null) && <span className={styles.sub}>Depósito {money(l.grrf.deposito ?? 0)} · Multa {money(l.grrf.multa ?? 0)}</span>}
+                      {l.grrf.fonte === FONTE_INFORMADO_RH && <span className={styles.sub}>Confirmada por {l.grrf.validadaPor ?? "—"} · {ROTULO_INFORMADO_RH}</span>}
                     </>
                   ) : (
                     <>
@@ -231,19 +227,9 @@ export function ConferenciaFinanceira() {
                     {l.rescisao.status === "divergente" && (
                       <Button variant="danger" disabled={!conf.instalado} onClick={() => setDialogo({ tipo: "decidir", linha: l })}>Decidir divergência</Button>
                     )}
-                    {l.rescisaoId !== null && (
-                      <Button variant="secondary" disabled={!conf.instalado} onClick={() => setDialogo({ tipo: "grrf", linha: l })}>
-                        {l.grrf.status === "pendente" ? "Registrar GRRF" : "Corrigir GRRF"}
-                      </Button>
-                    )}
-                    {l.rescisaoId === null && l.colaboradorId !== null && l.rescisao.status === "pendente" && (
-                      <Button variant="primary" disabled={!conf.instalado || l.rescisao.lancado === null} title={l.rescisao.lancado === null ? "Lance o valor na gaveta do desligado antes de validar." : undefined} onClick={() => setDialogo({ tipo: "manual", linha: l, componente: "rescisao" })}>
-                        Validar rescisão
-                      </Button>
-                    )}
-                    {l.rescisaoId === null && l.colaboradorId !== null && l.grrf.status === "pendente" && (
-                      <Button variant="secondary" disabled={!conf.instalado} onClick={() => setDialogo({ tipo: "manual", linha: l, componente: "grrf" })}>
-                        Validar GRRF
+                    {(l.rescisaoId !== null || l.colaboradorId !== null) && (
+                      <Button variant={l.rescisaoId === null && (l.rescisao.status !== "validado" || l.grrf.status === "pendente") ? "primary" : "secondary"} disabled={!conf.instalado} onClick={() => setDialogo({ tipo: "lancar", linha: l })}>
+                        {l.rescisao.status !== "validado" || l.grrf.status === "pendente" ? "Lançar e confirmar" : "Alterar valores"}
                       </Button>
                     )}
                   </div>
@@ -285,8 +271,7 @@ export function ConferenciaFinanceira() {
 
       {dialogo?.tipo === "zero" && <DialogoZero linha={dialogo.linha} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
       {dialogo?.tipo === "decidir" && <DialogoDecidir linha={dialogo.linha} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
-      {dialogo?.tipo === "grrf" && <DialogoGrrf linha={dialogo.linha} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
-      {dialogo?.tipo === "manual" && <DialogoValidarManual linha={dialogo.linha} componente={dialogo.componente} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
+      {dialogo?.tipo === "lancar" && <DialogoLancarConfirmar linha={dialogo.linha} onClose={() => setDialogo(null)} onMensagem={setMensagem} />}
     </div>
   );
 }
@@ -362,28 +347,43 @@ function DialogoDecidir({ linha: l, onClose, onMensagem }: { linha: LinhaConfere
   );
 }
 
-function DialogoGrrf({ linha: l, onClose, onMensagem }: { linha: LinhaConferencia; onClose: () => void; onMensagem: (m: string) => void }) {
-  const { registrarGrrf, confirmarModalidade } = usePortalData();
-  const jaRegistrada = l.grrf.status !== "pendente";
-  const [naoAplicavel, setNaoAplicavel] = useState(l.grrf.status === "nao_aplicavel");
-  const [deposito, setDeposito] = useState(l.grrf.deposito !== null ? String(l.grrf.deposito).replace(".", ",") : "");
-  const [multa, setMulta] = useState(l.grrf.multa !== null ? String(l.grrf.multa).replace(".", ",") : "");
-  const [total, setTotal] = useState(l.grrf.status === "validado" && l.grrf.total !== null ? String(l.grrf.total).replace(".", ",") : "");
-  const [fonte, setFonte] = useState<FonteGrrf>(l.grrf.fonte ?? "guia_grrf");
-  const [observacao, setObservacao] = useState("");
+/** Diálogo ÚNICO de lançamento financeiro de um desligamento: informa Rescisão (líquido) e GRRF (total da guia) e CONFIRMA numa só operação.
+ * Sem fonte documental, anexos, TRCT ou depósito/multa separados — a origem interna é "Informado e confirmado pelo RH". Usuário, data e auditoria
+ * ficam no servidor. A GRRF pode ficar pendente ou "não aplicável" (justificativa obrigatória). Mudar um valor já confirmado exige motivo. */
+export function DialogoLancarConfirmar({ linha: l, onClose, onMensagem }: { linha: LinhaConferencia; onClose: () => void; onMensagem: (m: string) => void }) {
+  const { confirmarLancamento, confirmarModalidade } = usePortalData();
+  const folha = l.rescisaoId !== null;
+  const rescConfirmada = l.rescisao.status === "validado";
+  const grrfConfirmada = l.grrf.status !== "pendente";
+  const fmt = (n: number | null) => (n === null ? "" : String(n).replace(".", ","));
+  const confirmarLiquido = folha && l.rescisao.status === "pendente";
+  const liquidoZero = confirmarLiquido && l.liquidoFolha === 0;
+
+  const [valorResc, setValorResc] = useState(folha ? "" : rescConfirmada ? fmt(l.rescisao.valor) : fmt(l.rescisao.lancado));
+  const [modo, setModo] = useState<"valor" | "pendente" | "nao_aplicavel">(
+    l.grrf.status === "nao_aplicavel" ? "nao_aplicavel" : l.grrf.status === "validado" || (l.grrf.lancado !== null && l.grrf.lancado > 0) ? "valor" : "pendente",
+  );
+  const [valorGrrf, setValorGrrf] = useState(l.grrf.status === "validado" ? fmt(l.grrf.total) : l.grrf.lancado !== null && l.grrf.lancado > 0 ? fmt(l.grrf.lancado) : "");
+  const [justificativa, setJustificativa] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [zero, setZero] = useState(false);
   const [modalidade, setModalidade] = useState("");
-  const [substituir, setSubstituir] = useState(false);
-  const [pedeSubstituicao, setPedeSubstituicao] = useState(false);
+  const [confirmo, setConfirmo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const semModalidade = !l.modalidade.trim() && !l.modalidadeConfirmada;
 
-  const nDep = paraNumero(deposito);
-  const nMulta = paraNumero(multa);
-  const nTotal = paraNumero(total);
-  const invalido = [nDep, nMulta, nTotal].some((n) => n !== null && Number.isNaN(n));
-  const somaFecha = nDep === null || nMulta === null || nTotal === null || Math.abs(nTotal - (nDep + nMulta)) < 0.005;
-  const podeEnviar = !ocupado && !(semModalidade && !modalidade) && (naoAplicavel ? observacao.trim().length > 0 : nTotal !== null && !invalido && somaFecha && (!jaRegistrada || observacao.trim().length > 0));
+  const nResc = paraNumero(valorResc);
+  const nGrrf = paraNumero(valorGrrf);
+  const semModalidade = folha && !l.modalidade.trim() && !l.modalidadeConfirmada && modo !== "pendente";
+  const rescZero = !folha && nResc === 0;
+  const rescMudou = !folha && nResc !== null && !Number.isNaN(nResc) && (!rescConfirmada || Math.abs(nResc - (l.rescisao.valor ?? 0)) >= 0.005);
+  const grrfMudou = modo === "valor" ? nGrrf !== null && !Number.isNaN(nGrrf) && !(l.grrf.status === "validado" && Math.abs(nGrrf - (l.grrf.total ?? 0)) < 0.005) : modo === "nao_aplicavel";
+  const pedeMotivo = (rescConfirmada && rescMudou && !folha) || (grrfConfirmada && grrfMudou);
+  const valorOk = folha || (nResc !== null && !Number.isNaN(nResc)) || rescConfirmada;
+  const grrfOk = modo === "pendente" ? !grrfConfirmada : modo === "valor" ? nGrrf !== null && !Number.isNaN(nGrrf) && nGrrf > 0 : justificativa.trim().length > 0;
+  const algo = folha ? confirmarLiquido || (modo !== "pendente" && grrfMudou) : rescMudou || (modo !== "pendente" && grrfMudou);
+  const podeEnviar =
+    !ocupado && confirmo && valorOk && grrfOk && algo && (!semModalidade || modalidade !== "") && (!pedeMotivo || motivo.trim().length > 0) && (!(rescZero || liquidoZero) || zero);
 
   async function confirmar() {
     setOcupado(true);
@@ -396,29 +396,74 @@ function DialogoGrrf({ linha: l, onClose, onMensagem }: { linha: LinhaConferenci
         return;
       }
     }
-    const r = await registrarGrrf({
-      rescisao_id: l.rescisaoId as number,
-      ...(naoAplicavel ? { nao_aplicavel: true, motivo: observacao.trim() } : { deposito: nDep, multa: nMulta, total: nTotal, fonte, observacao: observacao.trim() || undefined }),
-      confirmar_substituicao: substituir || undefined,
+    const r = await confirmarLancamento({
+      ...(folha ? { rescisao_id: l.rescisaoId as number, confirmar_liquido: confirmarLiquido || undefined } : { colaborador_nome: l.nome, valor_rescisao: nResc }),
+      grrf_modo: modo,
+      ...(modo === "valor" ? { valor_grrf: nGrrf } : {}),
+      ...(modo === "nao_aplicavel" ? { justificativa: justificativa.trim() } : {}),
+      motivo: motivo.trim() || undefined,
+      zero_conferido: zero || undefined,
+      confirmacao_rh: true,
     });
     setOcupado(false);
     if (r.ok) {
-      onMensagem(`GRRF de ${l.nome} ${naoAplicavel ? "marcada como não aplicável" : "registrada"}.`);
+      onMensagem(`Valores de ${l.nome} confirmados.`);
       onClose();
-    } else if (/confirme a substituição/i.test(r.error)) {
-      setPedeSubstituicao(true);
-      setErro(r.error);
     } else setErro(r.error);
   }
 
   return (
-    <Modal title={jaRegistrada ? "Corrigir GRRF" : "Registrar GRRF"} subtitle={`${l.nome} · ${formatarDataIso(l.dataEfetivaIso)}`} onClose={onClose} width={620}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={!podeEnviar || (pedeSubstituicao && !substituir)} onClick={confirmar}>{ocupado ? "Gravando..." : "Registrar"}</Button></>}>
-      <div className={styles.referencia}>
-        Folha de rescisão (referência — <strong>não é usada como GRRF</strong>): FGTS rescisório {money(l.fgtsRescisorioFolha ?? 0)} · Saldo FGTS {money(l.saldoFgtsFolha ?? 0)}. Informe o que foi
-        <strong> efetivamente recolhido</strong>, conforme a guia ou o demonstrativo.
-        {l.grrf.lancado !== null && <> GRRF já lançada no cadastro: <strong>{money(l.grrf.lancado)}</strong>.</>}
+    <Modal
+      title="Lançar e confirmar valores"
+      subtitle={`${l.nome} · ${formatarDataIso(l.dataEfetivaIso)}`}
+      onClose={onClose}
+      width={560}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" disabled={!podeEnviar} onClick={confirmar}>{ocupado ? "Salvando..." : "Confirmar e salvar"}</Button>
+        </>
+      }
+    >
+      {folha ? (
+        <div className={styles.campoDialogo}>
+          Valor da Rescisão
+          <span className={styles.valor}>{money(l.rescisao.status === "validado" ? l.rescisao.valor ?? 0 : l.liquidoFolha ?? 0)}</span>
+          <span className={styles.sub}>
+            {rescConfirmada
+              ? "Líquido da folha, já confirmado."
+              : l.rescisao.status === "divergente"
+                ? `Há divergência com o valor lançado (${money(l.rescisao.lancado ?? 0)}): decida em "Decidir divergência". A GRRF pode ser confirmada normalmente.`
+                : "Líquido da folha: será confirmado junto com esta operação."}
+          </span>
+        </div>
+      ) : (
+        <label className={styles.campoDialogo}>
+          Valor da Rescisão (R$) *
+          <input value={valorResc} inputMode="decimal" placeholder="0,00" onChange={(e) => setValorResc(e.target.value)} />
+          <span className={styles.sub}>Líquido a pagar ao colaborador.</span>
+        </label>
+      )}
+
+      <div className={styles.campoDialogo}>
+        Valor da GRRF
+        <span className={styles.sub}>Total da guia de FGTS rescisório a pagar pela empresa.</span>
+        <label className={`${styles.opcao} ${modo === "valor" ? styles.opcaoAtiva : ""}`}>
+          <input type="radio" name="grrf_modo" checked={modo === "valor"} onChange={() => setModo("valor")} />
+          <span>Informar o valor</span>
+        </label>
+        {modo === "valor" && <input value={valorGrrf} inputMode="decimal" placeholder="0,00" aria-label="Valor da GRRF (R$)" onChange={(e) => setValorGrrf(e.target.value)} />}
+        <label className={`${styles.opcao} ${modo === "pendente" ? styles.opcaoAtiva : ""}`} style={grrfConfirmada ? { opacity: 0.5, cursor: "not-allowed" } : undefined}>
+          <input type="radio" name="grrf_modo" checked={modo === "pendente"} disabled={grrfConfirmada} onChange={() => setModo("pendente")} />
+          <span>Ainda pendente (sem valor disponível)</span>
+        </label>
+        <label className={`${styles.opcao} ${modo === "nao_aplicavel" ? styles.opcaoAtiva : ""}`}>
+          <input type="radio" name="grrf_modo" checked={modo === "nao_aplicavel"} onChange={() => setModo("nao_aplicavel")} />
+          <span>Não aplicável (R$ 0,00) — exige justificativa</span>
+        </label>
+        {modo === "nao_aplicavel" && <textarea rows={2} value={justificativa} maxLength={1000} placeholder="Por que não há GRRF nesta rescisão?" aria-label="Justificativa" onChange={(e) => setJustificativa(e.target.value)} />}
       </div>
+
       {semModalidade && (
         <label className={styles.campoDialogo}>
           O relatório não informa a modalidade desta rescisão — confirme:
@@ -428,122 +473,22 @@ function DialogoGrrf({ linha: l, onClose, onMensagem }: { linha: LinhaConferenci
           </select>
         </label>
       )}
-      <label className={styles.opcao}>
-        <input type="checkbox" checked={naoAplicavel} onChange={(e) => setNaoAplicavel(e.target.checked)} />
-        <span>Não há GRRF a recolher nesta rescisão (informe o motivo abaixo)</span>
-      </label>
-      {!naoAplicavel && (
-        <>
-          <div className={styles.gradeDialogo}>
-            <label className={styles.campoDialogo}>Depósito rescisório (R$)<input value={deposito} inputMode="decimal" onChange={(e) => setDeposito(e.target.value)} placeholder="0,00" /></label>
-            <label className={styles.campoDialogo}>Multa rescisória (R$)<input value={multa} inputMode="decimal" onChange={(e) => setMulta(e.target.value)} placeholder="0,00" /></label>
-            <label className={styles.campoDialogo}>Total recolhido (R$) *<input value={total} inputMode="decimal" onChange={(e) => setTotal(e.target.value)} placeholder="0,00" /></label>
-          </div>
-          {!somaFecha && <div className={styles.erro}>O total não fecha com depósito + multa ({money((nDep ?? 0) + (nMulta ?? 0))}).</div>}
-          <label className={styles.campoDialogo}>
-            Fonte do valor *
-            <select value={fonte} onChange={(e) => setFonte(e.target.value as FonteGrrf)}>
-              {FONTES.map(([k, rot]) => <option key={k} value={k}>{rot}</option>)}
-            </select>
-          </label>
-        </>
-      )}
-      <label className={styles.campoDialogo}>
-        {naoAplicavel ? "Motivo *" : jaRegistrada ? "Motivo da correção *" : "Observação (opcional)"}
-        <textarea rows={2} value={observacao} maxLength={1000} onChange={(e) => setObservacao(e.target.value)} />
-      </label>
-      {pedeSubstituicao && (
-        <label className={styles.opcao}>
-          <input type="checkbox" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} />
-          <span>Confirmo substituir o valor de GRRF já lançado no cadastro (o valor anterior fica registrado na trilha).</span>
-        </label>
-      )}
-      {erro && <div className={styles.erro}>{erro}</div>}
-    </Modal>
-  );
-}
-
-/** Confirmação EXPRESSA de um lançamento manual (desligamento sem folha importada): o valor só passa a valer depois desta confirmação, com a fonte
- * documental (responsável e data ficam no servidor). GRRF "não se aplica" exige justificativa; um 0 lançado, sozinho, não resolve a GRRF. */
-export function DialogoValidarManual({ linha: l, componente, onClose, onMensagem }: { linha: LinhaConferencia; componente: "rescisao" | "grrf"; onClose: () => void; onMensagem: (m: string) => void }) {
-  const { validarLancamentoManual } = usePortalData();
-  const ehRescisao = componente === "rescisao";
-  const valor = ehRescisao ? l.rescisao.lancado : l.grrf.lancado;
-  const [naoAplicavel, setNaoAplicavel] = useState(false);
-  const [fonte, setFonte] = useState<string>(ehRescisao ? "demonstrativo_rescisao" : "guia_grrf");
-  const [observacao, setObservacao] = useState("");
-  const [justificativa, setJustificativa] = useState("");
-  const [zero, setZero] = useState(false);
-  const [substituir, setSubstituir] = useState(false);
-  const [pedeSubstituicao, setPedeSubstituicao] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const [ocupado, setOcupado] = useState(false);
-  const exigeZero = !naoAplicavel && valor === 0;
-  const podeEnviar = !ocupado && (naoAplicavel ? justificativa.trim().length > 0 : valor !== null && (!exigeZero || zero)) && (!pedeSubstituicao || substituir);
-  const fontes: [string, string][] = ehRescisao ? [["demonstrativo_rescisao", "Demonstrativo da rescisão"], ["outro_documento", "Outro documento"]] : FONTES;
-
-  async function confirmar() {
-    if (l.colaboradorId === null) return;
-    setOcupado(true);
-    setErro(null);
-    const r = await validarLancamentoManual({
-      colaborador_nome: l.nome,
-      componente,
-      ...(naoAplicavel ? { nao_aplicavel: true, justificativa: justificativa.trim(), confirmar_substituicao: substituir || undefined } : { fonte, observacao: observacao.trim() || undefined, zero_conferido: zero || undefined }),
-    });
-    setOcupado(false);
-    if (r.ok) {
-      onMensagem(`${ehRescisao ? "Rescisão" : naoAplicavel ? "GRRF (não aplicável)" : "GRRF"} de ${l.nome} validada.`);
-      onClose();
-    } else {
-      if (/confirme a substituição/i.test(r.error)) setPedeSubstituicao(true);
-      setErro(r.error);
-    }
-  }
-
-  return (
-    <Modal title={ehRescisao ? "Validar rescisão lançada" : "Validar GRRF lançada"} subtitle={`${l.nome} · ${formatarDataIso(l.dataEfetivaIso)}`} onClose={onClose} width={520}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={!podeEnviar} onClick={confirmar}>{ocupado ? "Gravando..." : "Confirmar validação"}</Button></>}>
-      <div className={styles.referencia}>
-        Valor lançado: <strong>{valor === null ? "—" : money(valor)}</strong>. Lançar um valor não o valida: confirme que ele confere com o documento, informando a fonte. A data e o responsável da validação ficam registrados.
-      </div>
-      {!ehRescisao && (
-        <label className={styles.opcao}>
-          <input type="checkbox" checked={naoAplicavel} onChange={(e) => setNaoAplicavel(e.target.checked)} />
-          <span>Não há GRRF a recolher nesta rescisão (R$ 0,00 resolvido) — exige justificativa</span>
-        </label>
-      )}
-      {naoAplicavel ? (
+      {pedeMotivo && (
         <label className={styles.campoDialogo}>
-          Justificativa *
-          <textarea rows={2} value={justificativa} maxLength={1000} onChange={(e) => setJustificativa(e.target.value)} />
+          Motivo da alteração *
+          <textarea rows={2} value={motivo} maxLength={1000} placeholder="Há valor já confirmado: o anterior continua no histórico." onChange={(e) => setMotivo(e.target.value)} />
         </label>
-      ) : (
-        <>
-          <label className={styles.campoDialogo}>
-            Fonte documental *
-            <select value={fonte} onChange={(e) => setFonte(e.target.value)}>
-              {fontes.map(([k, rot]) => <option key={k} value={k}>{rot}</option>)}
-            </select>
-          </label>
-          <label className={styles.campoDialogo}>
-            Observação (opcional)
-            <textarea rows={2} value={observacao} maxLength={1000} onChange={(e) => setObservacao(e.target.value)} />
-          </label>
-          {exigeZero && (
-            <label className={styles.opcao}>
-              <input type="checkbox" checked={zero} onChange={(e) => setZero(e.target.checked)} />
-              <span>Conferi o documento e confirmo que o valor é R$ 0,00.</span>
-            </label>
-          )}
-        </>
       )}
-      {pedeSubstituicao && (
+      {(rescZero || liquidoZero) && (
         <label className={styles.opcao}>
-          <input type="checkbox" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} />
-          <span>Confirmo substituir a GRRF lançada por "não aplicável" (o valor anterior fica na trilha).</span>
+          <input type="checkbox" checked={zero} onChange={(e) => setZero(e.target.checked)} />
+          <span>Confirmo que a rescisão é de R$ 0,00.</span>
         </label>
       )}
+      <label className={styles.opcao}>
+        <input type="checkbox" checked={confirmo} onChange={(e) => setConfirmo(e.target.checked)} />
+        <span>Confirmo que os valores informados estão corretos. Meu usuário e a data ficam registrados.</span>
+      </label>
       {erro && <div className={styles.erro}>{erro}</div>}
     </Modal>
   );

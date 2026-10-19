@@ -21,14 +21,11 @@ import {
   confirmarModalidade as confirmarModalidadeNoServidor,
   decidirDivergencia as decidirDivergenciaNoServidor,
   getFinanceiroDesligados,
-  registrarGrrf as registrarGrrfNoServidor,
-  salvarFechamentoManual,
-  validarLancamentoManual as validarLancamentoManualNoServidor,
+  confirmarLancamento as confirmarLancamentoNoServidor,
   validarRescisoes as validarRescisoesNoServidor,
   type ItemValidacao,
-  type RegistroGrrf,
+  type LancamentoConfirmado,
   type ResultadoValidacao,
-  type ValidacaoManual,
 } from "../repositories/financeiroRepository";
 import type { ConferenciaFinanceira, DecisaoDivergencia } from "../domain/custosRescisao";
 import {
@@ -265,16 +262,14 @@ export interface PortalData {
   criarMovimentacao: (form: NovaMovimentacaoForm) => Promise<{ ok: true; movimentacao: Movimentacao } | { ok: false; error?: string }>;
   /** Botão "Novo Cargo" (RH-only) — cria só nome/depto/gestor, 0 ocupantes. */
   criarCargoCustom: (nome: string, depto: string, gestor: string) => Promise<{ ok: true } | { ok: false }>;
-  salvarFechamentoFinanceiro: (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => Promise<{ ok: true } | { ok: false }>;
   /** Conferência financeira dos desligamentos (valores individuais): só o RH recebe; demais perfis ficam com null. */
   conferenciaFinanceira: ConferenciaFinanceira | null;
   /** Valida o LÍQUIDO da folha como Rescisão (individual ou em lote). Divergência e líquido R$ 0,00 voltam como resultado, sem gravar. */
   validarRescisoes: (itens: ItemValidacao[]) => Promise<{ ok: true; resultados: ResultadoValidacao[] } | { ok: false; error: string }>;
   decidirDivergencia: (p: { rescisaoId: number; decisao: DecisaoDivergencia; motivo: string; zeroConferido?: boolean }) => Promise<{ ok: true } | { ok: false; error: string }>;
-  registrarGrrf: (p: RegistroGrrf) => Promise<{ ok: true } | { ok: false; error: string }>;
   confirmarModalidade: (rescisaoId: number, modalidade: string) => Promise<{ ok: true } | { ok: false; error: string }>;
-  /** Confirmação expressa do RH de um componente do lançamento manual (desligamento sem folha): fonte documental, responsável e data. */
-  validarLancamentoManual: (p: ValidacaoManual) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Diálogo único: lança e CONFIRMA Rescisão e GRRF numa operação (usuário, data e trilha automáticos; origem "Informado e confirmado pelo RH"). */
+  confirmarLancamento: (p: LancamentoConfirmado) => Promise<{ ok: true } | { ok: false; error: string }>;
   atualizarCampoDescricaoCargo: (cargoNome: string, campo: CampoDescricaoCargo, valorNovo: string) => Promise<{ ok: true } | { ok: false }>;
   carregarHistoricoDescricaoCargo: (cargoNome: string) => Promise<HistoricoDescricaoCargo[]>;
   /** Catálogo fechado das 23 competências comportamentais oficiais (RH,
@@ -1674,15 +1669,6 @@ export function usePortalData(): PortalData {
     [flash, recarregarFinanceiroFn],
   );
 
-  // Lançamento manual (só para desligamento SEM rescisão importada da folha); grava pelo servidor, exclusivo do RH.
-  const salvarFechamentoFinanceiroFn = useCallback(
-    async (colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null) => {
-      const r = await comFinanceiro(() => salvarFechamentoManual(colaboradorNome, valorRescisao, valorGrrf), { mensagem: "Fechamento financeiro salvo." });
-      return r.ok ? { ok: true as const } : { ok: false as const };
-    },
-    [comFinanceiro],
-  );
-
   const validarRescisoesFn = useCallback(
     async (itens: ItemValidacao[]) => {
       const r = await comFinanceiro(() => validarRescisoesNoServidor(itens));
@@ -1699,17 +1685,9 @@ export function usePortalData(): PortalData {
     [comFinanceiro],
   );
 
-  const registrarGrrfFn = useCallback(
-    async (p: RegistroGrrf) => {
-      const r = await comFinanceiro(() => registrarGrrfNoServidor(p), { mensagem: "GRRF registrada.", flashErro: false });
-      return r.ok ? { ok: true as const } : r;
-    },
-    [comFinanceiro],
-  );
-
-  const validarLancamentoManualFn = useCallback(
-    async (p: ValidacaoManual) => {
-      const r = await comFinanceiro(() => validarLancamentoManualNoServidor(p), { mensagem: "Validação registrada.", flashErro: false });
+  const confirmarLancamentoFn = useCallback(
+    async (p: LancamentoConfirmado) => {
+      const r = await comFinanceiro(() => confirmarLancamentoNoServidor(p), { mensagem: "Valores confirmados.", flashErro: false });
       return r.ok ? { ok: true as const } : r;
     },
     [comFinanceiro],
@@ -2970,13 +2948,11 @@ export function usePortalData(): PortalData {
     aprovarPreenchimento: aprovarPreenchimentoFn,
     criarMovimentacao: criarMovimentacaoFn,
     criarCargoCustom: criarCargoCustomFn,
-    salvarFechamentoFinanceiro: salvarFechamentoFinanceiroFn,
     conferenciaFinanceira: state.conferenciaFinanceira,
     validarRescisoes: validarRescisoesFn,
     decidirDivergencia: decidirDivergenciaFn,
-    registrarGrrf: registrarGrrfFn,
     confirmarModalidade: confirmarModalidadeFn,
-    validarLancamentoManual: validarLancamentoManualFn,
+    confirmarLancamento: confirmarLancamentoFn,
     atualizarCampoDescricaoCargo: atualizarCampoDescricaoCargoFn,
     carregarHistoricoDescricaoCargo: carregarHistoricoDescricaoCargoFn,
     catalogoCompetenciasCargo: state.catalogoCompetenciasCargo,

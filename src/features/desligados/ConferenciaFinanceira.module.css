@@ -132,6 +132,16 @@
   background: var(--color-surface);
 }
 
+.campoDialogo input[type="radio"],
+.campoDialogo input[type="checkbox"] {
+  width: auto;
+  flex: none;
+  margin-top: 2px;
+  padding: 0;
+}
+.campoDialogo .opcao span {
+  font-weight: 400;
+}
 .gradeDialogo {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

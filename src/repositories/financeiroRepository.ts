@@ -4,7 +4,7 @@
 
 import { gravar } from "../features/desenvolvimento/devRepository";
 import { supabaseConfigured } from "../lib/supabaseClient";
-import type { ConferenciaFinanceira, CoberturaFinanceira, CustoMesFinanceiro, DecisaoDivergencia, FechamentoFinanceiro, FonteGrrf } from "../domain/custosRescisao";
+import type { ConferenciaFinanceira, CoberturaFinanceira, CustoMesFinanceiro, DecisaoDivergencia, FechamentoFinanceiro } from "../domain/custosRescisao";
 import type { DesligamentoFinanceiro } from "../types/domain";
 
 export interface FinanceiroRH {
@@ -75,38 +75,24 @@ export async function confirmarModalidade(p: { rescisao_id: number; modalidade: 
   await gravar("financeiro_modalidade_confirmar", p);
 }
 
-export interface RegistroGrrf {
-  rescisao_id: number;
-  nao_aplicavel?: boolean;
-  deposito?: number | string | null;
-  multa?: number | string | null;
-  total?: number | string | null;
-  fonte?: FonteGrrf;
-  observacao?: string;
-  motivo?: string;
-  confirmar_substituicao?: boolean;
-}
-
-export async function registrarGrrf(p: RegistroGrrf): Promise<void> {
-  await gravar("financeiro_grrf_registrar", { ...p });
-}
-
-export async function salvarFechamentoManual(colaboradorNome: string, valorRescisao: number | null, valorGrrf: number | null): Promise<void> {
-  await gravar("financeiro_fechamento_salvar", { colaborador_nome: colaboradorNome, valor_rescisao: valorRescisao, valor_grrf: valorGrrf });
-}
-
-export interface ValidacaoManual {
-  colaborador_nome: string;
-  componente: "rescisao" | "grrf";
-  fonte?: string;
-  observacao?: string;
-  nao_aplicavel?: boolean;
+export interface LancamentoConfirmado {
+  /** Desligamento com rescisão da folha: informe `rescisao_id`. Sem folha: informe `colaborador_nome` e `valor_rescisao`. */
+  rescisao_id?: number;
+  colaborador_nome?: string;
+  valor_rescisao?: number | null;
+  /** Folha: confirma o líquido da folha junto (divergência e R$ 0,00 seguem exigindo decisão/conferência expressa). */
+  confirmar_liquido?: boolean;
+  grrf_modo: "valor" | "pendente" | "nao_aplicavel";
+  valor_grrf?: number | null;
   justificativa?: string;
+  /** Obrigatório ao alterar um valor já confirmado. */
+  motivo?: string;
   zero_conferido?: boolean;
-  confirmar_substituicao?: boolean;
+  /** Confirmação expressa do RH: salva e valida numa única operação. */
+  confirmacao_rh: true;
 }
 
-/** Confirmação expressa do RH de um componente do lançamento manual (sem folha): fonte documental, responsável e data ficam no servidor. */
-export async function validarLancamentoManual(p: ValidacaoManual): Promise<void> {
-  await gravar("financeiro_fechamento_validar", { ...p });
+/** Diálogo único: lança e confirma Rescisão e GRRF. Usuário, data, origem ("Informado e confirmado pelo RH") e trilha ficam no servidor. */
+export async function confirmarLancamento(p: LancamentoConfirmado): Promise<void> {
+  await gravar("financeiro_lancamento_confirmar", { ...p });
 }

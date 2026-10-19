@@ -16,7 +16,10 @@ import type { Colaborador } from "../types/domain.js";
 export type StatusRescisao = "pendente" | "divergente" | "validado";
 export type StatusGrrf = "pendente" | "validado" | "nao_aplicavel";
 export type DecisaoDivergencia = "adotar_folha" | "manter_lancado";
-export type FonteGrrf = "guia_grrf" | "demonstrativo_rescisao" | "outro_documento";
+export type FonteGrrf = "guia_grrf" | "demonstrativo_rescisao" | "outro_documento" | "informado_rh";
+/** Origem interna dos valores lançados no diálogo único: o RH informou e confirmou — NÃO é conferência de documento. */
+export const FONTE_INFORMADO_RH = "informado_rh";
+export const ROTULO_INFORMADO_RH = "Informado e confirmado pelo RH";
 
 /** Linha da tabela de rubricas (só servidor) + validação já gravada. */
 export interface RubricaFinanceira {
