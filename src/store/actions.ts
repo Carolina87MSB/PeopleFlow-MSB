@@ -1,3 +1,4 @@
+import type { RescisaoHistorica } from "../domain/rescisoesHistorico";
 import type {
   AvaliacaoDesempenho,
   AvaliacaoExperiencia,
@@ -55,6 +56,7 @@ export type PortalAction =
       reajustesSalariais: ReajusteSalarial[];
       feedbacks: Feedback[];
       vagas: Vaga[];
+      rescisoesHistorico: RescisaoHistorica[];
     }
   | { type: "ADICIONAR_COMPETENCIA_CARGO"; relacao: DescricaoCargoCompetencia }
   | { type: "REMOVER_COMPETENCIA_CARGO"; cargoNome: string; competenciaId: string }

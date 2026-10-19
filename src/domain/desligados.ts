@@ -1,8 +1,12 @@
 import { mesIsoFromDataBr, mesLabel } from "./dates";
+import type { RescisaoHistorica } from "./rescisoesHistorico";
+import { hojeBrasilia, situacaoFuncionalEm } from "./situacaoFuncional";
 import type { Colaborador, DesligamentoFinanceiro } from "../types/domain";
 
-export function colaboradoresDesligados(colaboradores: Colaborador[]): Colaborador[] {
-  return colaboradores.filter((c) => c.desligado);
+/** Lista de Desligados pela regra central: quem já passou da data efetiva de desligamento (ou está marcado sem data). Desligamento com data
+ * FUTURA continua ativo — e fora desta lista — até a data. */
+export function colaboradoresDesligados(colaboradores: Colaborador[], hoje: string = hojeBrasilia()): Colaborador[] {
+  return colaboradores.filter((c) => situacaoFuncionalEm(c, hoje, "acesso", hoje).situacao === "desligado");
 }
 
 export function fechamentoDe(colaboradorNome: string, desligamentos: DesligamentoFinanceiro[]): DesligamentoFinanceiro | undefined {
@@ -28,7 +32,7 @@ export interface CustoRescisaoMes {
 /** Quantidade de desligamentos e custo (rescisão + GRRF) por mês — colaboradores sem data de
  * desligamento reconhecível ou sem fechamento financeiro lançado ainda entram na contagem, só não
  * somam valor (fica pendente lançar depois, ver `pendenteFechamento`). */
-export function custosRescisaoPorMes(desligados: Colaborador[], desligamentos: DesligamentoFinanceiro[]): CustoRescisaoMes[] {
+export function custosRescisaoPorMes(desligados: Colaborador[], desligamentos: DesligamentoFinanceiro[], saidasHistorico: RescisaoHistorica[] = []): CustoRescisaoMes[] {
   const porMes = new Map<string, CustoRescisaoMes>();
   desligados.forEach((c) => {
     const mes = mesIsoFromDataBr(c.dataDesligamento);
@@ -43,6 +47,19 @@ export function custosRescisaoPorMes(desligados: Colaborador[], desligamentos: D
     bucket.rescisao += fin?.valorRescisao ?? 0;
     bucket.grrf += fin?.valorGrrf ?? 0;
     bucket.total = bucket.rescisao + bucket.grrf;
+  });
+  // Saídas efetivas do histórico da folha (pessoas sem cadastro): entram só na QUANTIDADE. Não têm fechamento financeiro lançado e as
+  // rubricas do relatório ainda não foram validadas pelo RH (o que é custo desembolsado × saldo/provisão), então nenhum valor é somado.
+  // Encerramentos de estágio com efetivação NÃO entram aqui: não são saída da empresa.
+  saidasHistorico.forEach((r) => {
+    if (r.natureza !== "saida_efetiva") return;
+    const mes = r.demissaoIso.slice(0, 7);
+    let bucket = porMes.get(mes);
+    if (!bucket) {
+      bucket = { mes, mesLabel: mesLabel(mes), quantidade: 0, rescisao: 0, grrf: 0, total: 0 };
+      porMes.set(mes, bucket);
+    }
+    bucket.quantidade += 1;
   });
   return [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes));
 }

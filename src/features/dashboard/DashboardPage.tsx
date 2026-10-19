@@ -9,6 +9,7 @@ import { agregarCargos, agregarDepartamentos, contarPorGestor } from "../../doma
 import { tipoColor } from "../../domain/colors";
 import { formatarDataIso, hojeIso } from "../../domain/dates";
 import {
+  admissaoEfetivaPorId,
   calcularTurnover,
   colaboradoresAtivosEmData,
   desligamentosNoPeriodo,
@@ -20,6 +21,7 @@ import {
   type FiltrosAtributosDashboard,
 } from "../../domain/dashboardExecutivo";
 import { custosRescisaoPorMes, pendenteFechamento } from "../../domain/desligados";
+import { filtrarHistorico, prepararHistorico } from "../../domain/rescisoesHistorico";
 import { formatarNomeCargo } from "../../domain/formatoCargo";
 import { pendenciasAvaliacaoExperiencia as pendenciasAvaliacaoExperienciaDomain } from "../../domain/avaliacaoExperiencia";
 import { podeAgir } from "../../domain/workflow";
@@ -100,9 +102,22 @@ export function DashboardPage() {
 
   // Headcount Planejado/Aderência são a única exceção à regra "tudo responde
   // aos filtros" — sempre empresa toda, nunca recortados por Setor/Gestor/Cargo.
+  // Histórico de rescisões da folha: completa o quadro com quem saiu e nunca teve cadastro (e preserva a continuidade de quem teve estágio
+  // encerrado para efetivação). `prepararHistorico` usa o cadastro COMPLETO para nunca contar alguém duas vezes. Gestor vê só a própria
+  // árvore — as saídas sem cadastro não têm gestor, então ficam de fora do recorte dele.
+  const historicoPreparado = useMemo(() => prepararHistorico(state.rescisoesHistorico, state.colaboradores), [state.rescisoesHistorico, state.colaboradores]);
+  const veEmpresaToda = perfil !== "Gestor";
+  const historicoEmpresaToda = useMemo(
+    () => filtrarHistorico(historicoPreparado, { setor: "Todos", gestor: "Todos", cargo: "Todos" }, colaboradoresParaDashboardExecutivo, veEmpresaToda),
+    [historicoPreparado, colaboradoresParaDashboardExecutivo, veEmpresaToda],
+  );
+  const historicoFiltrado = useMemo(
+    () => filtrarHistorico(historicoPreparado, filtrosAtributos, colaboradoresExecutivoFiltrados, veEmpresaToda),
+    [historicoPreparado, filtrosAtributos, colaboradoresExecutivoFiltrados, veEmpresaToda],
+  );
   const headcountRealEmpresaToda = useMemo(
-    () => headcountEmData(colaboradoresParaDashboardExecutivo, periodoFim),
-    [colaboradoresParaDashboardExecutivo, periodoFim],
+    () => headcountEmData(colaboradoresParaDashboardExecutivo, periodoFim, historicoEmpresaToda),
+    [colaboradoresParaDashboardExecutivo, periodoFim, historicoEmpresaToda],
   );
   const aderencia = useMemo(() => {
     const planejado = configDashboard?.headcountPlanejado;
@@ -111,20 +126,20 @@ export function DashboardPage() {
   }, [configDashboard, headcountRealEmpresaToda]);
 
   const headcountReal = useMemo(
-    () => headcountEmData(colaboradoresExecutivoFiltrados, periodoFim),
-    [colaboradoresExecutivoFiltrados, periodoFim],
+    () => headcountEmData(colaboradoresExecutivoFiltrados, periodoFim, historicoFiltrado),
+    [colaboradoresExecutivoFiltrados, periodoFim, historicoFiltrado],
   );
   const resultadoTurnover = useMemo(
-    () => calcularTurnover(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
-    [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
+    () => calcularTurnover(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim, historicoFiltrado),
+    [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim, historicoFiltrado],
   );
   const colaboradoresAtivosNoFimDoPeriodo = useMemo(
-    () => colaboradoresAtivosEmData(colaboradoresExecutivoFiltrados, periodoFim),
-    [colaboradoresExecutivoFiltrados, periodoFim],
+    () => colaboradoresAtivosEmData(colaboradoresExecutivoFiltrados, periodoFim, historicoFiltrado),
+    [colaboradoresExecutivoFiltrados, periodoFim, historicoFiltrado],
   );
   const tempoMedio = useMemo(
-    () => tempoMedioDeEmpresa(colaboradoresAtivosNoFimDoPeriodo, periodoFim),
-    [colaboradoresAtivosNoFimDoPeriodo, periodoFim],
+    () => tempoMedioDeEmpresa(colaboradoresAtivosNoFimDoPeriodo, periodoFim, admissaoEfetivaPorId(historicoFiltrado)),
+    [colaboradoresAtivosNoFimDoPeriodo, periodoFim, historicoFiltrado],
   );
   // Sempre empresa toda (ver comentário em performanceMediaMSB) — não usa
   // colaboradoresExecutivoFiltrados nem o Período selecionado, só o ciclo
@@ -146,16 +161,21 @@ export function DashboardPage() {
   );
   const maxGestor = Math.max(1, ...gestores.map(([, count]) => count));
   const turnoverSetor = useMemo(
-    () => turnoverPorSetor(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
-    [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
+    () => turnoverPorSetor(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim, historicoFiltrado),
+    [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim, historicoFiltrado],
   );
   const desligadosNoPeriodoFiltrado = useMemo(
     () => desligamentosNoPeriodo(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
     [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
   );
   const custosRescisao = useMemo(
-    () => custosRescisaoPorMes(desligadosNoPeriodoFiltrado, desligamentosFinanceiros),
-    [desligadosNoPeriodoFiltrado, desligamentosFinanceiros],
+    () =>
+      custosRescisaoPorMes(
+        desligadosNoPeriodoFiltrado,
+        desligamentosFinanceiros,
+        historicoFiltrado.saidasSemCadastro.filter((r) => r.demissaoIso >= periodoInicio && r.demissaoIso <= periodoFim),
+      ),
+    [desligadosNoPeriodoFiltrado, desligamentosFinanceiros, historicoFiltrado, periodoInicio, periodoFim],
   );
   const custoRescisaoTotal = custosRescisao.reduce((acc, m) => acc + m.total, 0);
   const qtdDesligamentosTotal = custosRescisao.reduce((acc, m) => acc + m.quantidade, 0);
@@ -348,7 +368,15 @@ export function DashboardPage() {
             )}
             <Kpi label="Turnover" value={resultadoTurnover.turnover !== null ? `${Math.round(resultadoTurnover.turnover)}%` : "—"} hint="no período selecionado" />
             <Kpi label="Admissões" value={resultadoTurnover.admissoes} hint="no período selecionado" />
-            <Kpi label="Desligamentos" value={resultadoTurnover.desligamentos} hint="no período selecionado" />
+            <Kpi
+              label="Desligamentos"
+              value={resultadoTurnover.desligamentos}
+              hint={
+                resultadoTurnover.conversoes > 0
+                  ? `pessoas que saíram · ${resultadoTurnover.rescisoesContratuais} rescisões contratuais (inclui ${resultadoTurnover.conversoes} encerramento${resultadoTurnover.conversoes === 1 ? "" : "s"} de estágio com efetivação)`
+                  : "pessoas que saíram, no período selecionado"
+              }
+            />
             <Kpi label="Tempo Médio de Empresa" value={tempoMedio ? `${tempoMedio.anos}a ${tempoMedio.meses}m` : "—"} />
             <Kpi
               label="Performance Média da MSB"
@@ -546,6 +574,12 @@ export function DashboardPage() {
                     </tbody>
                   </table>
                 </div>
+                {historicoFiltrado.saidasSemCadastro.length > 0 && (
+                  <p className={styles.secaoContexto} style={{ marginTop: 8 }}>
+                    Os valores vêm do fechamento financeiro lançado pelo RH. Saídas registradas só no histórico da folha entram na contagem de desligamentos, mas ainda não têm valor: as rubricas do relatório
+                    (salário, proventos, descontos, líquido, FGTS) aguardam validação do RH e não são somadas.
+                  </p>
+                )}
               </div>
             ) : (
               <div className={styles.panel}>
