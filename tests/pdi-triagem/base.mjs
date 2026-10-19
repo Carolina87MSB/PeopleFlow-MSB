@@ -31,7 +31,7 @@ export async function novaReplica() {
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     create schema storage; create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
     create table storage.objects (bucket_id text, name text);
-    create table public.colaboradores (id bigint generated always as identity primary key, nome text, cargo text, departamento text, gestor text, desligado boolean default false, admissao date, empresa_afiliada boolean default false);
+    create table public.colaboradores (id bigint generated always as identity primary key, nome text, cargo text, departamento text, gestor text, desligado boolean default false, data_desligamento date, admissao date, empresa_afiliada boolean default false);
     create table public.peopleflow_descricoes_cargo (cargo_nome text primary key);
     create table public.peopleflow_pdi (
       id bigint generated always as identity primary key, colaborador_nome text not null, avaliacao_id text, origem text, acao text not null default '', prazo date,
