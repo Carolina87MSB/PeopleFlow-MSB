@@ -20,6 +20,7 @@ const PAGE_META: Record<string, PageMeta> = {
   "desenvolvimento/lnt": { eyebrow: "Desenvolvimento", title: "Necessidades de Desenvolvimento" },
   "desenvolvimento/treinamentos": { eyebrow: "Desenvolvimento", title: "Treinamentos" },
   "desenvolvimento/treinamento": { eyebrow: "Desenvolvimento", title: "Treinamento" },
+  "meus-treinamentos": { eyebrow: "Desenvolvimento", title: "Meus treinamentos" },
   acessos: { eyebrow: "Administração do sistema", title: "Acessos" },
 };
 

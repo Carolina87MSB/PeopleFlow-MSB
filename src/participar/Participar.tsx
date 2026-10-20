@@ -172,6 +172,11 @@ export function Participar() {
               </p>
             )}
             {estado.info.situacao === "nao_inscrito" && <p className={styles.aviso}>Você não está na lista de participantes deste treinamento. Procure o responsável — ele pode incluir você e registrar a presença.</p>}
+            {estado.info.situacao === "confirmada" && (
+              <a className={styles.link} href="/meus-treinamentos">
+                Ver meus treinamentos
+              </a>
+            )}
             <button
               className={styles.link}
               type="button"

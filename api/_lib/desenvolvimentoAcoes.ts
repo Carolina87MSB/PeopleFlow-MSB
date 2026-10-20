@@ -739,8 +739,12 @@ async function exigirPodeRegistrar(conta: ContaDev) {
   }
   throw new ErroHttp(403, "Registrar treinamento: RH, Gestor ou Responsável por Treinamentos indicado pelo Gestor.");
 }
-function exigirRHouResponsavel(conta: ContaDev, t: Treinamento) {
-  if (conta.perfil !== "RH" && !ehResponsavel(conta, t)) throw new ErroHttp(403, "Somente o RH ou o responsável/instrutor deste treinamento.");
+/** Condução e registro operacional (iniciar, realização, presença, QR, evidências): RH, responsável/instrutor designado
+ * ou o GESTOR da gestão que registrou o treinamento. O Responsável indicado pela gestão só conduz o que lhe foi designado. */
+async function exigirConduzir(conta: ContaDev, t: Treinamento) {
+  if (conta.perfil === "RH" || ehResponsavel(conta, t)) return;
+  if (conta.perfil === "Gestor" && (await ehDaGestao(conta, t))) return;
+  throw new ErroHttp(403, "Somente o RH, o responsável/instrutor designado ou o gestor deste treinamento.");
 }
 
 async function idsNoEscopo(conta: ContaDev): Promise<Set<number>> {
@@ -958,7 +962,7 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
 
 async function treinamentoRealizacao(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
-  exigirRHouResponsavel(conta, t);
+  await exigirConduzir(conta, t);
   if (!["planejado", "em_andamento"].includes(t.status)) throw new ErroHttp(422, "Realização só pode ser registrada em treinamento planejado ou em andamento.");
   const campos = {
     data_realizacao: dataOpcional(corpo, "data_realizacao", "Data de realização"),
@@ -992,16 +996,31 @@ async function treinamentoPlanejar(conta: ContaDev, corpo: Corpo) {
 
 async function treinamentoIniciar(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "id", "Treinamento"));
-  exigirRHouResponsavel(conta, t);
+  await exigirConduzir(conta, t);
   if (t.status !== "planejado") throw new ErroHttp(422, "Só treinamentos PLANEJADOS podem ser iniciados.");
+  // A revisão treinada é a vigente NO INÍCIO da realização: se o documento foi revisado desde o planejamento, a fotografia é
+  // atualizada agora (com auditoria). Depois do início ela nunca mais muda — revisões posteriores não alteram o que foi treinado.
+  let revisaoDoDocumento: Record<string, unknown> = {};
+  let mudouDocumento: Record<string, unknown> | null = null;
+  if (t.lista_mestra_codigo) {
+    const atual = await fotografiaDocumento(t.lista_mestra_codigo).catch((e: unknown) => {
+      if (e instanceof ErroHttp && e.status === 422) throw new ErroHttp(422, `O documento ${t.lista_mestra_codigo} não está vigente na Lista Mestra. Edite o treinamento e selecione o documento correto antes de iniciar.`);
+      throw e;
+    });
+    if (atual.lista_mestra_revisao !== t.lista_mestra_revisao || atual.lista_mestra_titulo !== t.lista_mestra_titulo) {
+      revisaoDoDocumento = { ...atual, ...(TIPOS_COM_DOCUMENTO.has(t.tipo) ? { titulo: caixaAlta(String(atual.lista_mestra_titulo)) } : {}) };
+      mudouDocumento = { codigo: t.lista_mestra_codigo, revisao: { antes: t.lista_mestra_revisao, depois: atual.lista_mestra_revisao }, titulo: { antes: t.lista_mestra_titulo, depois: atual.lista_mestra_titulo } };
+    }
+  }
   const { data, error } = await supabaseAdmin
     .from("peopleflow_dev_treinamentos")
-    .update({ status: "em_andamento", iniciado_em: new Date().toISOString(), iniciado_por: conta.userId, updated_by: conta.userId })
+    .update({ ...revisaoDoDocumento, status: "em_andamento", iniciado_em: new Date().toISOString(), iniciado_por: conta.userId, updated_by: conta.userId })
     .eq("id", t.id)
     .select(COLS_TRE)
     .single();
   if (error) erroBanco(error, "Treinamento");
   await auditar(conta, "treinamento_iniciado", "peopleflow_dev_treinamentos", String(t.id), { status: { antes: "planejado", depois: "em_andamento" } });
+  if (mudouDocumento) await auditar(conta, "treinamento_revisao_atualizada", "peopleflow_dev_treinamentos", String(t.id), { motivo: "Documento revisado entre o planejamento e o início da realização", ...mudouDocumento });
   return data;
 }
 
@@ -1502,7 +1521,7 @@ async function necessidadeDesvincular(conta: ContaDev, corpo: Corpo) {
 // ── Presença ────────────────────────────────────────────────────────────
 async function presencaManual(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
-  exigirRHouResponsavel(conta, t);
+  await exigirConduzir(conta, t);
   const presenca = umDe(texto(corpo, "presenca"), ["presente", "ausente", "pendente"] as const, "Presença");
   const motivo = texto(corpo, "motivo", { obrigatorio: true, max: 1000, rotulo: "a origem/justificativa do registro" });
   const retificacao = t.status === "concluido";
@@ -1538,7 +1557,7 @@ async function presencaManual(conta: ContaDev, corpo: Corpo) {
 // ── QR de presença (token aleatório, com validade; só o servidor o lê) ──
 async function qrGerar(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
-  exigirRHouResponsavel(conta, t);
+  await exigirConduzir(conta, t);
   if (t.status !== "em_andamento") throw new ErroHttp(422, "Inicie o treinamento para gerar o QR de presença.");
   const { data: atual } = await supabaseAdmin.from("peopleflow_dev_qr_tokens").select("token, ativo, expira_em").eq("treinamento_id", t.id).maybeSingle();
   const renovar = corpo.renovar === true;
@@ -1556,7 +1575,7 @@ async function qrGerar(conta: ContaDev, corpo: Corpo) {
 
 async function qrEncerrarAcao(conta: ContaDev, corpo: Corpo) {
   const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
-  exigirRHouResponsavel(conta, t);
+  await exigirConduzir(conta, t);
   const encerrou = await encerrarQr(conta, t.id);
   if (encerrou) await auditar(conta, "qr_encerrado", "peopleflow_dev_treinamentos", String(t.id), {});
   return { encerrado: encerrou };
@@ -1573,7 +1592,7 @@ const MIMES = new Set([
 const TIPOS_EVID = ["lista_presenca", "certificado", "material", "ata", "foto", "comprovante", "avaliacao", "outro"] as const;
 
 async function exigirPodeAnexar(conta: ContaDev, t: Treinamento) {
-  exigirRHouResponsavel(conta, t);
+  await exigirConduzir(conta, t);
   if (t.status === "cancelado") throw new ErroHttp(422, "Treinamento cancelado.");
   if (t.status === "concluido" && conta.perfil !== "RH") throw new ErroHttp(403, "Após a conclusão, só o RH anexa evidências.");
 }
@@ -1935,13 +1954,47 @@ async function presencaViaQr(acao: "presenca_info" | "presenca_confirmar", req: 
   return { ...info, situacao: "confirmada", confirmada_em: agora };
 }
 
-export function ehAcaoDePresencaQr(acao: string): acao is "presenca_info" | "presenca_confirmar" {
-  return acao === "presenca_info" || acao === "presenca_confirmar";
+/** Colaborador consulta o PRÓPRIO histórico (qualquer conta do PeopleFlow, sem sessão do módulo). Só concluídos e agendados oficiais
+ * em que a pessoa está inscrita — nada de outros participantes, eficácia, justificativas ou treinamentos de homologação/teste. */
+async function historicoDoParticipante(req: VercelRequest) {
+  const quem = await identificarParticipante(req);
+  const { data: parts, error } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .select("treinamento_id, presenca_status, removido_em")
+    .eq("colaborador_id", quem.colaboradorId);
+  if (error) erroBanco(error, "Participações");
+  const minhas = new Map((parts ?? []).filter((p) => !p.removido_em).map((p) => [Number(p.treinamento_id), p.presenca_status as string]));
+  if (minhas.size === 0) return { primeiro_nome: quem.primeiroNome, treinamentos: [] };
+  const { data: ts, error: tErro } = await supabaseAdmin
+    .from("peopleflow_dev_treinamentos")
+    .select("id, codigo, titulo, status, data_inicio, data_realizacao, carga_horaria_min, carga_realizada_min, lista_mestra_codigo, lista_mestra_revisao, homologacao")
+    .in("id", [...minhas.keys()]);
+  if (tErro) erroBanco(tErro, "Treinamentos");
+  const treinamentos = (ts ?? [])
+    .filter((t) => !t.homologacao && ["planejado", "em_andamento", "concluido"].includes(t.status as string))
+    .map((t) => {
+      const presenca = minhas.get(Number(t.id));
+      const situacao = t.status !== "concluido" ? "agendado" : presenca === "presente" ? "realizado" : "ausente";
+      return {
+        codigo: t.codigo,
+        titulo: t.titulo,
+        documento: t.lista_mestra_codigo ? `${t.lista_mestra_codigo} rev. ${t.lista_mestra_revisao}` : null,
+        data: (t.data_realizacao ?? t.data_inicio) as string | null,
+        carga_min: (t.carga_realizada_min ?? t.carga_horaria_min) as number | null,
+        situacao,
+      };
+    })
+    .sort((a, b) => String(b.data ?? "").localeCompare(String(a.data ?? "")));
+  return { primeiro_nome: quem.primeiroNome, treinamentos };
 }
 
-export async function executarPresencaQr(acao: "presenca_info" | "presenca_confirmar", req: VercelRequest, res: VercelResponse) {
+export function ehAcaoDePresencaQr(acao: string): acao is "presenca_info" | "presenca_confirmar" | "meu_historico" {
+  return acao === "presenca_info" || acao === "presenca_confirmar" || acao === "meu_historico";
+}
+
+export async function executarPresencaQr(acao: "presenca_info" | "presenca_confirmar" | "meu_historico", req: VercelRequest, res: VercelResponse) {
   try {
-    res.status(200).json({ ok: true, dados: await presencaViaQr(acao, req) });
+    res.status(200).json({ ok: true, dados: acao === "meu_historico" ? await historicoDoParticipante(req) : await presencaViaQr(acao, req) });
   } catch (err) {
     if (err instanceof ErroHttp) {
       res.status(err.status).json({ error: err.message });

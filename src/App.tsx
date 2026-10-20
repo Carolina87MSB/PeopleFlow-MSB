@@ -26,6 +26,7 @@ const HabilidadesPage = lazy(() => import("./features/desenvolvimento/Habilidade
 const LntPage = lazy(() => import("./features/desenvolvimento/LntPage"));
 const TreinamentosPage = lazy(() => import("./features/desenvolvimento/TreinamentosPage"));
 const TreinamentoPage = lazy(() => import("./features/desenvolvimento/TreinamentoPage"));
+const MeusTreinamentosPage = lazy(() => import("./features/desenvolvimento/MeusTreinamentosPage"));
 
 function SobDemanda({ children }: { children: ReactNode }) {
   return <Suspense fallback={null}>{children}</Suspense>;
@@ -76,6 +77,7 @@ function App() {
                   <Route path="treinamento/:id" element={<SobDemanda><TreinamentoPage /></SobDemanda>} />
                   <Route path="*" element={<Navigate to="habilidades" replace />} />
                 </Route>
+                <Route path="/meus-treinamentos" element={<SobDemanda><MeusTreinamentosPage /></SobDemanda>} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Routes>
