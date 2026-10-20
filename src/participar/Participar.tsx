@@ -1,14 +1,20 @@
 // Página /participar/:token — confirmação de presença por QR (módulo Desenvolvimento).
 // Leve de propósito: não carrega o portal (nem a base de colaboradores).
-// A pessoa se identifica pelo login com e-mail corporativo (magic link); o
-// servidor confere o QR (validade/encerramento), a inscrição e grava a
-// presença — o navegador nunca escreve no banco.
-import { useCallback, useEffect, useState } from "react";
+// Quem já tem sessão válida (a mesma do portal, guardada neste navegador) vai direto
+// para "Confirmar minha presença". Quem não tem se identifica com o e-mail corporativo:
+// pelo link recebido OU digitando o código do mesmo e-mail — o código mantém a sessão
+// NESTE navegador mesmo quando o e-mail é aberto no Outlook ou em outro aplicativo.
+// O servidor confere o QR (validade/encerramento), a inscrição e grava a presença;
+// o navegador nunca escreve no banco e a identidade vem sempre da sessão, nunca do que
+// a página envia.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
 import styles from "./Participar.module.css";
 
 /** Lido pelo script de index.html: se o link do e-mail cair na raiz do portal, volta para cá. */
 const CHAVE_PENDENTE = "pf_participar_pendente";
+/** Só o e-mail digitado (para preencher na próxima vez); nunca sessão, token ou código. */
+const CHAVE_EMAIL = "pf_participar_email";
 const DOMINIO = "@msbbrasil.com";
 
 interface Info {
@@ -27,6 +33,14 @@ type Estado =
   | { tipo: "link_enviado"; email: string }
   | { tipo: "info"; info: Info }
   | { tipo: "erro"; mensagem: string };
+
+function emailLembrado(): string {
+  try {
+    return localStorage.getItem(CHAVE_EMAIL) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 function lerToken(): string {
   const m = window.location.pathname.match(/^\/participar\/([A-Za-z0-9_-]+)/);
@@ -53,10 +67,14 @@ async function chamar(acao: "presenca_info" | "presenca_confirmar", token: strin
 export function Participar() {
   const token = lerToken();
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailLembrado);
+  const [codigo, setCodigo] = useState("");
+  const [avisoCodigo, setAvisoCodigo] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  const carregar = useCallback(async () => {
+  // O Supabase também emite SIGNED_IN ao abrir a página com sessão guardada: não repete a consulta enquanto uma já está em andamento.
+  const emAndamento = useRef(false);
+  const abrir = useCallback(async () => {
     if (!token) {
       setEstado({ tipo: "erro", mensagem: "Link de presença inválido. Leia o QR novamente." });
       return;
@@ -78,6 +96,15 @@ export function Participar() {
       setEstado({ tipo: "info", info: r.info });
     }
   }, [token]);
+  const carregar = useCallback(async () => {
+    if (emAndamento.current) return;
+    emAndamento.current = true;
+    try {
+      await abrir();
+    } finally {
+      emAndamento.current = false;
+    }
+  }, [abrir]);
 
   useEffect(() => {
     if (!supabaseConfigured) {
@@ -101,6 +128,7 @@ export function Participar() {
     }
     setEnviando(true);
     try {
+      localStorage.setItem(CHAVE_EMAIL, alvo);
       localStorage.setItem(CHAVE_PENDENTE, JSON.stringify({ token, ts: Date.now() }));
     } catch {
       // sem armazenamento local: o link do e-mail ainda funciona se voltar direto para esta página
@@ -112,6 +140,22 @@ export function Participar() {
       return;
     }
     setEstado({ tipo: "link_enviado", email: alvo });
+  }
+
+  async function entrarComCodigo(e: React.FormEvent) {
+    e.preventDefault();
+    if (estado.tipo !== "link_enviado") return;
+    const digitos = codigo.replace(/\s+/g, "");
+    if (!/^\d{6,10}$/.test(digitos)) {
+      setAvisoCodigo("Digite o código numérico que veio no e-mail.");
+      return;
+    }
+    setEnviando(true);
+    setAvisoCodigo(null);
+    // Sucesso dispara SIGNED_IN: o listener acima abre direto a confirmação do treinamento.
+    const { error } = await supabase.auth.verifyOtp({ email: estado.email, token: digitos, type: "email" });
+    setEnviando(false);
+    if (error) setAvisoCodigo("Código inválido ou vencido. Confira o último e-mail recebido ou peça um novo link.");
   }
 
   async function confirmar() {
@@ -133,7 +177,7 @@ export function Participar() {
         {estado.tipo === "login" && (
           <form onSubmit={pedirLink} className={styles.form}>
             <h1 className={styles.titulo}>Identifique-se</h1>
-            <p className={styles.texto}>Entre com seu e-mail corporativo. Enviaremos um link de acesso; abra-o neste celular.</p>
+            <p className={styles.texto}>Entre com seu e-mail corporativo. Você recebe um e-mail de acesso e só precisa fazer isso uma vez neste aparelho.</p>
             <input className={styles.input} type="email" inputMode="email" autoComplete="email" placeholder="nome.sobrenome@msbbrasil.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             {estado.aviso && <p className={styles.aviso}>{estado.aviso}</p>}
             <button className={styles.botao} type="submit" disabled={enviando}>
@@ -146,8 +190,21 @@ export function Participar() {
           <>
             <h1 className={styles.titulo}>Verifique seu e-mail</h1>
             <p className={styles.texto}>
-              Enviamos um link para <strong>{estado.email}</strong>. Abra-o neste aparelho para confirmar a presença. Se o link abrir a tela inicial do portal, leia o QR de novo.
+              Enviamos um e-mail para <strong>{estado.email}</strong>. Abra o link <strong>neste aparelho</strong> para confirmar a presença.
             </p>
+            <form onSubmit={entrarComCodigo} className={styles.form}>
+              <p className={styles.texto}>
+                Abriu o e-mail no Outlook ou em outro aplicativo? Se o e-mail trouxer um <strong>código</strong>, digite-o aqui: você entra neste navegador e continua do ponto em que parou.
+              </p>
+              <input className={styles.input} type="text" inputMode="numeric" autoComplete="one-time-code" placeholder="Código do e-mail" value={codigo} onChange={(e) => setCodigo(e.target.value)} maxLength={14} />
+              {avisoCodigo && <p className={styles.aviso}>{avisoCodigo}</p>}
+              <button className={styles.botao} type="submit" disabled={enviando || !codigo.trim()}>
+                {enviando ? "Entrando…" : "Entrar com o código"}
+              </button>
+            </form>
+            <button className={styles.link} type="button" onClick={() => setEstado({ tipo: "login" })}>
+              Usar outro e-mail
+            </button>
           </>
         )}
 
@@ -181,7 +238,8 @@ export function Participar() {
               className={styles.link}
               type="button"
               onClick={async () => {
-                await supabase.auth.signOut();
+                // Só este aparelho: não derruba a sessão do portal em outros dispositivos.
+                await supabase.auth.signOut({ scope: "local" });
                 setEstado({ tipo: "login" });
               }}
             >
