@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { Avatar, Badge, Button, Drawer, EmptyState, tableStyles } from "../../components/ui";
 import { listarDesligamentos, pendenteFechamento, type DesligamentoLista } from "../../domain/desligados";
 import { construirEventos } from "../../domain/historico";
+import { formatarDataIso } from "../../domain/dates";
 import { tipoColor } from "../../domain/colors";
 import { Header } from "../../components/layout/Header";
 import { usePortalData } from "../../store/usePortalData";
@@ -11,6 +12,32 @@ import { ConferenciaFinanceira, DialogoLancarConfirmar } from "./ConferenciaFina
 import confStyles from "./ConferenciaFinanceira.module.css";
 import type { LinhaConferencia } from "../../domain/custosRescisao";
 import styles from "./DesligadosPage.module.css";
+
+interface ChipFin {
+  texto: string;
+  bg: string;
+  fg: string;
+  dot?: string;
+}
+const VERDE: Omit<ChipFin, "texto"> = { bg: "var(--color-success-bg)", fg: "var(--color-success-fg)", dot: "var(--color-success)" };
+const ALERTA: Omit<ChipFin, "texto"> = { bg: "var(--color-warning-bg)", fg: "var(--color-warning-fg)", dot: "var(--color-warning)" };
+const PERIGO: Omit<ChipFin, "texto"> = { bg: "var(--color-danger-bg)", fg: "var(--color-danger-fg)", dot: "var(--color-danger)" };
+const NEUTRO: Omit<ChipFin, "texto"> = { bg: "var(--color-neutral-bg)", fg: "var(--color-neutral-fg)" };
+
+/** Status financeiro da linha, com os dois estados SEPARADOS: Rescisão (líquido da folha validado?) e GRRF (guia confirmada?). O FGTS Rescisório da folha não é estado. */
+function statusFinanceiro(linha: LinhaConferencia | null, d: DesligamentoLista, fechamentos: ReturnType<typeof usePortalData>["desligamentosFinanceiros"]): { rescisao: ChipFin; grrf: ChipFin | null } {
+  if (linha) {
+    const r = linha.rescisao.status;
+    const rescisao: ChipFin =
+      r === "validado" ? { texto: "Rescisão validada", ...VERDE } : r === "divergente" ? { texto: "Rescisão divergente", ...PERIGO } : linha.liquidoFolha === 0 ? { texto: "Rescisão R$ 0,00 a conferir", ...ALERTA } : { texto: "Rescisão a validar", ...ALERTA };
+    const g = linha.grrf.status;
+    const grrf: ChipFin = g === "validado" ? { texto: "GRRF confirmada", ...VERDE } : g === "nao_aplicavel" ? { texto: "GRRF não aplicável", ...NEUTRO } : { texto: "GRRF pendente", ...ALERTA };
+    return { rescisao, grrf };
+  }
+  // conferência indisponível: só o que o cadastro sabe
+  if (d.origem === "historico") return { rescisao: { texto: "Pendente", ...ALERTA }, grrf: null };
+  return pendenteFechamento(d.nome, fechamentos) ? { rescisao: { texto: "Pendente", ...ALERTA }, grrf: null } : { rescisao: { texto: "Completo", ...VERDE }, grrf: null };
+}
 
 export function DesligadosPage() {
   const { perfil, desligados, saidasHistoricasSemCadastro, desligamentosFinanceiros, conferenciaFinanceira, pendenciasFinanceirasCount, movimentacoes, podeVerCadastros } = usePortalData();
@@ -69,19 +96,7 @@ export function DesligadosPage() {
             <tbody>
               {itens.map((c) => {
                 const linha = linhaDe(c);
-                const rotuloFin = linha
-                  ? linha.rescisao.status === "divergente"
-                    ? "Divergente"
-                    : linha.rescisao.status === "validado" && linha.grrf.status !== "pendente"
-                      ? "Validado"
-                      : linha.rescisao.status === "validado" || linha.grrf.status !== "pendente"
-                        ? "Parcial"
-                        : "Pendente"
-                  : c.origem === "historico"
-                    ? "Pendente"
-                    : pendenteFechamento(c.nome, desligamentosFinanceiros)
-                      ? "Pendente"
-                      : "Completo";
+                const fin = statusFinanceiro(linha, c, desligamentosFinanceiros);
                 return (
                   <tr key={c.chave} className={tableStyles.clickable} onClick={() => setSelecionado(c.chave)}>
                     <td>
@@ -101,21 +116,18 @@ export function DesligadosPage() {
                     <td>{c.dataDesligamento}</td>
                     <td>{c.motivo}</td>
                     {perfil === "RH" && (
-                    <td>
-                      {rotuloFin === "Validado" || rotuloFin === "Completo" ? (
-                        <Badge bg="var(--color-success-bg)" fg="var(--color-success-fg)" dot="var(--color-success)">
-                          {rotuloFin}
-                        </Badge>
-                      ) : rotuloFin === "Divergente" ? (
-                        <Badge bg="var(--color-danger-bg)" fg="var(--color-danger-fg)" dot="var(--color-danger)">
-                          Divergente
-                        </Badge>
-                      ) : (
-                        <Badge bg="var(--color-warning-bg)" fg="var(--color-warning-fg)" dot="var(--color-warning)">
-                          {rotuloFin}
-                        </Badge>
-                      )}
-                    </td>
+                      <td>
+                        <div className={styles.statusFin}>
+                          <Badge bg={fin.rescisao.bg} fg={fin.rescisao.fg} dot={fin.rescisao.dot}>
+                            {fin.rescisao.texto}
+                          </Badge>
+                          {fin.grrf && (
+                            <Badge bg={fin.grrf.bg} fg={fin.grrf.fg} dot={fin.grrf.dot}>
+                              {fin.grrf.texto}
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
                     )}
                   </tr>
                 );
@@ -211,23 +223,32 @@ function DesligadoDrawer({ item: c, ehRH, linha, onIrConferencia, eventos, onClo
           <>
             <div className={styles.financeiroGrid}>
               <div className={styles.detalheItem}>
-                <span className={styles.detalheLabel}>Valor da Rescisão (líquido)</span>
+                <span className={styles.detalheLabel}>Rescisão (líquido)</span>
                 <span className={styles.detalheValor}>
                   {linha.rescisao.status === "validado"
-                    ? `${money(linha.rescisao.valor ?? 0)} — confirmada`
+                    ? `${money(linha.rescisao.valor ?? 0)} — validada`
                     : linha.rescisaoId !== null
-                      ? `${money(linha.liquidoFolha ?? 0)} — a confirmar`
+                      ? `${money(linha.liquidoFolha ?? 0)} — a validar`
                       : linha.rescisao.lancado !== null
                         ? `${money(linha.rescisao.lancado)} — a confirmar`
                         : "Sem valor"}
                 </span>
-                {linha.rescisao.status === "divergente" && linha.rescisao.lancado !== null && <span className={styles.detalheLabel}>Divergente: lançado {money(linha.rescisao.lancado)}</span>}
+                {linha.rescisao.status === "divergente" && linha.rescisao.lancado !== null && <span className={styles.detalheLabel}>Divergente: lançado {money(linha.rescisao.lancado)} × líquido da folha {money(linha.liquidoFolha ?? 0)}</span>}
+                {linha.rescisaoId !== null && <span className={styles.detalheLabel}>Importado da folha{linha.folhaEmitidaEmIso ? ` de ${formatarDataIso(linha.folhaEmitidaEmIso)}` : ""}</span>}
               </div>
+              {linha.fgtsRescisorioFolha !== null && (
+                <div className={styles.detalheItem}>
+                  <span className={styles.detalheLabel}>FGTS Rescisório (folha)</span>
+                  <span className={styles.detalheValor}>{money(linha.fgtsRescisorioFolha)}</span>
+                  <span className={styles.detalheLabel}>Importado da folha{linha.folhaEmitidaEmIso ? ` de ${formatarDataIso(linha.folhaEmitidaEmIso)}` : ""} — valor calculado, não é guia paga</span>
+                </div>
+              )}
               <div className={styles.detalheItem}>
-                <span className={styles.detalheLabel}>Valor da GRRF (total da guia)</span>
+                <span className={styles.detalheLabel}>GRRF (guia)</span>
                 <span className={styles.detalheValor}>
-                  {linha.grrf.status === "validado" ? `${money(linha.grrf.total ?? 0)} — confirmada` : linha.grrf.status === "nao_aplicavel" ? "Não aplicável (justificada)" : "Pendente"}
+                  {linha.grrf.status === "validado" ? `${money(linha.grrf.total ?? 0)} — confirmada` : linha.grrf.status === "nao_aplicavel" ? "Não aplicável (justificada)" : "Pendente — nenhuma guia confirmada"}
                 </span>
+                {linha.grrf.status === "validado" && linha.grrf.validadaPor && <span className={styles.detalheLabel}>Confirmada por {linha.grrf.validadaPor}</span>}
               </div>
             </div>
             <Button variant="primary" onClick={() => setDialogoManual(true)} className={styles.salvarBtn}>

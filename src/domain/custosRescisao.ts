@@ -81,7 +81,10 @@ export interface LinhaConferencia {
   modalidadeConfirmada: string | null;
   /** Valores da folha (importados) — só para o RH. */
   liquidoFolha: number | null;
+  /** FGTS Rescisório da folha (última coluna do relatório): valor CALCULADO pela folha e importado — NÃO é guia GRRF paga nem conferida. */
   fgtsRescisorioFolha: number | null;
+  /** Data (ISO) do relatório da folha de onde Líquido e FGTS Rescisório foram importados. */
+  folhaEmitidaEmIso: string | null;
   saldoFgtsFolha: number | null;
   rescisao: {
     status: StatusRescisao;
@@ -208,6 +211,7 @@ function montarLinha(p: { chave: string; origem: LinhaConferencia["origem"]; nat
     modalidadeConfirmada: p.rubrica?.modalidadeConfirmada ?? null,
     liquidoFolha: p.rubrica?.liquido ?? null,
     fgtsRescisorioFolha: p.rubrica?.fgtsRescisorio ?? null,
+    folhaEmitidaEmIso: p.h?.relatorioEmitidoEmIso ?? null,
     saldoFgtsFolha: p.rubrica?.saldoFgts ?? null,
     rescisao: conversao ? { status: "pendente", valor: null, lancado: null, decisao: null, zeroConferido: false, validadaPor: null, validadaEm: null, fonte: null } : rescisaoDe(p.rubrica, p.fech),
     grrf: conversao ? { status: "pendente", total: null, deposito: null, multa: null, fonte: null, lancado: null, validadaPor: null, validadaEm: null } : grrfDe(p.rubrica, p.fech),
@@ -221,7 +225,10 @@ export interface CustoMesFinanceiro {
   quantidade: number;
   /** Soma só dos valores VALIDADOS. */
   rescisao: number;
+  /** FGTS Rescisório CALCULADO pela folha (importado) das saídas do mês — informativo: não é pagamento comprovado e NÃO entra no total. */
+  fgtsFolha: number;
   grrf: number;
+  /** Rescisão validada + GRRF confirmada (o FGTS Rescisório da folha fica de fora). */
   total: number;
   rescisaoValidadas: number;
   grrfResolvidas: number;
@@ -233,6 +240,8 @@ export interface CoberturaFinanceira {
   saidas: number;
   rescisaoValidadas: number;
   grrfResolvidas: number;
+  /** Saídas com o FGTS Rescisório da folha importado (informativo; independe da validação). */
+  fgtsFolhaImportados: number;
   /** Tudo validado (rescisão e GRRF) em todas as saídas do recorte. */
   completa: boolean;
 }
@@ -243,10 +252,11 @@ export function agregarCustosPorMes(linhas: LinhaConferencia[]): CustoMesFinance
     if (l.natureza !== "saida_efetiva") continue;
     let b = porMes.get(l.mes);
     if (!b) {
-      b = { mes: l.mes, mesLabel: mesLabel(l.mes), quantidade: 0, rescisao: 0, grrf: 0, total: 0, rescisaoValidadas: 0, grrfResolvidas: 0, parcial: false };
+      b = { mes: l.mes, mesLabel: mesLabel(l.mes), quantidade: 0, rescisao: 0, fgtsFolha: 0, grrf: 0, total: 0, rescisaoValidadas: 0, grrfResolvidas: 0, parcial: false };
       porMes.set(l.mes, b);
     }
     b.quantidade += 1;
+    if (l.fgtsRescisorioFolha !== null) b.fgtsFolha += l.fgtsRescisorioFolha;
     if (l.rescisao.status === "validado") {
       b.rescisao += l.rescisao.valor ?? 0;
       b.rescisaoValidadas += 1;
@@ -259,6 +269,7 @@ export function agregarCustosPorMes(linhas: LinhaConferencia[]): CustoMesFinance
   const meses = [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes));
   for (const m of meses) {
     m.rescisao = arredonda(m.rescisao);
+    m.fgtsFolha = arredonda(m.fgtsFolha);
     m.grrf = arredonda(m.grrf);
     m.total = arredonda(m.rescisao + m.grrf);
     m.parcial = m.rescisaoValidadas < m.quantidade || m.grrfResolvidas < m.quantidade;
@@ -270,7 +281,8 @@ export function coberturaDe(linhas: LinhaConferencia[]): CoberturaFinanceira {
   const saidas = linhas.filter((l) => l.natureza === "saida_efetiva");
   const rescisaoValidadas = saidas.filter((l) => l.rescisao.status === "validado").length;
   const grrfResolvidas = saidas.filter((l) => l.grrf.status !== "pendente").length;
-  return { saidas: saidas.length, rescisaoValidadas, grrfResolvidas, completa: saidas.length > 0 && rescisaoValidadas === saidas.length && grrfResolvidas === saidas.length };
+  const fgtsFolhaImportados = saidas.filter((l) => l.fgtsRescisorioFolha !== null).length;
+  return { saidas: saidas.length, rescisaoValidadas, grrfResolvidas, fgtsFolhaImportados, completa: saidas.length > 0 && rescisaoValidadas === saidas.length && grrfResolvidas === saidas.length };
 }
 
 const arredonda = (v: number) => Math.round(v * 100) / 100;

@@ -207,7 +207,7 @@ export function DashboardPage() {
     () =>
       custosServidor
         ? custosServidor.meses
-        : custosQuantidade.map((m) => ({ mes: m.mes, mesLabel: m.mesLabel, quantidade: m.quantidade, rescisao: 0, grrf: 0, total: 0, rescisaoValidadas: 0, grrfResolvidas: 0, parcial: true })),
+        : custosQuantidade.map((m) => ({ mes: m.mes, mesLabel: m.mesLabel, quantidade: m.quantidade, rescisao: 0, fgtsFolha: 0, grrf: 0, total: 0, rescisaoValidadas: 0, grrfResolvidas: 0, parcial: true })),
     [custosServidor, custosQuantidade],
   );
   const mostrarValores = veValoresFinanceiros && custosServidor !== null;

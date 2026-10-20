@@ -133,7 +133,7 @@ async function carregarBase(colaboradores: Colaborador[]): Promise<Base> {
   const [h, r, f] = await Promise.all([
     supabaseAdmin
       .from("peopleflow_rescisoes_historico")
-      .select("id, codigo_folha, nome, nome_normalizado, admissao, demissao, tipo_rescisao, departamento, natureza, efetivacao_em, colaborador_id")
+      .select("id, codigo_folha, nome, nome_normalizado, admissao, demissao, tipo_rescisao, departamento, natureza, efetivacao_em, colaborador_id, relatorio_emitido_em")
       .order("demissao", { ascending: true }),
     supabaseAdmin.from("peopleflow_rescisoes_historico_rubricas").select("*"),
     supabaseAdmin.from("peopleflow_desligamentos").select("*"),
@@ -151,6 +151,7 @@ async function carregarBase(colaboradores: Colaborador[]): Promise<Base> {
     departamento: (x.departamento as string | null) ?? null,
     natureza: x.natureza as NaturezaRescisao,
     efetivacaoEmIso: (x.efetivacao_em as string | null) ?? null,
+    relatorioEmitidoEmIso: (x.relatorio_emitido_em as string | null | undefined) ?? null,
     colaboradorId: x.colaborador_id === null || x.colaborador_id === undefined ? null : Number(x.colaborador_id),
   }));
   const rubRows = r.error ? [] : ((r.data ?? []) as Record<string, unknown>[]);

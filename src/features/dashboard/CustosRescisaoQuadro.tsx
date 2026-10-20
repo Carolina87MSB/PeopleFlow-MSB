@@ -42,7 +42,7 @@ export function CustosRescisaoQuadro({ meses, mostrarValores, veValoresFinanceir
         color="var(--color-danger)"
       />
       <p className={styles.custoLegenda}>
-        {mostrarValores ? "Altura da barra = Custo Total do mês (só valores validados). Número acima = desligamentos no mês; * = total parcial." : "Altura da barra e número acima = desligamentos no mês."}
+        {mostrarValores ? "Altura da barra = Custo Total do mês (Rescisão validada + GRRF confirmada). Número acima = desligamentos no mês; * = total parcial." : "Altura da barra e número acima = desligamentos no mês."}
       </p>
       <div className={`${tableStyles.wrap} ${styles.custoTableWrap}`}>
         <table className={`${tableStyles.table} ${styles.custoTabela}`}>
@@ -52,9 +52,10 @@ export function CustosRescisaoQuadro({ meses, mostrarValores, veValoresFinanceir
               <th className={tableStyles.right}>Desligamentos</th>
               {mostrarValores && (
                 <>
-                  <th className={tableStyles.right}>Rescisão</th>
-                  <th className={tableStyles.right}>GRRF</th>
-                  <th className={tableStyles.right}>Custo Total</th>
+                  <th className={tableStyles.right} title="Líquido da folha já validado pelo RH">Rescisão</th>
+                  <th className={tableStyles.right} title="FGTS Rescisório calculado pela folha (importado). Não é guia GRRF paga e não entra no Custo Total.">FGTS Rescisório (folha)</th>
+                  <th className={tableStyles.right} title="GRRF informada e confirmada pelo RH (guia efetivamente recolhida)">GRRF confirmada</th>
+                  <th className={tableStyles.right} title="Rescisão validada + GRRF confirmada">Custo Total</th>
                   <th className={tableStyles.right} title="Rescisões com o líquido validado pelo RH, em relação aos desligamentos do mês">Rescisão validada</th>
                   <th className={tableStyles.right} title="GRRF informada e confirmada (ou não aplicável), em relação aos desligamentos do mês">GRRF resolvida</th>
                 </>
@@ -69,6 +70,7 @@ export function CustosRescisaoQuadro({ meses, mostrarValores, veValoresFinanceir
                 {mostrarValores && (
                   <>
                     <td className={tableStyles.right}>{money(m.rescisao)}</td>
+                    <td className={`${tableStyles.right} ${styles.custoFolha}`}>{money(m.fgtsFolha)}</td>
                     <td className={tableStyles.right}>{money(m.grrf)}</td>
                     <td className={tableStyles.right}>
                       <strong>{money(m.total)}</strong>
@@ -87,6 +89,7 @@ export function CustosRescisaoQuadro({ meses, mostrarValores, veValoresFinanceir
                 <td>Total</td>
                 <td className={tableStyles.right}>{meses.reduce((a, m) => a + m.quantidade, 0)}</td>
                 <td className={tableStyles.right}>{money(meses.reduce((a, m) => a + m.rescisao, 0))}</td>
+                <td className={`${tableStyles.right} ${styles.custoFolha}`}>{money(meses.reduce((a, m) => a + m.fgtsFolha, 0))}</td>
                 <td className={tableStyles.right}>{money(meses.reduce((a, m) => a + m.grrf, 0))}</td>
                 <td className={tableStyles.right}>
                   <strong>{money(meses.reduce((a, m) => a + m.total, 0))}</strong>
@@ -101,8 +104,9 @@ export function CustosRescisaoQuadro({ meses, mostrarValores, veValoresFinanceir
       </div>
       {mostrarValores && cobertura && (
         <p className={`${styles.secaoContexto} ${styles.custoNota}`}>
-          Só valores <strong>validados pelo RH</strong> são somados (Rescisão = líquido da folha; GRRF = total recolhido). Cobertura: rescisão validada em {cobertura.rescisaoValidadas} de{" "}
-          {cobertura.saidas} desligamentos · GRRF resolvida em {cobertura.grrfResolvidas} de {cobertura.saidas}.
+          Só valores <strong>validados pelo RH</strong> entram no Custo Total (Rescisão = líquido da folha validado; GRRF = total da guia confirmada). O <strong>FGTS Rescisório (folha)</strong> é o valor
+          calculado pela folha e importado: informativo, não é guia paga e não entra no Custo Total. Cobertura: rescisão validada em {cobertura.rescisaoValidadas} de {cobertura.saidas} desligamentos · GRRF
+          confirmada em {cobertura.grrfResolvidas} de {cobertura.saidas} · FGTS Rescisório da folha importado em {cobertura.fgtsFolhaImportados} de {cobertura.saidas}.
           {!cobertura.completa && " * Total parcial: o que falta validar não entra na soma."} Conversões de estágio para CLT não entram nos custos.
         </p>
       )}
