@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { requireRH, supabaseAdmin } from "./_lib/adminAuth.js";
-import { buildAccess } from "../src/domain/hierarquia.js";
+import { montarContasAcesso } from "../src/domain/contasAcesso.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -31,10 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (data.users.length < perPage) break;
     }
 
-    const contas = buildAccess(auth.colaboradores).map((conta) => ({
-      ...conta,
-      provisionado: emailsComConta.has(conta.email),
-    }));
+    // Quem pode receber acesso + quem já saiu e ainda tem conta de login (só para consulta e decisão do RH — nada é revogado aqui).
+    const contas = montarContasAcesso(auth.colaboradores, emailsComConta);
 
     res.status(200).json({ contas });
   } catch (err) {

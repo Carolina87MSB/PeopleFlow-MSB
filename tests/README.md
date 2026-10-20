@@ -28,6 +28,7 @@ npm test            # todos os abaixo, em sequência
 | `npm run test:pdi-encerramento-sessao` | Regressão: encerrar PDI com a conta do módulo vencida (12 h) renova a sessão antes de gravar; falha na renovação não envia nada; validações do servidor preservadas. |
 | `npm run test:financeiro` | Integração financeira dos desligamentos: migration (aditiva, idempotente, reversível) e lançamento simples (diálogo único: lança e confirma, origem `informado_rh`, alteração com motivo e histórico preservado), autorização (RH individual · Diretoria só agregado · Gestor nada), validação da rescisão (lote, divergência, líquido zero), GRRF (componentes, sem presunção), agregado do Dashboard (cobertura, parcial, sem duplicidade), fechamento do acesso — réplica PGlite. |
 | `npm run test:financeiro-dominio` | Regras puras de custos, pendências e verificações estáticas (navegador sem acesso direto à tabela, Gestor sem valores, sem nova Serverless Function). |
+| `npm run test:menu-dashboard` | Menu lateral por processos de RH (estrutura, ordem, permissões, rotas), Nova Movimentação + Guia (catálogo cadastrado), tela Acessos (filtros, desligados com conta, permissões calculadas, sem revogação automática) e Dashboard (alertas compactos, turnover > 0, Integrações removida, gestor desligado sinalizado). |
 
 Apoio em `pdi-triagem/`: `base.mjs` (réplica e dados de teste), `shim.mjs` (cliente estilo supabase-js sobre o PGlite),
 `hooks.mjs`/`register.mjs`/`stub-*.mjs` (carregam o código do servidor sem a sessão real do Supabase).

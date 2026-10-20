@@ -5,16 +5,17 @@
 import { supabase } from "../lib/supabaseClient";
 import type { Perfil } from "../types/domain";
 
-/** Perfil nunca inclui "Colaborador" aqui — essa tela sempre foi (e continua
- * sendo) só RH/Diretoria/gestor imediato (buildAccess()); o acesso restrito
- * da AVD tem sua própria lista separada, ver listarAcessosAvd() abaixo. */
+/** A lista principal é de RH/Diretoria/gestor imediato (buildAccess()); o acesso restrito da AVD tem lista própria (listarAcessosAvd() abaixo).
+ * `situacao` só vem da lista principal: "desligado" = já saiu da empresa e ainda tem conta de login (consulta para o RH decidir a revogação). */
 export interface ContaAcesso {
   nome: string;
   cargo: string;
   depto: string;
   email: string;
-  perfil: Exclude<Perfil, "Colaborador">;
+  perfil: Perfil;
   provisionado: boolean;
+  situacao?: "ativo" | "desligado";
+  dataDesligamento?: string | null;
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
