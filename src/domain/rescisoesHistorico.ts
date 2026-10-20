@@ -23,6 +23,8 @@ export interface RescisaoHistorica {
   natureza: NaturezaRescisao;
   efetivacaoEmIso: string | null;
   colaboradorId: number | null;
+  /** Data de emissão do relatório da folha de onde a linha foi importada (só o servidor preenche; usada para identificar a origem dos valores). */
+  relatorioEmitidoEmIso?: string | null;
 }
 
 /** Mesma regra de peopleflow_dev_normalizar_nome (SQL): minúsculas, sem acentos, espaços colapsados e aparados. */

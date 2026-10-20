@@ -210,3 +210,9 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* tabela principal: 8 colunas — espaçamento mais compacto para caber sem rolar na largura comum */
+.tabelaConf th,
+.tabelaConf td {
+  padding: 10px 12px;
+}

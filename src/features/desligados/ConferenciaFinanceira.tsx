@@ -72,6 +72,8 @@ export function ConferenciaFinanceira() {
   const c = conf.cobertura;
   const divergentes = conf.saidas.filter((l) => l.rescisao.status === "divergente").length;
   const pct = (a: number) => (c.saidas === 0 ? 0 : Math.round((a / c.saidas) * 100));
+  const saidasFolha = conf.saidas.filter((l) => l.fgtsRescisorioFolha !== null);
+  const fgtsFolhaTotal = Math.round(saidasFolha.reduce((a, l) => a + (l.fgtsRescisorioFolha ?? 0), 0) * 100) / 100;
   const habilitadas = linhas.filter((l) => l.rescisao.status === "pendente" && l.rescisaoId !== null && l.liquidoFolha !== 0);
 
   function alternar(id: number) {
@@ -119,7 +121,12 @@ export function ConferenciaFinanceira() {
           <div className={styles.barra}><div className={styles.barraPreenchida} style={{ width: `${pct(c.rescisaoValidadas)}%` }} /></div>
         </div>
         <div className={styles.resumoCard}>
-          <div className={styles.resumoRotulo}>GRRF registrada ou não aplicável</div>
+          <div className={styles.resumoRotulo}>FGTS Rescisório da folha (importado)</div>
+          <div className={styles.resumoValor}>{saidasFolha.length} de {c.saidas} · {money(fgtsFolhaTotal)}</div>
+          <div className={styles.sub}>Calculado pela folha — não é guia GRRF paga</div>
+        </div>
+        <div className={styles.resumoCard}>
+          <div className={styles.resumoRotulo}>GRRF confirmada ou não aplicável</div>
           <div className={styles.resumoValor}>{c.grrfResolvidas} de {c.saidas}</div>
           <div className={styles.barra}><div className={styles.barraPreenchida} style={{ width: `${pct(c.grrfResolvidas)}%` }} /></div>
         </div>
@@ -145,7 +152,7 @@ export function ConferenciaFinanceira() {
       </div>
 
       <div className={tableStyles.wrap}>
-        <table className={tableStyles.table}>
+        <table className={`${tableStyles.table} ${styles.tabelaConf}`}>
           <thead>
             <tr>
               <th />
@@ -153,7 +160,8 @@ export function ConferenciaFinanceira() {
               <th>Desligamento</th>
               <th>Modalidade</th>
               <th>Rescisão (líquido da folha)</th>
-              <th>GRRF</th>
+              <th>FGTS Rescisório (folha)</th>
+              <th>GRRF (guia)</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -201,7 +209,18 @@ export function ConferenciaFinanceira() {
                       {l.rescisao.lancado !== null && l.rescisao.status !== "validado" && l.rescisao.lancado !== l.liquidoFolha && <span className={styles.sub}>Lançado: {money(l.rescisao.lancado)}</span>}
                       {l.rescisao.status === "validado" && l.rescisao.decisao === "manter_lancado" && <span className={styles.sub}>Mantido o valor lançado (decisão do RH)</span>}
                       {l.liquidoFolha === 0 && l.rescisao.status !== "validado" && <span className={styles.sub}>Líquido R$ 0,00: confira o demonstrativo</span>}
+                      <span className={styles.sub} title="Líquido importado da folha de rescisão">Folha{l.folhaEmitidaEmIso ? ` de ${formatarDataIso(l.folhaEmitidaEmIso)}` : ""}</span>
                     </>
+                  )}
+                </td>
+                <td>
+                  {l.fgtsRescisorioFolha !== null ? (
+                    <>
+                      <span className={styles.valor}>{money(l.fgtsRescisorioFolha)}</span>
+                      <span className={styles.sub} title="Valor calculado pela folha e importado do relatório — não é guia GRRF paga nem conferida">Folha{l.folhaEmitidaEmIso ? ` de ${formatarDataIso(l.folhaEmitidaEmIso)}` : ""} · não é guia paga</span>
+                    </>
+                  ) : (
+                    "—"
                   )}
                 </td>
                 <td>
@@ -215,7 +234,7 @@ export function ConferenciaFinanceira() {
                     <>
                       <ChipGrrf l={l} />
                       {l.grrf.lancado !== null && <span className={styles.sub}>Lançada: {money(l.grrf.lancado)}</span>}
-                      {l.fgtsRescisorioFolha !== null && <span className={styles.sub}>Folha: FGTS rescisório {money(l.fgtsRescisorioFolha)} (referência)</span>}
+                      {l.grrf.status === "pendente" && <span className={styles.sub}>Guia ainda não confirmada pelo RH</span>}
                     </>
                   )}
                 </td>
@@ -238,7 +257,7 @@ export function ConferenciaFinanceira() {
             ))}
             {linhas.length === 0 && (
               <tr>
-                <td colSpan={7}>Nenhum desligamento neste filtro.</td>
+                <td colSpan={8}>Nenhum desligamento neste filtro.</td>
               </tr>
             )}
           </tbody>

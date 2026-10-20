@@ -118,7 +118,7 @@ const aggDir = await chamar("financeiro_agregado", {}, U.DIR);
 check("Diretoria: totais agregados → 403 (por ora só o RH; a liberação será decidida depois)", aggDir.codigo === 403 && aggDir.corpo.dados === undefined && /RH/.test(aggDir.corpo.error));
 const aggRh = await chamar("financeiro_agregado", {}, U.RH);
 const textoAgg = JSON.stringify(aggRh.corpo);
-check("RH: totais agregados → 200, e a resposta NÃO contém nomes, ids, líquidos ou valores individuais", aggRh.codigo === 200 && !/Alice|Bia|Caio|Eva|Fabio|Gabi|Kleber|Iara|Joca|liquido|rescisaoId|colaboradorId|fgts/i.test(textoAgg), textoAgg.slice(0, 200));
+check("RH: totais agregados → 200, e a resposta NÃO contém nomes, ids, líquidos ou valores individuais", aggRh.codigo === 200 && !/Alice|Bia|Caio|Eva|Fabio|Gabi|Kleber|Iara|Joca|liquido|rescisaoId|colaboradorId|fgtsRescisorio|saldoFgts/i.test(textoAgg), textoAgg.slice(0, 200));
 {
   // TODA ação financeira do servidor recusa Diretoria, Gestor, colaborador comum e conta desligada — inclusive as ações antigas ainda expostas
   const corposAcoes = {
@@ -425,6 +425,34 @@ await db.exec(`update public.peopleflow_desligamentos set rescisao_validada_em =
 await db.exec(`update public.peopleflow_rescisoes_historico_rubricas set grrf_status = 'pendente', grrf_total = null, grrf_deposito = null, grrf_multa = null, grrf_fonte = null, grrf_validada_em = null, grrf_validada_por = null where grrf_fonte = 'informado_rh' or grrf_status = 'nao_aplicavel'`);
 check("sem registros 'informado_rh' o rollback roda e a origem 'informado_rh' volta a ser recusada", fechInformados.length >= 3 && (await falha(() => db.exec(RB2))) === null && /validacao_chk/.test(String(await falha(() => db.exec(valorInforme)))));
 check("a migration simples pode ser reaplicada depois do rollback", (await falha(() => db.exec(MIG2))) === null && (await falha(() => db.exec(valorInforme))) === null && (await falha(() => db.exec(`delete from public.peopleflow_desligamentos where colaborador_nome = 'Teste Constraint'`))) === null);
+
+// ═══ M. FGTS Rescisório da folha: importado, separado do Custo Total, nunca tratado como GRRF paga ═══
+secao("M. FGTS Rescisório da folha (importado): visível ao RH, informativo, fora do Custo Total e sem tocar em nenhuma validação");
+{
+  const tabs = async () => ({
+    fech: (await um(`select md5(coalesce(string_agg(to_jsonb(x)::text, '|' order by x.colaborador_nome), '')) h from public.peopleflow_desligamentos x`)).h,
+    rub: (await um(`select md5(string_agg(to_jsonb(x)::text, '|' order by x.rescisao_id)) h from public.peopleflow_rescisoes_historico_rubricas x`)).h,
+    log: (await um(`select md5(coalesce(string_agg(to_jsonb(x)::text, '|' order by x.id), '')) h from public.peopleflow_fechamentos_log x`)).h,
+  });
+  const antesM = await tabs();
+  const li = dados(await chamar("financeiro_listar", {}));
+  const saidasM = li.saidas;
+  const rubRows = await sql(`select h.id, h.codigo_folha, r.liquido::float l, r.fgts_rescisorio::float f from public.peopleflow_rescisoes_historico h join public.peopleflow_rescisoes_historico_rubricas r on r.rescisao_id = h.id where h.natureza = 'saida_efetiva'`);
+  const daFolha = saidasM.filter((l) => l.rescisaoId !== null);
+  check("a Conferência traz o FGTS Rescisório da folha de TODAS as saídas com rescisão importada (um valor individual por pessoa) e o Líquido, iguais aos importados; lançamentos manuais (sem folha) ficam sem FGTS", daFolha.length === rubRows.length && daFolha.every((l) => { const r = rubRows.find((x) => x.id === l.rescisaoId); return r && l.fgtsRescisorioFolha === r.f && l.liquidoFolha === r.l; }) && saidasM.filter((l) => l.rescisaoId === null).every((l) => l.fgtsRescisorioFolha === null), `${daFolha.length}/${saidasM.length}`);
+  check("origem identificada: cada linha da folha traz a data do relatório (2026-10-19) de onde Líquido e FGTS Rescisório vieram; manual não traz", daFolha.every((l) => l.folhaEmitidaEmIso === "2026-10-19") && saidasM.filter((l) => l.rescisaoId === null).every((l) => l.folhaEmitidaEmIso === null));
+  const aggM = dados(await chamar("financeiro_agregado", {}));
+  const somaFgtsSaidas = Math.round(rubRows.reduce((a, r) => a + r.f, 0) * 100) / 100;
+  check("Dashboard (RH): FGTS Rescisório da folha por mês soma o total das saídas da massa (conversões de estágio ficam fora) — e cobertura 'importados' = nº de saídas", Math.round(aggM.meses.reduce((a, m) => a + m.fgtsFolha, 0) * 100) / 100 === somaFgtsSaidas && aggM.cobertura.fgtsFolhaImportados === rubRows.length && aggM.cobertura.saidas === saidasM.length, JSON.stringify([aggM.meses.map((m) => m.fgtsFolha), somaFgtsSaidas]));
+  check("o Custo Total continua = Rescisão validada + GRRF confirmada: o FGTS Rescisório da folha NUNCA entra (nem como 'pago')", aggM.meses.every((m) => Math.abs(m.total - (m.rescisao + m.grrf)) < 0.005) && aggM.meses.some((m) => m.fgtsFolha > 0));
+  check("nenhuma GRRF vira confirmada/validada por causa do FGTS da folha: GRRF resolvida só onde o RH confirmou (as da massa de teste), nunca por importação", saidasM.every((l) => l.grrf.status === "pendente" || l.grrf.validadaPor !== null));
+  check("conversão de estágio não entra em nenhum total do FGTS da folha", !saidasM.some((l) => l.natureza !== "saida_efetiva") && li.conversoes.length === 1);
+  const depoisM = await tabs();
+  check("VER os valores não grava nada: fechamentos, rubricas e trilha idênticos depois de listar e agregar (nada duplicado, idempotente)", JSON.stringify(antesM) === JSON.stringify(depoisM));
+  await chamar("financeiro_listar", {}); await chamar("financeiro_agregado", {});
+  check("repetir a leitura continua sem efeito", JSON.stringify(await tabs()) === JSON.stringify(antesM));
+  check("Diretoria e Gestor seguem sem acesso ao FGTS da folha (listar e agregado → 403)", (await chamar("financeiro_listar", {}, U.DIR)).codigo === 403 && (await chamar("financeiro_agregado", {}, U.DIR)).codigo === 403 && (await chamar("financeiro_listar", {}, U.GES)).codigo === 403 && (await chamar("financeiro_agregado", {}, U.GES)).codigo === 403);
+}
 
 // ═══ J. Fechar o acesso direto ═══
 secao("J. Fechamento do acesso direto: o navegador perde a tabela; o servidor segue servindo só o RH (ver e registrar); Diretoria e Gestor nada");

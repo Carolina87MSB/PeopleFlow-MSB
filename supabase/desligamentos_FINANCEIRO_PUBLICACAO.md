@@ -89,3 +89,12 @@ Decisão do RH: **por enquanto somente o RH** visualiza informações financeira
 - **Atenção ao período:** o Dashboard abre com os **últimos 30 dias**; para ver todos os meses (19 líquidos = R$ 89.311,10), ajustar o período (ex.: 01/01/2026 até hoje).
 
 Publicação: só código (merge + push). Reversão: `git revert -m 1 <merge>`.
+
+## Etapa 5 — Líquido e FGTS Rescisório da folha visíveis (sem importar nada de novo)
+O relatório "Relação de Rescisões Calculadas" (19/10/2026) **já está importado** (24 linhas em `peopleflow_rescisoes_historico_rubricas`, só servidor, valores imutáveis). Conferido linha a linha contra o PDF: Líquido, FGTS Rescisório, saldo, salário, proventos e descontos de todos os 24 batem; as 22 saídas efetivas somam Líquido R$ 91.350,13 e FGTS Rescisório R$ 24.196,05 (as 2 conversões de estágio têm FGTS R$ 0,00). Esta etapa **só muda a apresentação**: sem migration, sem gravação, sem nova importação (nada a duplicar).
+- **FGTS Rescisório (folha)** passa a ser coluna/campo principal nas telas, com a origem ("Folha de 19/out/2026 · não é guia paga"); GRRF (guia) segue separada (pendente / confirmada / não aplicável).
+- **Dashboard:** colunas Rescisão (validada) · FGTS Rescisório (folha) · GRRF confirmada · Custo Total. O Custo Total continua = Rescisão validada + GRRF confirmada: o FGTS da folha é informativo e **não** entra (não é pagamento comprovado). Cobertura: rescisão 19/22, GRRF 0/22, FGTS da folha 22/22.
+- **Gaveta, Conferência e lista** mostram Líquido e FGTS da folha sem exigir "Lançar e confirmar"; a lista mostra Rescisão e GRRF como estados separados.
+- Líquidos validados, a divergência (folha × lançado anterior) e os líquidos zerados permanecem como estavam; nada é validado automaticamente. Acesso: só o RH.
+
+Publicação: só código (merge + push). Reversão: `git revert -m 1 <merge>`.
