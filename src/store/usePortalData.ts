@@ -78,6 +78,7 @@ import { GRUPO_HABILIDADES_COMPETENCIAS } from "../domain/descricaoCargo";
 import { colaboradoresAtivosEmData } from "../domain/dashboardExecutivo";
 import { colaboradoresParaFeedbackDe } from "../domain/feedback";
 import { colaboradoresDesligados, pendenteFechamento } from "../domain/desligados";
+import { prepararHistorico, type RescisaoHistorica } from "../domain/rescisoesHistorico";
 import {
   CAMPOS_DESCRICAO_CARGO,
   dataRevisaoHoje,
@@ -184,6 +185,8 @@ export interface PortalData {
   movimentacoes: Movimentacao[];
   movimentacoesVisiveis: Movimentacao[];
   desligados: Colaborador[];
+  /** Saídas efetivas do histórico da folha que NÃO têm cadastro (mesma regra do Dashboard e da Conferência financeira) — completam a lista de Desligados. */
+  saidasHistoricasSemCadastro: RescisaoHistorica[];
   desligamentosFinanceiros: DesligamentoFinanceiro[];
   pendenciasFinanceirasCount: number;
   descricoesCargo: DescricaoCargo[];
@@ -576,6 +579,7 @@ export function usePortalData(): PortalData {
   );
 
   const desligados = useMemo(() => colaboradoresDesligados(state.colaboradores), [state.colaboradores]);
+  const saidasHistoricasSemCadastro = useMemo(() => prepararHistorico(state.rescisoesHistorico, state.colaboradores).saidasSemCadastro, [state.rescisoesHistorico, state.colaboradores]);
 
   // Pendência financeira = alguma conferência por fazer (rescisão não validada ou GRRF pendente). Só o RH enxerga os valores; para os demais perfis é 0.
   const pendenciasFinanceirasCount = useMemo(() => {
@@ -2917,6 +2921,7 @@ export function usePortalData(): PortalData {
     movimentacoes: state.movimentacoes,
     movimentacoesVisiveis,
     desligados,
+    saidasHistoricasSemCadastro,
     desligamentosFinanceiros: state.desligamentosFinanceiros,
     pendenciasFinanceirasCount,
     descricoesCargo: state.descricoesCargo,

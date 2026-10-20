@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Avatar, Badge, Button, Drawer, EmptyState, tableStyles } from "../../components/ui";
-import { pendenteFechamento } from "../../domain/desligados";
+import { listarDesligamentos, pendenteFechamento, type DesligamentoLista } from "../../domain/desligados";
 import { construirEventos } from "../../domain/historico";
 import { tipoColor } from "../../domain/colors";
 import { Header } from "../../components/layout/Header";
 import { usePortalData } from "../../store/usePortalData";
-import type { Colaborador } from "../../types/domain";
 import { PendenciasDesligadosCard } from "./PendenciasDesligadosCard";
 import { ConferenciaFinanceira, DialogoLancarConfirmar } from "./ConferenciaFinanceira";
 import confStyles from "./ConferenciaFinanceira.module.css";
@@ -14,22 +13,20 @@ import type { LinhaConferencia } from "../../domain/custosRescisao";
 import styles from "./DesligadosPage.module.css";
 
 export function DesligadosPage() {
-  const { perfil, desligados, desligamentosFinanceiros, conferenciaFinanceira, pendenciasFinanceirasCount, movimentacoes, podeVerCadastros } = usePortalData();
+  const { perfil, desligados, saidasHistoricasSemCadastro, desligamentosFinanceiros, conferenciaFinanceira, pendenciasFinanceirasCount, movimentacoes, podeVerCadastros } = usePortalData();
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [aba, setAba] = useState<"lista" | "conferencia">("lista");
 
-  // linha da conferência financeira de cada desligado do cadastro (valores individuais: só o RH recebe)
-  const linhaDe = (c: Colaborador): LinhaConferencia | null => conferenciaFinanceira?.saidas.find((l) => l.colaboradorId === c.id) ?? null;
+  // linha da conferência financeira de cada desligamento — cadastro (por id) ou histórico sem cadastro (pela chave "h:<id>"); valores individuais: só o RH recebe
+  const linhaDe = (d: DesligamentoLista): LinhaConferencia | null =>
+    conferenciaFinanceira?.saidas.find((l) => (d.colaborador ? l.colaboradorId === d.colaborador.id : l.chave === d.chave)) ?? null;
 
-  const desligadosOrdenados = useMemo(
-    () => [...desligados].sort((a, b) => a.nome.localeCompare(b.nome)),
-    [desligados],
-  );
+  // todos os desligamentos, uma vez cada: processos cadastrados + saídas históricas da folha que não têm cadastro
+  const itens = useMemo(() => listarDesligamentos(desligados, saidasHistoricasSemCadastro), [desligados, saidasHistoricasSemCadastro]);
+  const qtdCadastro = itens.filter((d) => d.origem === "cadastro").length;
+  const qtdHistorico = itens.length - qtdCadastro;
 
-  const colaboradorSelecionado = useMemo(
-    () => desligados.find((c) => c.nome === selecionado) ?? null,
-    [desligados, selecionado],
-  );
+  const itemSelecionado = useMemo(() => itens.find((d) => d.chave === selecionado) ?? null, [itens, selecionado]);
 
   if (!podeVerCadastros) return <Navigate to="/dashboard" replace />;
 
@@ -50,14 +47,19 @@ export function DesligadosPage() {
 
       {perfil === "RH" && aba === "conferencia" ? (
         <ConferenciaFinanceira />
-      ) : desligadosOrdenados.length === 0 ? (
+      ) : itens.length === 0 ? (
         <EmptyState message="Nenhum colaborador desligado ainda." />
       ) : (
+        <>
+        <p className={styles.resumoLista}>
+          {itens.length} desligamentos: {qtdCadastro} com processo cadastrado · {qtdHistorico} do histórico da folha (sem cadastro). Cada pessoa aparece uma única vez.
+        </p>
         <div className={tableStyles.wrap}>
           <table className={tableStyles.table}>
             <thead>
               <tr>
                 <th>Colaborador</th>
+                <th>Origem</th>
                 <th>Departamento</th>
                 <th>Data de desligamento</th>
                 <th>Motivo</th>
@@ -65,7 +67,7 @@ export function DesligadosPage() {
               </tr>
             </thead>
             <tbody>
-              {desligadosOrdenados.map((c) => {
+              {itens.map((c) => {
                 const linha = linhaDe(c);
                 const rotuloFin = linha
                   ? linha.rescisao.status === "divergente"
@@ -75,20 +77,29 @@ export function DesligadosPage() {
                       : linha.rescisao.status === "validado" || linha.grrf.status !== "pendente"
                         ? "Parcial"
                         : "Pendente"
-                  : pendenteFechamento(c.nome, desligamentosFinanceiros)
+                  : c.origem === "historico"
                     ? "Pendente"
-                    : "Completo";
+                    : pendenteFechamento(c.nome, desligamentosFinanceiros)
+                      ? "Pendente"
+                      : "Completo";
                 return (
-                  <tr key={c.nome} className={tableStyles.clickable} onClick={() => setSelecionado(c.nome)}>
+                  <tr key={c.chave} className={tableStyles.clickable} onClick={() => setSelecionado(c.chave)}>
                     <td>
                       <div className={styles.pessoa}>
                         <Avatar nome={c.nome} size={30} />
                         <span>{c.nome}</span>
                       </div>
                     </td>
+                    <td>
+                      {c.origem === "cadastro" ? (
+                        <Badge bg="var(--color-brand-pale)" fg="var(--color-brand)">Cadastro</Badge>
+                      ) : (
+                        <Badge bg="var(--color-neutral-bg)" fg="var(--color-neutral-fg)">Histórico da folha</Badge>
+                      )}
+                    </td>
                     <td>{c.depto}</td>
                     <td>{c.dataDesligamento}</td>
-                    <td>{c.motivoDesligamento}</td>
+                    <td>{c.motivo}</td>
                     {perfil === "RH" && (
                     <td>
                       {rotuloFin === "Validado" || rotuloFin === "Completo" ? (
@@ -112,20 +123,21 @@ export function DesligadosPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {perfil === "RH" && aba === "lista" && <PendenciasDesligadosCard />}
 
-      {colaboradorSelecionado && (
+      {itemSelecionado && (
         <DesligadoDrawer
-          colaborador={colaboradorSelecionado}
-          linha={linhaDe(colaboradorSelecionado)}
+          item={itemSelecionado}
+          linha={linhaDe(itemSelecionado)}
           ehRH={perfil === "RH"}
           onIrConferencia={() => {
             setSelecionado(null);
             setAba("conferencia");
           }}
-          eventos={construirEventos(movimentacoes.filter((m) => m.colaborador === colaboradorSelecionado.nome))}
+          eventos={construirEventos(movimentacoes.filter((m) => m.colaborador === itemSelecionado.nome))}
           onClose={() => setSelecionado(null)}
         />
       )}
@@ -134,7 +146,7 @@ export function DesligadosPage() {
 }
 
 interface DesligadoDrawerProps {
-  colaborador: Colaborador;
+  item: DesligamentoLista;
   /** Informação financeira dos desligamentos: só o RH (por decisão do RH, por ora). */
   ehRH: boolean;
   linha: LinhaConferencia | null;
@@ -143,7 +155,7 @@ interface DesligadoDrawerProps {
   onClose: () => void;
 }
 
-function DesligadoDrawer({ colaborador: c, ehRH, linha, onIrConferencia, eventos, onClose }: DesligadoDrawerProps) {
+function DesligadoDrawer({ item: c, ehRH, linha, onIrConferencia, eventos, onClose }: DesligadoDrawerProps) {
   const money = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const [dialogoManual, setDialogoManual] = useState(false);
   const [mensagemManual, setMensagemManual] = useState<string | null>(null);
@@ -167,8 +179,16 @@ function DesligadoDrawer({ colaborador: c, ehRH, linha, onIrConferencia, eventos
           <span className={styles.detalheValor}>{c.depto}</span>
         </div>
         <div className={styles.detalheItem}>
+          <span className={styles.detalheLabel}>Origem</span>
+          <span className={styles.detalheValor}>{c.origem === "cadastro" ? "Processo cadastrado" : "Histórico da folha (sem cadastro)"}</span>
+        </div>
+        <div className={styles.detalheItem}>
           <span className={styles.detalheLabel}>Gestor imediato</span>
           <span className={styles.detalheValor}>{c.gestor}</span>
+        </div>
+        <div className={styles.detalheItem}>
+          <span className={styles.detalheLabel}>Admissão</span>
+          <span className={styles.detalheValor}>{c.admissao}</span>
         </div>
         <div className={styles.detalheItem}>
           <span className={styles.detalheLabel}>Data de desligamento</span>
@@ -176,11 +196,11 @@ function DesligadoDrawer({ colaborador: c, ehRH, linha, onIrConferencia, eventos
         </div>
         <div className={styles.detalheItem}>
           <span className={styles.detalheLabel}>Motivo</span>
-          <span className={styles.detalheValor}>{c.motivoDesligamento}</span>
+          <span className={styles.detalheValor}>{c.motivo}</span>
         </div>
         <div className={styles.detalheItem}>
           <span className={styles.detalheLabel}>Registrado por</span>
-          <span className={styles.detalheValor}>{c.desligadoBy || "—"}</span>
+          <span className={styles.detalheValor}>{c.registradoPor}</span>
         </div>
       </div>
 
@@ -233,7 +253,7 @@ function DesligadoDrawer({ colaborador: c, ehRH, linha, onIrConferencia, eventos
 
       <h4 className={styles.sectionTitle}>Histórico ({eventos.length})</h4>
       {eventos.length === 0 ? (
-        <div className={styles.semHistorico}>Nenhuma movimentação registrada para este colaborador.</div>
+        <div className={styles.semHistorico}>{c.origem === "historico" ? "Saída importada do histórico da folha: não há movimentações no portal." : "Nenhuma movimentação registrada para este colaborador."}</div>
       ) : (
         <div className={styles.timeline}>
           {eventos.map((evento) => (
