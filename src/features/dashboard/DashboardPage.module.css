@@ -622,6 +622,45 @@
   margin-top: 16px;
 }
 
+/* Com valores (RH) o quadro ocupa a linha inteira: a tabela de 7 colunas não cabe em meia largura sem rolar. */
+.custoPanelLargo {
+  grid-column: 1 / -1;
+}
+.custoNota {
+  margin: 8px 0 0;
+  white-space: normal;
+  line-height: 1.5;
+}
+.custoLegenda {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  color: var(--color-muted-lighter);
+}
+.custoTabela th,
+.custoTabela td {
+  padding: 9px 14px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.custoTabela th {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.custoMes {
+  font-weight: 700;
+}
+.custoParcial {
+  display: inline-block;
+  width: 0.7em;
+  margin-left: 2px;
+  color: var(--color-muted-light);
+}
+.custoTotalLinha td {
+  border-top: 2px solid var(--color-border);
+  background: var(--color-surface-soft);
+  font-weight: 700;
+}
+
 .integracoesDesc {
   margin: 0 0 16px;
   font-size: 12px;

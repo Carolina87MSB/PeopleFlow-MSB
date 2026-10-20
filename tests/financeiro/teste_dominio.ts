@@ -5,6 +5,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { FONTE_INFORMADO_RH, ROTULO_INFORMADO_RH, agregarCustosPorMes, apurarSaidas, coberturaDe, listarConversoes, type FechamentoFinanceiro, type RubricaFinanceira } from "../../src/domain/custosRescisao.ts";
 import { pendenciasFrontDeDesligados } from "../../src/domain/pendenciasDesligados.ts";
+import { listarDesligamentos } from "../../src/domain/desligados.ts";
 import { prepararHistorico, type RescisaoHistorica } from "../../src/domain/rescisoesHistorico.ts";
 import type { Colaborador } from "../../src/types/domain.ts";
 
@@ -113,9 +114,10 @@ const usam = varre("src").filter((f) => /from\("peopleflow_desligamentos"\)/.tes
 check("o navegador NÃO acessa mais a tabela peopleflow_desligamentos direto (nenhum arquivo em src/)", usam.length === 0, usam.join());
 const repo = src("src/repositories/financeiroRepository.ts");
 check("o repositório financeiro só fala com o servidor (ações financeiro_*), sem cliente Supabase direto", /gravar</.test(repo) && !/supabase\.from\(/.test(repo));
-const dash = src("src/features/dashboard/DashboardPage.tsx");
+const dashPagina = src("src/features/dashboard/DashboardPage.tsx");
+const dash = dashPagina + "\n" + src("src/features/dashboard/CustosRescisaoQuadro.tsx"); // o quadro de custos foi extraído do Dashboard
 check("Dashboard: valores financeiros SÓ para o RH (decisão do RH); Diretoria e Gestor recebem apenas quantidades e nem chamam o servidor", /veValoresFinanceiros = perfil === "RH";/.test(dash) && !/veValoresFinanceiros = perfil === "RH" \|\|/.test(dash) && /if \(!veValoresFinanceiros\) return;/.test(dash) && /restritos ao RH;/.test(dash) && !/restritos ao RH e à Diretoria/.test(dash));
-check("Dashboard: colunas Rescisão, GRRF e Custo Total, com total parcial (*) e cobertura 'x de y'", /<th>Rescisão<\/th>/.test(dash) && /<th>GRRF<\/th>/.test(dash) && /<th>Custo Total<\/th>/.test(dash) && /Total parcial/.test(dash) && /rescisaoValidadas\} de \{coberturaCustos\.saidas\}/.test(dash) && /grrfResolvidas\} de \{coberturaCustos\.saidas\}/.test(dash));
+check("Dashboard: colunas Rescisão, GRRF e Custo Total, com total parcial (*) e cobertura 'x de y'", />Rescisão<\/th>/.test(dash) && />GRRF<\/th>/.test(dash) && />Custo Total<\/th>/.test(dash) && /Total parcial/.test(dash) && /rescisaoValidadas\} de/.test(dash) && /grrfResolvidas\} de \{cobertura\.saidas\}/.test(dash));
 const paginaDesl = src("src/features/desligados/DesligadosPage.tsx");
 check("Desligados: nem o status financeiro nem a seção de fechamento aparecem para quem não é RH", /perfil === "RH" && <th>Status financeiro<\/th>/.test(paginaDesl) && /ehRH && \(/.test(paginaDesl) && /ehRH=\{perfil === "RH"\}/.test(paginaDesl));
 check("Dashboard: total parcial identificado e cobertura exibida", /Total parcial/.test(dash) && /Cobertura: rescisão validada em/.test(dash) && /\(parcial\)/.test(dash));
@@ -142,6 +144,37 @@ const msg403 = /Somente o RH acessa e altera os valores financeiros individuais/
 check("a carga do portal trata o 403 de Gestor/Diretoria como esperado (mensagem do servidor casa com a tolerância do repositório) e devolve vazio", msg403 !== "" && new RegExp((/\/(Somente o RH[^/]*)\//.exec(repoFin)?.[1] ?? "$^") + "|Conta n", "i").test(msg403) && /VAZIO/.test(repoFin) && /return VAZIO/.test(repoFin));
 check("contadores e alertas de pendência financeira são só do RH (0 para os demais perfis)", /if \(perfil !== "RH"\) return 0;/.test(src("src/store/usePortalData.ts")) && /if \(perfil !== "RH"\) return 0;/.test(src("src/features/dashboard/DashboardPage.tsx")));
 check("schema.sql (instalações novas) já nasce com o fechamento: sem política para authenticated e só service_role", !/create policy "authenticated_rw_desligamentos"/.test(src("supabase/schema.sql")) && /revoke all on public\.peopleflow_desligamentos from public, anon, authenticated/.test(src("supabase/schema.sql")));
+// ── Lista de Desligados: cadastro + histórico da folha sem cadastro, uma vez cada ──
+{
+  const cad = [col(1, "Ana Cad", { desligado: true, dataDesligamento: "05/jul/2026", motivoDesligamento: "Pedido", desligadoBy: "RH", admissao: "01/jan/2025" }), col(2, "Beto Cad", { desligado: true, dataDesligamento: "10/ago/2026", motivoDesligamento: "Demissão", admissaoIso: "2024-03-03" })];
+  const hs = [
+    hist(10, "Ana Cad", "2026-07-05", "saida_efetiva", 1),                 // ligada ao cadastro por id: contada pelo cadastro
+    hist(11, "Beto Cad", "2026-08-10", "saida_efetiva", null, "2024-03-03"), // ligada por nome + admissão: idem
+    hist(12, "Zeca Hist", "2026-01-12", "saida_efetiva", null),            // só no histórico
+    hist(13, "Caio Hist", "2026-02-20", "saida_efetiva", null),
+    hist(14, "Marcelo Conv", "2026-03-31", "conversao_estagio_clt", null), // conversão de estágio: não é desligamento
+  ];
+  const prep = prepararHistorico(hs, cad);
+  const lista = listarDesligamentos(cad, prep.saidasSemCadastro);
+  check("lista = processos cadastrados + saídas históricas sem cadastro (2 + 2); ligadas e conversões não duplicam nem entram", lista.length === 4 && lista.filter((l) => l.origem === "cadastro").length === 2 && lista.filter((l) => l.origem === "historico").length === 2 && !lista.some((l) => /Conv/.test(l.nome)), lista.map((l) => l.chave).join());
+  check("ordenada por nome; chaves 'c:<id>' e 'h:<id>' únicas (as mesmas da Conferência financeira)", lista.map((l) => l.nome).join() === "Ana Cad,Beto Cad,Caio Hist,Zeca Hist" && new Set(lista.map((l) => l.chave)).size === 4 && lista.find((l) => l.nome === "Zeca Hist")!.chave === "h:12" && lista.find((l) => l.nome === "Ana Cad")!.chave === "c:1");
+  check("vínculos preservados: linha do cadastro mantém o colaborador; a histórica mantém o registro da folha e nenhum colaborador", lista.filter((l) => l.origem === "cadastro").every((l) => l.colaborador !== null && l.historico === null) && lista.filter((l) => l.origem === "historico").every((l) => l.colaborador === null && l.historico !== null && l.historico.colaboradorId === null));
+  const z = lista.find((l) => l.nome === "Zeca Hist")!;
+  check("linha histórica traz data (dd/mmm/aaaa), tipo de rescisão, departamento e admissão da folha; sem cargo/gestor inventados", z.dataDesligamento === "12/jan/2026" && z.motivo === "x" && z.depto === "Produção" && z.admissao === "01/jan/2025" && z.gestor === "—" && /sem cadastro/.test(z.cargo) && /folha/i.test(z.registradoPor));
+  const salvaguarda = listarDesligamentos(cad, [hist(21, "Ana Cad", "2026-07-05", "saida_efetiva", null, "2025-01-01"), hist(12, "Zeca Hist", "2026-01-12", "saida_efetiva", null), hist(12, "Zeca Hist", "2026-01-12", "saida_efetiva", null)]);
+  check("salvaguarda: histórica com mesmo nome+admissão do cadastro ou com id repetido não gera linha extra", salvaguarda.length === 3 && salvaguarda.filter((l) => l.nome === "Ana Cad").length === 1 && salvaguarda.filter((l) => l.nome === "Zeca Hist").length === 1);
+  check("sem nenhum dado, lista vazia", listarDesligamentos([], []).length === 0);
+}
+const paginaD = src("src/features/desligados/DesligadosPage.tsx");
+const storeD = src("src/store/usePortalData.ts");
+check("Desligados: a lista usa as MESMAS entradas da Conferência (cadastro desligado + saídas históricas sem cadastro) e mostra a origem de cada linha", /listarDesligamentos\(desligados, saidasHistoricasSemCadastro\)/.test(paginaD) && /<th>Origem<\/th>/.test(paginaD) && /Histórico da folha/.test(paginaD) && /prepararHistorico\(state\.rescisoesHistorico, state\.colaboradores\)\.saidasSemCadastro/.test(storeD) && /Cada pessoa aparece uma única vez/.test(paginaD));
+check("Desligados: status financeiro da linha histórica vem da Conferência (chave h:<id>), sem mexer nas regras de acesso (página e valores só do RH)", /l\.chave === d\.chave/.test(paginaD) && /perfil === "RH" && <th>Status financeiro<\/th>/.test(paginaD) && /ehRH=\{perfil === "RH"\}/.test(paginaD));
+// ── Gráfico e tabela dos Custos de Rescisão ──
+const quadro = src("src/features/dashboard/CustosRescisaoQuadro.tsx");
+const dashD = src("src/features/dashboard/DashboardPage.tsx");
+check("Gráfico: o texto acima das barras é curto (quantidade, com * se parcial), nunca 'N · parcial' que invadia a barra vizinha", /annotation: `\$\{m\.quantidade\}\$\{mostrarValores && m\.parcial \? "\*" : ""\}`/.test(quadro) && !/ · parcial/.test(quadro) && /Número acima = desligamentos no mês; \* = total parcial/.test(quadro));
+check("Tabela: colunas numéricas à direita, total do período, Rescisão validada e GRRF resolvida separadas, nota que quebra linha; quadro em largura total para o RH", /tableStyles\.right/.test(quadro) && /<tfoot>/.test(quadro) && /Rescisão validada/.test(quadro) && /GRRF resolvida/.test(quadro) && /custoPanelLargo/.test(quadro) && /custoNota/.test(quadro));
+check("Quadro: mesmos valores e regras de antes (money de m.rescisao/m.grrf/m.total, parcial, cobertura x de y); Dashboard só o usa", /money\(m\.rescisao\)/.test(quadro) && /money\(m\.grrf\)/.test(quadro) && /money\(m\.total\)/.test(quadro) && /cobertura\.rescisaoValidadas\} de/.test(quadro) && /<CustosRescisaoQuadro meses=\{custosRescisao\}/.test(dashD) && !/\.rescisao \* |m\.total \+|Math\.round\(/.test(quadro));
 check("a origem interna é exibida como 'Informado e confirmado pelo RH', não como conferência de documento", /ROTULO_INFORMADO_RH/.test(confTsx) && ROTULO_INFORMADO_RH === "Informado e confirmado pelo RH" && FONTE_INFORMADO_RH === "informado_rh");
 check("Desligados: aba Conferência financeira só para o RH; gaveta lê a folha validada, sem digitação dupla", /perfil === "RH" && \(\s*<div className=\{confStyles\.abas\}/.test(page) && /Conferência financeira/.test(page) && /em lote/.test(page));
 const srv = src("api/_lib/financeiroDesligamentos.ts");

@@ -1,5 +1,5 @@
-import { mesIsoFromDataBr, mesLabel } from "./dates";
-import type { RescisaoHistorica } from "./rescisoesHistorico";
+import { formatarDataIso, mesIsoFromDataBr, mesLabel } from "./dates";
+import { normalizarNomeHistorico, type RescisaoHistorica } from "./rescisoesHistorico";
 import { hojeBrasilia, situacaoFuncionalEm } from "./situacaoFuncional";
 import type { Colaborador, DesligamentoFinanceiro } from "../types/domain";
 
@@ -62,4 +62,68 @@ export function custosRescisaoPorMes(desligados: Colaborador[], desligamentos: D
     bucket.quantidade += 1;
   });
   return [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes));
+}
+
+/** Uma linha da lista de Desligados: processo cadastrado (`colaboradores`) ou saída histórica importada da folha que NÃO tem cadastro. */
+export interface DesligamentoLista {
+  /** "c:<id>" (cadastro) ou "h:<id>" (histórico sem cadastro) — a mesma chave da Conferência financeira; uma pessoa nunca aparece com duas. */
+  chave: string;
+  origem: "cadastro" | "historico";
+  nome: string;
+  depto: string;
+  cargo: string;
+  gestor: string;
+  /** "dd/mmm/aaaa" */
+  admissao: string;
+  /** "dd/mmm/aaaa" */
+  dataDesligamento: string;
+  motivo: string;
+  registradoPor: string;
+  colaborador: Colaborador | null;
+  historico: RescisaoHistorica | null;
+}
+
+/**
+ * Todos os desligamentos, uma vez cada: os do cadastro (já ligados ao histórico por id ou por nome + admissão, e por isso contados só pelo cadastro)
+ * mais as saídas efetivas do histórico da folha que não têm cadastro (`prepararHistorico(...).saidasSemCadastro`). Conversões de estágio para CLT
+ * não são desligamento e não entram. Ordenado por nome. Nenhum dado é alterado: os vínculos existentes (colaborador_id) ficam como estão.
+ */
+export function listarDesligamentos(desligados: Colaborador[], saidasSemCadastro: RescisaoHistorica[]): DesligamentoLista[] {
+  const doCadastro: DesligamentoLista[] = desligados.map((c) => ({
+    chave: `c:${c.id}`,
+    origem: "cadastro",
+    nome: c.nome,
+    depto: c.depto,
+    cargo: c.cargo,
+    gestor: c.gestor,
+    admissao: c.admissao,
+    dataDesligamento: c.dataDesligamento,
+    motivo: c.motivoDesligamento,
+    registradoPor: c.desligadoBy || "—",
+    colaborador: c,
+    historico: null,
+  }));
+  // salvaguarda contra dupla contagem: nome normalizado + admissão iguais aos de alguém do cadastro (qualquer situação não é "sem cadastro")
+  const jaNoCadastro = new Set(desligados.map((c) => `${normalizarNomeHistorico(c.nome)}|${c.admissaoIso}`));
+  const vistas = new Set<number>();
+  const historicas: DesligamentoLista[] = [];
+  for (const h of saidasSemCadastro) {
+    if (h.natureza !== "saida_efetiva" || vistas.has(h.id) || jaNoCadastro.has(`${h.nomeNormalizado}|${h.admissaoIso}`)) continue;
+    vistas.add(h.id);
+    historicas.push({
+      chave: `h:${h.id}`,
+      origem: "historico",
+      nome: h.nome,
+      depto: h.departamento ?? "—",
+      cargo: "Histórico da folha (sem cadastro)",
+      gestor: "—",
+      admissao: formatarDataIso(h.admissaoIso),
+      dataDesligamento: formatarDataIso(h.demissaoIso),
+      motivo: h.tipoRescisao || "—",
+      registradoPor: "Importado da folha de rescisão",
+      colaborador: null,
+      historico: h,
+    });
+  }
+  return [...doCadastro, ...historicas].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }

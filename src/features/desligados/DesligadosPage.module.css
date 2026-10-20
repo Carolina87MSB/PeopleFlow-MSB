@@ -161,3 +161,9 @@
   font-size: 12px;
   color: var(--color-muted);
 }
+
+.resumoLista {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--color-muted);
+}

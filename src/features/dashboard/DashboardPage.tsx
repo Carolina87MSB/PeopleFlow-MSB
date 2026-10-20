@@ -4,7 +4,7 @@ import { AlertTriangle, Check, CheckCircle2, Pencil, Plus, Search, X } from "luc
 import { Header } from "../../components/layout/Header";
 import { NovaMovimentacaoModal } from "../../components/shared/NovaMovimentacaoModal";
 import { ReprovarModal } from "../../components/shared/ReprovarModal";
-import { Avatar, BarChart, Badge, Button, EmptyState, tableStyles } from "../../components/ui";
+import { Avatar, Badge, Button, EmptyState } from "../../components/ui";
 import { agregarCargos, agregarDepartamentos, contarPorGestor } from "../../domain/agregados";
 import { tipoColor } from "../../domain/colors";
 import { formatarDataIso, hojeIso } from "../../domain/dates";
@@ -29,6 +29,7 @@ import { podeAgir } from "../../domain/workflow";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { TurnoverPorSetorList } from "./TurnoverPorSetorList";
+import { CustosRescisaoQuadro } from "./CustosRescisaoQuadro";
 import styles from "./DashboardPage.module.css";
 
 function diasAtras(n: number): string {
@@ -578,76 +579,7 @@ export function DashboardPage() {
                 <TurnoverPorSetorList data={turnoverSetor} />
               )}
             </div>
-            {custosRescisao.length > 0 ? (
-              <div className={styles.panel}>
-                <div className={styles.cardHeader}>
-                  <h3 className={styles.cardTitle}>Custos de Rescisão por mês</h3>
-                </div>
-                <BarChart
-                  data={custosRescisao.map((m) => ({ label: m.mesLabel, value: mostrarValores ? m.total : m.quantidade, annotation: mostrarValores ? `${m.quantidade}${m.parcial ? " · parcial" : ""}` : String(m.quantidade) }))}
-                  color="var(--color-danger)"
-                />
-                <div className={`${tableStyles.wrap} ${styles.custoTableWrap}`}>
-                  <table className={tableStyles.table}>
-                    <thead>
-                      <tr>
-                        <th>Mês</th>
-                        <th>Desligamentos</th>
-                        {mostrarValores && (
-                          <>
-                            <th>Rescisão</th>
-                            <th>GRRF</th>
-                            <th>Custo Total</th>
-                            <th>Validado</th>
-                          </>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {custosRescisao.map((m) => (
-                        <tr key={m.mes}>
-                          <td>{m.mesLabel}</td>
-                          <td>{m.quantidade}</td>
-                          {mostrarValores && (
-                            <>
-                              <td>{money(m.rescisao)}</td>
-                              <td>{money(m.grrf)}</td>
-                              <td>
-                                <strong>{money(m.total)}</strong>
-                                {m.parcial && <span title="Total parcial: há valores ainda não validados pelo RH"> *</span>}
-                              </td>
-                              <td title="Rescisão validada · GRRF resolvida (de cada mês)">
-                                {m.rescisaoValidadas}/{m.quantidade} · {m.grrfResolvidas}/{m.quantidade}
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {mostrarValores && coberturaCustos && (
-                  <p className={styles.secaoContexto} style={{ marginTop: 8 }}>
-                    Só valores <strong>validados pelo RH</strong> são somados (Rescisão = líquido da folha; GRRF = total recolhido). Cobertura: rescisão validada em{" "}
-                    {coberturaCustos.rescisaoValidadas} de {coberturaCustos.saidas} desligamentos · GRRF resolvida em {coberturaCustos.grrfResolvidas} de {coberturaCustos.saidas}.
-                    {!coberturaCustos.completa && " * Total parcial: o que falta validar não entra na soma."} Conversões de estágio para CLT não entram nos custos.
-                  </p>
-                )}
-                {mostrarValores === false && veValoresFinanceiros && custosErro && (
-                  <p className={styles.secaoContexto} style={{ marginTop: 8 }}>Valores financeiros indisponíveis no momento ({custosErro}). A contagem de desligamentos segue normal.</p>
-                )}
-                {!veValoresFinanceiros && (
-                  <p className={styles.secaoContexto} style={{ marginTop: 8 }}>Valores financeiros de rescisão são restritos ao RH; aqui aparece apenas a quantidade de desligamentos.</p>
-                )}
-              </div>
-            ) : (
-              <div className={styles.panel}>
-                <div className={styles.cardHeader}>
-                  <h3 className={styles.cardTitle}>Custos de Rescisão por mês</h3>
-                </div>
-                <EmptyState message="Nenhum desligamento no período/recorte selecionado." />
-              </div>
-            )}
+            <CustosRescisaoQuadro meses={custosRescisao} mostrarValores={mostrarValores} veValoresFinanceiros={veValoresFinanceiros} cobertura={coberturaCustos} erro={custosErro} />
           </div>
         </section>
 
