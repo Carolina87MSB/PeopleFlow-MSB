@@ -276,6 +276,39 @@ await t("Faltante (Íris) volta numa REPOSIÇÃO agendada pela gestão; o treina
   if ((await q(`select status from public.peopleflow_dev_treinamentos where id=${tPop}`))[0].status !== "concluido") throw new Error("original reaberto");
 });
 
+console.log("Confirmação de presença por QR: identidade, prazo, duplicidade e auditoria");
+await t("Só a pessoa autenticada confirma, e só a PRÓPRIA presença (o corpo da requisição não escolhe a pessoa); duplicidade não duplica nada", async () => {
+  const rep = (await q(`select id from public.peopleflow_dev_treinamentos where reposicao_de_id=${tPop}`))[0].id as number;
+  await espera("ge", "treinamento_iniciar", { id: rep }, 200);
+  await espera("hugo", "participantes_adicionar", { treinamento_id: rep, colaborador_ids: [3] }, 200); // Caio entra na turma, mas só ELE poderá confirmar a própria presença
+  const tk = (await espera("resp", "qr_gerar", { treinamento_id: rep }, 200)).token;
+  await espera("", "presenca_confirmar", { token: tk }, 401); // anônimo
+  await espera("semcadastro", "presenca_confirmar", { token: tk }, 409); // conta que não bate com o cadastro
+  const pCaio = await part(rep, 3);
+  const pCaioRep = pCaio.id;
+  // Íris tenta "confirmar pelo Caio": o servidor ignora qualquer pessoa/participante enviados no corpo
+  await espera("p9", "presenca_confirmar", { token: tk, colaborador_id: 3, participante_id: pCaio.id, user_id: U.p3 }, 200);
+  if ((await part(rep, 3)).presenca_status !== "pendente") throw new Error("confirmou em nome de terceiro");
+  if ((await part(rep, 9)).presenca_status !== "presente" || (await part(rep, 9)).presenca_metodo !== "qr") throw new Error("Íris deveria ter confirmado a própria");
+  const em = (await part(rep, 9)).presenca_em;
+  const r2 = await espera("p9", "presenca_confirmar", { token: tk }, 200); // segunda leitura do QR
+  if (r2.situacao !== "confirmada") throw new Error(JSON.stringify(r2));
+  const ps = await part(rep, 9);
+  if (String(ps.presenca_em) !== String(em)) throw new Error("repetir a confirmação alterou o horário original");
+  const a = await q(`select colaborador_id, user_id from public.peopleflow_dev_auditoria where acao='presenca_qr' and entidade_id='${ps.id}'`);
+  if (a.length !== 1 || Number(a[0].colaborador_id) !== 9 || a[0].user_id !== U.p9) throw new Error("auditoria da presença por QR: " + JSON.stringify(a));
+  // QR vencido, encerrado e código malformado não registram nada
+  await db.exec(`update public.peopleflow_dev_qr_tokens set expira_em = now() - interval '1 minute' where treinamento_id=${rep}`);
+  await espera("p3", "presenca_confirmar", { token: tk }, 404);
+  await db.exec(`update public.peopleflow_dev_qr_tokens set expira_em = now() + interval '1 hour' where treinamento_id=${rep}`);
+  await espera("p3", "presenca_info", { token: tk }, 200);
+  await espera("p3", "presenca_info", { token: "curto" }, 404);
+  await espera("resp", "qr_encerrar", { treinamento_id: rep }, 200);
+  await espera("p3", "presenca_confirmar", { token: tk }, 404);
+  if ((await part(rep, 3)).presenca_status !== "pendente") throw new Error("registrou com QR encerrado");
+  await espera("ge", "participante_remover", { participante_id: pCaioRep, motivo: "Só para o teste de identidade" }, 200); // mantém o histórico dos testes seguintes
+});
+
 console.log("Colaborador: consulta ao próprio histórico");
 await t("Cada colaborador vê SÓ o próprio histórico (documento e revisão treinada); ausência aparece como ausência; nada de outras pessoas", async () => {
   const caio = await espera("p3", "meu_historico", {}, 200);
