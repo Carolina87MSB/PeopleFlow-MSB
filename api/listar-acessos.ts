@@ -18,6 +18,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Junta todos os e-mails já provisionados no Supabase Auth (paginado — listUsers
     // não devolve tudo de uma vez).
     const emailsComConta = new Set<string>();
+    // Conta banida (banned_until no futuro) = acesso REVOGADO: existe, mas não consegue entrar. Só leitura: esta rota nunca altera contas.
+    const emailsRevogados = new Set<string>();
+    const agora = Date.now();
     const perPage = 200;
     for (let page = 1; ; page++) {
       const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
@@ -26,13 +29,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
       data.users.forEach((u) => {
-        if (u.email) emailsComConta.add(u.email.toLowerCase());
+        if (!u.email) return;
+        const email = u.email.toLowerCase();
+        emailsComConta.add(email);
+        const banidoAte = (u as { banned_until?: string | null }).banned_until;
+        if (banidoAte && new Date(banidoAte).getTime() > agora) emailsRevogados.add(email);
       });
       if (data.users.length < perPage) break;
     }
 
     // Quem pode receber acesso + quem já saiu e ainda tem conta de login (só para consulta e decisão do RH — nada é revogado aqui).
-    const contas = montarContasAcesso(auth.colaboradores, emailsComConta);
+    const contas = montarContasAcesso(auth.colaboradores, emailsComConta, emailsRevogados);
 
     res.status(200).json({ contas });
   } catch (err) {

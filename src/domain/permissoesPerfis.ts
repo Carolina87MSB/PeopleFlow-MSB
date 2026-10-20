@@ -54,5 +54,5 @@ export const ORIENTACOES_SEGURANCA: { titulo: string; texto: string }[] = [
   { titulo: "Acesso por perfil", texto: "O perfil vem do cadastro: cargo de CEO/Diretor → Diretoria; departamento Recursos Humanos → RH; quem aparece como gestor imediato de alguém → Gestor. Colaborador comum só responde a própria Avaliação de Desempenho." },
   { titulo: "Visibilidade de equipes", texto: "O Gestor vê somente a própria equipe (reportes diretos e indiretos). A Diretoria vê o que decide e o que solicitou; o RH vê tudo." },
   { titulo: "Restrições de informação", texto: "Dados financeiros de desligamentos (valores individuais e totais) são exclusivos do RH e protegidos também no servidor. O acesso direto do navegador às tabelas financeiras é bloqueado." },
-  { titulo: "Quem saiu da empresa", texto: "Colaborador desligado sai do cadastro de acessos e as ações do servidor o recusam. Se ainda houver conta de login provisionada, ela aparece na lista com a situação \"Desligado\" para o RH decidir a revogação." },
+  { titulo: "Quem saiu da empresa", texto: "Colaborador desligado sai do cadastro de acessos e as ações do servidor o recusam. Se ainda houver conta de login, ela aparece na lista com a situação \"Desligado\" para o RH decidir a revogação; conta banida no Supabase Auth aparece como \"Revogado\" (não consegue entrar)." },
 ];

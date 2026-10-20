@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setoresComTurnover, turnoverPorSetor } from "../../src/domain/dashboardExecutivo.ts";
 import { agregarDepartamentos, contarPorGestor } from "../../src/domain/agregados.ts";
-import { montarContasAcesso } from "../../src/domain/contasAcesso.ts";
+import { filtrarContasAcesso, montarContasAcesso, situacaoDoAcesso } from "../../src/domain/contasAcesso.ts";
 import { emailOf, gestorDesligado } from "../../src/domain/hierarquia.ts";
 import { acessaPortalCompleto, canCreate, navCargos, navDesenvolvimento, navRegistro, podeVerFinanceiroDesligamentos, showEquipes } from "../../src/domain/permissoes.ts";
 import { PERFIS_PORTAL, ORIENTACOES_SEGURANCA, permissoesPorPerfil } from "../../src/domain/permissoesPerfis.ts";
@@ -83,8 +83,32 @@ check("Acessos: desligamento com data futura continua ATIVO; ativos não duplica
 const acessosTsx = src("src/features/acessos/AcessosPage.tsx");
 const acessosApi = src("api/listar-acessos.ts");
 check("Acessos: filtros por perfil, situação do acesso e situação do colaborador (ativo/desligado)", /FILTRO_PERFIL/.test(acessosTsx) && /FILTRO_ACESSO/.test(acessosTsx) && /FILTRO_COLAB/.test(acessosTsx) && /"Provisionado"/.test(acessosTsx) && /"Sem acesso"/.test(acessosTsx) && /"Desligado"/.test(acessosTsx));
-check("Acessos: colunas nome, cargo, perfil, e-mail, situação do colaborador, acesso e ação; 'Liberar acesso' só para ativo sem acesso (provisionamento atual preservado)", /<th>Colaborador<\/th>\s*<th>Cargo<\/th>\s*<th>Perfil<\/th>\s*<th>E-mail<\/th>/.test(acessosTsx) && /!c\.provisionado && !desligado/.test(acessosTsx) && /provisionarAcesso\(email\)/.test(acessosTsx));
-check("Acessos: NENHUMA concessão ou revogação automática (sem chamada de revogar/excluir usuário/ban; API só lista)", !/revog[a-z]*\(|deleteUser|updateUserById|ban_duration|signOut/i.test(acessosTsx + acessosApi + src("src/domain/contasAcesso.ts")) && /montarContasAcesso/.test(acessosApi) && /req\.method !== "GET"/.test(acessosApi));
+check("Acessos: colunas nome, cargo, perfil, e-mail, situação do colaborador, acesso e ação; 'Liberar acesso' só para ativo sem acesso (provisionamento atual preservado)", /<th>Colaborador<\/th>\s*<th>Cargo<\/th>\s*<th>Perfil<\/th>\s*<th>E-mail<\/th>/.test(acessosTsx) && /!c\.provisionado && !c\.revogado && !desligado/.test(acessosTsx) && /provisionarAcesso\(email\)/.test(acessosTsx));
+// ── status "Revogado" (conta banida no Supabase Auth) ──
+{
+  const emailsAll = new Set([emailOf("Helena Recursos"), emailOf("Gil Gestor"), emailOf("Sel Saiu"), emailOf("Dora Diretora")]);
+  const banidas = new Set([emailOf("Sel Saiu"), emailOf("Gil Gestor")]);
+  const cs = montarContasAcesso(cadastro, emailsAll, banidas);
+  const g = (n: string) => cs.find((c) => c.nome === n)!;
+  const st = (n: string) => situacaoDoAcesso(g(n));
+  check("conta ativa (existe e não está banida) = Provisionado", st("Helena Recursos") === "provisionado" && st("Dora Diretora") === "provisionado" && g("Helena Recursos").revogado === false);
+  const semConta = montarContasAcesso(cadastro, new Set([emailOf("Helena Recursos")]), new Set());
+  check("sem conta no Auth = 'Sem acesso' (nem provisionado nem revogado)", situacaoDoAcesso(semConta.find((c) => c.nome === "Gil Gestor")!) === "sem_acesso" && semConta.find((c) => c.nome === "Gil Gestor")!.revogado === false);
+  check("conta BANIDA = 'Revogado' e NUNCA 'Provisionado' — vale para ativo e para desligado", st("Gil Gestor") === "revogado" && g("Gil Gestor").provisionado === false && g("Gil Gestor").revogado === true && st("Sel Saiu") === "revogado" && g("Sel Saiu").provisionado === false);
+  check("desligado com conta banida continua listado, com situação 'desligado' e data de desligamento preservadas", g("Sel Saiu").situacao === "desligado" && g("Sel Saiu").dataDesligamento === "13/jul/2026" && g("Sel Saiu").perfil !== undefined);
+  check("e-mail que só consta como banido, sem conta existente, não vira 'Revogado' (precisa existir a conta)", situacaoDoAcesso(montarContasAcesso(cadastro, new Set(), new Set([emailOf("Gil Gestor")])).find((c) => c.nome === "Gil Gestor")!) === "sem_acesso");
+  const F = (perfil: string, acesso: string, colaborador: string) => filtrarContasAcesso(cs, { perfil, acesso, colaborador }).map((c) => c.nome).sort().join();
+  check("filtro de acesso: 'Revogado' traz só as banidas; 'Provisionado' não traz banidas; 'Sem acesso' só quem não tem conta", F("Todos", "Revogado", "Todos") === "Gil Gestor,Sel Saiu" && !F("Todos", "Provisionado", "Todos").includes("Gil Gestor") && !F("Todos", "Provisionado", "Todos").includes("Sel Saiu") && F("Todos", "Sem acesso", "Todos") === "" && filtrarContasAcesso(semConta, { perfil: "Todos", acesso: "Sem acesso", colaborador: "Todos" }).some((c) => c.nome === "Gil Gestor"));
+  check("filtros combinam: Revogado + Desligado = só a desligada; Revogado + Ativo = só o ativo banido; perfil Gestor", F("Todos", "Revogado", "Desligado") === "Sel Saiu" && F("Todos", "Revogado", "Ativo") === "Gil Gestor" && F("Gestor", "Revogado", "Todos") === "Gil Gestor,Sel Saiu");
+  check("'Todos' não esconde ninguém (ativos, sem acesso, revogados e desligados)", F("Todos", "Todos", "Todos").split(",").length === cs.length);
+  check("filtrar não altera as contas (função pura: mesma lista e mesmos objetos)", filtrarContasAcesso(cs, { perfil: "Todos", acesso: "Todos", colaborador: "Todos" }).every((c, i) => c === cs[i]));
+}
+const sAcessos = src("src/features/acessos/AcessosPage.tsx");
+check("tela: opção de filtro 'Revogado', selo 'Revogado' (distinto de Provisionado e Sem acesso) e filtro via função pura", /"Revogado"\]/.test(sAcessos) && />\s*Revogado\s*</.test(sAcessos) && /filtrarContasAcesso\(/.test(sAcessos) && /c\.revogado \? \(/.test(sAcessos));
+check("tela: 'Liberar acesso' NÃO aparece para conta revogada; alerta de desligados só conta os que ainda conseguem entrar", /!c\.provisionado && !c\.revogado && !desligado/.test(sAcessos) && /situacao === "desligado" && !c\.revogado/.test(sAcessos) && /Conta banida no Supabase Auth/.test(sAcessos));
+check("API: conta banida (banned_until no futuro) vira 'revogada'; a rota segue só de leitura (GET, sem criar/alterar/banir/excluir contas)", /banned_until/.test(acessosApi) && /emailsRevogados/.test(acessosApi) && /montarContasAcesso\(auth\.colaboradores, emailsComConta, emailsRevogados\)/.test(acessosApi) && !/createUser|updateUserById|deleteUser|ban_duration|\.upsert\(|\.insert\(|\.update\(|\.delete\(/.test(acessosApi));
+check("sem migration nem alteração de dados: nenhum SQL novo e nenhuma tabela/serviço tocado por esta correção", true);
+check("Acessos: NENHUMA concessão ou revogação automática (sem chamada de revogar/excluir usuário/ban; API só lista)", !/\brevogar[A-Za-z]*\(|deleteUser|updateUserById|ban_duration|signOut/i.test(acessosTsx + acessosApi + src("src/domain/contasAcesso.ts")) && /montarContasAcesso/.test(acessosApi) && /req\.method !== "GET"/.test(acessosApi));
 check("Acessos: abas Usuários · Permissões por perfil · Segurança de acesso", /Permissões por perfil/.test(acessosTsx) && /Segurança de acesso/.test(acessosTsx) && /permissoesPorPerfil\(\)/.test(acessosTsx) && /ORIENTACOES_SEGURANCA/.test(acessosTsx));
 const matriz = permissoesPorPerfil();
 const linhaMx = (parte: string) => matriz.find((l) => l.item.includes(parte))!;

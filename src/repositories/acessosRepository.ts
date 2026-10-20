@@ -13,7 +13,10 @@ export interface ContaAcesso {
   depto: string;
   email: string;
   perfil: Perfil;
+  /** Conta existe e pode entrar. Conta banida é `revogado`, nunca `provisionado`. */
   provisionado: boolean;
+  /** Conta existe, mas está banida no Supabase Auth (acesso revogado). */
+  revogado?: boolean;
   situacao?: "ativo" | "desligado";
   dataDesligamento?: string | null;
 }

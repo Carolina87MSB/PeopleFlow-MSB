@@ -4,6 +4,7 @@ import { KeyRound, ShieldCheck } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { useToast } from "../../components/shared/ToastContext";
 import { Badge, Button, Card, EmptyState, FilterChips, tableStyles } from "../../components/ui";
+import { filtrarContasAcesso } from "../../domain/contasAcesso";
 import { ORIENTACOES_SEGURANCA, PERFIS_PORTAL, permissoesPorPerfil } from "../../domain/permissoesPerfis";
 import { listarAcessos, provisionarAcesso, type ContaAcesso } from "../../repositories/acessosRepository";
 import { usePortalData } from "../../store/usePortalData";
@@ -17,7 +18,7 @@ const PERFIL_BADGE: Record<ContaAcesso["perfil"], { bg: string; fg: string }> = 
 };
 
 const FILTRO_PERFIL = ["Todos", "RH", "Gestor", "Diretoria"];
-const FILTRO_ACESSO = ["Todos", "Provisionado", "Sem acesso"];
+const FILTRO_ACESSO = ["Todos", "Provisionado", "Sem acesso", "Revogado"];
 const FILTRO_COLAB = ["Todos", "Ativo", "Desligado"];
 
 type Aba = "usuarios" | "permissoes" | "seguranca";
@@ -54,19 +55,12 @@ export function AcessosPage() {
   }, [podeVerCadastros, carregar]);
 
   const filtradas = useMemo(
-    () =>
-      (contas ?? []).filter((c) => {
-        const situacao = c.situacao ?? "ativo";
-        if (filtroPerfil !== "Todos" && c.perfil !== filtroPerfil) return false;
-        if (filtroAcesso === "Provisionado" && !c.provisionado) return false;
-        if (filtroAcesso === "Sem acesso" && c.provisionado) return false;
-        if (filtroColab === "Ativo" && situacao !== "ativo") return false;
-        if (filtroColab === "Desligado" && situacao !== "desligado") return false;
-        return true;
-      }),
+    () => filtrarContasAcesso((contas ?? []).map((c) => ({ ...c, revogado: Boolean(c.revogado) })), { perfil: filtroPerfil, acesso: filtroAcesso, colaborador: filtroColab }),
     [contas, filtroPerfil, filtroAcesso, filtroColab],
   );
-  const desligadosComConta = (contas ?? []).filter((c) => c.situacao === "desligado").length;
+  // Desligados cuja conta ainda consegue entrar (a revogada já está resolvida): é isso que pede decisão do RH.
+  const desligadosComConta = (contas ?? []).filter((c) => c.situacao === "desligado" && !c.revogado).length;
+  const desligadosRevogados = (contas ?? []).filter((c) => c.situacao === "desligado" && c.revogado).length;
   const permissoes = useMemo(() => permissoesPorPerfil(), []);
 
   if (!podeVerCadastros) return <Navigate to="/dashboard" replace />;
@@ -141,7 +135,8 @@ export function AcessosPage() {
               </div>
               <p className={styles.contagem}>
                 {filtradas.length} de {contas.length} conta(s)
-                {desligadosComConta > 0 ? ` · ${desligadosComConta} de colaborador(es) desligado(s) ainda com conta de login — o RH decide a revogação` : ""}
+                {desligadosComConta > 0 ? ` · ${desligadosComConta} de colaborador(es) desligado(s) ainda com conta de login ativa — o RH decide a revogação` : ""}
+                {desligadosRevogados > 0 ? ` · ${desligadosRevogados} desligado(s) com acesso revogado` : ""}
               </p>
 
               <div className={tableStyles.wrap}>
@@ -183,7 +178,11 @@ export function AcessosPage() {
                             )}
                           </td>
                           <td>
-                            {c.provisionado ? (
+                            {c.revogado ? (
+                              <Badge bg="var(--color-danger-bg)" fg="var(--color-danger-fg)" dot="var(--color-danger)">
+                                Revogado
+                              </Badge>
+                            ) : c.provisionado ? (
                               <Badge bg="var(--color-success-bg)" fg="var(--color-success-fg)" dot="var(--color-success)">
                                 Provisionado
                               </Badge>
@@ -194,12 +193,13 @@ export function AcessosPage() {
                             )}
                           </td>
                           <td className={tableStyles.right}>
-                            {!c.provisionado && !desligado && (
+                            {!c.provisionado && !c.revogado && !desligado && (
                               <Button variant="primary" onClick={() => handleLiberar(c.email)} disabled={provisionando === c.email}>
                                 {provisionando === c.email ? "Liberando..." : "Liberar acesso"}
                               </Button>
                             )}
-                            {desligado && <span className={styles.semAcao}>Revogação: decisão do RH</span>}
+                            {desligado && !c.revogado && <span className={styles.semAcao}>Revogação: decisão do RH</span>}
+                            {c.revogado && <span className={styles.semAcao}>Conta banida no Supabase Auth</span>}
                           </td>
                         </tr>
                       );
