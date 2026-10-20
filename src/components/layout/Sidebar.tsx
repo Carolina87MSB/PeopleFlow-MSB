@@ -24,6 +24,7 @@ import { acessaPortalCompleto, navDesenvolvimento } from "../../domain/permissoe
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { Avatar } from "../ui/Avatar";
+import { NavTreinamentos } from "./NavTreinamentos";
 import styles from "./Sidebar.module.css";
 
 function NavItem({ to, icon, label, badge, badgeTone, duasLinhas }: { to: string; icon: React.ReactNode; label: string; badge?: number; badgeTone?: "warning" | "success" | "neutral"; duasLinhas?: boolean }) {
@@ -90,6 +91,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         <nav className={styles.nav} onClick={onClose}>
           <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Minhas Avaliações" />
+          <NavTreinamentos />
         </nav>
 
         <div className={styles.footer}>
@@ -178,6 +180,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <NavItem to="/desenvolvimento/treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Treinamentos" />
           </>
         )}
+        {/* Perfis sem o menu de Desenvolvimento (Diretoria): só o próprio histórico e, se designados, os treinamentos que conduzem. */}
+        {!navDesenvolvimento(perfil) && <NavTreinamentos />}
 
         {podeVerCadastros && (
           <>

@@ -43,6 +43,23 @@ export async function iniciarSessao(): Promise<SessaoDesenvolvimento> {
   return body as SessaoDesenvolvimento;
 }
 
+export interface LinhaMeuHistorico {
+  codigo: string | null;
+  titulo: string;
+  documento: string | null;
+  data: string | null;
+  carga_min: number | null;
+  situacao: "realizado" | "ausente" | "agendado";
+}
+
+/** Histórico do PRÓPRIO colaborador (servidor identifica pela conta; não depende de perfil nem de sessão do módulo). */
+export async function meuHistorico(): Promise<{ primeiro_nome: string; treinamentos: LinhaMeuHistorico[] }> {
+  const res = await fetch("/api/desenvolvimento?acao=meu_historico", { method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) }, body: "{}" });
+  const body = (await res.json().catch(() => ({}))) as { error?: string; dados?: { primeiro_nome: string; treinamentos: LinhaMeuHistorico[] } };
+  if (!res.ok || !body.dados) throw new Error(body.error ?? `Não foi possível carregar seus treinamentos (${res.status}).`);
+  return body.dados;
+}
+
 function faixa(pagina: number): [number, number] {
   const de = pagina * TAMANHO_PAGINA;
   return [de, de + TAMANHO_PAGINA - 1];

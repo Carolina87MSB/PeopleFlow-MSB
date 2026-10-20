@@ -65,19 +65,22 @@ function permissoes(t: Treinamento, perfil: string, colaboradorId: number, daGes
   const externo = t.modalidade === "externo";
   // Planejamento (editar/cancelar): a gestão até o início da realização; RH sempre (retificação após concluído).
   const antesDoInicio = (t.status === "solicitado" || t.status === "planejado") && !t.iniciado_em;
+  // Condução e registro operacional (iniciar, presença, QR, evidências): RH, responsável/instrutor designado ou o Gestor que registrou.
+  const opera = ehRH || conduz || (perfil === "Gestor" && daGestao);
   return {
     ehRH,
     conduz,
+    opera,
     daGestao,
     podeEditar: t.status !== "cancelado" && (ehRH || (antesDoInicio && daGestao)),
     // Montar a turma: RH, quem conduz ou a gestão que registrou (qualquer colaborador ativo, de qualquer área).
     podeParticipantes: !encerrado && (ehRH || conduz || daGestao),
     podeCancelar: !encerrado && (ehRH || (antesDoInicio && daGestao)),
-    podePresenca: ((ehRH || conduz) && (t.status === "em_andamento" || (externo && t.status === "planejado"))) || (ehRH && t.status === "concluido"),
-    podeRealizacao: (ehRH || conduz) && (t.status === "planejado" || t.status === "em_andamento"),
-    podeQr: (ehRH || conduz) && !externo && t.status === "em_andamento",
+    podePresenca: (opera && (t.status === "em_andamento" || (externo && t.status === "planejado"))) || (ehRH && t.status === "concluido"),
+    podeRealizacao: opera && (t.status === "planejado" || t.status === "em_andamento"),
+    podeQr: opera && !externo && t.status === "em_andamento",
     podeRepor: (ehRH || conduz || daGestao) && t.status === "concluido",
-    podeAnexar: (ehRH || conduz) && t.status !== "cancelado" && (t.status !== "concluido" || ehRH),
+    podeAnexar: opera && t.status !== "cancelado" && (t.status !== "concluido" || ehRH),
     veNecessidades: ehRH || perfil === "Gestor" || daGestao,
   };
 }
@@ -274,7 +277,7 @@ export default function TreinamentoPage() {
                 Planejar
               </Button>
             )}
-            {(p.ehRH || p.conduz) && t.status === "planejado" && (
+            {p.opera && t.status === "planejado" && (
               <Button variant="primary" onClick={() => void acao("treinamento_iniciar", { id: t.id }, "Treinamento iniciado.").catch(() => undefined)}>
                 Iniciar realização
               </Button>
