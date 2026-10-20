@@ -173,6 +173,12 @@ export function turnoverPorSetor(colaboradores: Colaborador[], inicioIso: string
     .sort((a, b) => b.turnover - a.turnover);
 }
 
+/** Só os setores com turnover maior que zero, do maior para o menor. Não recalcula nada: apenas filtra e ordena o que `turnoverPorSetor` devolveu
+ * (setores homônimos parciais, como "Planejamento" e "Planejamento Industrial e Operações", são setores diferentes e nunca se misturam). */
+export function setoresComTurnover(lista: { setor: string; turnover: number }[]): { setor: string; turnover: number }[] {
+  return lista.filter((t) => t.turnover > 0).sort((a, b) => b.turnover - a.turnover);
+}
+
 /** Média de mesesCompletos(admissaoIso, dataReferenciaIso) dos colaboradores
  * ativos EM dataReferenciaIso (não necessariamente "hoje"), arredondada pro
  * inteiro mais próximo ANTES de separar em anos/meses — arredondar cada parte

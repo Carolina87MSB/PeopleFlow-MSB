@@ -107,10 +107,10 @@
 }
 
 .nav {
-  padding: 14px 12px;
+  padding: 8px 12px 10px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
   flex: 1;
   overflow-y: auto;
 }
@@ -121,10 +121,10 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--color-muted-lighter);
-  padding: 14px 10px 6px;
+  padding: 11px 10px 4px;
 }
 .sectionLabel:first-child {
-  padding-top: 8px;
+  padding-top: 4px;
 }
 
 .navItem {
@@ -133,11 +133,11 @@
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 11px 13px;
+  padding: 8px 12px;
   border: 0;
   background: transparent;
-  border-radius: 11px;
-  font: 600 13.5px/1 var(--font-sans);
+  border-radius: 10px;
+  font: 600 13px/1 var(--font-sans);
   color: var(--color-text);
   text-align: left;
   text-decoration: none;
@@ -163,8 +163,8 @@
 /* Rótulo longo (ex.: "Necessidades de Desenvolvimento"): quebra limpa em até
    duas linhas, mesma fonte dos demais itens e altura total próxima da padrão. */
 .navItemDuasLinhas {
-  padding-top: 7px;
-  padding-bottom: 7px;
+  padding-top: 5px;
+  padding-bottom: 5px;
   line-height: 1.25;
 }
 

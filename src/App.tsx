@@ -10,7 +10,7 @@ import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { ColaboradoresPage } from "./features/colaboradores/ColaboradoresPage";
 import { DepartamentosPage } from "./features/departamentos/DepartamentosPage";
 import { CargosPage } from "./features/cargos/CargosPage";
-import { TiposPage } from "./features/tipos/TiposPage";
+import { NovaMovimentacaoPage } from "./features/movimentacoes/NovaMovimentacaoPage";
 import { AcessosPage } from "./features/acessos/AcessosPage";
 import { WorkflowPage } from "./features/workflow/WorkflowPage";
 import { AprovadasPage } from "./features/aprovadas/AprovadasPage";
@@ -51,7 +51,8 @@ function App() {
                 <Route path="/colaboradores" element={<ColaboradoresPage />} />
                 <Route path="/departamentos" element={<DepartamentosPage />} />
                 <Route path="/cargos" element={<CargosPage />} />
-                <Route path="/tipos" element={<TiposPage />} />
+                <Route path="/movimentacoes/nova" element={<NovaMovimentacaoPage />} />
+                <Route path="/tipos" element={<Navigate to="/movimentacoes/nova" replace />} />
                 <Route path="/acessos" element={<AcessosPage />} />
                 <Route path="/workflow" element={<WorkflowPage />} />
                 <Route path="/aprovadas" element={<AprovadasPage />} />

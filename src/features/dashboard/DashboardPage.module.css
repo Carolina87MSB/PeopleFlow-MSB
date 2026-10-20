@@ -665,53 +665,16 @@
   font-weight: 700;
 }
 
-.integracoesDesc {
-  margin: 0 0 16px;
-  font-size: 12px;
-  color: var(--color-muted);
-  max-width: 720px;
-  line-height: 1.6;
-}
-
-.integracoesGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.integracaoItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--dp-radius-control);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text);
-}
-.integracaoItem svg {
-  color: var(--color-brand);
-  flex: none;
-}
-.integracaoItem span {
-  flex: 1;
-}
-
-/* -------------------------------------------------------- responsividade */
-
-/* As grades internas (tiles/pendências) quebram antes das externas — abaixo
- * de ~90px de largura o número de 30px deixa de caber. */
 @media (max-width: 1024px) {
-  .kpis {
+  .kpis,
+  .alertasGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .distribuicoesGrid,
   .graficosGrid {
     grid-template-columns: 1fr;
   }
-  .gestorGrid,
-  .integracoesGrid {
+  .gestorGrid {
     grid-template-columns: 1fr;
   }
 }
@@ -721,7 +684,8 @@
     gap: 22px;
   }
 
-  .kpis {
+  .kpis,
+  .alertasGrid {
     grid-template-columns: 1fr;
   }
 
@@ -742,5 +706,118 @@
   .deptName {
     width: auto;
     flex: 1;
+  }
+}
+
+/* ---------------------------------------------------- ajustes de organização */
+
+/* indicadores: cartões da mesma altura (4 por linha), legenda sempre embaixo */
+.kpiCard {
+  min-height: 112px;
+}
+.kpiCard .kpiHint {
+  margin-top: auto;
+}
+
+/* alertas operacionais: cartões menores que os indicadores estratégicos */
+.alertasGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--dp-gap);
+}
+.kpiCompacto {
+  min-height: 0;
+  padding: 10px 14px;
+  gap: 4px;
+}
+.kpiCompacto .kpiValue {
+  font-size: 22px;
+}
+
+/* aprovações pendentes sem pendência: uma linha, sem painel vazio */
+.pendVazia {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--dp-radius-control);
+  background: var(--color-surface);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+.pendVazia svg {
+  color: var(--color-success);
+  flex: none;
+}
+.pendVazia .verTodas {
+  margin-left: auto;
+}
+
+/* headcount por setor mais compacto */
+.deptList {
+  gap: 8px;
+}
+.deptRow {
+  gap: 10px;
+}
+.deptName {
+  width: 168px;
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+
+/* equipes por gestor: cartões que acomodam o nome inteiro e sinalizam gestor desligado */
+.gestorGrid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.gestorCard {
+  align-items: center;
+  padding: 8px 10px;
+  gap: 9px;
+}
+.gestorNome {
+  -webkit-line-clamp: 3;
+}
+.gestorCardAlerta {
+  border-color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+.gestorDesligado {
+  align-self: flex-start;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-warning-fg);
+}
+.gestorAviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--dp-radius-control);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.gestorAviso svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* alertas compactos: mesmas quebras responsivas dos indicadores (declarados depois da regra base, por isso repetidos aqui) */
+@media (max-width: 1024px) {
+  .alertasGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .alertasGrid {
+    grid-template-columns: 1fr;
   }
 }

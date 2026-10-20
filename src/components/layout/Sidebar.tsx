@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import { agregarCargos, agregarDepartamentos } from "../../domain/agregados";
+import { acessaPortalCompleto, navDesenvolvimento } from "../../domain/permissoes";
 import { usePortalStore } from "../../store/PortalStoreContext";
 import { usePortalData } from "../../store/usePortalData";
 import { Avatar } from "../ui/Avatar";
@@ -55,6 +56,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     podeVerColaboradores,
     podeVerCadastros,
     podeVerCargos,
+    podeCriar,
     pendenciasFinanceirasCount,
     pendenciasAvaliacaoExperiencia,
   } = usePortalData();
@@ -69,7 +71,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   // Perfil "Colaborador" (acesso restrito à AVD) só alcança /desempenho —
   // menu mínimo em vez da navegação completa, que só levaria a telas que o
   // AppShell já bloqueia pra esse perfil.
-  if (conta?.perfil === "Colaborador") {
+  if (conta && !acessaPortalCompleto(conta.perfil)) {
     return (
       <aside className={[styles.sidebar, open ? styles.open : ""].join(" ")}>
         <div className={styles.brand}>
@@ -131,7 +133,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className={styles.sectionLabel}>Visão geral</div>
         <NavItem to="/dashboard" icon={<LayoutDashboard size={18} strokeWidth={1.9} />} label="Dashboard" />
 
-        <div className={styles.sectionLabel}>Cadastros</div>
+        <div className={styles.sectionLabel}>Gestão de pessoas</div>
         {podeVerColaboradores && (
           <NavItem to="/colaboradores" icon={<Users size={18} strokeWidth={1.9} />} label="Colaboradores" badge={colaboradoresVisiveis.length} badgeTone="neutral" />
         )}
@@ -141,23 +143,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         {podeVerCargos && (
           <NavItem to="/cargos" icon={<Briefcase size={18} strokeWidth={1.9} />} label="Cargos" badge={totalCargos} badgeTone="neutral" />
         )}
-        {/* Visível pra todo mundo (não só RH) desde a Etapa 2.1 — Gestor/Diretoria
-            precisam chegar lá pra preencher avaliações dos liderados/próprias. */}
-        <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Gestão de Desempenho" />
-        <NavItem to="/tipos" icon={<ArrowLeftRight size={18} strokeWidth={1.9} />} label="Tipos de movimentação" />
-        {podeVerCadastros && <NavItem to="/acessos" icon={<KeyRound size={18} strokeWidth={1.9} />} label="Acessos" />}
-
-        <div className={styles.sectionLabel}>Operação</div>
-        <NavItem to="/workflow" icon={<ClipboardList size={18} strokeWidth={1.9} />} label="Workflow de aprovação" badge={pendentesCount} badgeTone="warning" />
-        <NavItem to="/aprovadas" icon={<CheckCircle2 size={18} strokeWidth={1.9} />} label="Movimentações aprovadas" badge={aprovadasCount} badgeTone="success" />
-        <NavItem to="/historico" icon={<History size={18} strokeWidth={1.9} />} label="Histórico" />
-        <NavItem
-          to="/avaliacoes"
-          icon={<ClipboardCheck size={18} strokeWidth={1.9} />}
-          label="Avaliações de experiência"
-          badge={pendenciasAvaliacaoExperiencia.length}
-          badgeTone="warning"
-        />
         {podeVerCadastros && (
           <NavItem
             to="/desligados"
@@ -168,15 +153,36 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           />
         )}
 
-        {/* Módulo Desenvolvimento — nesta fase só RH e Gestor (Colaborador e
-            Diretoria ficam de fora até decisão). Sem contadores: o menu não
-            dispara nenhuma consulta do módulo. */}
-        {(perfil === "RH" || perfil === "Gestor") && (
+        <div className={styles.sectionLabel}>Movimentações de pessoal</div>
+        {podeCriar && <NavItem to="/movimentacoes/nova" icon={<ArrowLeftRight size={18} strokeWidth={1.9} />} label="Nova Movimentação" />}
+        <NavItem to="/aprovadas" icon={<CheckCircle2 size={18} strokeWidth={1.9} />} label="Movimentações aprovadas" badge={aprovadasCount} badgeTone="success" />
+        <NavItem to="/historico" icon={<History size={18} strokeWidth={1.9} />} label="Histórico" />
+        <NavItem to="/workflow" icon={<ClipboardList size={18} strokeWidth={1.9} />} label="Workflow de aprovação" badge={pendentesCount} badgeTone="warning" />
+
+        {/* Avaliações de experiência e Gestão de Desempenho são visíveis para todo perfil do portal completo (Gestor/Diretoria preenchem as dos
+            liderados/próprias); Habilidades, Necessidades e Treinamentos seguem só para RH e Gestor (navDesenvolvimento). Sem contadores do módulo
+            Desenvolvimento: o menu não dispara nenhuma consulta dele. */}
+        <div className={styles.sectionLabel}>Desenvolvimento</div>
+        <NavItem
+          to="/avaliacoes"
+          icon={<ClipboardCheck size={18} strokeWidth={1.9} />}
+          label="Avaliações de experiência"
+          badge={pendenciasAvaliacaoExperiencia.length}
+          badgeTone="warning"
+        />
+        <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Gestão de Desempenho" />
+        {navDesenvolvimento(perfil) && (
           <>
-            <div className={styles.sectionLabel}>Desenvolvimento</div>
             <NavItem to="/desenvolvimento/habilidades" icon={<Puzzle size={18} strokeWidth={1.9} />} label="Habilidades e Requisitos" duasLinhas />
             <NavItem to="/desenvolvimento/lnt" icon={<ListChecks size={18} strokeWidth={1.9} />} label="Necessidades de Desenvolvimento" duasLinhas />
             <NavItem to="/desenvolvimento/treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Treinamentos" />
+          </>
+        )}
+
+        {podeVerCadastros && (
+          <>
+            <div className={styles.sectionLabel}>Administração do sistema</div>
+            <NavItem to="/acessos" icon={<KeyRound size={18} strokeWidth={1.9} />} label="Acessos" />
           </>
         )}
       </nav>

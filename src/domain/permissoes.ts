@@ -83,3 +83,18 @@ export function filtrarColaboradoresPorEscopo<T extends { nome: string }>(
   if (perfil !== "Gestor" || !scopeSet) return colaboradores;
   return colaboradores.filter((c) => scopeSet.has(c.nome));
 }
+
+/** Perfil "Colaborador" (acesso restrito à Avaliação de Desempenho) só alcança o próprio menu mínimo; os demais perfis usam o portal completo. */
+export function acessaPortalCompleto(perfil: Perfil): boolean {
+  return perfil !== "Colaborador";
+}
+
+/** Módulo Desenvolvimento (Habilidades e Requisitos, Necessidades de Desenvolvimento, Treinamentos) no menu: por ora só RH e Gestor. */
+export function navDesenvolvimento(perfil: Perfil): boolean {
+  return perfil === "RH" || perfil === "Gestor";
+}
+
+/** Informação financeira dos desligamentos (valores individuais E totais agregados): por decisão do RH, por ora só o RH — o servidor impõe a mesma regra. */
+export function podeVerFinanceiroDesligamentos(perfil: Perfil): boolean {
+  return perfil === "RH";
+}

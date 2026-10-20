@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, Check, CheckCircle2, Pencil, Plus, Search, X } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { NovaMovimentacaoModal } from "../../components/shared/NovaMovimentacaoModal";
+import { podeVerFinanceiroDesligamentos } from "../../domain/permissoes";
+import { gestorDesligado } from "../../domain/hierarquia";
 import { ReprovarModal } from "../../components/shared/ReprovarModal";
 import { Avatar, Badge, Button, EmptyState } from "../../components/ui";
 import { agregarCargos, agregarDepartamentos, contarPorGestor } from "../../domain/agregados";
@@ -16,6 +18,7 @@ import {
   filtrarPorAtributos,
   headcountEmData,
   performanceMediaMSB,
+  setoresComTurnover,
   tempoMedioDeEmpresa,
   turnoverPorSetor,
   type FiltrosAtributosDashboard,
@@ -163,10 +166,14 @@ export function DashboardPage() {
     [colaboradoresAtivosNoFimDoPeriodo],
   );
   const maxGestor = Math.max(1, ...gestores.map(([, count]) => count));
+  // Gestores que constam no cadastro apenas como DESLIGADOS mas ainda aparecem liderando colaboradores ativos (inconsistência a decidir pelo RH).
+  const gestoresDesligadosNaLista = useMemo(() => gestores.map(([nome]) => nome).filter((nome) => gestorDesligado(state.colaboradores, nome)), [gestores, state.colaboradores]);
   const turnoverSetor = useMemo(
     () => turnoverPorSetor(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim, historicoFiltrado),
     [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim, historicoFiltrado],
   );
+  // Só setores com turnover maior que zero, do maior para o menor (a ordenação já vem de turnoverPorSetor; o cálculo não muda).
+  const turnoverSetorComSaida = useMemo(() => setoresComTurnover(turnoverSetor), [turnoverSetor]);
   const desligadosNoPeriodoFiltrado = useMemo(
     () => desligamentosNoPeriodo(colaboradoresExecutivoFiltrados, periodoInicio, periodoFim),
     [colaboradoresExecutivoFiltrados, periodoInicio, periodoFim],
@@ -182,7 +189,7 @@ export function DashboardPage() {
       ),
     [desligadosNoPeriodoFiltrado, historicoFiltrado, periodoInicio, periodoFim],
   );
-  const veValoresFinanceiros = perfil === "RH";
+  const veValoresFinanceiros = podeVerFinanceiroDesligamentos(perfil);
   const [custosServidor, setCustosServidor] = useState<CustosAgregados | null>(null);
   const [custosErro, setCustosErro] = useState<string | null>(null);
   useEffect(() => {
@@ -442,20 +449,21 @@ export function DashboardPage() {
               <strong>{totalPendencias}</strong> pendência(s) no total
             </span>
           </div>
-          <div className={styles.kpis}>
+          <div className={styles.alertasGrid}>
             <Kpi
+              compacto
               label="Pendências de Aprovação"
               value={pendenciasAprovacaoAlerta}
               hint={meusPendCount > 0 ? `${meusPendCount} aguardando você` : undefined}
               tone="danger"
               icon={<AlertTriangle size={11} strokeWidth={2.2} />}
             />
-            <Kpi label="Avaliações de Experiência Pendentes" value={avaliacoesExperienciaPendentes.length} tone="warning" />
+            <Kpi compacto label="Avaliações de Experiência Pendentes" value={avaliacoesExperienciaPendentes.length} tone="warning" />
             <Link to="/desligados" className={styles.kpiLink}>
-              <Kpi label="Desligamentos Pendentes" value={desligamentosPendentesAlerta} tone="warning" />
+              <Kpi compacto label="Desligamentos Pendentes" value={desligamentosPendentesAlerta} tone="warning" />
             </Link>
             <Link to="/cargos" className={styles.kpiLink}>
-              <Kpi label="Cargos sem Descrição" value={cargosSemDescricaoAlerta.length} tone="warning" />
+              <Kpi compacto label="Cargos sem Descrição" value={cargosSemDescricaoAlerta.length} tone="warning" />
             </Link>
           </div>
         </section>
@@ -467,6 +475,15 @@ export function DashboardPage() {
               {movimentacoesVisiveis.length} movimentações no mês · {aprovadasMes} aprovadas · {reprovadasMes} reprovadas
             </span>
           </div>
+          {pendentes.length === 0 ? (
+            <div className={styles.pendVazia}>
+              <CheckCircle2 size={15} strokeWidth={1.9} />
+              <span>Nenhuma aprovação pendente.</span>
+              <Link to="/workflow" className={styles.verTodas}>
+                Ver workflow ›
+              </Link>
+            </div>
+          ) : (
           <div className={styles.panel}>
             <div className={styles.cardHeader}>
               <h3 className={styles.cardTitle}>Aprovações pendentes</h3>
@@ -474,9 +491,6 @@ export function DashboardPage() {
                 Ver todas ›
               </Link>
             </div>
-            {pendentes.length === 0 ? (
-              <EmptyState message="Nenhuma pendência." />
-            ) : (
               <div className={styles.pendList}>
                 {pendentes.slice(0, 4).map((m) => (
                   <div key={m.id} className={styles.pendItem}>
@@ -503,8 +517,8 @@ export function DashboardPage() {
                   </div>
                 ))}
               </div>
-            )}
           </div>
+          )}
         </section>
 
         <section className={styles.secao}>
@@ -537,17 +551,45 @@ export function DashboardPage() {
                 <div className={styles.cardHeader}>
                   <h3 className={styles.cardTitle}>Equipes por Gestor</h3>
                 </div>
+                {perfil === "RH" && gestoresDesligadosNaLista.length > 0 && (
+                  <p className={styles.gestorAviso} role="note">
+                    <AlertTriangle size={13} strokeWidth={2.2} />
+                    {gestoresDesligadosNaLista.length === 1 ? "1 gestor desligado ainda consta" : `${gestoresDesligadosNaLista.length} gestores desligados ainda constam`} como responsável por colaboradores ativos:{" "}
+                    {gestoresDesligadosNaLista.join(", ")}. Defina o novo gestor imediato (o vínculo não foi alterado automaticamente).
+                  </p>
+                )}
                 <div className={styles.gestorGrid}>
-                  {gestores.map(([nome, count]) => (
-                    <Link key={nome} to={`/colaboradores?gestor=${encodeURIComponent(nome)}`} className={styles.gestorCard} title={nome}>
-                      <Avatar nome={nome} size={32} />
-                      <div className={styles.gestorInfo}>
-                        <div className={styles.gestorNome}>{nome}</div>
-                        <Barra valor={count} max={maxGestor} />
-                      </div>
-                      <span className={styles.gestorCount}>{count}</span>
-                    </Link>
-                  ))}
+                  {gestores.map(([nome, count]) => {
+                    // Sem gestor imediato no cadastro (ex.: topo da hierarquia): não é uma equipe — aparece rotulado, sem link e sem avatar de pessoa.
+                    if (!nome || nome === "—" || nome === "-") {
+                      return (
+                        <div key="sem-gestor" className={styles.gestorCard} title="Colaborador(es) ativo(s) sem gestor imediato definido no cadastro">
+                          <div className={styles.gestorInfo}>
+                            <div className={styles.gestorNome}>Sem gestor definido</div>
+                            <Barra valor={count} max={maxGestor} />
+                          </div>
+                          <span className={styles.gestorCount}>{count}</span>
+                        </div>
+                      );
+                    }
+                    const desligado = gestorDesligado(state.colaboradores, nome);
+                    return (
+                      <Link
+                        key={nome}
+                        to={`/colaboradores?gestor=${encodeURIComponent(nome)}`}
+                        className={[styles.gestorCard, desligado ? styles.gestorCardAlerta : ""].filter(Boolean).join(" ")}
+                        title={desligado ? `${nome} — gestor DESLIGADO: revisar o vínculo de gestão` : nome}
+                      >
+                        <Avatar nome={nome} size={30} />
+                        <div className={styles.gestorInfo}>
+                          <div className={styles.gestorNome}>{nome}</div>
+                          {desligado && <span className={styles.gestorDesligado}>Gestor desligado</span>}
+                          <Barra valor={count} max={maxGestor} />
+                        </div>
+                        <span className={styles.gestorCount}>{count}</span>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -573,44 +615,13 @@ export function DashboardPage() {
               <div className={styles.cardHeader}>
                 <h3 className={styles.cardTitle}>Turnover por Setor</h3>
               </div>
-              {turnoverSetor.length === 0 ? (
-                <EmptyState message="Sem dados suficientes no período selecionado." />
+              {turnoverSetorComSaida.length === 0 ? (
+                <EmptyState message={turnoverSetor.length === 0 ? "Sem dados suficientes no período selecionado." : "Nenhum setor com turnover no período selecionado."} />
               ) : (
-                <TurnoverPorSetorList data={turnoverSetor} />
+                <TurnoverPorSetorList data={turnoverSetorComSaida} />
               )}
             </div>
             <CustosRescisaoQuadro meses={custosRescisao} mostrarValores={mostrarValores} veValoresFinanceiros={veValoresFinanceiros} cobertura={coberturaCustos} erro={custosErro} />
-          </div>
-        </section>
-
-        {/* "Integrações futuras" ganhou seção própria: ficava sob o rótulo
-            "Custos", que agora virou "Turnover e Custos", e numa grade de 2
-            colunas ela ocuparia meia largura. Conteúdo idêntico. */}
-        <section className={styles.secao}>
-          <div className={styles.secaoHeader}>
-            <h2 className={styles.secaoTitulo}>Integrações</h2>
-          </div>
-          <div className={styles.mainGrid}>
-            <div className={styles.panel}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>Integrações futuras</h3>
-              </div>
-              <p className={styles.integracoesDesc}>
-                Esta estrutura já contempla a conexão com os demais portais MSB, permitindo que dados de colaboradores e
-                movimentações alimentem outras iniciativas de RH.
-              </p>
-              <div className={styles.integracoesGrid}>
-                {["Treinamentos MSB", "Portal SST"].map((nome) => (
-                  <div key={nome} className={styles.integracaoItem}>
-                    <CheckCircle2 size={16} strokeWidth={1.8} />
-                    <span>{nome}</span>
-                    <Badge bg="var(--color-neutral-bg)" fg="var(--color-neutral-fg)">
-                      EM BREVE
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </section>
       </div>
@@ -657,6 +668,7 @@ function Kpi({
   icon,
   tone = "default",
   barra,
+  compacto = false,
 }: {
   label: string;
   value: ReactNode;
@@ -665,6 +677,8 @@ function Kpi({
   icon?: ReactNode;
   tone?: KpiTone;
   barra?: { valor: number; max: number; rotulo?: ReactNode };
+  /** Variante menor (alertas operacionais): mesmo conteúdo, sem cartões desproporcionais. */
+  compacto?: boolean;
 }) {
   const toneClass =
     tone === "dark" ? styles.kpiDark : tone === "danger" ? styles.kpiDanger : tone === "warning" ? styles.kpiWarning : "";
@@ -672,7 +686,7 @@ function Kpi({
   const pct = barra && barra.max > 0 ? Math.max(0, Math.min(100, (barra.valor / barra.max) * 100)) : null;
 
   return (
-    <div className={[styles.kpiCard, toneClass].filter(Boolean).join(" ")}>
+    <div className={[styles.kpiCard, compacto ? styles.kpiCompacto : "", toneClass].filter(Boolean).join(" ")}>
       <div className={styles.kpiLabelRow}>
         <div className={styles.kpiLabel}>
           {icon}
