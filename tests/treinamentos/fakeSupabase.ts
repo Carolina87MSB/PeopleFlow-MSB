@@ -149,6 +149,17 @@ export function criarFake(db: PGlite, usuarios: Record<string, string | { id: st
   const conteudos = new Map<string, Uint8Array>();
   return {
     from: (tabela: string) => new Consulta(db, tabela),
+    /** Chamada de função do banco com argumentos nomeados (PostgREST /rpc). */
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      const chaves = Object.keys(args);
+      try {
+        const r = await db.query(`select public."${fn}"(${chaves.map((k, i) => `${k} => $${i + 1}`).join(", ")}) as r`, chaves.map((k) => args[k]));
+        return { data: (r.rows[0] as { r: unknown } | undefined)?.r ?? null, error: null };
+      } catch (e) {
+        const err = e as { code?: string; message: string };
+        return { data: null, error: { code: err.code, message: err.message } };
+      }
+    },
     auth: {
       getUser: async (token: string) => {
         const u = usuarios[token];

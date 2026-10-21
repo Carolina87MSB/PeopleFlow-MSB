@@ -6,6 +6,10 @@
 //     basta a presença estar "presente". Novos métodos de presença não exigem mudança aqui.
 //   • Não é retroativa: só participações confirmadas a partir de `ativa_desde` (data de ativação do recurso) são elegíveis.
 //   • Não interfere na conclusão do treinamento (nada aqui é consultado ao concluir).
+//   • Prazo de 7 dias corridos após a confirmação da presença (até o fim do 7º dia, horário de Brasília). Situação: Pendente, Vencida
+//     ou Respondida. Vencida AINDA pode ser respondida.
+//   • Privacidade: a identificação de quem respondeu serve ao controle de adesão; as NOTAS só existem de forma consolidada (médias) e só
+//     são exibidas com um mínimo de respostas, para que a média não identifique ninguém.
 
 export const VERSAO_FORMULARIO = 1;
 
@@ -56,6 +60,7 @@ export function elegivelParaReacao(p: ParticipacaoParaReacao, t: TreinamentoPara
 export interface IndicadorAdesao {
   elegiveis: number;
   respondidos: number;
+  /** Sem resposta (inclui as vencidas). */
   pendentes: number;
   /** Percentual inteiro de 0 a 100; null quando não há elegíveis. */
   taxa: number | null;
@@ -69,4 +74,41 @@ export function indicadorAdesao(elegiveis: number, respondidos: number): Indicad
 /** Média (1 casa) de cada questão; null quando não há respostas. */
 export function mediaPorQuestao(respostas: number[][]): (number | null)[] {
   return QUESTOES.map((_, i) => (respostas.length ? Math.round((respostas.reduce((s, r) => s + r[i], 0) / respostas.length) * 10) / 10 : null));
+}
+
+// ── Prazo e situação ────────────────────────────────────────────────────────
+export const PRAZO_DIAS = 7;
+/** Mínimo de respostas para exibir médias (abaixo disso a média poderia identificar quem respondeu). */
+export const MINIMO_RESPOSTAS_PARA_MEDIAS = 3;
+
+const fmtDiaSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" });
+const diaSP = (d: Date) => fmtDiaSP.format(d);
+/** Dia (AAAA-MM-DD) de um instante no horário de Brasília. */
+export const diaEmBrasilia = diaSP;
+
+/** Último dia para responder: dia da confirmação (Brasília) + 7 dias corridos. "AAAA-MM-DD". */
+export function prazoDaReacao(presencaEm: string | Date): string {
+  const base = diaSP(new Date(presencaEm));
+  const d = new Date(`${base}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + PRAZO_DIAS);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Instante em que o prazo termina (23:59:59 de Brasília do último dia; o Brasil não adota horário de verão desde 2019). */
+export function fimDoPrazoDaReacao(presencaEm: string | Date): Date {
+  return new Date(`${prazoDaReacao(presencaEm)}T23:59:59-03:00`);
+}
+
+export type SituacaoReacao = "pendente" | "vencida" | "respondida";
+
+/** Pendente (dentro do prazo), Vencida (passou do prazo sem resposta; ainda pode responder) ou Respondida. */
+export function situacaoDaReacao(p: { presenca_em: string | Date; respondido_em?: string | Date | null }, agora: Date = new Date()): { situacao: SituacaoReacao; prazo: string } {
+  const prazo = prazoDaReacao(p.presenca_em);
+  if (p.respondido_em) return { situacao: "respondida", prazo };
+  return { situacao: diaSP(agora) > prazo ? "vencida" : "pendente", prazo };
+}
+
+/** Médias só aparecem com o mínimo de respostas; antes disso retorna null (a API nem envia o número). */
+export function mediasConsolidadas(respostas: number[][]): (number | null)[] | null {
+  return respostas.length >= MINIMO_RESPOSTAS_PARA_MEDIAS ? mediaPorQuestao(respostas) : null;
 }

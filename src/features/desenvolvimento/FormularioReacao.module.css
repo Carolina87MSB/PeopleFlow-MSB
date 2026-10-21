@@ -35,6 +35,13 @@
   color: var(--color-text, #51606b);
 }
 
+.prazo {
+  margin: 6px 0 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-navy, #33485a);
+}
+
 .pergunta {
   margin: 0;
   padding: 0;

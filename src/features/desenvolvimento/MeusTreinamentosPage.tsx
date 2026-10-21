@@ -24,15 +24,33 @@ const SITUACAO = {
 
 const dataHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
 
-/** Avaliação de reação: botão quando disponível (também depois da conclusão), data/hora quando respondida, nada quando não se aplica. */
+/** Texto do prazo da avaliação (7 dias corridos após a presença; vencida ainda pode ser respondida). */
+const textoPrazo = (t: LinhaMeuHistorico) =>
+  !t.avaliacao_prazo ? undefined : t.avaliacao === "vencida" ? `O prazo terminou em ${formatarData(t.avaliacao_prazo)}, mas você ainda pode responder.` : `Responda até ${formatarData(t.avaliacao_prazo)}.`;
+
+/** Avaliação de reação: Pendente ou Vencida (com prazo e botão, também depois da conclusão), Respondida (data e hora) ou nada quando não se aplica. */
 function CelulaAvaliacao({ t, onAvaliar }: { t: LinhaMeuHistorico; onAvaliar: () => void }) {
-  if (t.avaliacao === "disponivel")
+  if (t.avaliacao === "pendente" || t.avaliacao === "vencida")
     return (
-      <button type="button" className={styles.linkAcao} onClick={onAvaliar}>
-        Avaliar treinamento
-      </button>
+      <div className={mobile.avaliacao}>
+        <Selo tom={t.avaliacao === "vencida" ? "danger" : "warning"}>{t.avaliacao === "vencida" ? "Vencida" : "Pendente"}</Selo>
+        {t.avaliacao_prazo && (
+          <span className={styles.secundario}>
+            {t.avaliacao === "vencida" ? "Prazo encerrou em" : "Prazo:"} {formatarData(t.avaliacao_prazo)}
+          </span>
+        )}
+        <button type="button" className={styles.linkAcao} onClick={onAvaliar}>
+          Avaliar treinamento
+        </button>
+      </div>
     );
-  if (t.avaliacao === "respondida") return <span className={styles.secundario}>Respondida{t.avaliacao_em ? ` em ${dataHora.format(new Date(t.avaliacao_em))}` : ""}</span>;
+  if (t.avaliacao === "respondida")
+    return (
+      <div className={mobile.avaliacao}>
+        <Selo tom="success">Respondida</Selo>
+        {t.avaliacao_em && <span className={styles.secundario}>em {dataHora.format(new Date(t.avaliacao_em))}</span>}
+      </div>
+    );
   return <span className={styles.secundario}>—</span>;
 }
 
@@ -41,7 +59,7 @@ export default function MeusTreinamentosPage() {
   const consulta = useConsulta(() => meuHistorico(), []);
   const itens = consulta.dados?.treinamentos ?? [];
   const [avaliando, setAvaliando] = useState<string | null>(null);
-  const alvo = itens.find((t) => t.codigo === avaliando && t.avaliacao === "disponivel") ?? null;
+  const alvo = itens.find((t) => t.codigo === avaliando && (t.avaliacao === "pendente" || t.avaliacao === "vencida")) ?? null;
   return (
     <>
       <Header />
@@ -55,6 +73,7 @@ export default function MeusTreinamentosPage() {
         {alvo && (
           <FormularioReacao
             titulo={alvo.titulo}
+            textoPrazo={textoPrazo(alvo)}
             onCancelar={() => setAvaliando(null)}
             onEnviar={async (respostas) => {
               await responderReacao(alvo.codigo as string, respostas);
@@ -134,7 +153,7 @@ export default function MeusTreinamentosPage() {
                       <dd>{PRESENCA[t.presenca].rotulo}</dd>
                     </div>
                     {t.avaliacao && (
-                      <div>
+                      <div className={mobile.cheio}>
                         <dt>Avaliação</dt>
                         <dd>
                           <CelulaAvaliacao t={t} onAvaliar={() => setAvaliando(t.codigo)} />

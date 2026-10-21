@@ -4,7 +4,7 @@ import visual from "./FormularioReacao.module.css";
 
 /** Formulário padronizado da Avaliação de Reação: 5 perguntas, escala de 1 a 5, uma resposta por participação.
  * Componente leve (sem dependência do portal): usado em "Meus treinamentos" e na página de presença por QR. */
-export function FormularioReacao({ titulo, onEnviar, onCancelar }: { titulo: string; onEnviar: (respostas: number[]) => Promise<void>; onCancelar?: () => void }) {
+export function FormularioReacao({ titulo, textoPrazo, onEnviar, onCancelar }: { titulo: string; textoPrazo?: string; onEnviar: (respostas: number[]) => Promise<void>; onCancelar?: () => void }) {
   const [notas, setNotas] = useState<(number | null)[]>(() => QUESTOES.map(() => null));
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -29,6 +29,8 @@ export function FormularioReacao({ titulo, onEnviar, onCancelar }: { titulo: str
         <p className={visual.eyebrow}>Avaliação do treinamento</p>
         <h4 className={visual.titulo}>{titulo}</h4>
         <p className={visual.ajuda}>Dê uma nota de 1 a 5 para cada afirmação (1 = discordo totalmente, 5 = concordo totalmente). Você responde uma vez só.</p>
+        <p className={visual.ajuda}>Suas notas são tratadas de forma consolidada: o RH sabe quem respondeu, mas não vê a nota de cada pessoa.</p>
+        {textoPrazo && <p className={visual.prazo}>{textoPrazo}</p>}
       </div>
       {QUESTOES.map((q, i) => (
         <fieldset key={i} className={visual.pergunta}>

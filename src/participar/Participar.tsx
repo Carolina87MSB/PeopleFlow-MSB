@@ -21,8 +21,10 @@ const DOMINIO = "@msbbrasil.com";
 interface Info {
   /** Código do treinamento (TRN-…): chave da avaliação de reação. */
   codigo?: string;
-  /** Avaliação de reação: disponível logo após a presença confirmada; "respondida" depois de enviada; null quando não se aplica. */
-  avaliacao?: "disponivel" | "respondida" | null;
+  /** Avaliação de reação: pendente (logo após a presença confirmada) | vencida (ainda pode responder) | respondida | null (não se aplica). */
+  avaliacao?: "pendente" | "vencida" | "respondida" | null;
+  /** Último dia para responder (7 dias corridos após a presença). */
+  avaliacao_prazo?: string | null;
   titulo: string;
   documento: string | null;
   data: string | null;
@@ -245,9 +247,10 @@ export function Participar() {
               </p>
             )}
             {estado.info.situacao === "nao_inscrito" && <p className={styles.aviso}>Você não está na lista de participantes deste treinamento. Procure o responsável — ele pode incluir você e registrar a presença.</p>}
-            {estado.info.situacao === "confirmada" && estado.info.avaliacao === "disponivel" && estado.info.codigo && (
+            {estado.info.situacao === "confirmada" && (estado.info.avaliacao === "pendente" || estado.info.avaliacao === "vencida") && estado.info.codigo && (
               <FormularioReacao
                 titulo={estado.info.titulo}
+                textoPrazo={estado.info.avaliacao_prazo ? (estado.info.avaliacao === "vencida" ? `O prazo terminou em ${formatarData(estado.info.avaliacao_prazo)}, mas você ainda pode responder.` : `Responda até ${formatarData(estado.info.avaliacao_prazo)}.`) : undefined}
                 onEnviar={async (respostas) => {
                   await enviarReacao(estado.info.codigo as string, respostas);
                   setEstado({ tipo: "info", info: { ...estado.info, avaliacao: "respondida" } });

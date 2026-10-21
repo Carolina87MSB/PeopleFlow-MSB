@@ -52,8 +52,10 @@ export interface LinhaMeuHistorico {
   carga_min: number | null;
   situacao: "realizado" | "ausente" | "agendado";
   presenca: "presente" | "ausente" | "pendente";
-  /** Avaliação de reação: disponivel (presença confirmada, treinamento oficial) | respondida | null (não se aplica). */
-  avaliacao: "disponivel" | "respondida" | null;
+  /** Avaliação de reação: pendente (dentro do prazo) | vencida (ainda pode responder) | respondida | null (não se aplica). */
+  avaliacao: "pendente" | "vencida" | "respondida" | null;
+  /** Último dia para responder (7 dias corridos após a presença). */
+  avaliacao_prazo: string | null;
   avaliacao_em: string | null;
 }
 
@@ -76,21 +78,29 @@ export async function responderReacao(codigo: string, respostas: number[]): Prom
 export interface IndicadorReacao {
   elegiveis: number;
   respondidos: number;
+  /** Sem resposta (inclui as vencidas). */
   pendentes: number;
+  vencidas: number;
   taxa: number | null;
-  medias: (number | null)[];
+  /** Médias CONSOLIDADAS por pergunta; null enquanto houver menos respostas que o mínimo (a API não envia o número). */
+  medias: (number | null)[] | null;
 }
 export interface ResumoReacao {
   ativa_desde: string | null;
+  prazo_dias: number;
+  minimo_respostas_para_medias: number;
   questoes: string[];
   geral: IndicadorReacao;
   treinamentos: (IndicadorReacao & { id: number; codigo: string; titulo: string; status: StatusTreinamento; data: string | null })[];
 }
 export interface DetalheReacao extends IndicadorReacao {
   ativa_desde: string | null;
+  prazo_dias: number;
+  minimo_respostas_para_medias: number;
   questoes: string[];
   treinamento: { id: number; codigo: string; titulo: string; status: StatusTreinamento } | null;
-  participantes: { participante_id: number; colaborador_id: number; nome: string; cargo: string; departamento: string; estado: "respondida" | "pendente"; respondido_em: string | null; respostas: number[] | null }[];
+  /** Controle de adesão: quem respondeu e quando — as NOTAS nunca vêm associadas a uma pessoa. */
+  participantes: { participante_id: number; colaborador_id: number; nome: string; cargo: string; departamento: string; situacao: "pendente" | "vencida" | "respondida"; prazo: string; respondido_em: string | null; fora_do_prazo: boolean }[];
 }
 export const reacaoResumo = () => gravar<ResumoReacao>("reacao_resumo", {});
 export const reacaoDetalhe = (treinamentoId: number) => gravar<DetalheReacao>("reacao_detalhe", { treinamento_id: treinamentoId });

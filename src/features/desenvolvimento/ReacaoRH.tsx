@@ -12,7 +12,9 @@ const dataHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo
 const pct = (t: number | null) => (t === null ? "—" : `${t}%`);
 const nota = (n: number | null) => (n === null ? "—" : n.toFixed(1).replace(".", ","));
 
+/** Controle de adesão: quem deve avaliar, quem respondeu, quem está pendente (no prazo) e quem está vencido. */
 function Indicadores({ i }: { i: IndicadorReacao }) {
+  const noPrazo = i.pendentes - i.vencidas;
   return (
     <div className={visual.indicadores}>
       <div>
@@ -24,8 +26,12 @@ function Indicadores({ i }: { i: IndicadorReacao }) {
         <span className={visual.rotulo}>Responderam</span>
       </div>
       <div>
-        <span className={visual.numero}>{i.pendentes}</span>
-        <span className={visual.rotulo}>Pendentes</span>
+        <span className={visual.numero}>{noPrazo}</span>
+        <span className={visual.rotulo}>Pendentes (no prazo)</span>
+      </div>
+      <div>
+        <span className={visual.numero}>{i.vencidas}</span>
+        <span className={visual.rotulo}>Vencidas</span>
       </div>
       <div>
         <span className={visual.numero}>{pct(i.taxa)}</span>
@@ -35,20 +41,25 @@ function Indicadores({ i }: { i: IndicadorReacao }) {
   );
 }
 
-function Medias({ questoes, medias }: { questoes: string[]; medias: (number | null)[] }) {
+/** Notas SOMENTE consolidadas (médias por pergunta). Abaixo do mínimo de respostas não há número: ele identificaria quem respondeu. */
+function Medias({ questoes, medias, minimo }: { questoes: string[]; medias: (number | null)[] | null; minimo: number }) {
+  if (!medias) return <p className={visual.reserva}>As médias das notas aparecem a partir de {minimo} respostas, para que ninguém seja identificado pela própria nota.</p>;
   return (
-    <ol className={visual.medias}>
-      {questoes.map((q, i) => (
-        <li key={i}>
-          <span>{q}</span>
-          <strong>{nota(medias[i] ?? null)}</strong>
-        </li>
-      ))}
-    </ol>
+    <>
+      <p className={visual.reserva}>Notas consolidadas (média de 1 a 5). O RH não vê a nota de cada pessoa.</p>
+      <ol className={visual.medias}>
+        {questoes.map((q, i) => (
+          <li key={i}>
+            <span>{q}</span>
+            <strong>{nota(medias[i] ?? null)}</strong>
+          </li>
+        ))}
+      </ol>
+    </>
   );
 }
 
-/** Aba "Avaliação de reação" (só RH): respondidos, pendentes e taxa de adesão; geral e por treinamento oficial. Teste/homologação fora. */
+/** Aba "Avaliação de reação" (só RH): adesão (respondidos, pendentes, vencidas, taxa) geral e por treinamento oficial; notas só consolidadas. Teste/homologação fora. */
 export function ReacaoAba() {
   const navigate = useNavigate();
   const resumo = useConsulta(() => reacaoResumo(), []);
@@ -59,7 +70,7 @@ export function ReacaoAba() {
         <div>
           <h3 className={styles.cardTitle}>Avaliação de reação</h3>
           <p className={styles.cardSubtitle}>
-            Obrigatória para todo treinamento oficial; fica disponível ao participante assim que a presença é confirmada.
+            Obrigatória para todo treinamento oficial, com prazo de {r?.prazo_dias ?? 7} dias corridos após a confirmação da presença (vencida ainda pode ser respondida). A conclusão do treinamento não depende dela.
             {r?.ativa_desde ? ` Vale para presenças confirmadas a partir de ${dataHora.format(new Date(r.ativa_desde))}.` : ""}
           </p>
         </div>
@@ -73,7 +84,7 @@ export function ReacaoAba() {
       ) : (
         <>
           <Indicadores i={r.geral} />
-          {r.geral.respondidos > 0 && <Medias questoes={r.questoes} medias={r.geral.medias} />}
+          <Medias questoes={r.questoes} medias={r.geral.medias} minimo={r.minimo_respostas_para_medias} />
           {r.treinamentos.length === 0 ? (
             <EstadoVazio icone={<MessageSquareHeart size={26} strokeWidth={1.6} />} titulo="Nenhum treinamento oficial com participação confirmada desde a ativação." />
           ) : (
@@ -86,6 +97,7 @@ export function ReacaoAba() {
                     <th>Devem avaliar</th>
                     <th>Responderam</th>
                     <th>Pendentes</th>
+                    <th>Vencidas</th>
                     <th>Adesão</th>
                   </tr>
                 </thead>
@@ -99,9 +111,10 @@ export function ReacaoAba() {
                       <td className={styles.mono}>{formatarData(t.data)}</td>
                       <td className={styles.mono}>{t.elegiveis}</td>
                       <td className={styles.mono}>{t.respondidos}</td>
-                      <td className={styles.mono}>{t.pendentes}</td>
+                      <td className={styles.mono}>{t.pendentes - t.vencidas}</td>
+                      <td className={styles.mono}>{t.vencidas}</td>
                       <td>
-                        <Selo tom={t.pendentes === 0 ? "success" : "warning"}>{pct(t.taxa)}</Selo>
+                        <Selo tom={t.pendentes === 0 ? "success" : t.vencidas > 0 ? "danger" : "warning"}>{pct(t.taxa)}</Selo>
                       </td>
                     </tr>
                   ))}
@@ -115,7 +128,13 @@ export function ReacaoAba() {
   );
 }
 
-/** Seção da página do treinamento (só RH, só oficial): quem respondeu, quem está pendente, notas e médias. */
+const SITUACAO = {
+  respondida: { rotulo: "Respondida", tom: "success" },
+  pendente: { rotulo: "Pendente", tom: "warning" },
+  vencida: { rotulo: "Vencida", tom: "danger" },
+} as const;
+
+/** Seção da página do treinamento (só RH, só oficial): controle de adesão (quem respondeu, pendentes, vencidas, prazo) e médias consolidadas. */
 export function ReacaoDoTreinamento({ treinamentoId }: { treinamentoId: number }) {
   const det = useConsulta(() => reacaoDetalhe(treinamentoId), [treinamentoId]);
   const d = det.dados;
@@ -128,19 +147,19 @@ export function ReacaoDoTreinamento({ treinamentoId }: { treinamentoId: number }
         <div>
           <h3 className={styles.cardTitle}>Avaliação de reação</h3>
           <p className={styles.cardSubtitle}>
-            {d.respondidos} de {d.elegiveis} responderam ({pct(d.taxa)}) · {d.pendentes} pendente{d.pendentes === 1 ? "" : "s"}. A conclusão do treinamento não depende das respostas.
+            {d.respondidos} de {d.elegiveis} responderam ({pct(d.taxa)}) · {d.pendentes - d.vencidas} pendente{d.pendentes - d.vencidas === 1 ? "" : "s"} no prazo · {d.vencidas} vencida{d.vencidas === 1 ? "" : "s"}. Prazo de {d.prazo_dias} dias após a presença; vencida ainda pode ser respondida.
           </p>
         </div>
       </div>
-      {d.respondidos > 0 && <Medias questoes={d.questoes} medias={d.medias} />}
+      <Medias questoes={d.questoes} medias={d.medias} minimo={d.minimo_respostas_para_medias} />
       <div className={tableStyles.wrap}>
         <table className={tableStyles.table}>
           <thead>
             <tr>
               <th>Participante</th>
               <th>Situação</th>
+              <th>Prazo</th>
               <th>Respondida em</th>
-              <th>Notas (1–5)</th>
             </tr>
           </thead>
           <tbody>
@@ -151,10 +170,11 @@ export function ReacaoDoTreinamento({ treinamentoId }: { treinamentoId: number }
                   <div className={styles.secundario}>{p.departamento}</div>
                 </td>
                 <td>
-                  <Selo tom={p.estado === "respondida" ? "success" : "warning"}>{p.estado === "respondida" ? "Respondida" : "Pendente"}</Selo>
+                  <Selo tom={SITUACAO[p.situacao].tom}>{SITUACAO[p.situacao].rotulo}</Selo>
+                  {p.fora_do_prazo && <div className={styles.secundario}>Após o prazo</div>}
                 </td>
+                <td className={styles.mono}>{formatarData(p.prazo)}</td>
                 <td className={styles.mono}>{p.respondido_em ? dataHora.format(new Date(p.respondido_em)) : "—"}</td>
-                <td className={styles.mono}>{p.respostas ? p.respostas.join(" · ") : "—"}</td>
               </tr>
             ))}
           </tbody>
