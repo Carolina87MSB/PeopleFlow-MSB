@@ -309,6 +309,89 @@ await t("Só a pessoa autenticada confirma, e só a PRÓPRIA presença (o corpo 
   await espera("ge", "participante_remover", { participante_id: pCaioRep, motivo: "Só para o teste de identidade" }, 200); // mantém o histórico dos testes seguintes
 });
 
+console.log("Data de realização: efetiva ≠ planejada");
+const { dataEfetivaDeRealizacao } = await import(pathToFileURL(`${PF}/src/domain/dataRealizacao.ts`).href);
+const diaSP = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" });
+const hojeSP = diaSP.format(new Date());
+const somaDias = (iso: string, n: number) => new Date(Date.parse(iso + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+const dataBRde = (iso: string) => iso.split("-").reverse().join("/");
+const isoDe = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v)).slice(0, 10);
+/** Treinamento de desenvolvimento (RH como participante, para não interferir no histórico dos demais), iniciado e com a presença resolvida. */
+async function realizado(extra: Record<string, unknown>) {
+  const d = await espera("rh", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", titulo: "Reunião de alinhamento", responsavel_colaborador_id: 1, data_inicio: hojeSP, ...extra }, 200);
+  await espera("rh", "participantes_adicionar", { treinamento_id: d.id, colaborador_ids: [1] }, 200);
+  await espera("rh", "treinamento_iniciar", { id: d.id }, 200);
+  await espera("rh", "presenca_manual", { treinamento_id: d.id, participante_ids: [(await part(d.id, 1)).id], presenca: "presente", motivo: "Lista física" }, 200);
+  return d.id as number;
+}
+const dataDoPdf = async (tid: number) => {
+  const ls = await q(`select storage_path from public.peopleflow_dev_evidencias where treinamento_id=${tid} and tipo='lista_presenca' and substituida_em is null`);
+  const m = textoDoPdf(fake.storage.conteudos.get(`desenvolvimento-evidencias/${ls[0].storage_path}`)!).match(/DATA DA REALIZAÇÃO\n(\d\d\/\d\d\/\d{4})\n/);
+  return m?.[1];
+};
+const auditoriaDaData = async (tid: number) => (await q(`select detalhe from public.peopleflow_dev_auditoria where acao='treinamento_concluido' and entidade_id='${tid}'`))[0].detalhe.data_realizacao;
+const dataGravada = async (tid: number) => isoDe((await q(`select data_realizacao from public.peopleflow_dev_treinamentos where id=${tid}`))[0].data_realizacao);
+await t("Regra (pura): informada vence; senão o dia do início em Brasília (fronteira da meia-noite); sem início, nada a presumir; data final planejada nunca entra", async () => {
+  const r = (x: any) => dataEfetivaDeRealizacao(x);
+  if (r({ data_realizacao: "2026-10-18", iniciado_em: "2026-10-20T19:47:55Z", data_fim: "2026-10-21" })?.data !== "2026-10-18" || r({ data_realizacao: "2026-10-18", iniciado_em: "2026-10-20T19:47:55Z" })?.origem !== "informada") throw new Error("informada deve ser preservada");
+  if (r({ iniciado_em: "2026-10-20T19:47:55Z" })?.data !== "2026-10-20") throw new Error("início à tarde");
+  if (r({ iniciado_em: "2026-10-21T02:59:59Z" })?.data !== "2026-10-20") throw new Error("23:59 de Brasília ainda é o dia 20");
+  if (r({ iniciado_em: "2026-10-21T03:00:00Z" })?.data !== "2026-10-21") throw new Error("00:00 de Brasília já é o dia 21");
+  if (r({ data_fim: "2026-10-21", data_inicio: "2026-10-20" }) !== null) throw new Error("sem início nem data informada não há data a presumir");
+});
+await t("Planejado de hoje até daqui a 2 dias, iniciado hoje, sem data informada: conclui com o DIA DO INÍCIO (não a data final planejada); auditoria e PDF coerentes", async () => {
+  const id = await realizado({ data_fim: somaDias(hojeSP, 2) });
+  if ((await q(`select data_realizacao from public.peopleflow_dev_treinamentos where id=${id}`))[0].data_realizacao !== null) throw new Error("a data efetiva não deve ser preenchida sozinha antes da conclusão");
+  await espera("ge", "treinamento_concluir", { id }, 403); // só o RH conclui
+  await espera("rh", "treinamento_concluir", { id }, 200);
+  if ((await dataGravada(id)) !== hojeSP) throw new Error("gravou " + (await dataGravada(id)));
+  const a = await auditoriaDaData(id);
+  if (a.origem !== "inicio_da_realizacao" || a.valor !== hojeSP || isoDe(a.planejada_fim) !== somaDias(hojeSP, 2)) throw new Error(JSON.stringify(a));
+  if ((await dataDoPdf(id)) !== dataBRde(hojeSP)) throw new Error("PDF com data diferente da gravada: " + (await dataDoPdf(id)));
+});
+await t("Planejado para daqui a 3 dias mas realizado hoje: a data efetiva é hoje, nem a prevista nem a final", async () => {
+  const id = await realizado({ data_inicio: somaDias(hojeSP, 3), data_fim: somaDias(hojeSP, 4) });
+  await espera("rh", "treinamento_concluir", { id }, 200);
+  if ((await dataGravada(id)) !== hojeSP) throw new Error("gravou " + (await dataGravada(id)));
+  if ((await dataDoPdf(id)) !== dataBRde(hojeSP)) throw new Error("PDF");
+});
+await t("Data efetiva INFORMADA (diferente do planejado e do início) é preservada, auditada como informada e usada no PDF; quem não conduz não a altera", async () => {
+  const id = await realizado({ data_fim: somaDias(hojeSP, 2) });
+  const informada = somaDias(hojeSP, -2);
+  await espera("hugo", "treinamento_realizacao", { id, data_realizacao: informada }, 403);
+  await espera("rh", "treinamento_realizacao", { id, data_realizacao: informada }, 200);
+  await espera("rh", "treinamento_concluir", { id }, 200);
+  const a = await auditoriaDaData(id);
+  if (a.origem !== "informada" || isoDe(a.valor) !== informada) throw new Error(JSON.stringify(a));
+  if ((await dataGravada(id)) !== informada || (await dataDoPdf(id)) !== dataBRde(informada)) throw new Error("PDF/gravação devem trazer a data informada: " + (await dataDoPdf(id)));
+});
+await t("Fuso: início às 23:30 de Brasília (02:30 UTC do dia seguinte) conta como o dia do início em Brasília", async () => {
+  const id = await realizado({});
+  await db.exec(`update public.peopleflow_dev_treinamentos set iniciado_em='${somaDias(hojeSP, 1)}T02:30:00Z' where id=${id}`); // 23:30 de hojeSP em Brasília
+  await espera("rh", "treinamento_concluir", { id }, 200);
+  if ((await dataGravada(id)) !== hojeSP) throw new Error("deveria ser " + hojeSP + ": " + (await dataGravada(id)));
+});
+await t("Externo concluído a partir de 'planejado' (sem início no sistema): sem data informada não conclui; com data informada conclui", async () => {
+  const e = await espera("rh", "treinamento_salvar", { tipo: "capacitacao_tecnica", modalidade: "externo", titulo: "Curso externo", formato: "online", instrutor_externo: "Instituição X", data_inicio: hojeSP, data_fim: somaDias(hojeSP, 1), responsavel_colaborador_id: 1 }, 200);
+  await espera("rh", "participantes_adicionar", { treinamento_id: e.id, colaborador_ids: [1] }, 200);
+  await espera("rh", "presenca_manual", { treinamento_id: e.id, participante_ids: [(await part(e.id, 1)).id], presenca: "presente", motivo: "Certificado" }, 200);
+  const u = await espera("rh", "evidencia_upload_url", { treinamento_id: e.id, tipo: "certificado", file_name: "c.pdf", mime: "application/pdf", tamanho_bytes: 500 }, 200);
+  fake.storage.from("desenvolvimento-evidencias")._simularUpload(u.path, 500, "application/pdf");
+  await espera("rh", "evidencia_registrar", { treinamento_id: e.id, path: u.path, tipo: "certificado", file_name: "c.pdf" }, 200);
+  const r = await chamar("rh", "treinamento_concluir", { id: e.id });
+  if (r.c !== 422 || !/data de realização/i.test(r.b.error)) throw new Error(JSON.stringify(r));
+  await espera("rh", "treinamento_realizacao", { id: e.id, data_realizacao: somaDias(hojeSP, -1) }, 200);
+  await espera("rh", "treinamento_concluir", { id: e.id }, 200);
+  if ((await dataGravada(e.id)) !== somaDias(hojeSP, -1)) throw new Error("data informada do externo");
+});
+await t("Tela: o RH vê a data efetiva e a origem antes de concluir; nenhum ponto do app/servidor usa a data final planejada como data efetiva", async () => {
+  const tela = fs.readFileSync(`${PF}/src/features/desenvolvimento/TreinamentoPage.tsx`, "utf8");
+  if (!/dataEfetivaDeRealizacao\(t\)/.test(tela) || !/Confira antes de concluir/.test(tela) || !/informe a data de realização para concluir/.test(tela)) throw new Error("tela sem a conferência da data efetiva");
+  for (const f of ["api/_lib/desenvolvimentoAcoes.ts", "src/features/desenvolvimento/TreinamentoPage.tsx", "src/features/desenvolvimento/TreinamentosPage.tsx", "src/features/desenvolvimento/devRepository.ts"]) {
+    if (/data_realizacao\s*\?\?\s*(t\.|r\.)?data_fim/.test(fs.readFileSync(`${PF}/${f}`, "utf8"))) throw new Error(f + " ainda usa data_fim como data efetiva");
+  }
+});
+
 console.log("Colaborador: consulta ao próprio histórico");
 await t("Cada colaborador vê SÓ o próprio histórico (documento e revisão treinada); ausência aparece como ausência; nada de outras pessoas", async () => {
   const caio = await espera("p3", "meu_historico", {}, 200);

@@ -13,6 +13,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
+import { dataEfetivaDeRealizacao } from "../../src/domain/dataRealizacao.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
 import { ACOES_PDI_ENCERRAMENTO } from "./pdiEncerramentoAcoes.js";
@@ -1051,8 +1052,10 @@ async function treinamentoConcluir(conta: ContaDev, corpo: Corpo) {
   const pendentes = participantes.filter((p) => p.presenca_status === "pendente").length;
   if (pendentes) throw new ErroHttp(422, `Registre a presença/realização de todos os participantes (${pendentes} pendente${pendentes > 1 ? "s" : ""}).`);
   if (!participantes.some((p) => p.presenca_status === "presente")) throw new ErroHttp(422, "Nenhum participante realizou o treinamento — cancele em vez de concluir.");
-  const dataRealizacao = t.data_realizacao ?? t.data_fim ?? t.data_inicio;
-  if (!dataRealizacao) throw new ErroHttp(422, "Informe a data de realização.");
+  // Data efetiva: a informada; senão o dia do início da realização (Brasília). Nunca a data final planejada.
+  const efetiva = dataEfetivaDeRealizacao(t);
+  if (!efetiva) throw new ErroHttp(422, "Informe a data de realização (treinamento que não foi iniciado no PeopleFlow não tem data a presumir).");
+  const dataRealizacao = efetiva.data;
   if (externo) {
     const { data: ev, error } = await supabaseAdmin.from("peopleflow_dev_evidencias").select("id").eq("treinamento_id", t.id).is("substituida_em", null).limit(1);
     if (error) erroBanco(error, "Evidências");
@@ -1072,6 +1075,7 @@ async function treinamentoConcluir(conta: ContaDev, corpo: Corpo) {
   await encerrarQr(conta, t.id);
   await auditar(conta, "treinamento_concluido", "peopleflow_dev_treinamentos", String(t.id), {
     status: { antes: t.status, depois: "concluido" },
+    data_realizacao: { valor: dataRealizacao, origem: efetiva.origem, planejada_inicio: t.data_inicio, planejada_fim: t.data_fim },
     realizaram: participantes.filter((p) => p.presenca_status === "presente").length,
     ausentes: participantes.filter((p) => p.presenca_status === "ausente").length,
   });
@@ -1753,7 +1757,7 @@ async function prepararListaPresenca(conta: ContaDev, t: Treinamento, participan
     tipo: ROTULO_TIPO[t.tipo] ?? t.tipo,
     modalidade: ROTULO_MODALIDADE[t.modalidade] ?? t.modalidade,
     formato: t.formato ? (ROTULO_FORMATO[t.formato] ?? t.formato) : "—",
-    dataRealizacao: dataBR(t.data_realizacao ?? t.data_fim ?? t.data_inicio),
+    dataRealizacao: dataBR(t.data_realizacao),
     cargaRealizada: cargaBR(t.carga_realizada_min ?? t.carga_horaria_min),
     local: t.local_link ?? "",
     responsavel: nomeDe(t.responsavel_colaborador_id) ?? "—",

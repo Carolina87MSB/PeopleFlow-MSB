@@ -41,6 +41,7 @@ Não escreva nomes de colaboradores neste arquivo (o repositório é público). 
 
 | # | Ação | Resultado esperado | Feito |
 |---|---|---|---|
+| 3.0 | Antes de concluir, RH confere na tela a **data de realização**: se ninguém a informou, vale o dia em que a realização foi iniciada (horário de Brasília); a data final planejada nunca é usada. Se foi outro dia, "Alterar dados da realização". | Data conferida e coerente com o dia real. | ☐ |
 | 3.1 | RH confere presentes/ausentes e **conclui**. | Status Concluído; o QR é encerrado. | ☐ |
 | 3.2 | Abrir a **Lista de Presença** (PDF) gerada. | PDF com código e título do POP, **revisão treinada**, data, carga, responsável/instrutor, turma com presente/ausente e método (QR/manual). | ☐ |
 | 3.3 | Retificar uma presença como RH (com justificativa). | Nova versão da lista; a anterior fica "substituída", nunca apagada. | ☐ |

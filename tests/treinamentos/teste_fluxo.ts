@@ -556,6 +556,7 @@ await t("14. modalidade Externo: sem QR, realização manual e evidência obriga
   await espera("rh", "necessidades_vincular", { treinamento_id: e.id, necessidade_ids: [3] }, 200);
   const p = await part(e.id, 4);
   await espera("rh", "presenca_manual", { treinamento_id: e.id, participante_ids: [p.id], presenca: "presente", motivo: "Treinamento externo — certificado" }, 200);
+  await espera("rh", "treinamento_realizacao", { id: e.id, data_realizacao: hoje }, 200); // externo sem início no sistema: a data efetiva é informada
   await espera("rh", "treinamento_concluir", { id: e.id }, 422);
   const u = await espera("rh", "evidencia_upload_url", { treinamento_id: e.id, participante_id: p.id, tipo: "certificado", file_name: "certificado.pdf", mime: "application/pdf", tamanho_bytes: 500 }, 200);
   fake.storage.from("desenvolvimento-evidencias")._simularUpload(u.path, 500, "application/pdf");
@@ -868,7 +869,7 @@ await t("G5/G6/G12/G13. Vencido, A vencer; ausente não atende; reposição vál
   await espera("rh", "requisito_salvar", { cargo_nome: "Analista de RH", tipo_requisito: "treinamento", lista_mestra_codigo: "I-PR-010", obrigatorio: true, periodicidade_meses: 1, status: "vigente" }, 200);
   // realizado há 60 dias, validade 1 mês: Fabio presente (→ vencido); Ana ausente (→ continua pendente)
   const a = await espera("rh", "treinamento_salvar", base("instrucao_trabalho", "interno", { lista_mestra_codigo: "I-PR-010" }), 200);
-  await db.exec(`update public.peopleflow_dev_treinamentos set data_inicio='${diasAtras(60)}' where id=${a.id}`); // simula dado histórico
+  await db.exec(`update public.peopleflow_dev_treinamentos set data_inicio='${diasAtras(60)}', data_realizacao='${diasAtras(60)}' where id=${a.id}`); // simula dado histórico (data efetiva informada)
   await espera("rh", "participantes_adicionar", { treinamento_id: a.id, colaborador_ids: [7, 1] }, 200);
   await espera("rh", "treinamento_iniciar", { id: a.id }, 200);
   await espera("rh", "presenca_manual", { treinamento_id: a.id, participante_ids: [(await part(a.id, 7)).id], presenca: "presente", motivo: "Lista física" }, 200);
@@ -879,7 +880,7 @@ await t("G5/G6/G12/G13. Vencido, A vencer; ausente não atende; reposição vál
   // reposição há 15 dias: Ana realiza → passa a atender (validade em ~15 dias → A vencer)
   await espera("rh", "treinamento_reposicao", base("instrucao_trabalho", "interno", { treinamento_id: a.id, lista_mestra_codigo: "I-PR-010", data_inicio: diasAtras(2) }), 422); // reposição também não pode ser retroativa
   const r = await espera("rh", "treinamento_reposicao", base("instrucao_trabalho", "interno", { treinamento_id: a.id, lista_mestra_codigo: "I-PR-010" }), 200);
-  await db.exec(`update public.peopleflow_dev_treinamentos set data_inicio='${diasAtras(15)}' where id=${r.id}`); // simula dado histórico
+  await db.exec(`update public.peopleflow_dev_treinamentos set data_inicio='${diasAtras(15)}', data_realizacao='${diasAtras(15)}' where id=${r.id}`); // simula dado histórico (data efetiva informada)
   await espera("rh", "treinamento_iniciar", { id: r.id }, 200);
   await espera("rh", "presenca_manual", { treinamento_id: r.id, participante_ids: [(await part(r.id, 1)).id], presenca: "presente", motivo: "Lista física" }, 200);
   await espera("rh", "treinamento_concluir", { id: r.id }, 200);
