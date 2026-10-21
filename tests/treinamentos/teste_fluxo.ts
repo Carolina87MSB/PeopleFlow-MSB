@@ -1109,6 +1109,17 @@ await t("sem exclusão física em treinamentos, vínculos e QR", async () => {
     try { await db.exec(`delete from public.${tb}`); throw new Error("apagou " + tb); } catch (e) { if ((e as Error).message.startsWith("apagou")) throw e; }
   }
 });
+console.log("Avaliação de reação sem a migration aplicada (deploy antes da migration não pode quebrar nada)");
+await t("sem a tabela de avaliações: meu_historico segue igual (avaliação = não se aplica), responder é recusado com mensagem clara e o resumo do RH informa 'não ativada'", async () => {
+  const meu = await espera("p3", "meu_historico", {}, 200);
+  if (meu.treinamentos.some((x: any) => x.avaliacao !== null)) throw new Error("avaliação sem a migration: " + JSON.stringify(meu));
+  const codigo = (await q("select codigo from public.peopleflow_dev_treinamentos order by id limit 1"))[0].codigo;
+  const r = await chamar("p3", "reacao_responder", { codigo, respostas: [5, 5, 5, 5, 5] });
+  if (r.c !== 422 || !/ainda não está disponível/.test(r.b.error)) throw new Error(JSON.stringify(r));
+  const resumo = await espera("rh", "reacao_resumo", {}, 200);
+  if (resumo.ativa_desde !== null || resumo.geral.elegiveis !== 0 || resumo.treinamentos.length !== 0) throw new Error(JSON.stringify(resumo));
+});
+
 console.log("Rollback");
 await t("rollback da Fase 5 aplica com dados, volta os nomes da Fase 1 e é repetível; bucket com arquivo fica", async () => {
   await db.exec("insert into storage.objects values ('desenvolvimento-evidencias','x')");

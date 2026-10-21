@@ -39,7 +39,7 @@ insert into public.colaboradores (id, nome, cargo, departamento, gestor) values
  (7,'${NOMES[7]}','Técnico','Qualidade','Outro'),(8,'${NOMES[8]}','Auxiliar','Produção','${NOMES[2]}'),(9,'${NOMES[9]}','Operador','Produção','${NOMES[2]}');
 insert into public.peopleflow_descricoes_cargo (cargo_nome) values ('Operador'),('Supervisora'),('Supervisor'),('Conferente'),('Técnico'),('Analista de RH'),('Auxiliar');
 `);
-for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql"]) await db.exec(SQL(f));
+for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql"]) await db.exec(SQL(f));
 await db.exec(`
 insert into public.peopleflow_dev_lista_mestra (codigo,titulo,revisao_atual,situacao) values ('P-PR-001','Montagem da sonda','03','vigente'),('I-PR-010','Inspeção final','01','vigente');
 `);
@@ -528,6 +528,279 @@ await t("Visualização e responsividade: tabela com 7 colunas no desktop, cart�
   if (!/@media \(max-width: 1100px\)[\s\S]*\.tabela\s*\{\s*display:\s*none/.test(css) || !/\.cartoes\s*\{\s*display:\s*none/.test(css)) throw new Error("alternância tabela/cartões");
   if (!/<HistoricoTreinamentos linhas=\{historico\.dados\}/.test(fs.readFileSync(`${PF}/src/features/desenvolvimento/HabilidadesPage.tsx`, "utf8"))) throw new Error("a aba Por colaborador não usa o componente");
   if (/homologacao/.test(comp)) throw new Error("a tela não decide homologação (a visão do banco já a exclui)");
+});
+
+console.log("Avaliação de reação");
+const reac = await import(pathToFileURL(`${PF}/src/domain/avaliacaoReacao.ts`).href);
+const jsonDe = (v: unknown) => JSON.stringify(v);
+const codigoDe = async (tid: number) => (await q(`select codigo from public.peopleflow_dev_treinamentos where id=${tid}`))[0].codigo as string;
+const qtdReacoes = async (where = "true") => (await q(`select count(*)::int n from public.peopleflow_dev_avaliacoes_reacao where ${where}`))[0].n as number;
+const qtdNotas = async () => (await q(`select count(*)::int n from public.peopleflow_dev_reacao_respostas`))[0].n as number;
+const BOAS = [5, 4, 5, 3, 4];
+let tRep = 0, tHom = 0;
+
+await t("Migration: aditiva (não toca em presença nem em registros existentes), idempotente, RLS só-servidor, notas SEM identificação", async () => {
+  const sql = SQL("desenvolvimento_avaliacao_reacao.sql");
+  if (/update\s+public\.peopleflow_dev_(participantes|treinamentos|evidencias)|delete\s+from|alter\s+table\s+public\.peopleflow_dev_(participantes|treinamentos|evidencias)|drop\s+table\s+(?!if exists public\.peopleflow_dev_(reacao|avaliacoes))/i.test(sql.replace(/--.*$/gm, ""))) throw new Error("a migration não pode alterar presença, treinamentos ou evidências existentes");
+  const antes = (await q("select ativa_desde from public.peopleflow_dev_reacao_config"))[0].ativa_desde;
+  await db.exec(sql);
+  const depois = (await q("select ativa_desde, count(*) over ()::int n from public.peopleflow_dev_reacao_config"))[0];
+  if (String(antes) !== String(depois.ativa_desde) || depois.n !== 1) throw new Error("reaplicar alterou a ativação ou duplicou a configuração");
+  const rls = await q("select relname, relrowsecurity from pg_class where relname in ('peopleflow_dev_avaliacoes_reacao','peopleflow_dev_reacao_respostas','peopleflow_dev_reacao_config')");
+  if (rls.length !== 3 || rls.some((r) => !r.relrowsecurity)) throw new Error("RLS desligada");
+  if ((await q("select count(*)::int n from pg_policies where tablename in ('peopleflow_dev_avaliacoes_reacao','peopleflow_dev_reacao_respostas','peopleflow_dev_reacao_config')"))[0].n !== 0) throw new Error("não deveria haver políticas (somente o servidor lê/grava)");
+  for (const tab of ["peopleflow_dev_avaliacoes_reacao", "peopleflow_dev_reacao_respostas"]) {
+    const priv = await q(`select has_table_privilege('authenticated','public.${tab}','select') a, has_table_privilege('anon','public.${tab}','select') b, has_table_privilege('service_role','public.${tab}','insert') c`);
+    if (priv[0].a || priv[0].b || !priv[0].c) throw new Error(tab + " privilégios: " + jsonDe(priv));
+  }
+  const fn = await q("select has_function_privilege('authenticated','public.peopleflow_dev_reacao_registrar(bigint,bigint,bigint,uuid,smallint,timestamptz,timestamptz,smallint,smallint,smallint,smallint,smallint)','execute') a, has_function_privilege('service_role','public.peopleflow_dev_reacao_registrar(bigint,bigint,bigint,uuid,smallint,timestamptz,timestamptz,smallint,smallint,smallint,smallint,smallint)','execute') b");
+  if (fn[0].a || !fn[0].b) throw new Error("só o servidor executa a gravação: " + jsonDe(fn));
+  const cols = async (tab: string) => (await q(`select column_name from information_schema.columns where table_schema='public' and table_name='${tab}' order by column_name`)).map((c) => c.column_name).join();
+  if (await cols("peopleflow_dev_reacao_respostas") !== "id,q1,q2,q3,q4,q5,treinamento_id,versao_formulario") throw new Error("a tabela de notas não pode ter colaborador, participação nem data/hora: " + await cols("peopleflow_dev_reacao_respostas"));
+  if (/q[1-5]/.test(await cols("peopleflow_dev_avaliacoes_reacao"))) throw new Error("o controle de adesão não guarda notas");
+});
+
+await t("Reversão: ciclo aplicar → reverter → reaplicar (e reverter de novo) num banco limpo", async () => {
+  const d = new PGlite();
+  await d.exec("create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls; create schema auth; create table auth.users (id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$; create schema storage; create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]); create table storage.objects (bucket_id text, name text); create table public.colaboradores (id bigint primary key, nome text, cargo text, admissao date, desligado boolean, empresa_afiliada boolean); create table public.peopleflow_descricoes_cargo (cargo_nome text primary key, obsoleto boolean default false); create table public.peopleflow_pdi (id bigint primary key);");
+  for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_avaliacao_reacao_rollback.sql", "desenvolvimento_avaliacao_reacao_rollback.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_avaliacao_reacao.sql"]) await d.exec(SQL(f));
+  if ((await d.query("select count(*)::int n from public.peopleflow_dev_reacao_config")).rows[0].n !== 1) throw new Error("configuração após o ciclo");
+});
+
+await t("Regras puras: elegível = presença confirmada em treinamento OFICIAL a partir da ativação, por qualquer método; nada de retroativo, teste, removido ou sem presença", async () => {
+  const ativa = "2026-10-21T12:00:00Z";
+  const ok = { presenca_status: "presente", presenca_em: "2026-10-21T15:00:00Z" };
+  const T = { homologacao: false, status: "concluido" };
+  const e = (p: any, tr: any = T, a: string | null = ativa) => reac.elegivelParaReacao({ ...ok, ...p }, { ...T, ...tr }, a);
+  if (!e({}) || !e({}, { status: "em_andamento" })) throw new Error("presença confirmada em andamento/concluído é elegível");
+  if (e({}, { homologacao: true })) throw new Error("teste/homologação nunca");
+  if (e({ presenca_em: "2026-10-20T15:00:00Z" })) throw new Error("presença anterior à ativação não é retroativa");
+  if (e({ presenca_status: "ausente" }) || e({ presenca_status: "pendente" }) || e({ presenca_em: null })) throw new Error("só presente");
+  if (e({ removido_em: "2026-10-21T16:00:00Z" })) throw new Error("removido");
+  if (e({}, { status: "planejado" }) || e({}, { status: "cancelado" })) throw new Error("planejado/cancelado");
+  if (e({}, T, null)) throw new Error("recurso não ativado: nada é elegível");
+  for (const metodo of ["qr", "manual", "importacao", "gravacao"]) if (!e({ presenca_metodo: metodo })) throw new Error("método " + metodo); // a regra nem olha o método (compatível com 'gravação')
+  if (reac.QUESTOES.length !== 5 || reac.ESCALA.map((x: any) => x.valor).join() !== "1,2,3,4,5") throw new Error("formulário padrão: 5 perguntas, escala 1 a 5");
+  if (reac.validarRespostas([1, 2, 3, 4]) !== null || reac.validarRespostas([1, 2, 3, 4, 6]) !== null || reac.validarRespostas([0, 1, 2, 3, 4]) !== null || reac.validarRespostas([1, 2, 3, 4, 2.5]) !== null || reac.validarRespostas("12345") !== null || reac.validarRespostas([1, 2, 3, 4, ""]) !== null) throw new Error("respostas inválidas aceitas");
+  if (jsonDe(reac.validarRespostas([1, "2", 3, 4, 5])) !== "[1,2,3,4,5]") throw new Error("respostas válidas");
+  if (jsonDe(reac.indicadorAdesao(4, 3)) !== '{"elegiveis":4,"respondidos":3,"pendentes":1,"taxa":75}' || reac.indicadorAdesao(0, 0).taxa !== null) throw new Error("adesão");
+});
+
+await t("Prazo de 7 dias corridos após a presença (fim do 7º dia em Brasília): Pendente, Vencida ou Respondida — vencida ainda pode ser respondida", async () => {
+  if (reac.prazoDaReacao("2026-10-21T15:00:00Z") !== "2026-10-28") throw new Error("prazo = dia da presença + 7");
+  if (reac.prazoDaReacao("2026-10-22T02:30:00Z") !== "2026-10-28") throw new Error("23:30 de Brasília do dia 21 ainda é o dia 21");
+  if (reac.prazoDaReacao("2026-10-22T03:30:00Z") !== "2026-10-29") throw new Error("00:30 de Brasília do dia 22 já é o dia 22");
+  if (reac.fimDoPrazoDaReacao("2026-10-21T15:00:00Z").toISOString() !== "2026-10-29T02:59:59.000Z") throw new Error("o prazo termina às 23:59:59 de Brasília");
+  const pres = "2026-10-21T15:00:00Z";
+  const s = (agora: string, extra: any = {}) => reac.situacaoDaReacao({ presenca_em: pres, ...extra }, new Date(agora)).situacao;
+  if (s("2026-10-21T16:00:00Z") !== "pendente" || s("2026-10-29T02:59:00Z") !== "pendente") throw new Error("dentro do prazo = pendente (até 23:59 do dia 28)");
+  if (s("2026-10-29T03:00:00Z") !== "vencida" || s("2026-11-30T12:00:00Z") !== "vencida") throw new Error("passou do prazo = vencida");
+  if (s("2026-12-31T12:00:00Z", { respondido_em: "2026-11-02T10:00:00Z" }) !== "respondida") throw new Error("respondida, mesmo fora do prazo");
+  if (reac.mediasConsolidadas([[5, 4, 5, 3, 4], [3, 4, 5, 3, 2]]) !== null) throw new Error("com 2 respostas a média identificaria alguém: não pode sair");
+  if (jsonDe(reac.mediasConsolidadas([[5, 4, 5, 3, 4], [3, 4, 5, 3, 2], [4, 4, 5, 3, 3]])) !== "[4,4,5,3,3]") throw new Error("a partir de 3 respostas, médias consolidadas");
+  if (reac.mediaPorQuestao([])[0] !== null) throw new Error("sem respostas, sem média");
+});
+
+await t("Retroativo: com a ativação no futuro ninguém é elegível (nem recebe a avaliação) e o servidor recusa; voltando à data real, volta a valer", async () => {
+  const iso = (await q("select ativa_desde from public.peopleflow_dev_reacao_config"))[0].ativa_desde;
+  await db.exec("update public.peopleflow_dev_reacao_config set ativa_desde = now() + interval '1 day'");
+  try {
+    const eva = await espera("p5", "meu_historico", {}, 200);
+    if (eva.treinamentos.some((x: any) => x.avaliacao !== null || x.avaliacao_prazo !== null)) throw new Error("avaliação antes da ativação: " + jsonDe(eva));
+    const r = await chamar("p5", "reacao_responder", { codigo: await codigoDe(tPop), respostas: BOAS });
+    if (r.c !== 422) throw new Error("deveria recusar participação anterior à ativação: " + r.c);
+    if ((await espera("rh", "reacao_resumo", {}, 200)).geral.elegiveis !== 0) throw new Error("resumo deveria estar zerado");
+  } finally {
+    await db.exec(`update public.peopleflow_dev_reacao_config set ativa_desde = '${new Date(iso).toISOString()}'`);
+  }
+  const volta = (await espera("p5", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.documento === "P-PR-001 rev. 04");
+  if (volta?.avaliacao !== "pendente" || !volta.avaliacao_prazo) throw new Error("deveria voltar a ficar pendente, com prazo: " + jsonDe(volta));
+});
+
+await t("O colaborador responde a PRÓPRIA avaliação, uma vez só: 5 notas de 1 a 5, data/hora, prazo, usuário e auditoria SEM notas; a conclusão já havia ocorrido sem nenhuma resposta", async () => {
+  if ((await q(`select status from public.peopleflow_dev_treinamentos where id=${tPop}`))[0].status !== "concluido" || (await qtdReacoes()) !== 0 || (await qtdNotas()) !== 0) throw new Error("o treinamento concluiu sem depender das respostas");
+  const cod = await codigoDe(tPop);
+  await espera("", "reacao_responder", { codigo: cod, respostas: BOAS }, 401);
+  await espera("semcadastro", "reacao_responder", { codigo: cod, respostas: BOAS }, 409);
+  for (const ruins of [[5, 4, 5, 3], [5, 4, 5, 3, 6], [0, 4, 5, 3, 4], [5, 4, 5, 3, "x"], "54534", null]) await espera("p3", "reacao_responder", { codigo: cod, respostas: ruins }, 422);
+  await espera("p3", "reacao_responder", { codigo: "TRN-0000-0000", respostas: BOAS }, 404);
+  const r = await espera("p3", "reacao_responder", { codigo: cod, respostas: BOAS }, 200);
+  if (!r.respondida_em) throw new Error("sem data/hora");
+  await espera("p3", "reacao_responder", { codigo: cod, respostas: [1, 1, 1, 1, 1] }, 409); // uma resposta por colaborador e treinamento
+  const ad = await q(`select colaborador_id, treinamento_id, respondido_por, respondido_em, presenca_em, prazo_em, versao_formulario from public.peopleflow_dev_avaliacoes_reacao`);
+  if (ad.length !== 1 || Number(ad[0].colaborador_id) !== 3 || ad[0].respondido_por !== U.p3 || !ad[0].respondido_em || ad[0].versao_formulario !== 1) throw new Error(jsonDe(ad));
+  if (new Date(ad[0].prazo_em).toISOString() !== reac.fimDoPrazoDaReacao(ad[0].presenca_em).toISOString()) throw new Error("prazo gravado diferente de presença + 7 dias");
+  const notas = await q(`select * from public.peopleflow_dev_reacao_respostas`);
+  if (notas.length !== 1 || jsonDe([notas[0].q1, notas[0].q2, notas[0].q3, notas[0].q4, notas[0].q5]) !== jsonDe(BOAS) || Number(notas[0].treinamento_id) !== tPop || Object.keys(notas[0]).some((k) => /colab|particip|user|usuario|respondido|em$/i.test(k) && k !== "treinamento_id")) throw new Error("notas sem identificação: " + jsonDe(notas));
+  const aud = await q(`select colaborador_id, user_id, detalhe from public.peopleflow_dev_auditoria where acao='reacao_respondida'`);
+  if (aud.length !== 1 || Number(aud[0].colaborador_id) !== 3 || aud[0].user_id !== U.p3 || Number(aud[0].detalhe.treinamento_id) !== tPop || aud[0].detalhe.no_prazo !== true || /q[1-5]|nota|respostas/i.test(jsonDe(aud[0].detalhe))) throw new Error("auditoria registra que respondeu, nunca as notas: " + jsonDe(aud));
+});
+
+await t("Identidade vem da sessão: o corpo não escolhe a pessoa; quem não participou (ausente, fora da turma, teste) não avalia; presença manual conta (independe do método)", async () => {
+  const cod = await codigoDe(tPop);
+  await espera("p5", "reacao_responder", { codigo: cod, respostas: [4, 4, 4, 4, 4], colaborador_id: 3, participante_id: (await part(tPop, 3)).id, user_id: U.p3 }, 200);
+  if ((await qtdReacoes("colaborador_id = 5")) !== 1 || (await qtdReacoes("colaborador_id = 3")) !== 1) throw new Error("gravou em nome de terceiro");
+  await espera("p9", "reacao_responder", { codigo: cod, respostas: BOAS }, 422); // Íris faltou neste treinamento
+  // Davi consta como presente por RETIFICAÇÃO MANUAL do RH: a avaliação independe do método
+  await espera("p4", "reacao_responder", { codigo: cod, respostas: [3, 3, 4, 4, 5] }, 200);
+  tRep = (await q(`select id from public.peopleflow_dev_treinamentos where reposicao_de_id=${tPop}`))[0].id;
+  await espera("p4", "reacao_responder", { codigo: await codigoDe(tRep), respostas: BOAS }, 403); // Davi não consta na turma da reposição
+  tHom = (await espera("rh", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", titulo: "Teste da avaliação", data_inicio: hojeSP, responsavel_colaborador_id: 1, homologacao: true }, 200)).id;
+  await espera("rh", "participantes_adicionar", { treinamento_id: tHom, colaborador_ids: [1] }, 200);
+  await espera("rh", "treinamento_iniciar", { id: tHom }, 200);
+  await espera("rh", "presenca_manual", { treinamento_id: tHom, participante_ids: [(await part(tHom, 1)).id], presenca: "presente", motivo: "Teste" }, 200);
+  await espera("rh", "reacao_responder", { codigo: await codigoDe(tHom), respostas: BOAS }, 422);
+  const pHom = (await part(tHom, 1)).id;
+  let bloqueou = false;
+  try { await db.exec(`select public.peopleflow_dev_reacao_registrar(${pHom}, ${tHom}, 1, '${U.rh}', 1::smallint, now(), now(), 5::smallint, 5::smallint, 5::smallint, 5::smallint, 5::smallint)`); } catch { bloqueou = true; }
+  if (!bloqueou) throw new Error("o banco aceitou avaliação de treinamento de teste");
+});
+
+await t("Vencida ainda pode ser respondida: situação 'Vencida' com prazo; a resposta é aceita, marcada como após o prazo (controle de adesão) e as notas entram consolidadas", async () => {
+  const id = await realizado({}); // Ana (token rh) presente agora
+  const pAna = (await part(id, 1)).id;
+  const original = (await q(`select presenca_em from public.peopleflow_dev_participantes where id=${pAna}`))[0].presenca_em;
+  const ativa = (await q("select ativa_desde from public.peopleflow_dev_reacao_config"))[0].ativa_desde;
+  await db.exec(`update public.peopleflow_dev_reacao_config set ativa_desde = now() - interval '60 days'`);
+  await db.exec(`update public.peopleflow_dev_participantes set presenca_em = now() - interval '10 days' where id=${pAna}`);
+  try {
+    const cod = await codigoDe(id);
+    const meu = (await espera("rh", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.codigo === cod);
+    if (meu.avaliacao !== "vencida" || !meu.avaliacao_prazo) throw new Error("deveria estar vencida: " + jsonDe(meu));
+    const det = await espera("rh", "reacao_detalhe", { treinamento_id: id }, 200);
+    if (det.participantes[0].situacao !== "vencida" || det.vencidas !== 1 || det.pendentes !== 1) throw new Error("RH: " + jsonDe(det));
+    const resumoAntes = await espera("rh", "reacao_resumo", {}, 200);
+    if (resumoAntes.geral.vencidas < 1) throw new Error("resumo deveria contar vencidas");
+    await espera("rh", "reacao_responder", { codigo: cod, respostas: [5, 5, 4, 4, 5] }, 200); // fora do prazo, mas aceita
+    const ad = (await q(`select respondido_em > prazo_em as fora from public.peopleflow_dev_avaliacoes_reacao where participante_id=${pAna}`))[0];
+    if (!ad.fora) throw new Error("deveria constar como respondida após o prazo");
+    const aud = (await q(`select detalhe from public.peopleflow_dev_auditoria where acao='reacao_respondida' and detalhe->>'participante_id' = '${pAna}'`))[0];
+    if (aud.detalhe.no_prazo !== false) throw new Error("auditoria: após o prazo");
+    const depois = (await espera("rh", "reacao_detalhe", { treinamento_id: id }, 200)).participantes[0];
+    if (depois.situacao !== "respondida" || depois.fora_do_prazo !== true) throw new Error("RH: " + jsonDe(depois));
+    if ((await espera("rh", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.codigo === cod).avaliacao !== "respondida") throw new Error("deveria constar respondida");
+  } finally {
+    await db.exec(`update public.peopleflow_dev_reacao_config set ativa_desde = '${new Date(ativa).toISOString()}'`);
+    await db.exec(`update public.peopleflow_dev_participantes set presenca_em = '${new Date(original).toISOString()}' where id=${pAna}`);
+  }
+});
+
+await t("Banco: nota fora de 1–5, segunda resposta, alteração, exclusão e participação ausente/de outra pessoa são recusadas; gravação atômica (adesão e nota juntas ou nenhuma); só o servidor acessa", async () => {
+  const tenta = async (sql: string) => { try { await db.exec(sql); return false; } catch { return true; } };
+  const pCaio = (await part(tPop, 3)).id, pIris = (await part(tPop, 9)).id, pBia = (await part(tPop, 2)).id;
+  const reg = (pid: number, tid: number, colab: number, q1 = 5) => `select public.peopleflow_dev_reacao_registrar(${pid}, ${tid}, ${colab}, '${U.rh}', 1::smallint, now(), now() + interval '7 days', ${q1}::smallint, 5::smallint, 5::smallint, 5::smallint, 5::smallint)`;
+  if (!(await tenta(`update public.peopleflow_dev_avaliacoes_reacao set colaborador_id = 2 where participante_id=${pCaio}`)) || !(await tenta(`update public.peopleflow_dev_reacao_respostas set q1 = 1`))) throw new Error("alterou avaliação enviada");
+  if (!(await tenta(`delete from public.peopleflow_dev_avaliacoes_reacao`)) || !(await tenta(`truncate public.peopleflow_dev_avaliacoes_reacao`)) || !(await tenta(`delete from public.peopleflow_dev_reacao_respostas`)) || !(await tenta(`truncate public.peopleflow_dev_reacao_respostas`))) throw new Error("apagou avaliação");
+  if (!(await tenta(reg(pCaio, tPop, 3)))) throw new Error("duas respostas para a mesma participação");
+  if (!(await tenta(reg(pIris, tPop, 9)))) throw new Error("avaliação de quem faltou");
+  if (!(await tenta(reg(pBia, tPop, 3)))) throw new Error("participação de outra pessoa");
+  const adesaoAntes = await qtdReacoes(), notasAntes = await qtdNotas();
+  if (!(await tenta(reg(pBia, tPop, 2, 6)))) throw new Error("nota 6"); // a nota inválida falha na SEGUNDA gravação: a adesão da primeira não pode ficar
+  if ((await qtdReacoes()) !== adesaoAntes || (await qtdNotas()) !== notasAntes) throw new Error("gravação parcial: adesão sem nota");
+  if (adesaoAntes !== notasAntes) throw new Error("cada resposta deve ter exatamente uma adesão e uma nota");
+  for (const uid of [U.p3, U.ge, U.rh]) {
+    for (const tab of ["peopleflow_dev_avaliacoes_reacao", "peopleflow_dev_reacao_respostas"]) {
+      let linhas = -1;
+      try { linhas = (await como(uid, `select 1 from public.${tab}`)).length; } catch { linhas = 0; } // sem privilégio = negado
+      if (linhas !== 0) throw new Error("leitura direta pelo navegador deveria ser negada/vazia: " + tab);
+    }
+  }
+});
+
+await t("Meus treinamentos: Pendente/Vencida com prazo (também depois de concluído), Respondida com data e hora, nada para ausente/teste; as notas nunca voltam ao colaborador", async () => {
+  const caio = await espera("p3", "meu_historico", {}, 200);
+  const doCaio = caio.treinamentos.find((x: any) => x.documento === "P-PR-001 rev. 04");
+  if (doCaio.avaliacao !== "respondida" || !doCaio.avaliacao_em || !/^\d{4}-\d{2}-\d{2}$/.test(doCaio.avaliacao_prazo)) throw new Error(jsonDe(doCaio));
+  if (/"q[1-5]"|respostas|nota/i.test(jsonDe(caio))) throw new Error("as notas não devem voltar ao colaborador: " + jsonDe(caio));
+  const iris = (await espera("p9", "meu_historico", {}, 200)).treinamentos;
+  if (iris.find((x: any) => x.situacao === "ausente")?.avaliacao !== null) throw new Error("ausente não avalia");
+  const rep = iris.find((x: any) => x.situacao === "agendado");
+  if (rep?.avaliacao !== "pendente" || !rep.avaliacao_prazo) throw new Error("reposição em andamento com presença por QR: pendente com prazo: " + jsonDe(rep));
+});
+
+await t("Página de presença por QR: logo após confirmar, a avaliação já vem pendente, com prazo; depois de enviada, aparece como respondida", async () => {
+  const tk = (await espera("resp", "qr_gerar", { treinamento_id: tRep }, 200)).token;
+  const info = await espera("p9", "presenca_info", { token: tk }, 200);
+  if (info.situacao !== "confirmada" || info.avaliacao !== "pendente" || !info.avaliacao_prazo || info.codigo !== (await codigoDe(tRep))) throw new Error(jsonDe(info));
+  await espera("p9", "reacao_responder", { codigo: info.codigo, respostas: [5, 5, 5, 5, 5] }, 200);
+  const depois = await espera("p9", "presenca_info", { token: tk }, 200);
+  if (depois.avaliacao !== "respondida") throw new Error("deveria constar como respondida");
+  await espera("resp", "qr_encerrar", { treinamento_id: tRep }, 200);
+});
+
+await t("Reversão com avaliações respondidas é recusada e preserva tudo (adesão e notas)", async () => {
+  const n = await qtdReacoes(), m = await qtdNotas();
+  if (n === 0 || n !== m) throw new Error("o cenário deveria ter respostas pareadas");
+  let recusou = false;
+  try { await db.exec(SQL("desenvolvimento_avaliacao_reacao_rollback.sql")); } catch (e) { recusou = /Reversão bloqueada/.test((e as Error).message); await db.exec("rollback"); } // o SQL Editor também desfaz a transação ao falhar
+  if (!recusou || (await qtdReacoes()) !== n || (await qtdNotas()) !== m) throw new Error("a reversão deveria ser recusada sem apagar nada");
+});
+
+await t("Privacidade: RH vê quem respondeu (adesão) mas NUNCA a nota de uma pessoa; médias só consolidadas e só com o mínimo de respostas; só o RH; teste fora; conclusão independe", async () => {
+  const resumo = await espera("rh", "reacao_resumo", {}, 200);
+  const esp = (await q(`select count(*)::int n from public.peopleflow_dev_participantes p join public.peopleflow_dev_treinamentos t on t.id = p.treinamento_id
+    where p.removido_em is null and p.presenca_status = 'presente' and not t.homologacao and t.status in ('em_andamento','concluido') and p.presenca_em >= (select ativa_desde from public.peopleflow_dev_reacao_config)`))[0].n;
+  if (resumo.geral.elegiveis !== esp || resumo.geral.respondidos !== (await qtdReacoes()) || resumo.geral.pendentes !== esp - resumo.geral.respondidos) throw new Error("geral: " + jsonDe(resumo.geral) + " esperado " + esp);
+  if (resumo.treinamentos.some((x: any) => x.id === tHom)) throw new Error("treinamento de teste nos indicadores");
+  const pop = resumo.treinamentos.find((x: any) => x.id === tPop);
+  if (pop.elegiveis !== 4 || pop.respondidos !== 3 || pop.pendentes !== 1 || pop.vencidas !== 0 || pop.taxa !== 75) throw new Error("tPop: " + jsonDe(pop));
+  if (jsonDe(pop.medias) !== jsonDe([4, 3.7, 4.3, 3.7, 4.3])) throw new Error("médias do tPop (3 respostas): " + jsonDe(pop.medias));
+  const rep = resumo.treinamentos.find((x: any) => x.id === tRep);
+  if (rep.elegiveis !== 1 || rep.respondidos !== 1 || rep.taxa !== 100 || rep.medias !== null) throw new Error("reposição (1 resposta) não pode expor média: " + jsonDe(rep));
+  if (resumo.treinamentos.some((x: any) => x.respondidos > 0 && x.respondidos < 3 && x.medias !== null)) throw new Error("média com menos respostas que o mínimo");
+  const det = await espera("rh", "reacao_detalhe", { treinamento_id: tPop }, 200);
+  if (det.participantes.length !== 4 || det.participantes[0].situacao !== "pendente" || det.participantes.filter((x: any) => x.situacao === "respondida").length !== 3) throw new Error(jsonDe(det.participantes.map((x: any) => x.situacao)));
+  const caio = det.participantes.find((x: any) => x.colaborador_id === 3);
+  if (!caio.respondido_em || caio.situacao !== "respondida" || !/^\d{4}-\d{2}-\d{2}$/.test(caio.prazo)) throw new Error("controle de adesão: " + jsonDe(caio));
+  // nenhuma nota associada a pessoa em NENHUMA resposta da API (nem no resumo, nem no detalhe)
+  const campos = new Set(det.participantes.flatMap((x: any) => Object.keys(x)));
+  if ([...campos].sort().join() !== "cargo,colaborador_id,departamento,fora_do_prazo,nome,participante_id,prazo,respondido_em,situacao") throw new Error("campos por participante: " + [...campos].join());
+  const tudo = jsonDe([det, resumo]);
+  if (/"respostas"|"nota"|"q[1-5]"/.test(tudo)) throw new Error("a API não pode expor nota por pessoa: " + tudo.slice(0, 200));
+  if (jsonDe(det.medias) !== jsonDe([4, 3.7, 4.3, 3.7, 4.3])) throw new Error("médias do detalhe: " + jsonDe(det.medias));
+  if ((await espera("rh", "reacao_detalhe", { treinamento_id: tHom }, 200)).treinamento !== null) throw new Error("detalhe de teste");
+  for (const quem of ["ge", "gil", "resp", "hugo"]) { await espera(quem, "reacao_resumo", {}, 403); await espera(quem, "reacao_detalhe", { treinamento_id: tPop }, 403); }
+  await espera("p3", "reacao_resumo", {}, 401);
+  // a conclusão não depende das respostas: um treinamento oficial com avaliação pendente conclui normalmente
+  const id = await realizado({});
+  await espera("rh", "treinamento_concluir", { id }, 200);
+  const d = await espera("rh", "reacao_detalhe", { treinamento_id: id }, 200);
+  if (d.pendentes !== 1 || d.respondidos !== 0 || d.medias !== null) throw new Error("avaliação pendente após a conclusão: " + jsonDe(d));
+  const fonte = fs.readFileSync(`${PF}/api/_lib/desenvolvimentoAcoes.ts`, "utf8");
+  const concluir = fonte.slice(fonte.indexOf("async function treinamentoConcluir"), fonte.indexOf("async function treinamentoCancelar"));
+  if (/reacao|Reacao/.test(concluir)) throw new Error("a conclusão não pode consultar a avaliação de reação");
+});
+
+await t("Presença manual e registros históricos preservados: quem tem presença manual continua elegível e listado; a migration não toca em presença; funcionalidades de presença seguem iguais", async () => {
+  const manuais = await q(`select colaborador_id from public.peopleflow_dev_participantes where treinamento_id=${tPop} and presenca_status='presente' and presenca_metodo='manual' order by colaborador_id`);
+  if (manuais.map((m) => Number(m.colaborador_id)).join() !== "2,4") throw new Error("presenças manuais do cenário: " + jsonDe(manuais));
+  const det = await espera("rh", "reacao_detalhe", { treinamento_id: tPop }, 200);
+  for (const colab of [2, 4]) if (!det.participantes.some((x: any) => x.colaborador_id === colab)) throw new Error("presença manual fora do controle de adesão: " + colab);
+  // presença manual continua funcionando (com justificativa) e passando a valer para a avaliação
+  const id = await realizado({});
+  const p = (await part(id, 1)).id;
+  await espera("rh", "presenca_manual", { treinamento_id: id, participante_ids: [p], presenca: "ausente", motivo: "Ajuste" }, 200);
+  await espera("rh", "presenca_manual", { treinamento_id: id, participante_ids: [p], presenca: "presente", motivo: "Voltou" }, 200);
+  const pend = (await espera("rh", "reacao_detalhe", { treinamento_id: id }, 200)).participantes;
+  if (pend.length !== 1 || pend[0].situacao !== "pendente") throw new Error("presença manual retificada deve gerar avaliação pendente: " + jsonDe(pend));
+});
+
+await t("Telas: formulário de 5 perguntas na escala 1–5 (envio só completo) com prazo; Meus treinamentos e página de presença usam o mesmo componente; RH sem coluna de notas; aba e seção só do RH e fora de teste", async () => {
+  const lerTela = (f: string) => fs.readFileSync(`${PF}/${f}`, "utf8");
+  const form = lerTela("src/features/desenvolvimento/FormularioReacao.tsx");
+  if (!/QUESTOES\.map/.test(form) || !/ESCALA\.map/.test(form) || !/type="radio"/.test(form) || !/disabled=\{!completo \|\| enviando\}/.test(form) || !/Responder depois/.test(form) || !/textoPrazo/.test(form) || !/não vê a nota de cada pessoa/.test(form)) throw new Error("formulário");
+  const meus = lerTela("src/features/desenvolvimento/MeusTreinamentosPage.tsx");
+  if (!/<FormularioReacao/.test(meus) || !/Avaliar treinamento/.test(meus) || !/t\.avaliacao === "pendente" \|\| t\.avaliacao === "vencida"/.test(meus) || !/Respondida/.test(meus) || !/Vencida/.test(meus) || !/ainda pode responder/.test(meus)) throw new Error("Meus treinamentos");
+  const part2 = lerTela("src/participar/Participar.tsx");
+  if (!/<FormularioReacao/.test(part2) || !/avaliacao === "pendente" \|\| estado\.info\.avaliacao === "vencida"/.test(part2) || !/reacao_responder/.test(part2) || !/ainda pode responder/.test(part2)) throw new Error("página de presença");
+  const rh = lerTela("src/features/desenvolvimento/ReacaoRH.tsx");
+  if (/Notas \(1–5\)|respostas\.join|\.respostas/.test(rh) || !/Vencidas/.test(rh) || !/a partir de \{minimo\} respostas/.test(rh) || !/O RH não vê a nota de cada pessoa/.test(rh)) throw new Error("telas do RH: notas só consolidadas");
+  const lista = lerTela("src/features/desenvolvimento/TreinamentosPage.tsx");
+  if (!/perfil === "RH" \? \[\{ id: "avaliacao-reacao"/.test(lista) || !/<ReacaoAba \/>/.test(lista)) throw new Error("aba do RH");
+  const pag = lerTela("src/features/desenvolvimento/TreinamentoPage.tsx");
+  if (!/p\.ehRH && !t\.homologacao && \(t\.status === "em_andamento" \|\| t\.status === "concluido"\) \? <ReacaoDoTreinamento/.test(pag)) throw new Error("seção do treinamento");
+  const css = lerTela("src/features/desenvolvimento/FormularioReacao.module.css");
+  if (!/min-height:\s*44px/.test(css) || !/repeat\(5, 1fr\)/.test(css)) throw new Error("alvos de toque / escala em 5 colunas");
 });
 
 console.log("Rastreabilidade");

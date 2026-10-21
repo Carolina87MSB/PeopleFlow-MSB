@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { GraduationCap } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { Card, tableStyles } from "../../components/ui";
-import { meuHistorico } from "./devRepository";
+import { meuHistorico, responderReacao, type LinhaMeuHistorico } from "./devRepository";
 import { Carregando, Erro, EstadoVazio, Selo } from "./componentes";
 import { useConsulta } from "./hooks";
 import { formatarCarga, formatarData } from "./rotulos";
+import { FormularioReacao } from "./FormularioReacao";
 import styles from "./Desenvolvimento.module.css";
 import mobile from "./MeusTreinamentos.module.css";
 
@@ -20,10 +22,44 @@ const SITUACAO = {
   agendado: { rotulo: "Agendado", tom: "info" },
 } as const;
 
+const dataHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+
+/** Texto do prazo da avaliação (7 dias corridos após a presença; vencida ainda pode ser respondida). */
+const textoPrazo = (t: LinhaMeuHistorico) =>
+  !t.avaliacao_prazo ? undefined : t.avaliacao === "vencida" ? `O prazo terminou em ${formatarData(t.avaliacao_prazo)}, mas você ainda pode responder.` : `Responda até ${formatarData(t.avaliacao_prazo)}.`;
+
+/** Avaliação de reação: Pendente ou Vencida (com prazo e botão, também depois da conclusão), Respondida (data e hora) ou nada quando não se aplica. */
+function CelulaAvaliacao({ t, onAvaliar }: { t: LinhaMeuHistorico; onAvaliar: () => void }) {
+  if (t.avaliacao === "pendente" || t.avaliacao === "vencida")
+    return (
+      <div className={mobile.avaliacao}>
+        <Selo tom={t.avaliacao === "vencida" ? "danger" : "warning"}>{t.avaliacao === "vencida" ? "Vencida" : "Pendente"}</Selo>
+        {t.avaliacao_prazo && (
+          <span className={styles.secundario}>
+            {t.avaliacao === "vencida" ? "Prazo encerrou em" : "Prazo:"} {formatarData(t.avaliacao_prazo)}
+          </span>
+        )}
+        <button type="button" className={styles.linkAcao} onClick={onAvaliar}>
+          Avaliar treinamento
+        </button>
+      </div>
+    );
+  if (t.avaliacao === "respondida")
+    return (
+      <div className={mobile.avaliacao}>
+        <Selo tom="success">Respondida</Selo>
+        {t.avaliacao_em && <span className={styles.secundario}>em {dataHora.format(new Date(t.avaliacao_em))}</span>}
+      </div>
+    );
+  return <span className={styles.secundario}>—</span>;
+}
+
 /** "Meus treinamentos": consulta do próprio histórico por qualquer colaborador (o servidor identifica a pessoa pela conta). */
 export default function MeusTreinamentosPage() {
   const consulta = useConsulta(() => meuHistorico(), []);
   const itens = consulta.dados?.treinamentos ?? [];
+  const [avaliando, setAvaliando] = useState<string | null>(null);
+  const alvo = itens.find((t) => t.codigo === avaliando && (t.avaliacao === "pendente" || t.avaliacao === "vencida")) ?? null;
   return (
     <>
       <Header />
@@ -34,6 +70,18 @@ export default function MeusTreinamentosPage() {
             <p className={styles.cardSubtitle}>Treinamentos agendados e realizados por você, do mais recente para o mais antigo</p>
           </div>
         </div>
+        {alvo && (
+          <FormularioReacao
+            titulo={alvo.titulo}
+            textoPrazo={textoPrazo(alvo)}
+            onCancelar={() => setAvaliando(null)}
+            onEnviar={async (respostas) => {
+              await responderReacao(alvo.codigo as string, respostas);
+              setAvaliando(null);
+              consulta.recarregar();
+            }}
+          />
+        )}
         {consulta.erro ? (
           <Erro mensagem={consulta.erro} />
         ) : consulta.carregando || !consulta.dados ? (
@@ -52,6 +100,7 @@ export default function MeusTreinamentosPage() {
                     <th>Carga</th>
                     <th>Presença</th>
                     <th>Situação</th>
+                    <th>Avaliação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -69,6 +118,9 @@ export default function MeusTreinamentosPage() {
                       </td>
                       <td>
                         <Selo tom={SITUACAO[t.situacao].tom}>{SITUACAO[t.situacao].rotulo}</Selo>
+                      </td>
+                      <td>
+                        <CelulaAvaliacao t={t} onAvaliar={() => setAvaliando(t.codigo)} />
                       </td>
                     </tr>
                   ))}
@@ -100,6 +152,14 @@ export default function MeusTreinamentosPage() {
                       <dt>Presença</dt>
                       <dd>{PRESENCA[t.presenca].rotulo}</dd>
                     </div>
+                    {t.avaliacao && (
+                      <div className={mobile.cheio}>
+                        <dt>Avaliação</dt>
+                        <dd>
+                          <CelulaAvaliacao t={t} onAvaliar={() => setAvaliando(t.codigo)} />
+                        </dd>
+                      </div>
+                    )}
                   </dl>
                 </li>
               ))}

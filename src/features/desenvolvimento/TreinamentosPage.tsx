@@ -9,11 +9,12 @@ import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, TagTeste, type Ab
 import { usePaginado } from "./hooks";
 import { FORMATO, formatarCarga, formatarData, MODALIDADE, STATUS_TREINAMENTO, TIPO_TREINAMENTO } from "./rotulos";
 import { ListaMestraAba } from "./ListaMestraAba";
+import { ReacaoAba } from "./ReacaoRH";
 import { TreinamentoDrawer } from "./TreinamentoForm";
 import { ResponsaveisGestaoDrawer } from "./ResponsaveisGestao";
 import styles from "./Desenvolvimento.module.css";
 
-type AbaTreinamentos = "agenda" | "concluidos" | "lista-mestra";
+type AbaTreinamentos = "agenda" | "concluidos" | "avaliacao-reacao" | "lista-mestra";
 
 const FILTROS: Record<"agenda" | "concluidos", { rotulo: string; status: StatusTreinamento[] }[]> = {
   agenda: [
@@ -34,7 +35,7 @@ export default function TreinamentosPage() {
   const abas: AbaDef<AbaTreinamentos>[] = [
     { id: "agenda", rotulo: "Agenda" },
     { id: "concluidos", rotulo: "Concluídos" },
-    ...(perfil === "RH" ? [{ id: "lista-mestra" as const, rotulo: "Lista Mestra" }] : []),
+    ...(perfil === "RH" ? [{ id: "avaliacao-reacao" as const, rotulo: "Avaliação de reação" }, { id: "lista-mestra" as const, rotulo: "Lista Mestra" }] : []),
   ];
   const atual = abas.find((a) => a.id === aba)?.id;
   if (!atual) return <Navigate to="/desenvolvimento/treinamentos/agenda" replace />;
@@ -45,6 +46,7 @@ export default function TreinamentosPage() {
       <Abas base="/desenvolvimento/treinamentos" abas={abas} atual={atual} />
       {atual === "agenda" && <ListaTreinamentos key="agenda" aba="agenda" />}
       {atual === "concluidos" && <ListaTreinamentos key="concluidos" aba="concluidos" />}
+      {atual === "avaliacao-reacao" && <ReacaoAba />}
       {atual === "lista-mestra" && <ListaMestraAba />}
     </>
   );

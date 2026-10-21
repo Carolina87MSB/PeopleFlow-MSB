@@ -44,6 +44,7 @@ import {
 } from "./rotulos";
 import { TreinamentoDrawer } from "./TreinamentoForm";
 import { CampoDuracao } from "./CampoDuracao";
+import { ReacaoDoTreinamento } from "./ReacaoRH";
 import { alternar as alternarSelecao, departamentosDe, desmarcarTodos, filtrarOpcoes, selecionarTodos, TODOS_DEPARTAMENTOS } from "./selecaoParticipantes";
 import { dataEfetivaDeRealizacao } from "../../domain/dataRealizacao";
 import styles from "./Desenvolvimento.module.css";
@@ -185,6 +186,8 @@ export default function TreinamentoPage() {
           </ul>
         </Card>
       ) : null,
+    // Avaliação de reação: acompanhamento só do RH, só de treinamento oficial (teste/homologação fora).
+    reacao: p.ehRH && !t.homologacao && (t.status === "em_andamento" || t.status === "concluido") ? <ReacaoDoTreinamento key="reacao" treinamentoId={t.id} /> : null,
     reposicoes: <Reposicoes key="reposicoes" t={t} podeRepor={p.podeRepor} ausentes={ausentes} />,
     evidencias: <Evidencias key="evidencias" t={t} podeAnexar={p.podeAnexar} participantes={ativos} versao={versaoVinculos} />,
     necessidades: !p.veNecessidades ? null : t.homologacao ? (
@@ -200,9 +203,9 @@ export default function TreinamentoPage() {
   };
   const ordem =
     t.status === "em_andamento"
-      ? ["qr", "participantes", "evidencias", "necessidades"]
+      ? ["qr", "participantes", "reacao", "evidencias", "necessidades"]
       : t.status === "concluido"
-        ? ["resultado", "reposicoes", "participantes", "evidencias", "necessidades"]
+        ? ["resultado", "reposicoes", "participantes", "reacao", "evidencias", "necessidades"]
         : ["participantes", "evidencias", "necessidades"];
 
   return (
