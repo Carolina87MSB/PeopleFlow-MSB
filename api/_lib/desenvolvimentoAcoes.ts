@@ -14,6 +14,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
 import { dataEfetivaDeRealizacao } from "../../src/domain/dataRealizacao.js";
+import { elegivelParaReacao, indicadorAdesao, mediaPorQuestao, QUESTOES, validarRespostas, VERSAO_FORMULARIO } from "../../src/domain/avaliacaoReacao.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
 import { ACOES_PDI_ENCERRAMENTO } from "./pdiEncerramentoAcoes.js";
@@ -1926,6 +1927,147 @@ async function treinamentoPorToken(tokenQr: string) {
   return t;
 }
 
+// ── Avaliação de Reação ─────────────────────────────────────────────────
+// Padrão único para todo treinamento OFICIAL: disponível ao participante com presença confirmada (qualquer método), a partir da ativação do
+// recurso (peopleflow_dev_reacao_config.ativa_desde — sem envio retroativo). Não é consultada ao concluir: a conclusão independe das respostas.
+function tabelaReacaoAusente(error: { code?: string; message?: string } | null): boolean {
+  return Boolean(error && (error.code === "42P01" || error.code === "PGRST205" || /does not exist|Could not find the table/i.test(error.message ?? "")));
+}
+
+/** null = recurso ainda não ativado (migration não aplicada): nada é elegível e nada quebra. */
+async function ativaDesdeReacao(): Promise<string | null> {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_reacao_config").select("ativa_desde").eq("id", 1).maybeSingle();
+  if (error) {
+    if (tabelaReacaoAusente(error)) return null;
+    erroBanco(error, "Avaliação de reação");
+  }
+  return (data?.ativa_desde as string | undefined) ?? null;
+}
+
+/** participante_id → respondido_em, das avaliações do colaborador. */
+async function respondidasDoColaborador(colaboradorId: number): Promise<Map<number, string>> {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_avaliacoes_reacao").select("participante_id, respondido_em").eq("colaborador_id", colaboradorId);
+  if (error) {
+    if (tabelaReacaoAusente(error)) return new Map();
+    erroBanco(error, "Avaliação de reação");
+  }
+  return new Map((data ?? []).map((r) => [Number(r.participante_id), String(r.respondido_em)]));
+}
+
+async function estadoReacao(t: Treinamento, p: { id: number; presenca_status: string; presenca_em: string | null }, colaboradorId: number): Promise<"disponivel" | "respondida" | null> {
+  const ativaDesde = await ativaDesdeReacao();
+  if (!ativaDesde) return null;
+  if ((await respondidasDoColaborador(colaboradorId)).has(Number(p.id))) return "respondida";
+  return elegivelParaReacao({ presenca_status: p.presenca_status, presenca_em: p.presenca_em }, t as { homologacao?: boolean; status: string }, ativaDesde) ? "disponivel" : null;
+}
+
+/** O próprio colaborador responde (qualquer conta do PeopleFlow, sem sessão do módulo): identidade pela sessão, nunca pelo corpo. Uma vez só. */
+async function reacaoResponder(req: VercelRequest) {
+  const corpo = (typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {})) as Corpo;
+  const quem = await identificarParticipante(req);
+  const codigo = texto(corpo, "codigo", { obrigatorio: true, max: 40, rotulo: "o treinamento" });
+  const respostas = validarRespostas(corpo.respostas);
+  if (!respostas) throw new ErroHttp(422, "Responda as 5 perguntas com notas de 1 a 5.");
+  const { data: t, error: tErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select(COLS_TRE).eq("codigo", codigo).maybeSingle();
+  if (tErro) erroBanco(tErro, "Treinamento");
+  if (!t) throw new ErroHttp(404, "Treinamento não encontrado.");
+  const { data: p, error: pErro } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .select("id, presenca_status, presenca_em, removido_em")
+    .eq("treinamento_id", t.id)
+    .eq("colaborador_id", quem.colaboradorId)
+    .maybeSingle();
+  if (pErro) erroBanco(pErro, "Participante");
+  if (!p || p.removido_em) throw new ErroHttp(403, "Você não consta na turma deste treinamento.");
+  const ativaDesde = await ativaDesdeReacao();
+  if (!ativaDesde) throw new ErroHttp(422, "A avaliação de reação ainda não está disponível.");
+  if (!elegivelParaReacao({ presenca_status: p.presenca_status as string, presenca_em: p.presenca_em as string | null }, t as { homologacao?: boolean; status: string }, ativaDesde)) {
+    throw new ErroHttp(422, "A avaliação está disponível para quem participou (presença confirmada) de treinamentos oficiais, a partir da ativação do recurso.");
+  }
+  const { data: nova, error: iErro } = await supabaseAdmin
+    .from("peopleflow_dev_avaliacoes_reacao")
+    .insert({
+      participante_id: p.id,
+      treinamento_id: t.id,
+      colaborador_id: quem.colaboradorId,
+      versao_formulario: VERSAO_FORMULARIO,
+      q1: respostas[0], q2: respostas[1], q3: respostas[2], q4: respostas[3], q5: respostas[4],
+      respondido_por: quem.userId,
+    })
+    .select("id, respondido_em")
+    .single();
+  if (iErro) {
+    if (iErro.code === "23505") throw new ErroHttp(409, "Você já respondeu a avaliação deste treinamento.");
+    erroBanco(iErro, "Avaliação de reação");
+  }
+  await supabaseAdmin.from("peopleflow_dev_auditoria").insert({
+    user_id: quem.userId, colaborador_id: quem.colaboradorId, acao: "reacao_respondida", entidade: "peopleflow_dev_avaliacoes_reacao", entidade_id: String(nova!.id),
+    detalhe: { treinamento_id: t.id, participante_id: p.id, versao_formulario: VERSAO_FORMULARIO },
+  });
+  return { respondida_em: nova!.respondido_em };
+}
+
+/** Participações elegíveis (todas, de treinamentos oficiais) e respostas — base dos indicadores do RH. */
+async function baseReacao(somenteTreinamento?: number) {
+  const ativaDesde = await ativaDesdeReacao();
+  if (!ativaDesde) return { ativaDesde: null as string | null, treinamentos: [] as Treinamento[], elegiveis: [] as Record<string, any>[], respostas: [] as Record<string, any>[] };
+  let q = supabaseAdmin.from("peopleflow_dev_treinamentos").select("id, codigo, titulo, status, homologacao, data_inicio, data_realizacao").eq("homologacao", false);
+  if (somenteTreinamento) q = q.eq("id", somenteTreinamento);
+  const { data: ts, error } = await q;
+  if (error) erroBanco(error, "Treinamentos");
+  const treinamentos = ((ts ?? []) as Treinamento[]).filter((t) => ["em_andamento", "concluido"].includes(t.status));
+  if (treinamentos.length === 0) return { ativaDesde, treinamentos, elegiveis: [], respostas: [] };
+  const ids = treinamentos.map((t) => Number(t.id));
+  const { data: ps, error: pErro } = await supabaseAdmin.from("peopleflow_dev_participantes").select("id, treinamento_id, colaborador_id, presenca_status, presenca_em, removido_em").in("treinamento_id", ids);
+  if (pErro) erroBanco(pErro, "Participantes");
+  const porId = new Map(treinamentos.map((t) => [Number(t.id), t]));
+  const elegiveis = (ps ?? []).filter((p) => elegivelParaReacao({ presenca_status: p.presenca_status as string, presenca_em: p.presenca_em as string | null, removido_em: p.removido_em as string | null }, porId.get(Number(p.treinamento_id)) as { homologacao?: boolean; status: string }, ativaDesde)) as Record<string, any>[];
+  const { data: rs, error: rErro } = await supabaseAdmin.from("peopleflow_dev_avaliacoes_reacao").select("participante_id, treinamento_id, q1, q2, q3, q4, q5, respondido_em, versao_formulario").in("treinamento_id", ids);
+  if (rErro) erroBanco(rErro, "Avaliações de reação");
+  return { ativaDesde, treinamentos, elegiveis, respostas: (rs ?? []) as Record<string, any>[] };
+}
+const notas = (r: Record<string, any>) => [r.q1, r.q2, r.q3, r.q4, r.q5].map(Number);
+
+/** RH: indicadores gerais e por treinamento (respondidos, pendentes, taxa de adesão e média por pergunta). Teste/homologação fora. */
+async function reacaoResumo(conta: ContaDev) {
+  exigirRH(conta);
+  const { ativaDesde, treinamentos, elegiveis, respostas } = await baseReacao();
+  const idsElegiveis = new Set(elegiveis.map((p) => Number(p.id)));
+  const respDentro = respostas.filter((r) => idsElegiveis.has(Number(r.participante_id)));
+  const lista = treinamentos
+    .map((t) => {
+      const el = elegiveis.filter((p) => Number(p.treinamento_id) === Number(t.id));
+      const rs = respDentro.filter((r) => Number(r.treinamento_id) === Number(t.id));
+      return { id: Number(t.id), codigo: t.codigo, titulo: t.titulo, status: t.status, data: (t.data_realizacao ?? t.data_inicio) as string | null, ...indicadorAdesao(el.length, rs.length), medias: mediaPorQuestao(rs.map(notas)) };
+    })
+    .filter((x) => x.elegiveis > 0)
+    .sort((a, b) => String(b.data ?? "").localeCompare(String(a.data ?? "")) || b.id - a.id);
+  return { ativa_desde: ativaDesde, questoes: QUESTOES, geral: { ...indicadorAdesao(elegiveis.length, respDentro.length), medias: mediaPorQuestao(respDentro.map(notas)) }, treinamentos: lista };
+}
+
+/** RH: quem respondeu e quem está pendente em UM treinamento (com as notas, para rastreabilidade). */
+async function reacaoDetalhe(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const tid = idObrigatorio(corpo, "treinamento_id", "Treinamento");
+  const { ativaDesde, treinamentos, elegiveis, respostas } = await baseReacao(tid);
+  const t = treinamentos[0];
+  if (!t) return { ativa_desde: ativaDesde, treinamento: null, questoes: QUESTOES, participantes: [], ...indicadorAdesao(0, 0), medias: mediaPorQuestao([]) };
+  const resp = new Map(respostas.map((r) => [Number(r.participante_id), r]));
+  const ids = [...new Set(elegiveis.map((p) => Number(p.colaborador_id)))];
+  const { data: pessoas, error } = ids.length ? await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento").in("id", ids) : { data: [], error: null };
+  if (error) erroBanco(error, "Colaboradores");
+  const pessoa = new Map((pessoas ?? []).map((c) => [Number(c.id), c]));
+  const participantes = elegiveis
+    .map((p) => {
+      const r = resp.get(Number(p.id));
+      const c = pessoa.get(Number(p.colaborador_id));
+      return { participante_id: Number(p.id), colaborador_id: Number(p.colaborador_id), nome: String(c?.nome ?? ""), cargo: String(c?.cargo ?? ""), departamento: String(c?.departamento ?? ""), estado: r ? "respondida" : "pendente", respondido_em: (r?.respondido_em as string | undefined) ?? null, respostas: r ? notas(r) : null };
+    })
+    .sort((a, b) => (a.estado === b.estado ? a.nome.localeCompare(b.nome, "pt-BR") : a.estado === "pendente" ? -1 : 1));
+  const rs = participantes.filter((x) => x.respostas).map((x) => x.respostas as number[]);
+  return { ativa_desde: ativaDesde, treinamento: { id: Number(t.id), codigo: t.codigo, titulo: t.titulo, status: t.status }, questoes: QUESTOES, ...indicadorAdesao(participantes.length, rs.length), medias: mediaPorQuestao(rs), participantes };
+}
+
 async function presencaViaQr(acao: "presenca_info" | "presenca_confirmar", req: VercelRequest) {
   const corpo = (typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {})) as Corpo;
   const tokenQr = texto(corpo, "token", { obrigatorio: true, max: 100, rotulo: "o código" });
@@ -1939,9 +2081,9 @@ async function presencaViaQr(acao: "presenca_info" | "presenca_confirmar", req: 
     .maybeSingle();
   if (error) erroBanco(error, "Participante");
   // Só o necessário para a pessoa: nada de ids internos nem dados de outros participantes.
-  const info = { titulo: t.titulo, documento: t.lista_mestra_codigo ? `${t.lista_mestra_codigo} rev. ${t.lista_mestra_revisao}` : null, data: t.data_inicio, primeiro_nome: quem.primeiroNome, homologacao: Boolean(t.homologacao) };
+  const info = { codigo: t.codigo as string, titulo: t.titulo, documento: t.lista_mestra_codigo ? `${t.lista_mestra_codigo} rev. ${t.lista_mestra_revisao}` : null, data: t.data_inicio, primeiro_nome: quem.primeiroNome, homologacao: Boolean(t.homologacao) };
   if (!p || p.removido_em) return { ...info, situacao: "nao_inscrito" };
-  if (p.presenca_status === "presente") return { ...info, situacao: "confirmada", confirmada_em: p.presenca_em };
+  if (p.presenca_status === "presente") return { ...info, situacao: "confirmada", confirmada_em: p.presenca_em, avaliacao: await estadoReacao(t, { id: p.id as number, presenca_status: "presente", presenca_em: p.presenca_em as string | null }, quem.colaboradorId) };
   if (acao === "presenca_info") return { ...info, situacao: "pendente" };
   const agora = new Date().toISOString();
   const { data: atualizado, error: uErro } = await supabaseAdmin
@@ -1955,7 +2097,7 @@ async function presencaViaQr(acao: "presenca_info" | "presenca_confirmar", req: 
   if (atualizado) {
     await supabaseAdmin.from("peopleflow_dev_auditoria").insert({ user_id: quem.userId, colaborador_id: quem.colaboradorId, acao: "presenca_qr", entidade: "peopleflow_dev_participantes", entidade_id: String(p.id), detalhe: { treinamento_id: t.id } });
   }
-  return { ...info, situacao: "confirmada", confirmada_em: agora };
+  return { ...info, situacao: "confirmada", confirmada_em: agora, avaliacao: await estadoReacao(t, { id: p.id as number, presenca_status: "presente", presenca_em: agora }, quem.colaboradorId) };
 }
 
 /** Colaborador consulta o PRÓPRIO histórico (qualquer conta do PeopleFlow, sem sessão do módulo). Só concluídos e agendados oficiais
@@ -1964,10 +2106,13 @@ async function historicoDoParticipante(req: VercelRequest) {
   const quem = await identificarParticipante(req);
   const { data: parts, error } = await supabaseAdmin
     .from("peopleflow_dev_participantes")
-    .select("treinamento_id, presenca_status, removido_em")
+    .select("id, treinamento_id, presenca_status, presenca_em, removido_em")
     .eq("colaborador_id", quem.colaboradorId);
   if (error) erroBanco(error, "Participações");
-  const minhas = new Map((parts ?? []).filter((p) => !p.removido_em).map((p) => [Number(p.treinamento_id), p.presenca_status as string]));
+  const meusRegistros = new Map((parts ?? []).filter((p) => !p.removido_em).map((p) => [Number(p.treinamento_id), p]));
+  const minhas = new Map([...meusRegistros].map(([id, p]) => [id, p.presenca_status as string]));
+  const ativaDesde = await ativaDesdeReacao();
+  const respondidas = ativaDesde ? await respondidasDoColaborador(quem.colaboradorId) : new Map<number, string>();
   if (minhas.size === 0) return { primeiro_nome: quem.primeiroNome, treinamentos: [] };
   const { data: ts, error: tErro } = await supabaseAdmin
     .from("peopleflow_dev_treinamentos")
@@ -1988,19 +2133,27 @@ async function historicoDoParticipante(req: VercelRequest) {
         situacao,
         // só a presença da PRÓPRIA pessoa (sem método, sem eficácia nem observações)
         presenca: (presenca ?? "pendente") as string,
+        // Avaliação de reação: disponível (presença confirmada, treinamento oficial, após a ativação) | respondida | não se aplica
+        avaliacao: (() => {
+          const meu = meusRegistros.get(Number(t.id));
+          if (!ativaDesde || !meu) return null;
+          if (respondidas.has(Number(meu.id))) return "respondida";
+          return elegivelParaReacao({ presenca_status: meu.presenca_status as string, presenca_em: meu.presenca_em as string | null }, t as { homologacao?: boolean; status: string }, ativaDesde) ? "disponivel" : null;
+        })(),
+        avaliacao_em: (meusRegistros.get(Number(t.id)) ? (respondidas.get(Number(meusRegistros.get(Number(t.id))!.id)) ?? null) : null) as string | null,
       };
     })
     .sort((a, b) => String(b.data ?? "").localeCompare(String(a.data ?? "")));
   return { primeiro_nome: quem.primeiroNome, treinamentos };
 }
 
-export function ehAcaoDePresencaQr(acao: string): acao is "presenca_info" | "presenca_confirmar" | "meu_historico" {
-  return acao === "presenca_info" || acao === "presenca_confirmar" || acao === "meu_historico";
+export function ehAcaoDePresencaQr(acao: string): acao is "presenca_info" | "presenca_confirmar" | "meu_historico" | "reacao_responder" {
+  return acao === "presenca_info" || acao === "presenca_confirmar" || acao === "meu_historico" || acao === "reacao_responder";
 }
 
-export async function executarPresencaQr(acao: "presenca_info" | "presenca_confirmar" | "meu_historico", req: VercelRequest, res: VercelResponse) {
+export async function executarPresencaQr(acao: "presenca_info" | "presenca_confirmar" | "meu_historico" | "reacao_responder", req: VercelRequest, res: VercelResponse) {
   try {
-    res.status(200).json({ ok: true, dados: acao === "meu_historico" ? await historicoDoParticipante(req) : await presencaViaQr(acao, req) });
+    res.status(200).json({ ok: true, dados: acao === "meu_historico" ? await historicoDoParticipante(req) : acao === "reacao_responder" ? await reacaoResponder(req) : await presencaViaQr(acao, req) });
   } catch (err) {
     if (err instanceof ErroHttp) {
       res.status(err.status).json({ error: err.message });
@@ -2329,6 +2482,9 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   evidencia_url: evidenciaUrl,
   evidencia_substituir: evidenciaSubstituir,
   eficacia_registrar: eficaciaRegistrar,
+  // Avaliação de Reação: acompanhamento (só RH). O colaborador responde por reacao_responder (família da página de presença).
+  reacao_resumo: reacaoResumo,
+  reacao_detalhe: reacaoDetalhe,
   // LNT (Fase 6 — núcleo): ações só do RH, em api/_lib/lntAcoes.ts.
   ...ACOES_LNT,
   // PDI: encerramento por desligamento (RH) — api/_lib/pdiEncerramentoAcoes.ts.

@@ -9,6 +9,7 @@
 // a página envia.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase, supabaseConfigured } from "../lib/supabaseClient";
+import { FormularioReacao } from "../features/desenvolvimento/FormularioReacao";
 import styles from "./Participar.module.css";
 
 /** Lido pelo script de index.html: se o link do e-mail cair na raiz do portal, volta para cá. */
@@ -18,6 +19,10 @@ const CHAVE_EMAIL = "pf_participar_email";
 const DOMINIO = "@msbbrasil.com";
 
 interface Info {
+  /** Código do treinamento (TRN-…): chave da avaliação de reação. */
+  codigo?: string;
+  /** Avaliação de reação: disponível logo após a presença confirmada; "respondida" depois de enviada; null quando não se aplica. */
+  avaliacao?: "disponivel" | "respondida" | null;
   titulo: string;
   documento: string | null;
   data: string | null;
@@ -62,6 +67,17 @@ async function chamar(acao: "presenca_info" | "presenca_confirmar", token: strin
   });
   const body = (await res.json().catch(() => ({}))) as { error?: string; dados?: Info };
   return { status: res.status, erro: body.error, info: body.dados };
+}
+
+async function enviarReacao(codigo: string, respostas: number[]) {
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch("/api/desenvolvimento?acao=reacao_responder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {}) },
+    body: JSON.stringify({ codigo, respostas }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(body.error ?? "Não foi possível enviar a avaliação.");
 }
 
 export function Participar() {
@@ -229,6 +245,16 @@ export function Participar() {
               </p>
             )}
             {estado.info.situacao === "nao_inscrito" && <p className={styles.aviso}>Você não está na lista de participantes deste treinamento. Procure o responsável — ele pode incluir você e registrar a presença.</p>}
+            {estado.info.situacao === "confirmada" && estado.info.avaliacao === "disponivel" && estado.info.codigo && (
+              <FormularioReacao
+                titulo={estado.info.titulo}
+                onEnviar={async (respostas) => {
+                  await enviarReacao(estado.info.codigo as string, respostas);
+                  setEstado({ tipo: "info", info: { ...estado.info, avaliacao: "respondida" } });
+                }}
+              />
+            )}
+            {estado.info.situacao === "confirmada" && estado.info.avaliacao === "respondida" && <p className={styles.ok}>✓ Avaliação do treinamento registrada. Obrigado!</p>}
             {estado.info.situacao === "confirmada" && (
               <a className={styles.link} href="/meus-treinamentos">
                 Ver meus treinamentos

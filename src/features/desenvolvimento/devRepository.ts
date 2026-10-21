@@ -52,6 +52,9 @@ export interface LinhaMeuHistorico {
   carga_min: number | null;
   situacao: "realizado" | "ausente" | "agendado";
   presenca: "presente" | "ausente" | "pendente";
+  /** Avaliação de reação: disponivel (presença confirmada, treinamento oficial) | respondida | null (não se aplica). */
+  avaliacao: "disponivel" | "respondida" | null;
+  avaliacao_em: string | null;
 }
 
 /** Histórico do PRÓPRIO colaborador (servidor identifica pela conta; não depende de perfil nem de sessão do módulo). */
@@ -61,6 +64,36 @@ export async function meuHistorico(): Promise<{ primeiro_nome: string; treinamen
   if (!res.ok || !body.dados) throw new Error(body.error ?? `Não foi possível carregar seus treinamentos (${res.status}).`);
   return body.dados;
 }
+
+/** O PRÓPRIO colaborador envia a Avaliação de Reação (5 notas de 1 a 5); o servidor identifica a pessoa pela conta e aceita uma vez só. */
+export async function responderReacao(codigo: string, respostas: number[]): Promise<{ respondida_em: string }> {
+  const res = await fetch("/api/desenvolvimento?acao=reacao_responder", { method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) }, body: JSON.stringify({ codigo, respostas }) });
+  const body = (await res.json().catch(() => ({}))) as { error?: string; dados?: { respondida_em: string } };
+  if (!res.ok || !body.dados) throw new Error(body.error ?? `Não foi possível enviar a avaliação (${res.status}).`);
+  return body.dados;
+}
+
+export interface IndicadorReacao {
+  elegiveis: number;
+  respondidos: number;
+  pendentes: number;
+  taxa: number | null;
+  medias: (number | null)[];
+}
+export interface ResumoReacao {
+  ativa_desde: string | null;
+  questoes: string[];
+  geral: IndicadorReacao;
+  treinamentos: (IndicadorReacao & { id: number; codigo: string; titulo: string; status: StatusTreinamento; data: string | null })[];
+}
+export interface DetalheReacao extends IndicadorReacao {
+  ativa_desde: string | null;
+  questoes: string[];
+  treinamento: { id: number; codigo: string; titulo: string; status: StatusTreinamento } | null;
+  participantes: { participante_id: number; colaborador_id: number; nome: string; cargo: string; departamento: string; estado: "respondida" | "pendente"; respondido_em: string | null; respostas: number[] | null }[];
+}
+export const reacaoResumo = () => gravar<ResumoReacao>("reacao_resumo", {});
+export const reacaoDetalhe = (treinamentoId: number) => gravar<DetalheReacao>("reacao_detalhe", { treinamento_id: treinamentoId });
 
 function faixa(pagina: number): [number, number] {
   const de = pagina * TAMANHO_PAGINA;
@@ -790,6 +823,8 @@ export type AcaoGravacao =
   | "evidencia_url"
   | "evidencia_substituir"
   | "eficacia_registrar"
+  | "reacao_resumo"
+  | "reacao_detalhe"
   | "participantes_opcoes"
   | "reposicao_faltantes"
   | "treinamento_reposicao"

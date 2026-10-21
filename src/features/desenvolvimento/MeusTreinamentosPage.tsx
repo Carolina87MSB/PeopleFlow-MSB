@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { GraduationCap } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { Card, tableStyles } from "../../components/ui";
-import { meuHistorico } from "./devRepository";
+import { meuHistorico, responderReacao, type LinhaMeuHistorico } from "./devRepository";
 import { Carregando, Erro, EstadoVazio, Selo } from "./componentes";
 import { useConsulta } from "./hooks";
 import { formatarCarga, formatarData } from "./rotulos";
+import { FormularioReacao } from "./FormularioReacao";
 import styles from "./Desenvolvimento.module.css";
 import mobile from "./MeusTreinamentos.module.css";
 
@@ -20,10 +22,26 @@ const SITUACAO = {
   agendado: { rotulo: "Agendado", tom: "info" },
 } as const;
 
+const dataHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+
+/** Avaliação de reação: botão quando disponível (também depois da conclusão), data/hora quando respondida, nada quando não se aplica. */
+function CelulaAvaliacao({ t, onAvaliar }: { t: LinhaMeuHistorico; onAvaliar: () => void }) {
+  if (t.avaliacao === "disponivel")
+    return (
+      <button type="button" className={styles.linkAcao} onClick={onAvaliar}>
+        Avaliar treinamento
+      </button>
+    );
+  if (t.avaliacao === "respondida") return <span className={styles.secundario}>Respondida{t.avaliacao_em ? ` em ${dataHora.format(new Date(t.avaliacao_em))}` : ""}</span>;
+  return <span className={styles.secundario}>—</span>;
+}
+
 /** "Meus treinamentos": consulta do próprio histórico por qualquer colaborador (o servidor identifica a pessoa pela conta). */
 export default function MeusTreinamentosPage() {
   const consulta = useConsulta(() => meuHistorico(), []);
   const itens = consulta.dados?.treinamentos ?? [];
+  const [avaliando, setAvaliando] = useState<string | null>(null);
+  const alvo = itens.find((t) => t.codigo === avaliando && t.avaliacao === "disponivel") ?? null;
   return (
     <>
       <Header />
@@ -34,6 +52,17 @@ export default function MeusTreinamentosPage() {
             <p className={styles.cardSubtitle}>Treinamentos agendados e realizados por você, do mais recente para o mais antigo</p>
           </div>
         </div>
+        {alvo && (
+          <FormularioReacao
+            titulo={alvo.titulo}
+            onCancelar={() => setAvaliando(null)}
+            onEnviar={async (respostas) => {
+              await responderReacao(alvo.codigo as string, respostas);
+              setAvaliando(null);
+              consulta.recarregar();
+            }}
+          />
+        )}
         {consulta.erro ? (
           <Erro mensagem={consulta.erro} />
         ) : consulta.carregando || !consulta.dados ? (
@@ -52,6 +81,7 @@ export default function MeusTreinamentosPage() {
                     <th>Carga</th>
                     <th>Presença</th>
                     <th>Situação</th>
+                    <th>Avaliação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -69,6 +99,9 @@ export default function MeusTreinamentosPage() {
                       </td>
                       <td>
                         <Selo tom={SITUACAO[t.situacao].tom}>{SITUACAO[t.situacao].rotulo}</Selo>
+                      </td>
+                      <td>
+                        <CelulaAvaliacao t={t} onAvaliar={() => setAvaliando(t.codigo)} />
                       </td>
                     </tr>
                   ))}
@@ -100,6 +133,14 @@ export default function MeusTreinamentosPage() {
                       <dt>Presença</dt>
                       <dd>{PRESENCA[t.presenca].rotulo}</dd>
                     </div>
+                    {t.avaliacao && (
+                      <div>
+                        <dt>Avaliação</dt>
+                        <dd>
+                          <CelulaAvaliacao t={t} onAvaliar={() => setAvaliando(t.codigo)} />
+                        </dd>
+                      </div>
+                    )}
                   </dl>
                 </li>
               ))}
