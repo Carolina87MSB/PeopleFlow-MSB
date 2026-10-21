@@ -415,7 +415,7 @@ await t("Meus treinamentos no celular: cartões com os mesmos dados da tabela (t
   const pg = fs.readFileSync(`${PF}/src/features/desenvolvimento/MeusTreinamentosPage.tsx`, "utf8");
   const css = fs.readFileSync(`${PF}/src/features/desenvolvimento/MeusTreinamentos.module.css`, "utf8");
   const cartao = pg.slice(pg.indexOf("mobile.cartoes"));
-  for (const campo of ["t.titulo", "t.codigo", "t.documento", "formatarData(t.data)", "formatarCarga(t.carga_min)", "SITUACAO[t.situacao]"]) if (!cartao.includes(campo)) throw new Error("cartão sem " + campo);
+  for (const campo of ["t.titulo", "t.codigo", "t.documento", "formatarData(t.data)", "formatarCarga(t.carga_min)", "SITUACAO[t.situacao]", "PRESENCA[t.presenca].rotulo"]) if (!cartao.includes(campo)) throw new Error("cartão sem " + campo);
   if (!/<table/.test(pg) || !/<th>Treinamento<\/th>/.test(pg)) throw new Error("tabela do desktop removida");
   if (!/@media \(max-width: 700px\)[\s\S]*\.tabela\s*\{\s*display:\s*none/.test(css) || !/\.cartoes\s*\{\s*display:\s*none/.test(css)) throw new Error("alternância tabela/cartões só no celular");
   if (!/meuHistorico\(\)/.test(pg) || /homologacao/.test(pg)) throw new Error("a página não deve mexer na consulta nem na regra de homologação (fica no servidor)");
@@ -423,6 +423,111 @@ await t("Meus treinamentos no celular: cartões com os mesmos dados da tabela (t
 await t("Visão oficial do histórico guarda a revisão efetivamente treinada (04), não a vigente (05)", async () => {
   const h = await q(`select lista_mestra_revisao from public.peopleflow_dev_v_historico where colaborador_id=3 and lista_mestra_codigo='P-PR-001'`);
   if (h.length !== 1 || h[0].lista_mestra_revisao !== "04") throw new Error(JSON.stringify(h));
+});
+
+console.log("Histórico individual (RH/Gestor): presença, eficácia, evidências e acesso");
+const hist = await import(pathToFileURL(`${PF}/src/features/desenvolvimento/historicoColaborador.ts`).href);
+const como = async (uid: string, sql: string) => {
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub','${uid}',false);`);
+  try { return await q(sql); } finally { await db.exec("reset role;"); }
+};
+// as 3 consultas que a tela faz (visão de participações, prazo da eficácia e evidências), com o papel real de quem consulta (RLS valendo)
+const COLS_VIEW = "participante_id, treinamento_id, treinamento_codigo, titulo, situacao, presenca_status, presenca_metodo, status_treinamento, exige_eficacia, eficacia_resultado";
+const visao = (uid: string, colab: number) => como(uid, `select ${COLS_VIEW} from public.peopleflow_dev_v_participacoes where colaborador_id=${colab} order by participante_id`);
+const evid = (uid: string, tid: number) => como(uid, `select id, tipo, participante_id from public.peopleflow_dev_evidencias where treinamento_id=${tid} and substituida_em is null order by id`);
+
+await t("RH: a visão traz presença, método e eficácia de cada participação (QR, manual, eficaz, ausente) — previstos, ausências e reposições preservados", async () => {
+  const caio = (await visao(U.rh, 3)).find((r) => r.treinamento_id === tPop);
+  if (!caio || caio.presenca_status !== "presente" || caio.presenca_metodo !== "qr" || caio.eficacia_resultado !== "eficaz" || caio.exige_eficacia !== true || caio.situacao !== "realizado" || caio.status_treinamento !== "concluido") throw new Error(JSON.stringify(caio));
+  const davi = (await visao(U.rh, 4)).find((r) => r.treinamento_id === tPop);
+  if (davi?.presenca_status !== "presente" || davi.presenca_metodo !== "manual" || davi.eficacia_resultado !== null) throw new Error("Davi: presente por retificação manual, sem eficácia: " + JSON.stringify(davi));
+  const iris = await visao(U.rh, 9);
+  const sit = iris.map((r) => r.situacao).sort().join();
+  if (sit !== "ausente,previsto") throw new Error("Íris: ausente no original e reposição prevista: " + sit);
+  if (iris.find((r) => r.situacao === "ausente")?.presenca_metodo !== "manual") throw new Error("método da ausência");
+});
+await t("Homologação/teste fora do histórico oficial (nem para o RH)", async () => {
+  const testes = (await q(`select id from public.peopleflow_dev_treinamentos where homologacao`)).map((r) => r.id);
+  if (testes.length === 0) throw new Error("o cenário deveria ter um treinamento de teste");
+  const rh = await como(U.rh, `select treinamento_id from public.peopleflow_dev_v_participacoes where treinamento_id = any(array[${testes.join(",")}])`);
+  if (rh.length !== 0) throw new Error("teste apareceu no histórico: " + JSON.stringify(rh));
+});
+await t("Acesso: RH consulta qualquer colaborador; Gestor a equipe pela tela; colaborador comum não lê nada direto (só o próprio histórico, pelo servidor)", async () => {
+  if ((await visao(U.ge, 3)).length === 0 || (await visao(U.ge, 5)).length === 0) throw new Error("Bia deveria ver a própria equipe");
+  if ((await visao(U.gil, 4)).length === 0) throw new Error("Gil deveria ver Davi (liderado)");
+  if ((await visao(U.gil, 3)).length !== 0) throw new Error("Gil não vê Caio (outra equipe, sem relação com o treinamento)");
+  for (const tabela of ["peopleflow_dev_v_participacoes", "peopleflow_dev_participantes", "peopleflow_dev_evidencias", "peopleflow_dev_treinamentos"]) {
+    if ((await como(U.p3, `select 1 from public.${tabela}`)).length !== 0) throw new Error("colaborador comum leu " + tabela);
+  }
+  const meu = await espera("p3", "meu_historico", {}, 200);
+  const doCaio = meu.treinamentos.find((x: any) => x.documento === "P-PR-001 rev. 04");
+  if (!doCaio || doCaio.presenca !== "presente") throw new Error(JSON.stringify(meu));
+});
+await t("Evidências: lista de presença vigente e certificado individual aparecem; o RH abre qualquer uma; o gestor só as da própria equipe (link emitido pelo servidor)", async () => {
+  const davi = (await part(tPop, 4)).id, caio = (await part(tPop, 3)).id;
+  const subir = async (pid: number, nome: string) => {
+    const u = await espera("rh", "evidencia_upload_url", { treinamento_id: tPop, participante_id: pid, tipo: "certificado", file_name: nome, mime: "application/pdf", tamanho_bytes: 500 }, 200);
+    fake.storage.from("desenvolvimento-evidencias")._simularUpload(u.path, 500, "application/pdf");
+    return (await espera("rh", "evidencia_registrar", { treinamento_id: tPop, participante_id: pid, path: u.path, tipo: "certificado", file_name: nome }, 200)).id as number;
+  };
+  const certDavi = await subir(davi, "cert-davi.pdf"), certCaio = await subir(caio, "cert-caio.pdf");
+  const rh = await evid(U.rh, tPop);
+  const lista = rh.filter((e) => e.tipo === "lista_presenca");
+  if (lista.length !== 1) throw new Error("só a versão vigente da lista deve aparecer: " + JSON.stringify(rh));
+  // o que a tela monta para o Caio: lista + certificado dele; nunca o certificado do Davi nem a foto da sala
+  const linhaCaio = { participante_id: caio, treinamento_id: tPop };
+  const paraCaio = hist.evidenciasDaParticipacao(linhaCaio, rh.map((e) => ({ ...e, treinamento_id: tPop, file_name: "x", enviado_em: "" })));
+  const tipos = paraCaio.map((e: any) => `${e.tipo}:${e.participante_id ?? "-"}`).sort().join();
+  if (tipos !== `certificado:${caio},lista_presenca:-`) throw new Error("evidências do Caio: " + tipos);
+  await espera("rh", "evidencia_url", { id: certDavi }, 200);
+  await espera("rh", "evidencia_url", { id: lista[0].id }, 200);
+  await espera("ge", "evidencia_url", { id: certCaio }, 200); // Caio é da equipe da Bia
+  await espera("ge", "evidencia_url", { id: lista[0].id }, 200);
+  await espera("ge", "evidencia_url", { id: certDavi }, 403); // Davi é da equipe do Gil
+  await espera("gil", "evidencia_url", { id: certDavi }, 200);
+  await espera("gil", "evidencia_url", { id: certCaio }, 403);
+  await espera("p3", "evidencia_url", { id: certCaio }, 401); // colaborador comum não abre evidência (nem a própria) nesta etapa
+});
+await t("Regra de eficácia na tela: não exigida, resultado, pendente (prazo e vencimento), não se aplica e 'após a realização'", async () => {
+  const base = { exige_eficacia: true, eficacia_resultado: null, presenca_status: "presente", status_treinamento: "concluido", eficacia_prazo: "2026-12-01" };
+  const s = (x: any, hoje = "2026-10-21") => hist.situacaoEficacia({ ...base, ...x }, hoje);
+  if (s({ exige_eficacia: false }).texto !== "Não exigida") throw new Error("não exigida");
+  if (s({ eficacia_resultado: "eficaz" }).texto !== "Eficaz" || s({ eficacia_resultado: "nao_eficaz" }).tom !== "danger" || s({ eficacia_resultado: "parcialmente_eficaz" }).texto !== "Parcialmente eficaz") throw new Error("resultado");
+  const pend = s({});
+  if (pend.texto !== "Pendente" || pend.tom !== "warning" || pend.prazo !== "2026-12-01" || pend.vencida) throw new Error("pendente no prazo: " + JSON.stringify(pend));
+  const venc = s({ eficacia_prazo: "2026-10-01" });
+  if (venc.texto !== "Pendente" || venc.tom !== "danger" || !venc.vencida) throw new Error("pendente vencida: " + JSON.stringify(venc));
+  if (s({ eficacia_prazo: null }).prazo !== null) throw new Error("sem prazo");
+  if (s({ presenca_status: "ausente" }).texto !== "Não se aplica") throw new Error("ausente não é avaliado");
+  if (s({ presenca_status: "pendente", status_treinamento: "planejado" }).texto !== "Após a realização") throw new Error("previsto");
+  if (s({ presenca_status: "presente", status_treinamento: "em_andamento" }).texto !== "Pendente") throw new Error("em andamento com presença já pode ser avaliado (regra do servidor)");
+});
+await t("Evidências na tela: lista de presença e certificado do treinamento + anexos da própria pessoa; ordem fixa e numeração quando há mais de um do mesmo tipo", async () => {
+  const ev = (id: number, tipo: string, participante_id: number | null) => ({ id, treinamento_id: 7, participante_id, tipo, file_name: "f", enviado_em: "" });
+  const todas = [ev(5, "foto", null), ev(4, "certificado", 2), ev(3, "certificado", 1), ev(2, "lista_presenca", null), ev(1, "certificado", 1), ev(9, "outro", 1), { ...ev(8, "lista_presenca", null), treinamento_id: 99 }];
+  const r = hist.evidenciasDaParticipacao({ participante_id: 1, treinamento_id: 7 }, todas).map((e: any) => `${e.id}:${e.rotulo}`).join(" | ");
+  if (r !== "2:Lista de presença | 1:Certificado 1 | 3:Certificado 2 | 9:Outro") throw new Error(r);
+});
+await t("Meus treinamentos: só a PRESENÇA é acrescentada (nada de eficácia, método ou observações); cada pessoa vê a própria", async () => {
+  const caio = await espera("p3", "meu_historico", {}, 200);
+  const txt = JSON.stringify(caio);
+  if (/eficaci|metodo|observ|motivo|qr/i.test(txt)) throw new Error("vazou informação além da presença: " + txt);
+  if (caio.treinamentos.some((x: any) => !["presente", "ausente", "pendente"].includes(x.presenca))) throw new Error(txt);
+  const iris = (await espera("p9", "meu_historico", {}, 200)).treinamentos.map((x: any) => `${x.situacao}:${x.presenca}`).sort().join();
+  if (iris !== "agendado:presente,ausente:ausente") throw new Error("Íris (confirmou pelo QR a reposição em andamento): " + iris);
+  const davi = (await espera("p4", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.situacao === "realizado");
+  if (davi?.presenca !== "presente") throw new Error("Davi (retificado): " + JSON.stringify(davi));
+});
+await t("Visualização e responsividade: tabela com 7 colunas no desktop, cartões abaixo de 1100 px, link para o treinamento, mesmos dados nos dois; página 'Por colaborador' usa o componente", async () => {
+  const comp = fs.readFileSync(`${PF}/src/features/desenvolvimento/HistoricoTreinamentos.tsx`, "utf8");
+  const css = fs.readFileSync(`${PF}/src/features/desenvolvimento/HistoricoTreinamentos.module.css`, "utf8");
+  for (const col of ["Data", "Treinamento", "Carga", "Situação", "Presença", "Eficácia", "Evidências"]) if (!new RegExp(`<th>${col}</th>`).test(comp)) throw new Error("coluna " + col);
+  const cartao = comp.slice(comp.indexOf("visual.cartoes"));
+  for (const campo of ["h.titulo", "h.treinamento_codigo", "formatarData(h.data_referencia)", "formatarCarga(h.carga_horaria_min)", "presencaDe(h)", "eficacia.texto", "abrirTreinamento(h.treinamento_id)", "abrirEvidencia(e.id)", "SITUACAO_PARTICIPACAO[h.situacao]"]) if (!cartao.includes(campo)) throw new Error("cartão sem " + campo);
+  if (!comp.includes("/desenvolvimento/treinamento/${id}")) throw new Error("link do treinamento");
+  if (!/@media \(max-width: 1100px\)[\s\S]*\.tabela\s*\{\s*display:\s*none/.test(css) || !/\.cartoes\s*\{\s*display:\s*none/.test(css)) throw new Error("alternância tabela/cartões");
+  if (!/<HistoricoTreinamentos linhas=\{historico\.dados\}/.test(fs.readFileSync(`${PF}/src/features/desenvolvimento/HabilidadesPage.tsx`, "utf8"))) throw new Error("a aba Por colaborador não usa o componente");
+  if (/homologacao/.test(comp)) throw new Error("a tela não decide homologação (a visão do banco já a exclui)");
 });
 
 console.log("Rastreabilidade");

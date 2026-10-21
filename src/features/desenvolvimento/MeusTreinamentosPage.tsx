@@ -8,6 +8,12 @@ import { formatarCarga, formatarData } from "./rotulos";
 import styles from "./Desenvolvimento.module.css";
 import mobile from "./MeusTreinamentos.module.css";
 
+const PRESENCA = {
+  presente: { rotulo: "Presente", tom: "success" },
+  ausente: { rotulo: "Ausente", tom: "warning" },
+  pendente: { rotulo: "A confirmar", tom: "neutral" },
+} as const;
+
 const SITUACAO = {
   realizado: { rotulo: "Realizado", tom: "success" },
   ausente: { rotulo: "Ausente", tom: "warning" },
@@ -44,6 +50,7 @@ export default function MeusTreinamentosPage() {
                     <th>Documento</th>
                     <th>Data</th>
                     <th>Carga</th>
+                    <th>Presença</th>
                     <th>Situação</th>
                   </tr>
                 </thead>
@@ -57,6 +64,9 @@ export default function MeusTreinamentosPage() {
                       <td className={styles.secundario}>{t.documento ?? "—"}</td>
                       <td className={styles.mono}>{formatarData(t.data)}</td>
                       <td className={styles.mono}>{formatarCarga(t.carga_min)}</td>
+                      <td>
+                        <Selo tom={PRESENCA[t.presenca].tom}>{PRESENCA[t.presenca].rotulo}</Selo>
+                      </td>
                       <td>
                         <Selo tom={SITUACAO[t.situacao].tom}>{SITUACAO[t.situacao].rotulo}</Selo>
                       </td>
@@ -85,6 +95,10 @@ export default function MeusTreinamentosPage() {
                     <div>
                       <dt>Carga</dt>
                       <dd>{formatarCarga(t.carga_min)}</dd>
+                    </div>
+                    <div>
+                      <dt>Presença</dt>
+                      <dd>{PRESENCA[t.presenca].rotulo}</dd>
                     </div>
                   </dl>
                 </li>
