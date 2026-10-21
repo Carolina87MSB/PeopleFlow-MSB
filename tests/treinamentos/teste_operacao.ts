@@ -411,6 +411,15 @@ await t("Histórico não lista treinamento de homologação/teste; sem login nã
   await espera("", "meu_historico", {}, 401);
   await espera("semcadastro", "meu_historico", {}, 409);
 });
+await t("Meus treinamentos no celular: cartões com os mesmos dados da tabela (título, código, documento, data, carga, situação); tabela preservada no desktop; sem alterar a consulta", async () => {
+  const pg = fs.readFileSync(`${PF}/src/features/desenvolvimento/MeusTreinamentosPage.tsx`, "utf8");
+  const css = fs.readFileSync(`${PF}/src/features/desenvolvimento/MeusTreinamentos.module.css`, "utf8");
+  const cartao = pg.slice(pg.indexOf("mobile.cartoes"));
+  for (const campo of ["t.titulo", "t.codigo", "t.documento", "formatarData(t.data)", "formatarCarga(t.carga_min)", "SITUACAO[t.situacao]"]) if (!cartao.includes(campo)) throw new Error("cartão sem " + campo);
+  if (!/<table/.test(pg) || !/<th>Treinamento<\/th>/.test(pg)) throw new Error("tabela do desktop removida");
+  if (!/@media \(max-width: 700px\)[\s\S]*\.tabela\s*\{\s*display:\s*none/.test(css) || !/\.cartoes\s*\{\s*display:\s*none/.test(css)) throw new Error("alternância tabela/cartões só no celular");
+  if (!/meuHistorico\(\)/.test(pg) || /homologacao/.test(pg)) throw new Error("a página não deve mexer na consulta nem na regra de homologação (fica no servidor)");
+});
 await t("Visão oficial do histórico guarda a revisão efetivamente treinada (04), não a vigente (05)", async () => {
   const h = await q(`select lista_mestra_revisao from public.peopleflow_dev_v_historico where colaborador_id=3 and lista_mestra_codigo='P-PR-001'`);
   if (h.length !== 1 || h[0].lista_mestra_revisao !== "04") throw new Error(JSON.stringify(h));

@@ -1,0 +1,88 @@
+/* "Meus treinamentos": tabela no desktop; cartões individuais no celular (mesmos dados, nada a mais nem a menos). */
+.cartoes {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 10px;
+}
+
+.cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.titulo {
+  margin: 0;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-navy);
+  overflow-wrap: anywhere;
+}
+
+.topo > :last-child {
+  flex: none;
+}
+
+.codigo {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dados {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.dados > div {
+  min-width: 0;
+}
+
+.dados dt {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.dados dd {
+  margin: 2px 0 0 0;
+  font-size: 13px;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.cheio {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 700px) {
+  .tabela {
+    display: none;
+  }
+
+  .cartoes {
+    display: grid;
+  }
+}
