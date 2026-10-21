@@ -45,6 +45,7 @@ import {
 import { TreinamentoDrawer } from "./TreinamentoForm";
 import { CampoDuracao } from "./CampoDuracao";
 import { alternar as alternarSelecao, departamentosDe, desmarcarTodos, filtrarOpcoes, selecionarTodos, TODOS_DEPARTAMENTOS } from "./selecaoParticipantes";
+import { dataEfetivaDeRealizacao } from "../../domain/dataRealizacao";
 import styles from "./Desenvolvimento.module.css";
 
 function formatarDataHora(iso: string | null | undefined): string {
@@ -173,7 +174,7 @@ export default function TreinamentoPage() {
           <h3 className={styles.cardTitle}>Resultado</h3>
           <ul className={styles.resumo} style={{ marginTop: 10 }}>
             <li>
-              <CalendarDays size={15} /> Realizado em {formatarData(t.data_realizacao ?? t.data_fim ?? t.data_inicio)}
+              <CalendarDays size={15} /> Realizado em {formatarData(t.data_realizacao)}
             </li>
             <li>
               <Clock size={15} /> {formatarCarga(t.carga_realizada_min ?? t.carga_horaria_min)}
@@ -361,13 +362,21 @@ function SemTreinamento() {
 function RealizacaoResumo({ t, podeAlterar, onSalvar }: { t: Treinamento; podeAlterar: boolean; onSalvar: (corpo: Record<string, unknown>) => Promise<void> }) {
   const [alterando, setAlterando] = useState(false);
   const alterada = Boolean(t.data_realizacao || t.carga_realizada_min);
+  const efetiva = dataEfetivaDeRealizacao(t);
   return (
     <div className={styles.realizacao}>
       <div>
         <strong>Realização</strong>
         <span className={styles.secundario}>{alterada ? " · informada" : " · conforme o planejado"}</span>
         <div>
-          Data: {formatarData(t.data_realizacao ?? t.data_fim ?? t.data_inicio)} · Carga horária: {formatarCarga(t.carga_realizada_min ?? t.carga_horaria_min)}
+          Data: {efetiva ? formatarData(efetiva.data) : "a informar"} · Carga horária: {formatarCarga(t.carga_realizada_min ?? t.carga_horaria_min)}
+        </div>
+        <div className={styles.secundario}>
+          {!efetiva
+            ? "Sem data de início no PeopleFlow: informe a data de realização para concluir."
+            : efetiva.origem === "informada"
+              ? "Data de realização informada."
+              : "Data do início da realização (Brasília). Confira antes de concluir; se a realização foi em outro dia, altere os dados da realização."}
         </div>
       </div>
       {podeAlterar && !alterando && (
@@ -390,7 +399,7 @@ function RealizacaoResumo({ t, podeAlterar, onSalvar }: { t: Treinamento; podeAl
 }
 
 function Realizacao({ t, onSalvar, onCancelar }: { t: Treinamento; onSalvar: (corpo: Record<string, unknown>) => Promise<void>; onCancelar: () => void }) {
-  const [data, setData] = useState(t.data_realizacao ?? "");
+  const [data, setData] = useState(t.data_realizacao ?? dataEfetivaDeRealizacao(t)?.data ?? "");
   const [carga, setCarga] = useState(() => paraHorasMinutos(t.carga_realizada_min));
   const [salvando, setSalvando] = useState(false);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
