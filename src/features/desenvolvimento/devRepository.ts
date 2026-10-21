@@ -5,6 +5,7 @@
 // api/desenvolvimento.ts. Todas as listas são paginadas.
 
 import { supabase } from "../../lib/supabaseClient";
+import type { EvidenciaDoHistorico } from "./historicoColaborador";
 
 export const TAMANHO_PAGINA = 50;
 
@@ -50,6 +51,7 @@ export interface LinhaMeuHistorico {
   data: string | null;
   carga_min: number | null;
   situacao: "realizado" | "ausente" | "agendado";
+  presenca: "presente" | "ausente" | "pendente";
 }
 
 /** Histórico do PRÓPRIO colaborador (servidor identifica pela conta; não depende de perfil nem de sessão do módulo). */
@@ -267,20 +269,42 @@ export interface LinhaHistorico {
   situacao: SituacaoParticipacao;
   reposicao_numero: number | null;
   reposto_em_treinamento_id: number | null;
+  presenca_status: "pendente" | "presente" | "ausente";
+  /** Como a presença foi confirmada: qr | manual (null enquanto pendente). */
+  presenca_metodo: string | null;
+  status_treinamento: StatusTreinamento;
+  exige_eficacia: boolean;
+  eficacia_resultado: ResultadoEficacia | null;
+  /** Prazo da avaliação de eficácia (do treinamento; null quando não há ou o treinamento não é visível). */
+  eficacia_prazo: string | null;
+  /** Lista de presença, certificados e anexos desta pessoa (versões vigentes; só o que o banco libera a quem consulta). */
+  evidencias: EvidenciaDoHistorico[];
 }
 
-/** Histórico individual: todas as participações (previsto, realizado, ausente, reposição). */
+/** Histórico individual: todas as participações (previsto, realizado, ausente, reposição) — fora homologação/teste (a visão já exclui).
+ * O acesso é do banco: RH consulta qualquer colaborador, Gestor só a equipe; prazo e evidências seguem a visibilidade do treinamento. */
 export async function historicoDoColaborador(colaboradorId: number): Promise<LinhaHistorico[]> {
   const { data, error } = await supabase
     .from("peopleflow_dev_v_participacoes")
     .select(
-      "participante_id, treinamento_id, treinamento_codigo, titulo, tipo, modalidade, lista_mestra_codigo, lista_mestra_revisao, data_referencia, carga_horaria_min, situacao, reposicao_numero, reposto_em_treinamento_id",
+      "participante_id, treinamento_id, treinamento_codigo, titulo, tipo, modalidade, lista_mestra_codigo, lista_mestra_revisao, data_referencia, carga_horaria_min, situacao, reposicao_numero, reposto_em_treinamento_id, presenca_status, presenca_metodo, status_treinamento, exige_eficacia, eficacia_resultado",
     )
     .eq("colaborador_id", colaboradorId)
     .order("data_referencia", { ascending: false, nullsFirst: true })
     .limit(500);
   if (error) falha("Histórico", error.message);
-  return (data ?? []) as LinhaHistorico[];
+  const linhas = (data ?? []) as Omit<LinhaHistorico, "eficacia_prazo" | "evidencias">[];
+  if (linhas.length === 0) return [];
+  const ids = [...new Set(linhas.map((l) => l.treinamento_id))];
+  const [prazos, evidencias] = await Promise.all([
+    supabase.from("peopleflow_dev_treinamentos").select("id, eficacia_prazo").in("id", ids),
+    supabase.from("peopleflow_dev_evidencias").select("id, treinamento_id, participante_id, tipo, file_name, enviado_em").in("treinamento_id", ids).is("substituida_em", null).order("id"),
+  ]);
+  if (prazos.error) falha("Prazos de eficácia", prazos.error.message);
+  if (evidencias.error) falha("Evidências", evidencias.error.message);
+  const prazoDe = new Map((prazos.data ?? []).map((t) => [Number(t.id), (t.eficacia_prazo as string | null) ?? null]));
+  const anexos = (evidencias.data ?? []) as EvidenciaDoHistorico[];
+  return linhas.map((l) => ({ ...l, eficacia_prazo: prazoDe.get(l.treinamento_id) ?? null, evidencias: anexos.filter((e) => e.treinamento_id === l.treinamento_id) }));
 }
 
 // ── Treinamentos (Fase 5) ───────────────────────────────────────────────

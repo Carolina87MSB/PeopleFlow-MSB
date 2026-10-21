@@ -1986,6 +1986,8 @@ async function historicoDoParticipante(req: VercelRequest) {
         data: (t.data_realizacao ?? t.data_inicio) as string | null,
         carga_min: (t.carga_realizada_min ?? t.carga_horaria_min) as number | null,
         situacao,
+        // só a presença da PRÓPRIA pessoa (sem método, sem eficácia nem observações)
+        presenca: (presenca ?? "pendente") as string,
       };
     })
     .sort((a, b) => String(b.data ?? "").localeCompare(String(a.data ?? "")));

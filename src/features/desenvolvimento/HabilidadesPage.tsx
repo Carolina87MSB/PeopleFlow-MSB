@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { Award, ClipboardCheck, ListPlus, Plus, UserRound } from "lucide-react";
+import { ClipboardCheck, ListPlus, Plus, UserRound } from "lucide-react";
 import { Header } from "../../components/layout/Header";
-import { Button, Card, FilterChips, tableStyles } from "../../components/ui";
+import { Button, Card, FilterChips } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import {
   conformidadeDoColaborador,
@@ -17,7 +17,8 @@ import {
 import { useDesenvolvimento } from "./contexto";
 import { Abas, Carregando, Erro, EstadoVazio, Paginacao, Selo, type AbaDef } from "./componentes";
 import { useConsulta, usePaginado } from "./hooks";
-import { formatarCarga, formatarData, SITUACAO, SITUACAO_PARTICIPACAO } from "./rotulos";
+import { formatarData, SITUACAO } from "./rotulos";
+import { HistoricoTreinamentos } from "./HistoricoTreinamentos";
 import { RequisitosCargoAba } from "./RequisitosCargoAba";
 import { CatalogoAba } from "./CatalogoAba";
 import { TreinamentoDrawer } from "./TreinamentoForm";
@@ -350,46 +351,8 @@ function PorColaboradorAba() {
                 <Erro mensagem={historico.erro} />
               ) : historico.carregando || !historico.dados ? (
                 <Carregando />
-              ) : historico.dados.length === 0 ? (
-                <EstadoVazio icone={<Award size={24} strokeWidth={1.6} />} titulo="Nenhum treinamento registrado." />
               ) : (
-                <div className={tableStyles.wrap}>
-                  <table className={tableStyles.table}>
-                    <thead>
-                      <tr>
-                        <th>Data</th>
-                        <th>Treinamento</th>
-                        <th>Carga</th>
-                        <th>Situação</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {historico.dados.map((h) => (
-                        <tr key={h.participante_id}>
-                          <td className={styles.mono}>{formatarData(h.data_referencia)}</td>
-                          <td>
-                            {h.titulo}
-                            {h.lista_mestra_codigo && (
-                              <span className={styles.secundario}>
-                                {" "}
-                                · {h.lista_mestra_codigo}
-                                {h.lista_mestra_revisao ? ` rev. ${h.lista_mestra_revisao}` : ""}
-                              </span>
-                            )}
-                          </td>
-                          <td className={styles.mono}>{formatarCarga(h.carga_horaria_min)}</td>
-                          <td>
-                            <Selo tom={SITUACAO_PARTICIPACAO[h.situacao].tom}>
-                              {SITUACAO_PARTICIPACAO[h.situacao].rotulo}
-                              {h.situacao === "realizado_reposicao" && h.reposicao_numero ? ` ${h.reposicao_numero}` : ""}
-                            </Selo>
-                            {h.reposto_em_treinamento_id && <div className={styles.secundario}>Realizado depois em reposição</div>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <HistoricoTreinamentos linhas={historico.dados} />
               )}
             </div>
           </Card>
