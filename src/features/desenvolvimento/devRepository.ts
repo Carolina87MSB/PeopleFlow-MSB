@@ -57,6 +57,10 @@ export interface LinhaMeuHistorico {
   /** Último dia para responder (7 dias corridos após a presença). */
   avaliacao_prazo: string | null;
   avaliacao_em: string | null;
+  /** Treinamento de teste/homologação: só aparece enquanto há confirmação por gravação em aberto (não entra em indicadores). */
+  teste: boolean;
+  /** Participação por gravação: link só para quem está na turma; confirmar só com o treinamento em andamento e a pessoa ainda sem presença. */
+  gravacao: { link: string; pode_confirmar: boolean } | null;
 }
 
 /** Histórico do PRÓPRIO colaborador (servidor identifica pela conta; não depende de perfil nem de sessão do módulo). */
@@ -104,6 +108,29 @@ export interface DetalheReacao extends IndicadorReacao {
 }
 export const reacaoResumo = () => gravar<ResumoReacao>("reacao_resumo", {});
 export const reacaoDetalhe = (treinamentoId: number) => gravar<DetalheReacao>("reacao_detalhe", { treinamento_id: treinamentoId });
+
+/** O PRÓPRIO colaborador confirma a participação assistindo à gravação (declaração); o servidor identifica a pessoa pela conta e aceita uma vez só. */
+export async function confirmarPorGravacao(codigo: string): Promise<{ confirmada_em: string }> {
+  const res = await fetch("/api/desenvolvimento?acao=gravacao_confirmar", { method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) }, body: JSON.stringify({ codigo, declaro: true }) });
+  const body = (await res.json().catch(() => ({}))) as { error?: string; dados?: { confirmada_em: string } };
+  if (!res.ok || !body.dados) throw new Error(body.error ?? `Não foi possível confirmar a participação (${res.status}).`);
+  return body.dados;
+}
+
+export interface ConfigGravacao {
+  permite_gravacao: boolean;
+  gravacao_url: string | null;
+}
+
+/** Configuração de gravação do treinamento; null quando o recurso ainda não foi ativado no banco (colunas inexistentes). */
+export async function obterGravacao(treinamentoId: number): Promise<ConfigGravacao | null> {
+  const { data, error } = await supabase.from("peopleflow_dev_treinamentos").select("permite_gravacao, gravacao_url").eq("id", treinamentoId).maybeSingle();
+  if (error) {
+    if (error.code === "42703" || error.code === "PGRST204" || /permite_gravacao|gravacao_url/i.test(error.message)) return null;
+    falha("Gravação", error.message);
+  }
+  return data ? { permite_gravacao: Boolean(data.permite_gravacao), gravacao_url: (data.gravacao_url as string | null) ?? null } : null;
+}
 
 function faixa(pagina: number): [number, number] {
   const de = pagina * TAMANHO_PAGINA;
@@ -402,6 +429,9 @@ export interface Treinamento {
   reposicao_numero: number | null;
   /** Homologação/teste: fluxo real, sem efeito oficial (histórico, conformidade, necessidades). */
   homologacao: boolean;
+  /** Participação por gravação (preenchido à parte por obterGravacao; ausente se o recurso não foi ativado). */
+  permite_gravacao?: boolean;
+  gravacao_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -476,7 +506,7 @@ export interface Participante {
   colaborador_id: number;
   origem_inclusao: "manual" | "criterio" | "lnt" | "reposicao";
   presenca_status: "pendente" | "presente" | "ausente";
-  presenca_metodo: "manual" | "qr" | "login" | "importacao" | null;
+  presenca_metodo: "manual" | "qr" | "gravacao" | "login" | "importacao" | null;
   presenca_em: string | null;
   presenca_motivo: string | null;
   eficacia_resultado: ResultadoEficacia | null;
@@ -833,6 +863,7 @@ export type AcaoGravacao =
   | "evidencia_url"
   | "evidencia_substituir"
   | "eficacia_registrar"
+  | "gravacao_definir"
   | "reacao_resumo"
   | "reacao_detalhe"
   | "participantes_opcoes"

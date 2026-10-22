@@ -36,6 +36,8 @@ export interface DadosListaPresenca {
   codigoVerificacao: string;
   /** Treinamento de homologação/teste: faixa de aviso no topo e no rodapé. */
   homologacao?: boolean;
+  /** Presente quando alguém confirmou por gravação: nota sobre o alcance da declaração (não é comprovação técnica de visualização). */
+  notaGravacao?: string | null;
 }
 
 const AVISO_TESTE = "TREINAMENTO DE HOMOLOGAÇÃO/TESTE — SEM VALIDADE COMO REGISTRO OFICIAL DE CAPACITAÇÃO";
@@ -191,6 +193,15 @@ export async function gerarPdfListaPresenca(d: DadosListaPresenca): Promise<Uint
     y -= 14;
   });
   y -= 8;
+
+  // ── Participação por gravação (alcance da declaração)
+  if (d.notaGravacao) {
+    secao("Participação por gravação");
+    const linhas = quebrar(d.notaGravacao, LARGURA - 8, 8, normal);
+    garantir(linhas.length * 10.5 + 4);
+    linhas.forEach((l, i) => texto(l, M + 4, y - i * 10.5, 8));
+    y -= linhas.length * 10.5 + 4;
+  }
 
   // ── Registros manuais (quem registrou e por quê)
   const manuais = d.participantes.filter((p) => p.forma === "Registro manual" || (p.situacao === "Ausente" && (p.registradoPor || p.justificativa)));

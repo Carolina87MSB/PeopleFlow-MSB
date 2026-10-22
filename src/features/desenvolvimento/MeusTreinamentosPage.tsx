@@ -3,10 +3,11 @@ import { GraduationCap } from "lucide-react";
 import { Header } from "../../components/layout/Header";
 import { Card, tableStyles } from "../../components/ui";
 import { meuHistorico, responderReacao, type LinhaMeuHistorico } from "./devRepository";
-import { Carregando, Erro, EstadoVazio, Selo } from "./componentes";
+import { Carregando, Erro, EstadoVazio, Selo, TagTeste } from "./componentes";
 import { useConsulta } from "./hooks";
 import { formatarCarga, formatarData } from "./rotulos";
 import { FormularioReacao } from "./FormularioReacao";
+import { BlocoGravacaoColaborador } from "./ParticipacaoGravacao";
 import styles from "./Desenvolvimento.module.css";
 import mobile from "./MeusTreinamentos.module.css";
 
@@ -108,7 +109,9 @@ export default function MeusTreinamentosPage() {
                     <tr key={`${t.codigo}-${i}`}>
                       <td>
                         {t.titulo}
+                        {t.teste && <TagTeste />}
                         {t.codigo && <div className={styles.secundario}>{t.codigo}</div>}
+                        {t.gravacao && t.codigo && <BlocoGravacaoColaborador codigo={t.codigo} link={t.gravacao.link} podeConfirmar={t.gravacao.pode_confirmar} onConfirmada={consulta.recarregar} />}
                       </td>
                       <td className={styles.secundario}>{t.documento ?? "—"}</td>
                       <td className={styles.mono}>{formatarData(t.data)}</td>
@@ -131,7 +134,10 @@ export default function MeusTreinamentosPage() {
               {itens.map((t, i) => (
                 <li key={`${t.codigo}-${i}`} className={mobile.cartao}>
                   <div className={mobile.topo}>
-                    <h4 className={mobile.titulo}>{t.titulo}</h4>
+                    <h4 className={mobile.titulo}>
+                      {t.titulo}
+                      {t.teste && <TagTeste />}
+                    </h4>
                     <Selo tom={SITUACAO[t.situacao].tom}>{SITUACAO[t.situacao].rotulo}</Selo>
                   </div>
                   {t.codigo && <span className={mobile.codigo}>{t.codigo}</span>}
@@ -161,6 +167,7 @@ export default function MeusTreinamentosPage() {
                       </div>
                     )}
                   </dl>
+                  {t.gravacao && t.codigo && <BlocoGravacaoColaborador codigo={t.codigo} link={t.gravacao.link} podeConfirmar={t.gravacao.pode_confirmar} onConfirmada={consulta.recarregar} />}
                 </li>
               ))}
             </ul>

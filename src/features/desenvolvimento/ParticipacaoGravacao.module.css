@@ -1,0 +1,81 @@
+.linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.linha > input {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.aviso {
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-muted, #7d8c93);
+}
+
+.bloco {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  max-width: 420px;
+}
+
+.assistir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--color-brand, #17a398);
+  border-radius: 10px;
+  color: var(--color-brand, #17a398);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.declaracao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-navy, #33485a);
+}
+
+.declaracao input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.confirmar {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-brand, #17a398);
+  color: #fff;
+  cursor: pointer;
+}
+
+.confirmar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.erro {
+  margin: 0;
+  font-size: 13px;
+  color: #a23b3b;
+}
