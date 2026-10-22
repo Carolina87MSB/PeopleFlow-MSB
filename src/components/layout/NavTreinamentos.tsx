@@ -13,9 +13,9 @@ function Item({ to, label }: { to: string; label: string }) {
   );
 }
 
-/** Treinamentos para quem NÃO tem o menu de Desenvolvimento (RH/Gestor): "Meus treinamentos" (próprio histórico) e, só para quem foi
- * designado responsável/instrutor ou indicado pela gestão, "Treinamentos que conduzo". Quem decide é o servidor: a sessão do módulo só abre
- * para o designado (os demais recebem 403 e o item não aparece). A consulta só roda para este perfil. */
+/** "Treinamentos que conduzo": só para quem NÃO tem a área de gestão (RH/Gestor) mas foi designado responsável/instrutor ou indicado pela
+ * gestão. Quem decide é o servidor: a sessão do módulo só abre para o designado (os demais recebem 403 e o item não aparece). A consulta só roda
+ * para este perfil. ("Meus treinamentos" é item fixo do menu de todos, em Sidebar.tsx.) */
 export function NavTreinamentos() {
   const [conduz, setConduz] = useState(false);
   useEffect(() => {
@@ -27,10 +27,5 @@ export function NavTreinamentos() {
       vivo = false;
     };
   }, []);
-  return (
-    <>
-      {conduz && <Item to="/desenvolvimento/treinamentos/agenda" label="Treinamentos que conduzo" />}
-      <Item to="/meus-treinamentos" label="Meus treinamentos" />
-    </>
-  );
+  return conduz ? <Item to="/desenvolvimento/treinamentos/agenda" label="Treinamentos que conduzo" /> : null;
 }

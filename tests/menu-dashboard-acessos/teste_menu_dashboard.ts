@@ -33,10 +33,26 @@ const esperado = [
   "# Visão geral", "Dashboard",
   "# Gestão de pessoas", "Colaboradores", "Departamentos", "Cargos", "Desligados",
   "# Movimentações de pessoal", "Nova Movimentação", "Movimentações aprovadas", "Histórico", "Workflow de aprovação",
-  "# Desenvolvimento", "Avaliações de experiência", "Gestão de Desempenho", "Habilidades e Requisitos", "Necessidades de Desenvolvimento", "Treinamentos",
+  "# Desenvolvimento", "Avaliações de experiência", "Gestão de Desempenho", "Habilidades e Requisitos", "Necessidades de Desenvolvimento", "Treinamentos", "Meus treinamentos",
   "# Administração do sistema", "Acessos",
 ];
 check("menu: seções e itens EXATAMENTE na estrutura e ordem pedidas", JSON.stringify(sequencia) === JSON.stringify(esperado), sequencia.join(" | "));
+// "Meus treinamentos": item de TODO usuário autenticado (RH, Gestor, Diretoria, Colaborador), nos dois menus; "Treinamentos" segue sendo a área de gestão
+{
+  const ini = side.indexOf("{navDesenvolvimento(perfil) && (");
+  const fim = side.indexOf('{/* "Meus treinamentos"', ini);
+  const dentroDoPortao = side.slice(ini, fim);
+  const foraDoPortao = side.slice(fim);
+  check("menu: 'Meus treinamentos' aparece no menu completo FORA do portão da área de gestão (vale para RH, Gestor, Diretoria e Colaborador)", fim > ini && /to="\/meus-treinamentos".*label="Meus treinamentos"/.test(foraDoPortao) && !/label="Meus treinamentos"/.test(dentroDoPortao));
+  const menuMinimo = side.slice(side.indexOf("Minhas Avaliações"), side.indexOf("</nav>", side.indexOf("Minhas Avaliações")));
+  check("menu: 'Meus treinamentos' também está no menu mínimo do Colaborador", /to="\/meus-treinamentos".*label="Meus treinamentos"/.test(menuMinimo));
+  check("menu: 'Treinamentos' (gestão) segue só para quem tem navDesenvolvimento (RH/Gestor) e abre /desenvolvimento/treinamentos", /navDesenvolvimento\(perfil\) && \([\s\S]*?to="\/desenvolvimento\/treinamentos".*label="Treinamentos"/.test(side));
+  check("menu: 'Meus treinamentos' abre a página JÁ existente /meus-treinamentos (rota única, sem outra tela) e o AppShell a libera ao Colaborador", (src("src/App.tsx").match(/path="\/meus-treinamentos"/g) ?? []).length === 1 && /startsWith\("\/meus-treinamentos"\)/.test(src("src/components/layout/AppShell.tsx")));
+  const nav = src("src/components/layout/NavTreinamentos.tsx");
+  check("menu: o componente de 'Treinamentos que conduzo' não duplica 'Meus treinamentos'", !/Meus treinamentos/.test(nav.replace(/\/\*[\s\S]*?\*\//g, "")) && /Treinamentos que conduzo/.test(nav));
+  const pagina = src("src/features/desenvolvimento/MeusTreinamentosPage.tsx");
+  check("'Meus treinamentos': a consulta não recebe perfil nem identificador (a pessoa vem do login, no servidor), inclusive para RH e Gestor", /meuHistorico\(\)/.test(pagina) && !/perfil|colaboradorId|usePortalData|useDesenvolvimento/.test(pagina));
+}
 check("menu: sem seções recolhíveis (sem estado de abrir/fechar, <details> ou aria-expanded)", !/useState|<details|aria-expanded|collapsible|recolh/i.test(side));
 check("menu: 'Tipos de movimentação' saiu do menu; /tipos redireciona para a nova página (nada fica sem rota)", !/Tipos de movimentação/.test(side) && /path="\/tipos" element=\{<Navigate to="\/movimentacoes\/nova" replace \/>\}/.test(src("src/App.tsx")));
 const rotas = src("src/App.tsx");

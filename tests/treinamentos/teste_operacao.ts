@@ -1012,7 +1012,7 @@ await t("Telas: formulário, página do treinamento, Meus treinamentos e lista u
   const rot = lerTela("src/features/desenvolvimento/rotulos.ts");
   if (!/gravacao: "Gravação"/.test(rot)) throw new Error("rótulo do método");
   if (grav.DECLARACAO_GRAVACAO !== "Declaro que assisti ao treinamento" || !/não comprova tecnicamente a visualização integral/.test(grav.AVISO_DECLARACAO_GRAVACAO) || !/não representa comprovação técnica/.test(grav.NOTA_LISTA_GRAVACAO)) throw new Error("textos da declaração");
-  if (/presenca_metodo\s*:\s*["']gravacao["']/.test(fs.readFileSync(`${PF}/api/_lib/desenvolvimentoAcoes.ts`, "utf8").replace(/async function gravacaoConfirmar[\s\S]*?\n}\n/, ""))) throw new Error("só a confirmação do próprio colaborador grava o método 'gravacao'");
+  if (/presenca_metodo\s*:\s*["']gravacao["']/.test(fs.readFileSync(`${PF}/api/_lib/desenvolvimentoAcoes.ts`, "utf8").replace(/async function gravacaoConfirmar[\s\S]*?\r?\n}\r?\n/, ""))) throw new Error("só a confirmação do próprio colaborador grava o método 'gravacao'");
 });
 
 await t("Reversão com participação por gravação existente é recusada e preserva tudo", async () => {
@@ -1021,6 +1021,70 @@ await t("Reversão com participação por gravação existente é recusada e pre
   let recusou = false;
   try { await db.exec(SQL("desenvolvimento_participacao_gravacao_rollback.sql")); } catch (e) { recusou = /Reversão bloqueada/.test((e as Error).message); await db.exec("rollback"); }
   if (!recusou || (await q(`select count(*)::int n from public.peopleflow_dev_participantes where presenca_metodo='gravacao'`))[0].n !== n) throw new Error("a reversão deveria ser recusada sem alterar nada");
+});
+
+console.log("Meus treinamentos para RH, Gestor e Diretoria: a pessoa vem do login, nunca do perfil");
+await t("RH e Gestor consultam 'Meus treinamentos' e veem SÓ as próprias participações (o corpo não escolhe a pessoa), como qualquer colaborador", async () => {
+  for (const [tok, colab] of [["rh", 1], ["ge", 2], ["gil", 6], ["p3", 3]] as const) {
+    const esperado = (await q(`select distinct t.codigo from public.peopleflow_dev_participantes p join public.peopleflow_dev_treinamentos t on t.id = p.treinamento_id where p.colaborador_id = ${colab} and p.removido_em is null and (not t.homologacao or t.status = 'em_andamento') order by 1`)).map((r) => r.codigo as string);
+    const meu = await espera(tok, "meu_historico", {}, 200);
+    const codigos = meu.treinamentos.map((x: any) => x.codigo as string).sort();
+    for (const c of codigos) if (!esperado.includes(c)) throw new Error(`${tok}: treinamento que não é dele(a): ${c}`);
+    // tenta "ver outro": colaborador_id/user_id/perfil no corpo são ignorados
+    const espiao = await espera(tok, "meu_historico", { colaborador_id: 3, user_id: U.p3, perfil: "RH", email: "caio.operador@msbbrasil.com" }, 200);
+    if (jsonDe(espiao.treinamentos.map((x: any) => x.codigo).sort()) !== jsonDe(codigos)) throw new Error(`${tok}: o corpo escolheu outra pessoa`);
+    if (espiao.primeiro_nome !== meu.primeiro_nome) throw new Error(`${tok}: nome diferente com corpo falso`);
+  }
+  // um perfil administrativo não enxerga as participações de outra pessoa pela mesma tela
+  const caio = (await espera("p3", "meu_historico", {}, 200)).treinamentos.map((x: any) => x.codigo).sort();
+  const rh = (await espera("rh", "meu_historico", {}, 200)).treinamentos.map((x: any) => x.codigo).sort();
+  if (jsonDe(caio) === jsonDe(rh)) throw new Error("Caio e Ana não deveriam ter exatamente as mesmas participações");
+});
+
+await t("Privilégio administrativo não confirma em nome de outra pessoa: QR, gravação e avaliação usam só a conta de quem está logado (RH, Gestor ou colaborador); cada um confirma a PRÓPRIA", async () => {
+  const id = (await espera("rh", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", titulo: "Identidade pelo login", data_inicio: hojeSP, responsavel_colaborador_id: 7, permite_gravacao: true }, 200)).id;
+  await espera("rh", "participantes_adicionar", { treinamento_id: id, colaborador_ids: [3, 1, 2] }, 200); // Caio, Ana (RH) e Bia (Gestora)
+  await espera("resp", "gravacao_definir", { treinamento_id: id, url: LINK }, 200);
+  await espera("resp", "treinamento_iniciar", { id }, 200);
+  const cod = await codigoDe(id);
+  const tk = (await espera("resp", "qr_gerar", { treinamento_id: id }, 200)).token;
+  // RH/Gestor com o corpo falso: o servidor confirma a conta logada, nunca o Caio
+  const f = await espera("rh", "presenca_confirmar", { token: tk, colaborador_id: 3, participante_id: (await part(id, 3)).id }, 200);
+  if (f.situacao !== "confirmada") throw new Error("Ana está na turma e confirma a própria: " + jsonDe(f));
+  let m = await metodosDe(id);
+  if (m[1] !== "presente/qr" || m[3] !== "pendente/-" || m[2] !== "pendente/-") throw new Error("QR só da própria pessoa: " + jsonDe(m));
+  await espera("ge", "gravacao_confirmar", { codigo: cod, declaro: true, colaborador_id: 3 }, 200); // Bia confirma a dela (não a do Caio)
+  m = await metodosDe(id);
+  if (m[2] !== "presente/gravacao" || m[3] !== "pendente/-") throw new Error("gravação só da própria pessoa: " + jsonDe(m));
+  // quem não está na turma não confirma nada, mesmo sendo RH ou Gestor
+  const fora = (await espera("rh", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", titulo: "Turma sem RH", data_inicio: hojeSP, responsavel_colaborador_id: 7, permite_gravacao: true }, 200)).id;
+  await espera("rh", "participantes_adicionar", { treinamento_id: fora, colaborador_ids: [3] }, 200);
+  await espera("resp", "gravacao_definir", { treinamento_id: fora, url: LINK }, 200);
+  await espera("resp", "treinamento_iniciar", { id: fora }, 200);
+  const tkFora = (await espera("resp", "qr_gerar", { treinamento_id: fora }, 200)).token;
+  for (const tok of ["rh", "ge", "gil"]) {
+    await espera(tok, "gravacao_confirmar", { codigo: await codigoDe(fora), declaro: true, colaborador_id: 3 }, 403);
+    const q1 = await espera(tok, "presenca_confirmar", { token: tkFora, colaborador_id: 3 }, 200);
+    if (q1.situacao !== "nao_inscrito") throw new Error(`${tok} não está na turma: ` + jsonDe(q1));
+    await espera(tok, "reacao_responder", { codigo: await codigoDe(fora), respostas: BOAS }, 403);
+  }
+  if (jsonDe(await metodosDe(fora)) !== jsonDe({ 3: "pendente/-" })) throw new Error("ninguém confirmou pelo Caio: " + jsonDe(await metodosDe(fora)));
+  // o Caio confirma a dele normalmente
+  await espera("p3", "gravacao_confirmar", { codigo: await codigoDe(fora), declaro: true }, 200);
+  if ((await metodosDe(fora))[3] !== "presente/gravacao") throw new Error("o próprio colaborador confirma");
+  // a avaliação de reação também é da própria pessoa, qualquer que seja o perfil
+  const cadaUm = (await espera("rh", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.codigo === cod);
+  if (cadaUm.presenca !== "presente") throw new Error("Ana vê a própria presença: " + jsonDe(cadaUm));
+});
+
+await t("A tela 'Meus treinamentos' e o menu valem para qualquer perfil: nada na página depende de perfil; a ação de registro manual do RH segue separada (método 'manual', com justificativa e auditoria)", async () => {
+  const id = await realizado({});
+  const p = (await part(id, 1)).id;
+  await espera("rh", "presenca_manual", { treinamento_id: id, participante_ids: [p], presenca: "ausente", motivo: "Ajuste administrativo" }, 200);
+  const a = (await q(`select presenca_metodo, presenca_motivo from public.peopleflow_dev_participantes where id=${p}`))[0];
+  if (a.presenca_metodo !== "manual" || a.presenca_motivo !== "Ajuste administrativo") throw new Error("registro manual do RH preservado: " + jsonDe(a));
+  const aud = await q(`select count(*)::int n from public.peopleflow_dev_auditoria where acao='presenca_manual' and entidade_id='${p}'`);
+  if (aud[0].n < 1) throw new Error("registro manual auditado");
 });
 
 console.log("Rastreabilidade");
