@@ -39,7 +39,7 @@ insert into public.colaboradores (id, nome, cargo, departamento, gestor) values
  (7,'${NOMES[7]}','Técnico','Qualidade','Outro'),(8,'${NOMES[8]}','Auxiliar','Produção','${NOMES[2]}'),(9,'${NOMES[9]}','Operador','Produção','${NOMES[2]}');
 insert into public.peopleflow_descricoes_cargo (cargo_nome) values ('Operador'),('Supervisora'),('Supervisor'),('Conferente'),('Técnico'),('Analista de RH'),('Auxiliar');
 `);
-for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql"]) await db.exec(SQL(f));
+for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql"]) await db.exec(SQL(f));
 await db.exec(`
 insert into public.peopleflow_dev_lista_mestra (codigo,titulo,revisao_atual,situacao) values ('P-PR-001','Montagem da sonda','03','vigente'),('I-PR-010','Inspeção final','01','vigente');
 `);
@@ -801,6 +801,200 @@ await t("Telas: formulário de 5 perguntas na escala 1–5 (envio só completo) 
   if (!/p\.ehRH && !t\.homologacao && \(t\.status === "em_andamento" \|\| t\.status === "concluido"\) \? <ReacaoDoTreinamento/.test(pag)) throw new Error("seção do treinamento");
   const css = lerTela("src/features/desenvolvimento/FormularioReacao.module.css");
   if (!/min-height:\s*44px/.test(css) || !/repeat\(5, 1fr\)/.test(css)) throw new Error("alvos de toque / escala em 5 colunas");
+});
+
+console.log("Participação por gravação");
+const grav = await import(pathToFileURL(`${PF}/src/domain/gravacao.ts`).href);
+const LINK = "https://msbbrasil-my.sharepoint.com/:v:/g/personal/rh/EXEMPLO-gravacao";
+const metodosDe = async (tid: number) => Object.fromEntries((await q(`select colaborador_id, presenca_status, presenca_metodo from public.peopleflow_dev_participantes where treinamento_id=${tid} order by colaborador_id`)).map((r) => [Number(r.colaborador_id), `${r.presenca_status}/${r.presenca_metodo ?? "-"}`]));
+let g1 = 0, g2 = 0, gHom = 0;
+
+await t("Migration: aditiva (treinamentos existentes seguem sem gravação), idempotente, aceita o método 'gravacao' e recusa métodos desconhecidos", async () => {
+  const sql = SQL("desenvolvimento_participacao_gravacao.sql");
+  if (/update\s+public\.peopleflow_dev_|delete\s+from|drop\s+table/i.test(sql.replace(/--.*$/gm, ""))) throw new Error("a migration não pode alterar nem apagar dados existentes");
+  const antes = (await q("select count(*)::int n, count(*) filter (where permite_gravacao)::int c from public.peopleflow_dev_treinamentos"))[0];
+  await db.exec(sql);
+  const depois = (await q("select count(*)::int n, count(*) filter (where permite_gravacao)::int c from public.peopleflow_dev_treinamentos"))[0];
+  if (antes.n !== depois.n || depois.c !== 0) throw new Error("treinamentos existentes não podem ser afetados: " + jsonDe({ antes, depois }));
+  const def = (await q("select column_default d, is_nullable n from information_schema.columns where table_name='peopleflow_dev_treinamentos' and column_name='permite_gravacao'"))[0];
+  if (!/false/.test(def.d) || def.n !== "NO") throw new Error("padrão seguro (false): " + jsonDe(def));
+  const tenta = async (s: string) => { try { await db.exec(s); return false; } catch { return true; } };
+  if (!(await tenta(`update public.peopleflow_dev_participantes set presenca_metodo = 'telepatia' where id = ${(await part(tPop, 3)).id}`))) throw new Error("método desconhecido aceito");
+  if (!(await tenta(`update public.peopleflow_dev_treinamentos set gravacao_url = 'http://x.sharepoint.com/a' where id = ${tPop}`))) throw new Error("link http aceito pelo banco");
+});
+
+await t("Reversão: ciclo aplicar → reverter → reaplicar num banco limpo", async () => {
+  const d = new PGlite();
+  await d.exec("create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls; create schema auth; create table auth.users (id uuid primary key); create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$; create schema storage; create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]); create table storage.objects (bucket_id text, name text); create table public.colaboradores (id bigint primary key, nome text, cargo text, admissao date, desligado boolean, empresa_afiliada boolean); create table public.peopleflow_descricoes_cargo (cargo_nome text primary key, obsoleto boolean default false); create table public.peopleflow_pdi (id bigint primary key);");
+  for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_participacao_gravacao_rollback.sql", "desenvolvimento_participacao_gravacao_rollback.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_participacao_gravacao.sql"]) await d.exec(SQL(f));
+  const c = (await d.query("select count(*)::int n from pg_constraint where conname = 'peopleflow_dev_participantes_presenca_metodo_chk'")).rows[0].n;
+  if (c !== 1) throw new Error("verificação do método após o ciclo");
+});
+
+await t("Link da gravação: só https em *.sharepoint.com, sem credenciais, sem domínio parecido, sem tamanho absurdo", async () => {
+  const v = grav.validarLinkGravacao;
+  for (const ok of [LINK, "https://msbbrasil.sharepoint.com/sites/rh/Shared%20Documents/treino.mp4", "  https://SHAREPOINT.com/x  "]) if (!v(ok)) throw new Error("deveria aceitar: " + ok);
+  for (const ruim of ["http://msbbrasil.sharepoint.com/a", "https://exemplo.com/a", "https://sharepoint.com.alheio.com/a", "https://alheio.com/sharepoint.com", "https://user:senha@msbbrasil.sharepoint.com/a", "https://msbbrasil.sharepoint.com:8443/a", "javascript:alert(1)", "ftp://x.sharepoint.com/a", "", "   ", null, undefined, 42, "https://x.sharepoint.com/" + "a".repeat(1000)]) if (v(ruim)) throw new Error("deveria recusar: " + String(ruim).slice(0, 60));
+  if (!grav.podeConfirmarPorGravacao({ permite_gravacao: true, gravacao_url: LINK, status: "em_andamento" }, "ausente") || grav.podeConfirmarPorGravacao({ permite_gravacao: true, gravacao_url: LINK, status: "concluido" }, "pendente") || grav.podeConfirmarPorGravacao({ permite_gravacao: true, gravacao_url: null, status: "em_andamento" }, "pendente") || grav.podeConfirmarPorGravacao({ permite_gravacao: false, gravacao_url: LINK, status: "em_andamento" }, "pendente") || grav.podeConfirmarPorGravacao({ permite_gravacao: true, gravacao_url: LINK, status: "em_andamento" }, "presente")) throw new Error("regra de quando se pode confirmar");
+});
+
+await t("Cenário 1 — ao vivo + gravação: o responsável habilita e disponibiliza o link (SharePoint); gestão de outra área e colaborador comum não; link inválido é recusado", async () => {
+  g1 = (await espera("rh", "treinamento_salvar", { tipo: "novo_pop", modalidade: "interno", formato: "online", lista_mestra_codigo: "P-PR-001", data_inicio: hojeSP, responsavel_colaborador_id: 7, permite_gravacao: true }, 200)).id;
+  if ((await q(`select permite_gravacao from public.peopleflow_dev_treinamentos where id=${g1}`))[0].permite_gravacao !== true) throw new Error("não gravou 'Permitir participação por gravação'");
+  await espera("rh", "participantes_adicionar", { treinamento_id: g1, colaborador_ids: [3, 5, 4, 9] }, 200);
+  for (const ruim of ["http://msbbrasil.sharepoint.com/a", "https://exemplo.com/video", "https://sharepoint.com.alheio.com/a"]) await espera("resp", "gravacao_definir", { treinamento_id: g1, url: ruim }, 422);
+  await espera("gil", "gravacao_definir", { treinamento_id: g1, url: LINK }, 403);
+  await espera("hugo", "gravacao_definir", { treinamento_id: g1, url: LINK }, 403);
+  await espera("p3", "gravacao_definir", { treinamento_id: g1, url: LINK }, 401);
+  const r = await espera("resp", "gravacao_definir", { treinamento_id: g1, url: LINK }, 200); // o responsável designado disponibiliza o link
+  if (r.gravacao_url !== grav.validarLinkGravacao(LINK) || r.permite_gravacao !== true) throw new Error(jsonDe(r));
+  const aud = await q(`select detalhe from public.peopleflow_dev_auditoria where acao='gravacao_configurada' and entidade_id='${g1}' order by id`);
+  if (aud.length < 2 || aud[aud.length - 1].detalhe.depois.gravacao_url !== grav.validarLinkGravacao(LINK)) throw new Error("auditoria da configuração: " + jsonDe(aud));
+});
+
+await t("Antes de iniciar não se confirma; iniciado, presentes confirmam por QR, ausente registrado e quem faltou vê o link — sem QR para a gravação", async () => {
+  await espera("p5", "gravacao_confirmar", { codigo: await codigoDe(g1), declaro: true }, 422); // ainda não iniciado
+  await espera("resp", "treinamento_iniciar", { id: g1 }, 200);
+  const tk = (await espera("resp", "qr_gerar", { treinamento_id: g1 }, 200)).token;
+  await espera("p3", "presenca_confirmar", { token: tk }, 200); // Caio presente ao vivo, por QR
+  await espera("resp", "presenca_manual", { treinamento_id: g1, participante_ids: [(await part(g1, 5)).id], presenca: "ausente", motivo: "Não compareceu à sessão ao vivo" }, 200);
+  const eva = (await espera("p5", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.gravacao);
+  if (!eva || eva.gravacao.link !== grav.validarLinkGravacao(LINK) || eva.gravacao.pode_confirmar !== true || eva.presenca !== "ausente") throw new Error("ausente deve ver o link e poder confirmar: " + jsonDe(eva));
+  const caio = (await espera("p3", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.gravacao);
+  if (caio.gravacao.pode_confirmar !== false || caio.presenca !== "presente") throw new Error("quem já está presente vê o link, mas não confirma de novo");
+  const fora = (await espera("p9", "meu_historico", {}, 200)).treinamentos.filter((x: any) => x.gravacao);
+  if (fora.length !== 1) throw new Error("Íris está na turma: vê o link do treinamento dela, só dele"); // sanity: um único com gravação
+});
+
+await t("Confirmação por gravação: exige a declaração, o colaborador autenticado e da turma; registra data, hora, usuário e método 'Gravação'; duplicidade impedida (inclusive simultânea); auditoria", async () => {
+  const cod = await codigoDe(g1);
+  await espera("p5", "gravacao_confirmar", { codigo: cod }, 422); // sem declaração
+  await espera("p5", "gravacao_confirmar", { codigo: cod, declaro: "sim" }, 422); // só true literal
+  await espera("", "gravacao_confirmar", { codigo: cod, declaro: true }, 401);
+  await espera("semcadastro", "gravacao_confirmar", { codigo: cod, declaro: true }, 409);
+  await espera("p5", "gravacao_confirmar", { codigo: "TRN-0000-0000", declaro: true }, 404);
+  await espera("p3", "gravacao_confirmar", { codigo: cod, declaro: true }, 409); // Caio já está presente (QR)
+  const ok = await espera("p5", "gravacao_confirmar", { codigo: cod, declaro: true, colaborador_id: 3, user_id: U.p3, metodo: "qr" }, 200); // o corpo não escolhe a pessoa nem o método
+  if (ok.metodo !== "gravacao" || !ok.confirmada_em) throw new Error(jsonDe(ok));
+  const m = await metodosDe(g1);
+  if (m[5] !== "presente/gravacao" || m[3] !== "presente/qr" || m[4] !== "pendente/-") throw new Error("métodos: " + jsonDe(m));
+  const linha = (await q(`select presenca_em, presenca_por, presenca_motivo from public.peopleflow_dev_participantes where id=${(await part(g1, 5)).id}`))[0];
+  if (linha.presenca_por !== U.p5 || !linha.presenca_em || linha.presenca_motivo !== null) throw new Error("data/hora/usuário: " + jsonDe(linha));
+  const aud = await q(`select colaborador_id, user_id, detalhe from public.peopleflow_dev_auditoria where acao='presenca_gravacao' and entidade_id='${(await part(g1, 5)).id}'`);
+  if (aud.length !== 1 || Number(aud[0].colaborador_id) !== 5 || aud[0].user_id !== U.p5 || aud[0].detalhe.status_anterior !== "ausente" || aud[0].detalhe.declaracao !== grav.DECLARACAO_GRAVACAO || aud[0].detalhe.metodo !== "gravacao") throw new Error("auditoria: " + jsonDe(aud));
+  await espera("p5", "gravacao_confirmar", { codigo: cod, declaro: true }, 409); // duplicidade
+  const [a, b] = await Promise.all([chamar("p4", "gravacao_confirmar", { codigo: cod, declaro: true }), chamar("p4", "gravacao_confirmar", { codigo: cod, declaro: true })]);
+  if ([a.c, b.c].sort().join() !== "200,409") throw new Error("confirmações simultâneas: " + [a.c, b.c]);
+  if ((await q(`select count(*)::int n from public.peopleflow_dev_auditoria where acao='presenca_gravacao' and entidade_id='${(await part(g1, 4)).id}'`))[0].n !== 1) throw new Error("auditoria duplicada");
+  if ((await q(`select count(*)::int n from public.peopleflow_dev_qr_tokens where treinamento_id=${g1}`))[0].n !== 1) throw new Error("(o QR do ao vivo existe; a gravação não usa QR)");
+});
+
+await t("A Avaliação de Reação chega logo após a confirmação por gravação, com prazo de 7 dias, e é respondida normalmente", async () => {
+  const eva = (await espera("p5", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.gravacao);
+  if (eva.avaliacao !== "pendente" || !eva.avaliacao_prazo) throw new Error("avaliação após a gravação: " + jsonDe(eva));
+  if (eva.gravacao.pode_confirmar !== false) throw new Error("já confirmada");
+  await espera("p5", "reacao_responder", { codigo: await codigoDe(g1), respostas: [5, 4, 4, 5, 5] }, 200);
+});
+
+await t("O treinamento fica ABERTO até o RH concluir (sem encerramento automático); com confirmação pendente o RH resolve (ausente) e conclui; depois disso a confirmação se encerra", async () => {
+  if ((await q(`select status from public.peopleflow_dev_treinamentos where id=${g1}`))[0].status !== "em_andamento") throw new Error("não pode encerrar sozinho");
+  await espera("ge", "treinamento_concluir", { id: g1 }, 403); // só o RH
+  await espera("rh", "treinamento_concluir", { id: g1 }, 422); // Íris ainda não confirmou: o RH decide o momento
+  await espera("rh", "presenca_manual", { treinamento_id: g1, participante_ids: [(await part(g1, 9)).id], presenca: "ausente", motivo: "Não assistiu dentro do prazo" }, 200);
+  await espera("rh", "treinamento_concluir", { id: g1 }, 200);
+  await espera("p9", "gravacao_confirmar", { codigo: await codigoDe(g1), declaro: true }, 422); // concluído: encerrada
+  const m = await metodosDe(g1);
+  if (m[9] !== "ausente/manual") throw new Error("ausente registrado manualmente (funcionalidade existente): " + jsonDe(m));
+});
+
+await t("Lista de presença, histórico e RH: método 'Gravação' identificado (QR × Gravação × Manual) e nota sobre o alcance da declaração; indicadores e histórico existentes incluem a participação", async () => {
+  const ls = await q(`select storage_path from public.peopleflow_dev_evidencias where treinamento_id=${g1} and tipo='lista_presenca' and substituida_em is null`);
+  if (ls.length !== 1) throw new Error("lista vigente");
+  const txt = textoDoPdf(fake.storage.conteudos.get(`desenvolvimento-evidencias/${ls[0].storage_path}`)!);
+  const corrido = txt.replace(/\s+/g, " "); // a nota quebra em várias linhas no PDF
+  for (const e of ["Gravação", "QR Code", "Participação por gravação", "declaração do próprio colaborador de que assistiu ao vídeo", "não representa comprovação técnica de visualização integral"]) if (!corrido.includes(e)) throw new Error(`PDF sem "${e}"`);
+  const rh = await como(U.rh, `select colaborador_id, presenca_metodo, situacao from public.peopleflow_dev_v_participacoes where treinamento_id=${g1} order by colaborador_id`);
+  const por = Object.fromEntries(rh.map((r) => [Number(r.colaborador_id), `${r.presenca_metodo}/${r.situacao}`]));
+  if (por[3] !== "qr/realizado" || por[5] !== "gravacao/realizado" || por[4] !== "gravacao/realizado" || por[9] !== "manual/ausente") throw new Error("histórico individual: " + jsonDe(por));
+  const meu = (await espera("p5", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.gravacao);
+  if (meu.situacao !== "realizado" || meu.presenca !== "presente") throw new Error(jsonDe(meu));
+  const det = await espera("rh", "reacao_detalhe", { treinamento_id: g1 }, 200);
+  if (det.elegiveis !== 3 || det.respondidos !== 1) throw new Error("indicadores da avaliação incluem os por gravação: " + jsonDe([det.elegiveis, det.respondidos]));
+});
+
+await t("Cenário 2 — só gravado: cadastra com 'Permitir participação por gravação', link do SharePoint, participantes confirmam SEM QR; o RH não cria presença 'por gravação'; conclusão pelo RH", async () => {
+  g2 = (await espera("ge", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", formato: "online", titulo: "Treinamento gravado", data_inicio: hojeSP, responsavel_colaborador_id: 7, permite_gravacao: true }, 200)).id;
+  await espera("ge", "participantes_adicionar", { treinamento_id: g2, colaborador_ids: [3, 5, 8] }, 200);
+  await espera("ge", "gravacao_definir", { treinamento_id: g2, url: LINK }, 200); // a gestão que registrou também configura
+  await espera("resp", "treinamento_iniciar", { id: g2 }, 200);
+  const cod = await codigoDe(g2);
+  // Eva "tenta" confirmar pelo Caio: o servidor ignora o corpo e confirma só a dela
+  await espera("p5", "gravacao_confirmar", { codigo: cod, declaro: true, colaborador_id: 3 }, 200);
+  let m = await metodosDe(g2);
+  if (m[5] !== "presente/gravacao" || m[3] !== "pendente/-") throw new Error("identidade pela sessão: " + jsonDe(m));
+  await espera("p3", "gravacao_confirmar", { codigo: cod, declaro: true }, 200);
+  // o RH não cria presença "por gravação": mesmo pedindo método 'gravacao', o registro manual continua sendo 'manual' (com justificativa)
+  await espera("rh", "presenca_manual", { treinamento_id: g2, participante_ids: [(await part(g2, 8)).id], presenca: "presente", motivo: "Registro do RH", metodo: "gravacao" }, 200);
+  m = await metodosDe(g2);
+  if (m[8] !== "presente/manual") throw new Error("o RH não gera método 'gravacao': " + jsonDe(m));
+  if ((await q(`select count(*)::int n from public.peopleflow_dev_qr_tokens where treinamento_id=${g2}`))[0].n !== 0) throw new Error("gravação exclusiva não usa QR");
+  await espera("rh", "treinamento_concluir", { id: g2 }, 200);
+  m = await metodosDe(g2);
+  if (jsonDe(m) !== jsonDe({ 3: "presente/gravacao", 5: "presente/gravacao", 8: "presente/manual" })) throw new Error(jsonDe(m));
+});
+
+await t("Treinamento SEM gravação habilitada, sem link ou sem permissão da turma: confirmação recusada; desabilitar não apaga confirmações já feitas", async () => {
+  const sem = (await espera("rh", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", titulo: "Sem gravação", data_inicio: hojeSP, responsavel_colaborador_id: 7 }, 200)).id;
+  if ((await q(`select permite_gravacao from public.peopleflow_dev_treinamentos where id=${sem}`))[0].permite_gravacao !== false) throw new Error("padrão: sem gravação");
+  await espera("rh", "participantes_adicionar", { treinamento_id: sem, colaborador_ids: [5] }, 200);
+  await espera("rh", "treinamento_iniciar", { id: sem }, 200);
+  await espera("p5", "gravacao_confirmar", { codigo: await codigoDe(sem), declaro: true }, 422); // não permite
+  await espera("rh", "gravacao_definir", { treinamento_id: sem, permitir: true }, 200);
+  await espera("p5", "gravacao_confirmar", { codigo: await codigoDe(sem), declaro: true }, 422); // permite, mas sem link
+  await espera("rh", "gravacao_definir", { treinamento_id: sem, url: LINK }, 200);
+  await espera("rh", "gravacao_definir", { treinamento_id: sem, permitir: false }, 200);
+  await espera("p5", "gravacao_confirmar", { codigo: await codigoDe(sem), declaro: true }, 422); // desabilitada de novo
+  if ((await q(`select count(*)::int n from public.peopleflow_dev_participantes where presenca_metodo='gravacao'`))[0].n < 4) throw new Error("desabilitar não pode apagar confirmações anteriores");
+  await espera("rh", "treinamento_cancelar", { id: sem, motivo: "Cenário de teste" }, 200);
+});
+
+await t("Treinamento de homologação/teste: o fluxo funciona para validação (aparece em Meus treinamentos como TESTE só enquanto há confirmação em aberto) e nunca entra em indicadores, histórico oficial ou avaliação", async () => {
+  gHom = (await espera("rh", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", titulo: "Teste de gravação", data_inicio: hojeSP, responsavel_colaborador_id: 1, homologacao: true, permite_gravacao: true }, 200)).id;
+  await espera("rh", "participantes_adicionar", { treinamento_id: gHom, colaborador_ids: [5] }, 200);
+  await espera("rh", "gravacao_definir", { treinamento_id: gHom, url: LINK }, 200);
+  await espera("rh", "treinamento_iniciar", { id: gHom }, 200);
+  const antes = (await espera("p5", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.teste);
+  if (!antes || antes.gravacao.pode_confirmar !== true || antes.avaliacao !== null) throw new Error("teste com confirmação em aberto: " + jsonDe(antes));
+  const r = await espera("p5", "gravacao_confirmar", { codigo: await codigoDe(gHom), declaro: true }, 200);
+  if (r.avaliacao !== null) throw new Error("teste não gera avaliação: " + jsonDe(r));
+  if ((await espera("p5", "meu_historico", {}, 200)).treinamentos.some((x: any) => x.teste)) throw new Error("depois de confirmar, o teste volta a sair do histórico");
+  if ((await como(U.rh, `select 1 from public.peopleflow_dev_v_participacoes where treinamento_id=${gHom}`)).length !== 0) throw new Error("teste no histórico oficial");
+  if ((await espera("rh", "reacao_resumo", {}, 200)).treinamentos.some((x: any) => x.id === gHom)) throw new Error("teste nos indicadores de avaliação");
+});
+
+await t("Telas: formulário, página do treinamento, Meus treinamentos e lista usam a mesma regra; declaração e aviso sobre o alcance; método 'Gravação' identificado; sem QR nem registro manual por gravação", async () => {
+  const lerTela = (f: string) => fs.readFileSync(`${PF}/${f}`, "utf8");
+  const form = lerTela("src/features/desenvolvimento/TreinamentoForm.tsx");
+  if (!/Permitir participação por gravação/.test(form) || !/permite_gravacao/.test(form)) throw new Error("formulário");
+  const comp = lerTela("src/features/desenvolvimento/ParticipacaoGravacao.tsx");
+  for (const e of ["Assistir à gravação", "Confirmar participação", "DECLARACAO_GRAVACAO", "AVISO_DECLARACAO_GRAVACAO", "disabled={!declaro || enviando}", 'rel="noopener noreferrer"', "Permitir participação por gravação", "Salvar link", "gravacao_definir"]) if (!comp.includes(e)) throw new Error("componente sem " + e);
+  if (/qr/i.test(comp)) throw new Error("a gravação não usa QR");
+  const meus = lerTela("src/features/desenvolvimento/MeusTreinamentosPage.tsx");
+  if (!/<BlocoGravacaoColaborador/.test(meus) || !/TagTeste/.test(meus)) throw new Error("Meus treinamentos");
+  const pag = lerTela("src/features/desenvolvimento/TreinamentoPage.tsx");
+  if (!/<GravacaoDoTreinamento/.test(pag) || !/METODO_PRESENCA\[m\]/.test(pag)) throw new Error("página do treinamento");
+  const rot = lerTela("src/features/desenvolvimento/rotulos.ts");
+  if (!/gravacao: "Gravação"/.test(rot)) throw new Error("rótulo do método");
+  if (grav.DECLARACAO_GRAVACAO !== "Declaro que assisti ao treinamento" || !/não comprova tecnicamente a visualização integral/.test(grav.AVISO_DECLARACAO_GRAVACAO) || !/não representa comprovação técnica/.test(grav.NOTA_LISTA_GRAVACAO)) throw new Error("textos da declaração");
+  if (/presenca_metodo\s*:\s*["']gravacao["']/.test(fs.readFileSync(`${PF}/api/_lib/desenvolvimentoAcoes.ts`, "utf8").replace(/async function gravacaoConfirmar[\s\S]*?\n}\n/, ""))) throw new Error("só a confirmação do próprio colaborador grava o método 'gravacao'");
+});
+
+await t("Reversão com participação por gravação existente é recusada e preserva tudo", async () => {
+  const n = (await q(`select count(*)::int n from public.peopleflow_dev_participantes where presenca_metodo='gravacao'`))[0].n;
+  if (n < 4) throw new Error("o cenário deveria ter confirmações por gravação");
+  let recusou = false;
+  try { await db.exec(SQL("desenvolvimento_participacao_gravacao_rollback.sql")); } catch (e) { recusou = /Reversão bloqueada/.test((e as Error).message); await db.exec("rollback"); }
+  if (!recusou || (await q(`select count(*)::int n from public.peopleflow_dev_participantes where presenca_metodo='gravacao'`))[0].n !== n) throw new Error("a reversão deveria ser recusada sem alterar nada");
 });
 
 console.log("Rastreabilidade");

@@ -32,6 +32,7 @@ function paraForm(t: Treinamento | null, modo: Modo) {
     justificativa: reposicao ? `Reposição para faltantes de ${t?.codigo ?? ""}` : (t?.justificativa ?? ""),
     observacao: reposicao ? "" : (t?.observacao ?? ""),
     exige_eficacia: t?.exige_eficacia ?? false,
+    permite_gravacao: t?.permite_gravacao ?? false,
     homologacao: t?.homologacao ?? false,
     eficacia_prazo: reposicao ? "" : (t?.eficacia_prazo ?? ""),
     motivo: "",
@@ -94,10 +95,12 @@ export function TreinamentoDrawer({
       if (novoRegistro && form.data_inicio && form.data_inicio < hojeISO()) throw new Error("A data prevista não pode ser anterior à data de registro do treinamento. O treinamento deve ser registrado antes de sua realização.");
       if (modo === "reposicao" && !form.data_inicio) throw new Error("Defina a nova data da reposição.");
       if (exigeDoc && !tituloDoc) throw new Error("Selecione um documento vigente da Lista Mestra.");
-      const { carga_horas: _h, carga_minutos: _m, ...resto } = form;
+      const { carga_horas: _h, carga_minutos: _m, permite_gravacao: permiteGravacao, ...resto } = form;
       const corpo = {
         ...resto,
         titulo: tituloEfetivo,
+        // só envia quando ligada ou quando já estava ligada (para poder desligar): treinamentos sem gravação seguem exatamente como antes
+        ...(permiteGravacao || item?.permite_gravacao ? { permite_gravacao: permiteGravacao } : {}),
         carga_horaria_min: carga,
         responsavel_colaborador_id: form.responsavel_colaborador_id || null,
         instrutor_colaborador_id: form.instrutor_colaborador_id || null,
@@ -282,6 +285,16 @@ export function TreinamentoDrawer({
           <label className={styles.check}>
             <input type="checkbox" checked={form.exige_eficacia} onChange={set("exige_eficacia")} /> Exige avaliação de eficácia
           </label>
+          {modo !== "reposicao" && (
+            <label className={[styles.campo, styles.cheio].join(" ")}>
+              <span className={styles.check}>
+                <input type="checkbox" checked={form.permite_gravacao} onChange={set("permite_gravacao")} /> Permitir participação por gravação
+              </span>
+              <span className={styles.dica}>
+                Participantes assistem à gravação (link do SharePoint, informado na página do treinamento) e confirmam a participação pelo PeopleFlow, enquanto o treinamento estiver em andamento. A confirmação é uma declaração do colaborador, não comprova a visualização integral.
+              </span>
+            </label>
+          )}
           {ehRH && (
             <label className={[styles.campo, styles.cheio].join(" ")}>
               <span className={styles.check}>

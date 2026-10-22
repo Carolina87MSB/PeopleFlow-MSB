@@ -14,6 +14,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
 import { dataEfetivaDeRealizacao } from "../../src/domain/dataRealizacao.js";
+import { DECLARACAO_GRAVACAO, NOTA_LISTA_GRAVACAO, podeConfirmarPorGravacao, validarLinkGravacao } from "../../src/domain/gravacao.js";
 import { diaEmBrasilia, elegivelParaReacao, fimDoPrazoDaReacao, indicadorAdesao, mediasConsolidadas, MINIMO_RESPOSTAS_PARA_MEDIAS, QUESTOES, situacaoDaReacao, validarRespostas, VERSAO_FORMULARIO, type SituacaoReacao } from "../../src/domain/avaliacaoReacao.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
@@ -909,6 +910,12 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
     // Homologação/teste: só o RH marca (flag administrativa, não é Tipo).
     const homologacao = corpo.homologacao === true;
     if (homologacao && conta.perfil !== "RH") throw new ErroHttp(403, "Somente o RH marca treinamento de homologação/teste.");
+    // "Permitir participação por gravação": só envia a coluna quando ligada (treinamento existente nunca é afetado; sem a migration, recusa com clareza).
+    const querGravacao = corpo.permite_gravacao === true;
+    if (querGravacao) {
+      const { error: colErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("permite_gravacao").limit(1);
+      if (colErro && colunaGravacaoAusente(colErro)) throw new ErroHttp(422, "A participação por gravação ainda não está disponível (recurso não ativado).");
+    }
     const linha = { ...campos, ...doc, titulo, lista_mestra_codigo: campos.lista_mestra_codigo, homologacao };
     exigirMinimoPlanejamento(linha);
     exigirDataPrevistaNaoRetroativa(linha.data_inicio);
@@ -929,6 +936,7 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
       .single();
     if (error) erroBanco(error, "Treinamento");
     await auditar(conta, "treinamento_planejado", "peopleflow_dev_treinamentos", String(data.id), { registro: true, perfil: conta.perfil, depois: data });
+    if (querGravacao) await atualizarGravacao(conta, data as Treinamento, { permitir: true });
     return data;
   }
 
@@ -959,6 +967,12 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
   if (error) erroBanco(error, "Treinamento");
   await auditar(conta, antes.status === "concluido" ? "treinamento_retificado" : "treinamento_editado", "peopleflow_dev_treinamentos", String(id), { alteracoes: mudou, motivo });
   if (antes.status === "concluido" && data.modalidade === "interno") await gerarListaPresenca(conta, data, `Retificação do treinamento: ${motivo}`);
+  // Permissão de gravação (só quando o formulário a envia): aplica depois de gravar o resto, com auditoria própria.
+  if (typeof corpo.permite_gravacao === "boolean" && ["planejado", "em_andamento"].includes(data.status)) {
+    const atual = await lerGravacao(id);
+    if (atual && atual.permite_gravacao !== corpo.permite_gravacao) await atualizarGravacao(conta, data as Treinamento, { permitir: corpo.permite_gravacao });
+    else if (!atual && corpo.permite_gravacao) throw new ErroHttp(422, "A participação por gravação ainda não está disponível (recurso não ativado).");
+  }
   return data;
 }
 
@@ -1741,7 +1755,7 @@ async function prepararListaPresenca(conta: ContaDev, t: Treinamento, participan
         cargo: String(c?.cargo ?? ""),
         departamento: String(c?.departamento ?? ""),
         situacao: p.presenca_status === "presente" ? "Presente" : "Ausente",
-        forma: p.presenca_metodo === "qr" ? "QR Code" : manual ? "Registro manual" : "—",
+        forma: p.presenca_metodo === "qr" ? "QR Code" : p.presenca_metodo === "gravacao" ? "Gravação" : manual ? "Registro manual" : "—",
         confirmadoEm: dataHoraBR(p.presenca_em),
         registradoPor: manual ? nomeDe(colabDaConta.get(String(p.presenca_por))) : null,
         justificativa: manual ? (p.presenca_motivo ?? null) : null,
@@ -1753,6 +1767,7 @@ async function prepararListaPresenca(conta: ContaDev, t: Treinamento, participan
   const codigoVerificacao = hashRegistros.slice(0, 16).toUpperCase().replace(/(.{4})(?=.)/g, "$1-");
   const presentes = linhas.filter((l) => l.situacao === "Presente").length;
   const bytes = await gerarPdfListaPresenca({
+    notaGravacao: linhas.some((l) => l.forma === "Gravação") ? NOTA_LISTA_GRAVACAO : null,
     codigo: t.codigo,
     titulo: t.titulo,
     tipo: ROTULO_TIPO[t.tipo] ?? t.tipo,
@@ -1925,6 +1940,106 @@ async function treinamentoPorToken(tokenQr: string) {
   const t = await lerTreinamento(Number(qr.treinamento_id));
   if (t.status !== "em_andamento") throw new ErroHttp(404, "Este treinamento não está com presença aberta.");
   return t;
+}
+
+// ── Participação por gravação ───────────────────────────────────────────
+// O responsável disponibiliza o link da gravação (SharePoint) e habilita "Permitir participação por gravação". Participantes da turma
+// (presentes, ausentes ou, no treinamento só gravado, todos) assistem e CONFIRMAM pelo PeopleFlow, autenticados, com a declaração
+// "Declaro que assisti ao treinamento": presença "presente" + método "gravacao" + data/hora + usuário. É uma declaração do colaborador,
+// não comprovação técnica de visualização integral. Só enquanto o treinamento está em andamento: o RH decide quando concluir.
+// Sem QR e sem registro manual "por gravação" pelo RH.
+function colunaGravacaoAusente(error: { code?: string; message?: string } | null): boolean {
+  return Boolean(error && (error.code === "42703" || error.code === "PGRST204" || /permite_gravacao|gravacao_url/i.test(error.message ?? "")));
+}
+
+interface ConfigGravacao {
+  permite_gravacao: boolean;
+  gravacao_url: string | null;
+}
+
+/** null = recurso ainda não ativado (migration não aplicada): nada quebra, a gravação simplesmente não existe. */
+async function lerGravacao(treinamentoId: number): Promise<ConfigGravacao | null> {
+  const { data, error } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("permite_gravacao, gravacao_url").eq("id", treinamentoId).maybeSingle();
+  if (error) {
+    if (colunaGravacaoAusente(error)) return null;
+    erroBanco(error, "Gravação");
+  }
+  return data ? { permite_gravacao: Boolean(data.permite_gravacao), gravacao_url: (data.gravacao_url as string | null) ?? null } : null;
+}
+
+/** Habilita/desabilita a participação por gravação e define/limpa o link (quem conduz: RH, responsável designado ou gestor da gestão). */
+async function atualizarGravacao(conta: ContaDev, t: Treinamento, mudanca: { permitir?: boolean; url?: unknown }) {
+  if (!["planejado", "em_andamento"].includes(t.status)) throw new ErroHttp(422, "A gravação só pode ser configurada antes da conclusão do treinamento.");
+  const antes = await lerGravacao(t.id);
+  if (!antes) throw new ErroHttp(422, "A participação por gravação ainda não está disponível (recurso não ativado).");
+  let url: string | null = antes.gravacao_url;
+  if (mudanca.url !== undefined) {
+    const informado = typeof mudanca.url === "string" ? mudanca.url.trim() : mudanca.url;
+    if (informado === null || informado === "") url = null;
+    else {
+      const valido = validarLinkGravacao(informado);
+      if (!valido) throw new ErroHttp(422, "Informe o link da gravação no SharePoint (https://…sharepoint.com/…).");
+      url = valido;
+    }
+  }
+  const permite = mudanca.permitir === undefined ? antes.permite_gravacao : mudanca.permitir;
+  if (permite === antes.permite_gravacao && url === antes.gravacao_url) return antes;
+  const { error } = await supabaseAdmin
+    .from("peopleflow_dev_treinamentos")
+    .update({ permite_gravacao: permite, gravacao_url: url, gravacao_definida_em: new Date().toISOString(), gravacao_definida_por: conta.userId, updated_by: conta.userId })
+    .eq("id", t.id);
+  if (error) erroBanco(error, "Gravação");
+  await auditar(conta, "gravacao_configurada", "peopleflow_dev_treinamentos", String(t.id), { antes, depois: { permite_gravacao: permite, gravacao_url: url } });
+  return { permite_gravacao: permite, gravacao_url: url } as ConfigGravacao;
+}
+
+async function gravacaoDefinir(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  await exigirConduzir(conta, t);
+  const permitir = typeof corpo.permitir === "boolean" ? corpo.permitir : undefined;
+  return atualizarGravacao(conta, t, { permitir, url: "url" in corpo ? corpo.url : undefined });
+}
+
+/** O PRÓPRIO colaborador confirma a participação assistindo à gravação (qualquer conta do PeopleFlow, sem sessão do módulo). Uma vez só. */
+async function gravacaoConfirmar(req: VercelRequest) {
+  const corpo = (typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {})) as Corpo;
+  const quem = await identificarParticipante(req);
+  const codigo = texto(corpo, "codigo", { obrigatorio: true, max: 40, rotulo: "o treinamento" });
+  if (corpo.declaro !== true) throw new ErroHttp(422, `Marque a declaração "${DECLARACAO_GRAVACAO}" para confirmar a participação.`);
+  const { data: t, error: tErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select(COLS_TRE).eq("codigo", codigo).maybeSingle();
+  if (tErro) erroBanco(tErro, "Treinamento");
+  if (!t) throw new ErroHttp(404, "Treinamento não encontrado.");
+  const cfg = await lerGravacao(Number(t.id));
+  if (!cfg) throw new ErroHttp(422, "A participação por gravação ainda não está disponível.");
+  if (!cfg.permite_gravacao) throw new ErroHttp(422, "Este treinamento não permite participação por gravação.");
+  if (!cfg.gravacao_url) throw new ErroHttp(422, "A gravação ainda não foi disponibilizada pelo responsável.");
+  if (t.status !== "em_andamento") throw new ErroHttp(422, t.status === "concluido" ? "O treinamento já foi concluído pelo RH: a confirmação por gravação está encerrada." : "A confirmação por gravação abre quando o treinamento é iniciado.");
+  const { data: p, error: pErro } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .select("id, presenca_status, presenca_metodo, presenca_motivo, removido_em")
+    .eq("treinamento_id", t.id)
+    .eq("colaborador_id", quem.colaboradorId)
+    .maybeSingle();
+  if (pErro) erroBanco(pErro, "Participante");
+  if (!p || p.removido_em) throw new ErroHttp(403, "Você não consta na turma deste treinamento.");
+  if (p.presenca_status === "presente") throw new ErroHttp(409, "Sua participação neste treinamento já está confirmada.");
+  const agora = new Date().toISOString();
+  // Condicional: duas confirmações simultâneas não duplicam (a segunda não encontra mais "não presente").
+  const { data: atualizado, error: uErro } = await supabaseAdmin
+    .from("peopleflow_dev_participantes")
+    .update({ presenca_status: "presente", presenca_metodo: "gravacao", presenca_em: agora, presenca_por: quem.userId, presenca_motivo: null, updated_by: quem.userId })
+    .eq("id", p.id)
+    .neq("presenca_status", "presente")
+    .select("id")
+    .maybeSingle();
+  if (uErro) erroBanco(uErro, "Presença");
+  if (!atualizado) throw new ErroHttp(409, "Sua participação neste treinamento já está confirmada.");
+  await supabaseAdmin.from("peopleflow_dev_auditoria").insert({
+    user_id: quem.userId, colaborador_id: quem.colaboradorId, acao: "presenca_gravacao", entidade: "peopleflow_dev_participantes", entidade_id: String(p.id),
+    detalhe: { treinamento_id: t.id, metodo: "gravacao", declaracao: DECLARACAO_GRAVACAO, status_anterior: p.presenca_status, metodo_anterior: p.presenca_metodo, motivo_anterior: p.presenca_motivo, homologacao: Boolean(t.homologacao) },
+  });
+  // A Avaliação de Reação segue as mesmas regras (presença confirmada, oficial, a partir da ativação, prazo de 7 dias).
+  return { confirmada_em: agora, metodo: "gravacao", ...(await estadoReacao(t, { id: p.id as number, presenca_status: "presente", presenca_em: agora }, quem.colaboradorId)) };
 }
 
 // ── Avaliação de Reação ─────────────────────────────────────────────────
@@ -2169,8 +2284,15 @@ async function historicoDoParticipante(req: VercelRequest) {
     .select("id, codigo, titulo, status, data_inicio, data_realizacao, carga_horaria_min, carga_realizada_min, lista_mestra_codigo, lista_mestra_revisao, homologacao")
     .in("id", [...minhas.keys()]);
   if (tErro) erroBanco(tErro, "Treinamentos");
+  // Gravação (separada: sem a migration as colunas não existem e nada quebra)
+  const { data: gs, error: gErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("id, permite_gravacao, gravacao_url").in("id", [...minhas.keys()]);
+  if (gErro && !colunaGravacaoAusente(gErro)) erroBanco(gErro, "Gravação");
+  const gravacaoDe = new Map((gErro ? [] : (gs ?? [])).map((g) => [Number(g.id), { permite_gravacao: Boolean(g.permite_gravacao), gravacao_url: (g.gravacao_url as string | null) ?? null }]));
+  // Treinamento de teste/homologação continua fora do histórico — exceto enquanto houver CONFIRMAÇÃO POR GRAVAÇÃO em aberto para esta pessoa
+  // (para o RH validar o fluxo; vem marcado como teste e não entra em indicadores nem na avaliação).
+  const confirmavel = (t: Record<string, any>) => { const g = gravacaoDe.get(Number(t.id)); return Boolean(g) && podeConfirmarPorGravacao({ ...g!, status: t.status as string }, minhas.get(Number(t.id)) ?? "pendente"); };
   const treinamentos = (ts ?? [])
-    .filter((t) => !t.homologacao && ["planejado", "em_andamento", "concluido"].includes(t.status as string))
+    .filter((t) => ["planejado", "em_andamento", "concluido"].includes(t.status as string) && (!t.homologacao || confirmavel(t)))
     .map((t) => {
       const presenca = minhas.get(Number(t.id));
       const situacao = t.status !== "concluido" ? "agendado" : presenca === "presente" ? "realizado" : "ausente";
@@ -2183,6 +2305,13 @@ async function historicoDoParticipante(req: VercelRequest) {
         situacao,
         // só a presença da PRÓPRIA pessoa (sem método, sem eficácia nem observações)
         presenca: (presenca ?? "pendente") as string,
+        teste: Boolean(t.homologacao),
+        // Participação por gravação: link só para quem está na turma; confirmar só com o treinamento em andamento e a pessoa ainda sem presença
+        gravacao: (() => {
+          const g = gravacaoDe.get(Number(t.id));
+          if (!g || !g.permite_gravacao || !g.gravacao_url || !["em_andamento", "concluido"].includes(t.status as string)) return null;
+          return { link: g.gravacao_url, pode_confirmar: podeConfirmarPorGravacao({ ...g, status: t.status as string }, presenca ?? "pendente") };
+        })(),
         // Avaliação de reação: pendente | vencida (ainda pode responder) | respondida | não se aplica — com o prazo (7 dias após a presença)
         ...(() => {
           const meu = meusRegistros.get(Number(t.id));
@@ -2195,13 +2324,13 @@ async function historicoDoParticipante(req: VercelRequest) {
   return { primeiro_nome: quem.primeiroNome, treinamentos };
 }
 
-export function ehAcaoDePresencaQr(acao: string): acao is "presenca_info" | "presenca_confirmar" | "meu_historico" | "reacao_responder" {
-  return acao === "presenca_info" || acao === "presenca_confirmar" || acao === "meu_historico" || acao === "reacao_responder";
+export function ehAcaoDePresencaQr(acao: string): acao is "presenca_info" | "presenca_confirmar" | "meu_historico" | "reacao_responder" | "gravacao_confirmar" {
+  return acao === "presenca_info" || acao === "presenca_confirmar" || acao === "meu_historico" || acao === "reacao_responder" || acao === "gravacao_confirmar";
 }
 
-export async function executarPresencaQr(acao: "presenca_info" | "presenca_confirmar" | "meu_historico" | "reacao_responder", req: VercelRequest, res: VercelResponse) {
+export async function executarPresencaQr(acao: "presenca_info" | "presenca_confirmar" | "meu_historico" | "reacao_responder" | "gravacao_confirmar", req: VercelRequest, res: VercelResponse) {
   try {
-    res.status(200).json({ ok: true, dados: acao === "meu_historico" ? await historicoDoParticipante(req) : acao === "reacao_responder" ? await reacaoResponder(req) : await presencaViaQr(acao, req) });
+    res.status(200).json({ ok: true, dados: acao === "meu_historico" ? await historicoDoParticipante(req) : acao === "reacao_responder" ? await reacaoResponder(req) : acao === "gravacao_confirmar" ? await gravacaoConfirmar(req) : await presencaViaQr(acao, req) });
   } catch (err) {
     if (err instanceof ErroHttp) {
       res.status(err.status).json({ error: err.message });
@@ -2531,6 +2660,8 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   evidencia_substituir: evidenciaSubstituir,
   eficacia_registrar: eficaciaRegistrar,
   // Avaliação de Reação: acompanhamento (só RH). O colaborador responde por reacao_responder (família da página de presença).
+  // Participação por gravação: configurar (quem conduz). O colaborador confirma por gravacao_confirmar (família da página de presença).
+  gravacao_definir: gravacaoDefinir,
   reacao_resumo: reacaoResumo,
   reacao_detalhe: reacaoDetalhe,
   // LNT (Fase 6 — núcleo): ações só do RH, em api/_lib/lntAcoes.ts.

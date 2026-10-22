@@ -1120,6 +1120,21 @@ await t("sem a tabela de avaliações: meu_historico segue igual (avaliação = 
   if (resumo.ativa_desde !== null || resumo.geral.elegiveis !== 0 || resumo.treinamentos.length !== 0) throw new Error(JSON.stringify(resumo));
 });
 
+console.log("Participação por gravação sem a migration aplicada (deploy antes da migration não pode quebrar nada)");
+await t("sem as colunas de gravação: tudo segue igual (meu_historico sem gravação, registro de treinamento normal); habilitar/confirmar é recusado com mensagem clara", async () => {
+  const meu = await espera("p3", "meu_historico", {}, 200);
+  if (meu.treinamentos.some((x: any) => x.gravacao !== null)) throw new Error("gravação sem a migration: " + JSON.stringify(meu));
+  const codigo = (await q("select codigo from public.peopleflow_dev_treinamentos order by id limit 1"))[0].codigo;
+  const c = await chamar("p3", "gravacao_confirmar", { codigo, declaro: true });
+  if (c.c !== 422 || !/ainda não está disponível/.test(c.b.error)) throw new Error(JSON.stringify(c));
+  const id = (await q("select id from public.peopleflow_dev_treinamentos order by id limit 1"))[0].id;
+  const d = await chamar("rh", "gravacao_definir", { treinamento_id: id, permitir: true });
+  if (d.c !== 422 && d.c !== 403) throw new Error("gravacao_definir sem a migration: " + JSON.stringify(d));
+  const novo = await chamar("rh", "treinamento_salvar", { ...base("capacitacao_tecnica", "interno", { titulo: "Sem gravação", responsavel_colaborador_id: 1 }), permite_gravacao: true });
+  if (novo.c !== 422 || !/ainda não está disponível/.test(novo.b.error)) throw new Error("registrar com gravação sem a migration: " + JSON.stringify(novo));
+  await espera("rh", "treinamento_salvar", { ...base("capacitacao_tecnica", "interno", { titulo: "Registro normal depois", responsavel_colaborador_id: 1 }), permite_gravacao: false }, 200); // desligado = como sempre foi
+});
+
 console.log("Rollback");
 await t("rollback da Fase 5 aplica com dados, volta os nomes da Fase 1 e é repetível; bucket com arquivo fica", async () => {
   await db.exec("insert into storage.objects values ('desenvolvimento-evidencias','x')");

@@ -93,7 +93,7 @@ export const PRESENCA: Record<"pendente" | "presente" | "ausente", { rotulo: str
   ausente: { rotulo: "Ausente", tom: "danger" },
 };
 
-export const METODO_PRESENCA: Record<string, string> = { qr: "QR", manual: "Manual", login: "Login", importacao: "Importação" };
+export const METODO_PRESENCA: Record<string, string> = { qr: "QR", manual: "Manual", gravacao: "Gravação", login: "Login", importacao: "Importação" };
 
 export const EFICACIA: Record<ResultadoEficacia, { rotulo: string; tom: Tom }> = {
   eficaz: { rotulo: "Eficaz", tom: "success" },

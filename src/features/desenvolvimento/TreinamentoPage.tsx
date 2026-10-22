@@ -13,6 +13,7 @@ import {
   listarReposicoes,
   listarVinculosTreinamento,
   opcoesNecessidades,
+  obterGravacao,
   obterTreinamento,
   opcoesParticipantes,
   pessoasPorId,
@@ -45,6 +46,7 @@ import {
 import { TreinamentoDrawer } from "./TreinamentoForm";
 import { CampoDuracao } from "./CampoDuracao";
 import { ReacaoDoTreinamento } from "./ReacaoRH";
+import { GravacaoDoTreinamento } from "./ParticipacaoGravacao";
 import { alternar as alternarSelecao, departamentosDe, desmarcarTodos, filtrarOpcoes, selecionarTodos, TODOS_DEPARTAMENTOS } from "./selecaoParticipantes";
 import { dataEfetivaDeRealizacao } from "../../domain/dataRealizacao";
 import styles from "./Desenvolvimento.module.css";
@@ -95,6 +97,7 @@ export default function TreinamentoPage() {
   const { flash } = useToast();
   const treino = useConsulta(() => obterTreinamento(tid), [tid]);
   const participantes = useConsulta(() => listarParticipantes(tid), [tid]);
+  const gravacao = useConsulta(() => obterGravacao(tid), [tid]);
   const t = treino.dados;
   const pessoasDoTreino = useConsulta(
     () => (t ? pessoasPorId([t.responsavel_colaborador_id, t.instrutor_colaborador_id, t.solicitado_por_colaborador_id].filter((x): x is number => x != null)) : Promise.resolve(new Map())),
@@ -186,6 +189,21 @@ export default function TreinamentoPage() {
           </ul>
         </Card>
       ) : null,
+    // Participação por gravação: configurar (quem conduz/RH) e acompanhar quem confirmou por gravação (identificável pelo método na lista de participantes).
+    gravacao: (
+      <GravacaoDoTreinamento
+        key="gravacao"
+        treinamentoId={t.id}
+        status={t.status}
+        config={gravacao.dados}
+        podeConfigurar={p.opera}
+        porGravacao={ativos.filter((x) => x.presenca_status === "presente" && x.presenca_metodo === "gravacao").length}
+        onAlterado={() => {
+          gravacao.recarregar();
+          participantes.recarregar();
+        }}
+      />
+    ),
     // Avaliação de reação: acompanhamento só do RH, só de treinamento oficial (teste/homologação fora).
     reacao: p.ehRH && !t.homologacao && (t.status === "em_andamento" || t.status === "concluido") ? <ReacaoDoTreinamento key="reacao" treinamentoId={t.id} /> : null,
     reposicoes: <Reposicoes key="reposicoes" t={t} podeRepor={p.podeRepor} ausentes={ausentes} />,
@@ -203,10 +221,10 @@ export default function TreinamentoPage() {
   };
   const ordem =
     t.status === "em_andamento"
-      ? ["qr", "participantes", "reacao", "evidencias", "necessidades"]
+      ? ["qr", "gravacao", "participantes", "reacao", "evidencias", "necessidades"]
       : t.status === "concluido"
-        ? ["resultado", "reposicoes", "participantes", "reacao", "evidencias", "necessidades"]
-        : ["participantes", "evidencias", "necessidades"];
+        ? ["resultado", "reposicoes", "participantes", "gravacao", "reacao", "evidencias", "necessidades"]
+        : ["gravacao", "participantes", "evidencias", "necessidades"];
 
   return (
     <>
@@ -338,7 +356,7 @@ export default function TreinamentoPage() {
 
       {editando && (
         <TreinamentoDrawer
-          item={t}
+          item={gravacao.dados ? { ...t, ...gravacao.dados } : t}
           onFechar={() => setEditando(false)}
           onSalvo={() => {
             setEditando(false);
@@ -835,6 +853,7 @@ function Participantes(props: {
           <h3 className={styles.cardTitle}>Participantes ({ativos.length})</h3>
           <p className={styles.cardSubtitle}>
             {resumo.presente} presente{resumo.presente === 1 ? "" : "s"} · {resumo.ausente} ausente{resumo.ausente === 1 ? "" : "s"} · {resumo.pendente} pendente{resumo.pendente === 1 ? "" : "s"}
+            {resumo.presente > 0 ? ` (${["qr", "gravacao", "manual"].map((m) => [METODO_PRESENCA[m], ativos.filter((x) => x.presenca_status === "presente" && x.presenca_metodo === m).length] as const).filter(([, n]) => n > 0).map(([rot, n]) => `${n} por ${rot.toLowerCase()}`).join(" · ")})` : ""}
             {perfil === "Gestor" ? " — você vê os participantes da sua equipe" : ""}
           </p>
         </div>
