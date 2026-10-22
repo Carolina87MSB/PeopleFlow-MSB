@@ -1969,7 +1969,12 @@ async function lerGravacao(treinamentoId: number): Promise<ConfigGravacao | null
 
 /** Habilita/desabilita a participação por gravação e define/limpa o link (quem conduz: RH, responsável designado ou gestor da gestão). */
 async function atualizarGravacao(conta: ContaDev, t: Treinamento, mudanca: { permitir?: boolean; url?: unknown }) {
-  if (!["planejado", "em_andamento"].includes(t.status)) throw new ErroHttp(422, "A gravação só pode ser configurada antes da conclusão do treinamento.");
+  const concluido = t.status === "concluido";
+  if (!["planejado", "em_andamento"].includes(t.status) && !concluido) throw new ErroHttp(422, "A gravação não pode ser configurada em treinamento cancelado.");
+  // Depois da conclusão a confirmação por gravação está encerrada: só o RH corrige o LINK (ex.: o vídeo mudou de pasta), para que os
+  // participantes continuem acessando a gravação; habilitar/desabilitar não muda mais.
+  if (concluido && conta.perfil !== "RH") throw new ErroHttp(403, "Depois da conclusão, somente o RH atualiza o link da gravação.");
+  if (concluido && mudanca.permitir !== undefined) throw new ErroHttp(422, "Depois da conclusão não é possível habilitar nem desabilitar a participação por gravação (a confirmação está encerrada).");
   const antes = await lerGravacao(t.id);
   if (!antes) throw new ErroHttp(422, "A participação por gravação ainda não está disponível (recurso não ativado).");
   let url: string | null = antes.gravacao_url;

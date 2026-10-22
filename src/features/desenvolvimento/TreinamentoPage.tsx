@@ -197,6 +197,7 @@ export default function TreinamentoPage() {
         status={t.status}
         config={gravacao.dados}
         podeConfigurar={p.opera}
+        ehRH={p.ehRH}
         porGravacao={ativos.filter((x) => x.presenca_status === "presente" && x.presenca_metodo === "gravacao").length}
         onAlterado={() => {
           gravacao.recarregar();

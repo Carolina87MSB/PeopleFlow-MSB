@@ -13,6 +13,7 @@ export function GravacaoDoTreinamento({
   status,
   config,
   podeConfigurar,
+  ehRH,
   porGravacao,
   onAlterado,
 }: {
@@ -20,16 +21,21 @@ export function GravacaoDoTreinamento({
   status: string;
   config: ConfigGravacao | null;
   podeConfigurar: boolean;
+  /** Depois da conclusão só o RH corrige o link (a confirmação já está encerrada). */
+  ehRH: boolean;
   /** Quantos participantes confirmaram por gravação (RH identifica pelo método na lista de participantes). */
   porGravacao: number;
   onAlterado: () => void;
 }) {
-  const editavel = podeConfigurar && (status === "planejado" || status === "em_andamento");
+  const antesDaConclusao = status === "planejado" || status === "em_andamento";
+  const editavel = podeConfigurar && antesDaConclusao;
+  const podeCorrigirLink = editavel || (ehRH && status === "concluido");
   const [url, setUrl] = useState(config?.gravacao_url ?? "");
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   // Recurso não ativado no banco, ou sem uso e sem permissão para configurar: a seção nem aparece.
   if (!config || (!config.permite_gravacao && !editavel)) return null;
+  const encerrada = status === "concluido";
 
   async function salvar(corpo: { permitir?: boolean; url?: string | null }) {
     setErro(null);
@@ -66,7 +72,7 @@ export function GravacaoDoTreinamento({
       )}
       {config.permite_gravacao && (
         <>
-          {editavel ? (
+          {podeCorrigirLink ? (
             <div className={visual.linha}>
               <input className={styles.input} type="url" inputMode="url" placeholder="https://suaempresa.sharepoint.com/…" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Link da gravação no SharePoint" />
               <Button variant="primary" disabled={salvando || !linkValido || url.trim() === (config.gravacao_url ?? "")} onClick={() => void salvar({ url: url.trim() === "" ? null : url.trim() })}>
@@ -83,7 +89,8 @@ export function GravacaoDoTreinamento({
             </p>
           )}
           <p className={styles.secundario} style={{ marginTop: 8 }}>
-            {AVISO_DECLARACAO_GRAVACAO} O RH decide quando concluir o treinamento; não há encerramento automático.
+            {AVISO_DECLARACAO_GRAVACAO}{" "}
+            {encerrada ? "Treinamento concluído: novas confirmações estão encerradas; a gravação continua acessível aos participantes." : "O RH decide quando concluir o treinamento; não há encerramento automático."}
           </p>
         </>
       )}

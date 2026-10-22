@@ -972,12 +972,38 @@ await t("Treinamento de homologação/teste: o fluxo funciona para validação (
   if ((await espera("rh", "reacao_resumo", {}, 200)).treinamentos.some((x: any) => x.id === gHom)) throw new Error("teste nos indicadores de avaliação");
 });
 
+await t("Depois da conclusão: novas confirmações bloqueadas, MAS a gravação continua acessível aos participantes da turma (presentes e ausentes); só o RH corrige o link; habilitar/desabilitar não muda mais", async () => {
+  const cod = await codigoDe(g1);
+  const link = grav.validarLinkGravacao(LINK);
+  for (const [tok, quem] of [["p5", "Eva (confirmou por gravação)"], ["p3", "Caio (QR)"], ["p4", "Davi (gravação)"], ["p9", "Íris (ausente)"]] as const) {
+    const it = (await espera(tok, "meu_historico", {}, 200)).treinamentos.find((x: any) => x.codigo === cod);
+    if (!it || it.gravacao?.link !== link || it.gravacao.pode_confirmar !== false) throw new Error(`${quem}: link acessível e sem confirmação após a conclusão: ` + jsonDe(it));
+  }
+  // quem não está na turma não enxerga a gravação deste treinamento
+  if ((await espera("hugo", "meu_historico", {}, 200)).treinamentos.some((x: any) => x.codigo === cod)) throw new Error("fora da turma não vê o treinamento nem o link");
+  for (const tok of ["p9", "p5"]) await espera(tok, "gravacao_confirmar", { codigo: cod, declaro: true }, 422); // concluído: encerrada para todos
+  // somente o RH corrige o link depois de concluído (ex.: o vídeo mudou de pasta no SharePoint)
+  const novo = "https://msbbrasil.sharepoint.com/sites/rh/Shared%20Documents/gravacoes/treino-corrigido.mp4";
+  for (const tok of ["resp", "ge", "gil", "hugo"]) await espera(tok, "gravacao_definir", { treinamento_id: g1, url: novo }, 403);
+  await espera("p3", "gravacao_definir", { treinamento_id: g1, url: novo }, 401);
+  await espera("rh", "gravacao_definir", { treinamento_id: g1, url: "https://exemplo.com/video" }, 422);
+  await espera("rh", "gravacao_definir", { treinamento_id: g1, permitir: false }, 422); // não reabre nem fecha a confirmação
+  await espera("rh", "gravacao_definir", { treinamento_id: g1, permitir: true, url: novo }, 422);
+  await espera("rh", "gravacao_definir", { treinamento_id: g1, url: novo }, 200);
+  const depois = (await espera("p9", "meu_historico", {}, 200)).treinamentos.find((x: any) => x.codigo === cod);
+  if (depois.gravacao.link !== grav.validarLinkGravacao(novo) || depois.gravacao.pode_confirmar !== false) throw new Error("participantes passam a ver o link corrigido: " + jsonDe(depois));
+  const aud = await q(`select detalhe from public.peopleflow_dev_auditoria where acao='gravacao_configurada' and entidade_id='${g1}' order by id desc limit 1`);
+  if (aud[0].detalhe.antes.gravacao_url !== link || aud[0].detalhe.depois.gravacao_url !== grav.validarLinkGravacao(novo) || aud[0].detalhe.depois.permite_gravacao !== true) throw new Error("auditoria da correção: " + jsonDe(aud));
+  const m = await metodosDe(g1);
+  if (jsonDe(m) !== jsonDe({ 3: "presente/qr", 4: "presente/gravacao", 5: "presente/gravacao", 9: "ausente/manual" })) throw new Error("as presenças já registradas não mudam: " + jsonDe(m));
+});
+
 await t("Telas: formulário, página do treinamento, Meus treinamentos e lista usam a mesma regra; declaração e aviso sobre o alcance; método 'Gravação' identificado; sem QR nem registro manual por gravação", async () => {
   const lerTela = (f: string) => fs.readFileSync(`${PF}/${f}`, "utf8");
   const form = lerTela("src/features/desenvolvimento/TreinamentoForm.tsx");
   if (!/Permitir participação por gravação/.test(form) || !/permite_gravacao/.test(form)) throw new Error("formulário");
   const comp = lerTela("src/features/desenvolvimento/ParticipacaoGravacao.tsx");
-  for (const e of ["Assistir à gravação", "Confirmar participação", "DECLARACAO_GRAVACAO", "AVISO_DECLARACAO_GRAVACAO", "disabled={!declaro || enviando}", 'rel="noopener noreferrer"', "Permitir participação por gravação", "Salvar link", "gravacao_definir"]) if (!comp.includes(e)) throw new Error("componente sem " + e);
+  for (const e of ["a gravação continua acessível aos participantes", "ehRH", "Assistir à gravação", "Confirmar participação", "DECLARACAO_GRAVACAO", "AVISO_DECLARACAO_GRAVACAO", "disabled={!declaro || enviando}", 'rel="noopener noreferrer"', "Permitir participação por gravação", "Salvar link", "gravacao_definir"]) if (!comp.includes(e)) throw new Error("componente sem " + e);
   if (/qr/i.test(comp)) throw new Error("a gravação não usa QR");
   const meus = lerTela("src/features/desenvolvimento/MeusTreinamentosPage.tsx");
   if (!/<BlocoGravacaoColaborador/.test(meus) || !/TagTeste/.test(meus)) throw new Error("Meus treinamentos");
