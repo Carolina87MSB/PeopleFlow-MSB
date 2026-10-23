@@ -91,6 +91,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         <nav className={styles.nav} onClick={onClose}>
           <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Minhas Avaliações" />
+          <NavItem to="/meus-treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Meus treinamentos" />
           <NavTreinamentos />
         </nav>
 
@@ -180,7 +181,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <NavItem to="/desenvolvimento/treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Treinamentos" />
           </>
         )}
-        {/* Perfis sem o menu de Desenvolvimento (Diretoria): só o próprio histórico e, se designados, os treinamentos que conduzem. */}
+        {/* "Meus treinamentos" (página /meus-treinamentos) é de TODO usuário autenticado, inclusive RH, gestores e Diretoria: mostra só as
+            participações da pessoa que está logada (identificada pela conta, nunca pelo perfil). "Treinamentos" acima é a área de gestão. */}
+        <NavItem to="/meus-treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Meus treinamentos" />
+        {/* Quem não tem o menu de gestão (Diretoria), mas foi designado responsável/instrutor, vê "Treinamentos que conduzo". */}
         {!navDesenvolvimento(perfil) && <NavTreinamentos />}
 
         {podeVerCadastros && (
