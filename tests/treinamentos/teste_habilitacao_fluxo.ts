@@ -353,6 +353,22 @@ await t("Dispensa: só o RH, com justificativa; a pendência sai da fila SEM apa
   const a = await q("select acao from public.peopleflow_dev_auditoria where acao in ('ausencia_encaminhada','ausencia_dispensada') order by id");
   if (!a.some((x) => x.acao === "ausencia_dispensada") || a.filter((x) => x.acao === "ausencia_encaminhada").length < 2) throw new Error("auditoria dos encaminhamentos: " + jsonDe(a));
 });
+await t("Histórico de ações: cada ação com o AUTOR certo (responsável × instrutor × participante); RH, responsável, instrutor e Gestora da área veem; outra área e participante não; sem justificativas", async () => {
+  const hugo = NOMES[8], gil = NOMES[6];
+  const h = await espera("rh", "treinamento_historico", { treinamento_id: TS }, 200);
+  const por = (rotulo: RegExp) => h.filter((e: any) => rotulo.test(e.rotulo)).map((e: any) => e.por);
+  if (!por(/^Treinamento registrado/).every((p: string) => p === hugo) || por(/^Treinamento registrado/).length !== 1) throw new Error("registro por Hugo: " + jsonDe(h));
+  if (por(/^Realização iniciada/).join() !== hugo || por(/^Sessão concluída/).join() !== hugo) throw new Error("início e conclusão por Hugo (responsável): " + jsonDe(h));
+  if (!por(/QR de presença gerado/).length || !por(/QR de presença gerado/).every((p: string) => p === hugo)) throw new Error("QR gerado por Hugo: " + jsonDe(h));
+  const qr = h.filter((e: any) => /próprio participante/.test(e.rotulo));
+  if (qr.length !== 2 || qr.some((e: any) => e.por !== e.resumo)) throw new Error("presença por QR: o autor é o próprio participante: " + jsonDe(qr));
+  if (h.some((e: any) => /Justificativa|Férias|reunião externa/i.test(JSON.stringify(e)))) throw new Error("o histórico não expõe o texto das justificativas: " + jsonDe(h));
+  if (!h.some((e: any) => /dispensada/i.test(e.rotulo) && e.por === NOMES[1] && e.resumo.includes(gil))) throw new Error("a dispensa aparece com o RH como autor: " + jsonDe(h));
+  if (!h.every((e: any, i: number) => i === 0 || h[i - 1].em <= e.em)) throw new Error("em ordem cronológica");
+  for (const tok of ["hugo", "resp", "ge"]) if (!Array.isArray((await espera(tok, "treinamento_historico", { treinamento_id: TS }, 200)))) throw new Error(`${tok} vê o histórico`);
+  await espera("p4", "treinamento_historico", { treinamento_id: TS }, 403); // habilitado de outra área
+  await espera("p9", "treinamento_historico", { treinamento_id: TS }, 401); // participante comum nem abre o módulo
+});
 
 await t("Treinamento de homologação/teste: o fluxo completo funciona e as pendências dele ficam FORA da lista oficial, a menos que o RH peça para incluí-las (marcadas como teste)", async () => {
   const h = (await espera("rh", "treinamento_salvar", cad({ titulo: "Teste de homologação", responsavel_colaborador_id: 7, homologacao: true }), 200)).id;

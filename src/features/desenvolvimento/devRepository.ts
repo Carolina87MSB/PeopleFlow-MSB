@@ -890,6 +890,7 @@ export type AcaoGravacao =
   | "ausencia_encaminhar"
   | "treinamento_conferir"
   | "pendencias_listar"
+  | "treinamento_historico"
   | "dc_habilidade_adicionar"
   | "dc_habilidade_sugerir"
   | "dc_habilidade_remover"
@@ -1012,3 +1013,10 @@ export const opcoesHabilitacao = () => gravar<OpcaoHabilitacao[]>("habilitacao_o
 export const listarPendencias = (incluirTeste = false) => gravar<Pendencias>("pendencias_listar", { incluir_teste: incluirTeste });
 export const conferirConclusao = (id: number) => gravar<Conferencia>("treinamento_conferir", { id });
 export const listarTransferencias = (treinamentoId: number) => gravar<Transferencia[]>("transferencias_listar", { treinamento_id: treinamentoId });
+export interface EventoHistorico {
+  em: string;
+  rotulo: string;
+  por: string;
+  resumo: string;
+}
+export const historicoDoTreinamento = (treinamentoId: number) => gravar<EventoHistorico[]>("treinamento_historico", { treinamento_id: treinamentoId });

@@ -47,6 +47,7 @@ import {
 import { TreinamentoDrawer } from "./TreinamentoForm";
 import { CampoDuracao } from "./CampoDuracao";
 import { ReacaoDoTreinamento } from "./ReacaoRH";
+import { HistoricoDaSessao } from "./HistoricoDaSessao";
 import { AusenciaDrawer, PainelConclusao, SituacaoAusencia } from "./ConclusaoEAusencias";
 import { TransferirResponsabilidade } from "./Habilitacoes";
 import { GravacaoDoTreinamento } from "./ParticipacaoGravacao";
@@ -218,6 +219,7 @@ export default function TreinamentoPage() {
     ),
     // Avaliação de reação: acompanhamento só do RH, só de treinamento oficial (teste/homologação fora).
     reacao: p.veReacao && !t.homologacao && (t.status === "em_andamento" || t.status === "concluido") ? <ReacaoDoTreinamento key="reacao" treinamentoId={t.id} /> : null,
+    historico: p.ehRH || p.conduz || p.acompanha ? <HistoricoDaSessao key="historico" treinamentoId={t.id} versao={(participantes.dados ?? []).length + presentes * 1000 + ausentes * 100000 + (t.status.length)} /> : null,
     reposicoes: <Reposicoes key="reposicoes" t={t} podeRepor={p.podeRepor} ausentes={ausentes} />,
     evidencias: <Evidencias key="evidencias" t={t} podeAnexar={p.podeAnexar} participantes={ativos} versao={versaoVinculos} />,
     necessidades: !p.veNecessidades ? null : t.homologacao ? (
@@ -233,10 +235,10 @@ export default function TreinamentoPage() {
   };
   const ordem =
     t.status === "em_andamento"
-      ? ["qr", "gravacao", "participantes", "reacao", "evidencias", "necessidades"]
+      ? ["qr", "gravacao", "participantes", "reacao", "evidencias", "necessidades", "historico"]
       : t.status === "concluido"
-        ? ["resultado", "reposicoes", "participantes", "gravacao", "reacao", "evidencias", "necessidades"]
-        : ["gravacao", "participantes", "evidencias", "necessidades"];
+        ? ["resultado", "reposicoes", "participantes", "gravacao", "reacao", "evidencias", "necessidades", "historico"]
+        : ["gravacao", "participantes", "evidencias", "necessidades", "historico"];
 
   return (
     <>

@@ -2287,6 +2287,72 @@ async function treinamentoConferir(conta: ContaDev, corpo: Corpo) {
   return conferirConclusao(t);
 }
 
+// ── Histórico de ações do treinamento: quem fez o quê e quando ───────────
+const ROTULOS_HISTORICO: Record<string, string> = {
+  treinamento_planejado: "Treinamento registrado",
+  treinamento_editado: "Dados do treinamento editados",
+  treinamento_retificado: "Treinamento retificado após a conclusão",
+  treinamento_revisao_atualizada: "Revisão do documento atualizada no início",
+  treinamento_iniciado: "Realização iniciada",
+  treinamento_realizacao: "Dados da realização atualizados",
+  treinamento_concluido: "Sessão concluída",
+  treinamento_cancelado: "Treinamento cancelado",
+  participantes_incluidos: "Participantes incluídos",
+  participante_retirado: "Participante retirado",
+  qr_gerado: "QR de presença gerado",
+  qr_encerrado: "QR de presença encerrado",
+  presenca_qr: "Presença confirmada pelo próprio participante (QR)",
+  presenca_manual: "Presença registrada manualmente",
+  presenca_retificada: "Presença retificada pelo RH",
+  ausencia_encaminhada: "Ausência justificada e encaminhada",
+  ausencia_dispensada: "Ausência dispensada pelo RH",
+  evidencia_anexada: "Evidência anexada",
+  evidencia_substituida: "Evidência substituída",
+  lista_presenca_gerada: "Lista de presença gerada",
+  gravacao_configurada: "Participação por gravação configurada",
+  eficacia_registrada: "Eficácia registrada",
+  reposicao_criada: "Reposição programada",
+  responsabilidade_transferida: "Responsabilidade transferida pelo RH",
+  reacao_respondida: "Avaliação de reação respondida",
+};
+
+/** Quem realizou cada ação (RH, quem administra e a liderança que acompanha). Mostra o autor, o que foi feito e, quando couber, o participante;
+ * nunca o conteúdo de justificativas nem as notas da avaliação. */
+async function treinamentoHistorico(conta: ContaDev, corpo: Corpo) {
+  const t = await lerTreinamento(idObrigatorio(corpo, "treinamento_id", "Treinamento"));
+  if (!(await podeVerTreinamento(conta, t))) throw new ErroHttp(403, "Sem acesso a este treinamento.");
+  const { data: ps, error: pErro } = await supabaseAdmin.from("peopleflow_dev_participantes").select("id, colaborador_id").eq("treinamento_id", t.id);
+  if (pErro) erroBanco(pErro, "Participantes");
+  const { data: es, error: eErro } = await supabaseAdmin.from("peopleflow_dev_evidencias").select("id").eq("treinamento_id", t.id);
+  if (eErro) erroBanco(eErro, "Evidências");
+  const colunas = "ts, colaborador_id, acao, entidade, entidade_id, detalhe";
+  const consultas = [supabaseAdmin.from("peopleflow_dev_auditoria").select(colunas).eq("entidade", "peopleflow_dev_treinamentos").eq("entidade_id", String(t.id))];
+  if ((ps ?? []).length) consultas.push(supabaseAdmin.from("peopleflow_dev_auditoria").select(colunas).eq("entidade", "peopleflow_dev_participantes").in("entidade_id", (ps ?? []).map((p) => String(p.id))));
+  if ((es ?? []).length) consultas.push(supabaseAdmin.from("peopleflow_dev_auditoria").select(colunas).eq("entidade", "peopleflow_dev_evidencias").in("entidade_id", (es ?? []).map((e) => String(e.id))));
+  const linhas: Record<string, any>[] = [];
+  for (const c of consultas) {
+    const { data, error } = await c;
+    if (error) erroBanco(error, "Histórico");
+    linhas.push(...((data ?? []) as Record<string, any>[]));
+  }
+  const colabDoPart = new Map((ps ?? []).map((p) => [String(p.id), Number(p.colaborador_id)]));
+  const nomes = await nomesDeColaboradores([...linhas.map((l) => Number(l.colaborador_id)).filter((x) => x > 0), ...colabDoPart.values(), ...linhas.flatMap((l) => [l.detalhe?.de, l.detalhe?.para]).filter((x): x is number => typeof x === "number")]);
+  return linhas
+    .filter((l) => ROTULOS_HISTORICO[String(l.acao)])
+    .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
+    .map((l) => {
+      const d = (l.detalhe ?? {}) as Record<string, any>;
+      const alvo = l.entidade === "peopleflow_dev_participantes" ? nomes.get(colabDoPart.get(String(l.entidade_id)) ?? 0) : null;
+      let resumo = alvo ?? "";
+      if (l.acao === "presenca_manual" || l.acao === "presenca_retificada") resumo = `${alvo ?? ""} — ${d.presenca?.depois === "presente" ? "presente" : d.presenca?.depois === "ausente" ? "ausente" : "pendente"}`;
+      if (l.acao === "ausencia_encaminhada") resumo = `${alvo ?? ""} — ${d.depois?.encaminhamento === "dispensa" ? "dispensa" : "reposição"}`;
+      if (l.acao === "treinamento_concluido") resumo = `${d.realizaram ?? 0} presente(s) · ${d.ausentes ?? 0} ausente(s)`;
+      if (l.acao === "responsabilidade_transferida") resumo = `${nomes.get(Number(d.de)) ?? "—"} → ${nomes.get(Number(d.para)) ?? "—"}`;
+      if (l.acao === "participantes_incluidos" && Array.isArray(d.incluidos)) resumo = `${d.incluidos.length} participante(s)`;
+      return { em: new Date(l.ts).toISOString(), rotulo: ROTULOS_HISTORICO[String(l.acao)], por: nomes.get(Number(l.colaborador_id)) ?? "—", resumo: resumo.trim() };
+    });
+}
+
 // ── Pendências (RH: todas; Gestor: da sua área; responsável habilitado: dos treinamentos que administra) ──
 const dia = (v: unknown): string | null => (v == null ? null : (v instanceof Date ? v.toISOString() : String(v)).slice(0, 10));
 async function pendenciasListar(conta: ContaDev, corpo: Corpo = {}) {
@@ -3133,6 +3199,7 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   ausencia_encaminhar: ausenciaEncaminhar,
   treinamento_conferir: treinamentoConferir,
   pendencias_listar: pendenciasListar,
+  treinamento_historico: treinamentoHistorico,
   presenca_manual: presencaManual,
   qr_gerar: qrGerar,
   qr_encerrar: qrEncerrarAcao,

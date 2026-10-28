@@ -82,3 +82,16 @@ Marque ✓ / ✗ e anote observações em cada linha.
 | 8.1 | Repetir 1.1, 4.4, 4.7 e 7.1 no **celular** | Sem rolagem horizontal da página; botões tocáveis; textos legíveis | |
 
 **Ao final:** envie as linhas com ✗ (e o que viu). Qualquer ✗ em 2.3, 6.x ou 7.1 é bloqueio de publicação (isolamento/anonimato/revogação).
+
+## Demonstração local (antes da publicação)
+
+Para ver as telas reais com dados **fictícios** (banco em memória, nada toca o Supabase de produção):
+
+1. `cd tests && npm run demo:api` (servidor local, porta 5190; abre já com os cenários executados).
+2. Na raiz: `npx vite --config tests/demo/vite.demo.config.mts` e abrir `http://localhost:5191/tests/demo/index.html`.
+3. No alto: **Entrar como** (RH, gestoras, colaboradoras habilitadas, participantes), **Reiniciar do zero** ou **Carregar demonstração completa**. A página *Resultado da homologação* lista, por cenário, o esperado × verificado.
+4. Verificação por script, sem interface: `cd tests && npm run demo:verificar` (gera `tests/demo/resultado-homologacao.json`).
+
+O menu lateral da demonstração é simplificado; as telas do módulo (Treinamentos, Treinamento, Meus treinamentos) são as reais. A conferência no celular e a do menu real continuam no roteiro acima.
+
+**Histórico de ações:** cada treinamento tem o cartão *Histórico de ações* (botão *Ver histórico*), com quem fez cada ação e quando (RH, quem administra e a liderança que acompanha).

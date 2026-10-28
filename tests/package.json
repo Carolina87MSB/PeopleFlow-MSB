@@ -27,7 +27,9 @@
     "test:treinamentos": "node --import ./pdi-triagem/register.mjs treinamentos/teste_fluxo.ts",
     "test:treinamentos-operacao": "node --import ./pdi-triagem/register.mjs treinamentos/teste_operacao.ts",
     "test:treinamentos-habilitacao": "node --import ./pdi-triagem/register.mjs treinamentos/teste_habilitacao_banco.ts",
-    "test:treinamentos-habilitacao-fluxo": "node --import ./pdi-triagem/register.mjs treinamentos/teste_habilitacao_fluxo.ts"
+    "test:treinamentos-habilitacao-fluxo": "node --import ./pdi-triagem/register.mjs treinamentos/teste_habilitacao_fluxo.ts",
+    "demo:verificar": "node --import ./pdi-triagem/register.mjs demo/verificar.ts",
+    "demo:api": "node --import ./pdi-triagem/register.mjs demo/servidor.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
