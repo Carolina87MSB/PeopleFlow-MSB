@@ -510,7 +510,7 @@ await t("Telas: Habilitações (RH habilita/revoga; liderança só consulta), Pe
   for (const x of ["habilitacao_conceder", "habilitacao_revogar", "Referência da solicitação da liderança", "Criar acesso ao portal (somente Treinamentos)", "Histórico de revogações", "treinamento_transferir", "ehRH &&"]) if (!hab.includes(x)) throw new Error("Habilitações sem " + x);
   if (/responsavel_gestao_indicar|responsaveis_gestao_listar/.test(hab + ler("src/features/desenvolvimento/devRepository.ts"))) throw new Error("ações antigas de indicação ainda referenciadas");
   const lista = ler("src/features/desenvolvimento/TreinamentosPage.tsx");
-  if (!/id: "pendencias" as const, rotulo: "Pendências"/.test(lista) || !/perfil === "RH" \|\| perfil === "Gestor" \|\| habilitado/.test(lista) || !/<PendenciasAba \/>/.test(lista) || !/perfil === "RH" \? "Habilitações" : "Responsáveis habilitados"/.test(lista)) throw new Error("aba Pendências e botão de habilitações");
+  if (!/id: "pendencias" as const, rotulo: "Pendências"/.test(lista) || !/perfil === "RH" \|\| perfil === "Gestor" \|\| habilitado/.test(lista) || !/<PendenciasAba \/>/.test(lista) || !/perfil === "RH" \? "Habilitações" : "Habilitados na minha área"/.test(lista)) throw new Error("aba Pendências e botão de habilitações");
   const pag = ler("src/features/desenvolvimento/TreinamentoPage.tsx");
   if (!/const conduz = vinculo && habilitado;/.test(pag) || !/podeConcluir: opera && emExecucao/.test(pag) || !/<PainelConclusao/.test(pag) || !/Você acompanha este treinamento \(somente consulta\)/.test(pag) || !/TransferirResponsabilidade/.test(pag)) throw new Error("permissões da página: administra = habilitado + vínculo; liderança acompanha");
   if (/ehRH && \(t\.status === "em_andamento" \|\| externoPlanejado\) && \(\s*<Button variant="success"/.test(pag)) throw new Error("concluir não é mais só do RH");
@@ -531,6 +531,143 @@ await t("Acesso específico a Treinamentos (sem AVD nem outros módulos): conta 
   // o módulo conferido no servidor: habilitar cria SOMENTE o acesso peopleflow (testado acima); a sessão exige habilitação para quem não é RH/Gestor
   const api = ler("api/desenvolvimento.ts");
   if (!/if \(gestoresQueIndicaram\.length === 0\) \{/.test(api) || /conduzAlgum/.test(api)) throw new Error("só a habilitação abre o módulo para quem não é RH/Gestor");
+});
+
+await t("Ajustes de usabilidade: botões e textos novos (presença, transferência visível, filtro, lista de áreas/lideranças, Local, resumo de presenças)", async () => {
+  const ler = (f: string) => fs.readFileSync(`${PF}/${f}`, "utf8");
+  const pag = ler("src/features/desenvolvimento/TreinamentoPage.tsx");
+  if (!/Registrar presença\s*<\/Button>/.test(pag)) throw new Error("botão 'Registrar presença' na seleção de participantes");
+  // resumo: "1 presente (1 por gravação) · 0 ausentes · 0 pendentes"
+  const iResumo = pag.indexOf("{resumo.presente} presente"), iMetodo = pag.indexOf("por ${rot.toLowerCase()}", iResumo), iAusente = pag.indexOf("{resumo.ausente} ausente", iResumo);
+  if (iResumo < 0 || iMetodo < 0 || iAusente < 0 || iMetodo > iAusente) throw new Error("o método de presença vem junto de 'presentes', antes de 'ausentes'");
+  // transferência de responsabilidade: botão visível ao RH, fora de "Mais detalhes"
+  const iDet = pag.indexOf("<details className={styles.maisDetalhes}>"), iFimDet = pag.indexOf("</details>", iDet), iTransf = pag.indexOf("<TransferenciaDoTreinamento t={t}");
+  if (iTransf < 0 || (iTransf > iDet && iTransf < iFimDet)) throw new Error("transferência fora de 'Mais detalhes'");
+  const lista = ler("src/features/desenvolvimento/TreinamentosPage.tsx");
+  if (!/\(perfil === "RH" \|\| \(perfil === "Gestor" && habilitado\)\) && \(\s*<label className=\{styles\.check\}>/.test(lista)) throw new Error("filtro 'Só os que conduzo' só para quem pode conduzir");
+  if (!/perfil === "RH" \? "Habilitações" : "Habilitados na minha área"/.test(lista) || /Responsáveis habilitados"\}/.test(lista) || /precisa habilitá-lo/.test(lista)) throw new Error("textos do Gestor: consulta; habilitar é do RH");
+  const hab = ler("src/features/desenvolvimento/Habilitacoes.tsx");
+  if (!/Área e liderança que solicitou \*/.test(hab) || !/liderança: \{l\.nome\}/.test(hab) || /\(opcoes\.dados \?\? \[\]\)\.map\(\(o\) => \(\s*<option key=\{o\.id\} value=\{o\.id\}>\s*\{o\.nome\}/.test(hab)) throw new Error("seleção por área e liderança (sem lista indistinta de colaboradores)");
+  if (!/habilitar e revogar é feito pelo RH|Habilitar e revogar é feito pelo RH/.test(hab)) throw new Error("o Gestor não habilita");
+  const form = ler("src/features/desenvolvimento/TreinamentoForm.tsx");
+  if (/Local ou link/.test(form) || !/>\s*Local\s*<span className=\{styles\.iconeInfo\}/.test(form) || !/Microsoft Teams, Sala de Treinamento, Ambiente virtual — SharePoint/.test(form) || !/<Info size=\{14\}/.test(form)) throw new Error("campo 'Local' com ícone de informação e exemplos");
+  if (!/value=\{form\.local_link\}/.test(form)) throw new Error("o valor histórico segue no campo (nada é sobrescrito)");
+  if (!/localParaExibicao\(t\.local_link\)/.test(pag)) throw new Error("cabeçalho sem URL extensa");
+  const { localParaExibicao, localParaLista } = await import(pathToFileURL(`${PF}/src/domain/gravacao.ts`).href);
+  const esperado: [string, string][] = [
+    ["Microsoft Teams", "Microsoft Teams"], ["Sala de Treinamento", "Sala de Treinamento"], ["Ambiente virtual — SharePoint", "Ambiente virtual — SharePoint"], ["", ""],
+    ["https://empresa.sharepoint.com/:v:/s/x/EaBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789?e=abc", "Ambiente virtual — SharePoint"],
+    ["https://teams.microsoft.com/l/meetup-join/19%3ameeting_abcdef%40thread.v2/0?context=%7b%22Tid%22", "Microsoft Teams"],
+    ["https://meet.exemplo.com.br/sala/muito/longa/com/muitos/segmentos?token=abcdefghijklmnopqrstuvwxyz", "Link online (meet.exemplo.com.br)"],
+  ];
+  for (const [entrada, saida] of esperado) if (localParaExibicao(entrada) !== saida) throw new Error(`localParaExibicao(${entrada.slice(0, 40)}) = ${localParaExibicao(entrada)}`);
+  if (localParaLista("https://meet.exemplo.com.br/sala/1", false) !== "https://meet.exemplo.com.br/sala/1") throw new Error("a lista de presença (PDF) segue com o local exatamente como cadastrado");
+  const rea = ler("src/features/desenvolvimento/ReacaoRH.tsx");
+  if (!/visao_parcial/.test(rea)) throw new Error("reação: visão parcial do Gestor de outra área");
+});
+
+console.log("8. Gestor que acompanha liderados em treinamento de OUTRA área: sem poderes e sem informações indevidas");
+let TG = 0, nCaio = 0, nDavi = 0, evDavi = 0;
+const col = async (uid: string) => (await como(uid, `select colaborador_id from public.peopleflow_dev_participantes where treinamento_id=${TG} order by 1`)).map((x) => Number(x.colaborador_id)).join();
+const evs = async (uid: string) => (await como(uid, `select id from public.peopleflow_dev_evidencias where treinamento_id=${TG} and substituida_em is null order by 1`)).map((x) => Number(x.id));
+await t("Gestor vê o treinamento e SÓ os próprios liderados (participantes, evidências, vínculos, reação, histórico, pendências); a turma e os demais ficam de fora", async () => {
+  TG = (await espera("rh", "treinamento_salvar", cad({ titulo: "Treinamento da Produção com liderado da Logística", responsavel_colaborador_id: 1, instrutor_externo: "Palestrante de Fora" }), 200)).id;
+  await espera("rh", "participantes_adicionar", { treinamento_id: TG, colaborador_ids: [4, 3, 5] }, 200);
+  await espera("rh", "treinamento_iniciar", { id: TG }, 200);
+  await espera("rh", "presenca_manual", { treinamento_id: TG, participante_ids: [(await part(TG, 4)).id, (await part(TG, 3)).id], presenca: "presente", motivo: "Lista física" }, 200);
+  await espera("rh", "presenca_manual", { treinamento_id: TG, participante_ids: [(await part(TG, 5)).id], presenca: "ausente", motivo: "Em férias" }, 200);
+  await espera("rh", "ausencia_encaminhar", { participante_id: (await part(TG, 5)).id, justificativa: "Férias combinadas (texto reservado)", encaminhamento: "reposicao" }, 200);
+  const anexa = async (tipo: string, arquivo: string, participante?: number) => {
+    const u = await espera("rh", "evidencia_upload_url", { treinamento_id: TG, tipo, file_name: arquivo, mime: "application/pdf", tamanho_bytes: 500 }, 200);
+    fake.storage.from("desenvolvimento-evidencias")._simularUpload(u.path, 500, "application/pdf");
+    return (await espera("rh", "evidencia_registrar", { treinamento_id: TG, path: u.path, tipo, file_name: arquivo, ...(participante ? { participante_id: participante } : {}) }, 200)).id as number;
+  };
+  const evTurma = await anexa("ata", "ata-da-turma.pdf");
+  evDavi = await anexa("comprovante", "comprovante-davi.pdf", (await part(TG, 4)).id);
+  // vínculos: uma Necessidade do Caio (Produção) e uma do Davi (Logística)
+  nCaio = (await espera("rh", "necessidade_registrar", { colaborador_id: 3, descricao: "Necessidade do Caio", categoria: "tecnica", justificativa: "teste" }, 200)).id;
+  nDavi = (await espera("rh", "necessidade_registrar", { colaborador_id: 4, descricao: "Necessidade do Davi", categoria: "tecnica", justificativa: "teste" }, 200)).id;
+  await db.exec(`update public.peopleflow_dev_necessidades set status='validada' where id in (${nCaio}, ${nDavi})`);
+  await espera("rh", "necessidades_vincular", { treinamento_id: TG, necessidade_ids: [nCaio, nDavi] }, 200);
+
+  // RLS (leitura direta, com o papel real de cada pessoa): Gil enxerga o treinamento e só o Davi
+  if (!(await ids(U.gil)).includes(TG) || !(await ids(U.ge)).includes(TG)) throw new Error("os dois gestores veem o treinamento");
+  if ((await col(U.gil)) !== "4" || (await col(U.ge)) !== "3,5" || (await col(U.rh)) !== "3,4,5") throw new Error(`participantes por RLS: gil=${await col(U.gil)} ge=${await col(U.ge)}`);
+  if (jsonDe(await evs(U.gil)) !== jsonDe([evDavi])) throw new Error("Gil vê só a evidência individual do Davi (não a ata nem a lista da turma): " + jsonDe(await evs(U.gil)));
+  if ((await evs(U.ge)).length !== 0) throw new Error("Bia não vê evidência da turma nem a do Davi: " + jsonDe(await evs(U.ge)));
+  if (!(await evs(U.rh)).includes(evTurma)) throw new Error("o RH vê tudo");
+  // abrir arquivos (servidor): a mesma regra
+  await espera("gil", "evidencia_url", { id: evDavi }, 200);
+  await espera("gil", "evidencia_url", { id: evTurma }, 403);
+  await espera("ge", "evidencia_url", { id: evDavi }, 403);
+  await espera("ge", "evidencia_url", { id: evTurma }, 403);
+  await espera("rh", "evidencia_url", { id: evTurma }, 200);
+  // Necessidades vinculadas: cada gestor só as dos seus liderados
+  const vinc = async (tok: string) => (await espera(tok, "vinculos_listar", { treinamento_id: TG }, 200)).map((v: any) => v.necessidade?.colaborador_id).sort().join();
+  if ((await vinc("gil")) !== "4" || (await vinc("ge")) !== "3" || (await vinc("rh")) !== "3,4") throw new Error(`vínculos: gil=${await vinc("gil")} ge=${await vinc("ge")} rh=${await vinc("rh")}`);
+  // Avaliação de reação: só a situação dos seus liderados, sem médias da turma
+  const rGil = await espera("gil", "reacao_detalhe", { treinamento_id: TG }, 200), rRH = await espera("rh", "reacao_detalhe", { treinamento_id: TG }, 200);
+  if (jsonDe(rGil.participantes.map((p: any) => p.colaborador_id)) !== "[4]" || rGil.visao_parcial !== true || rGil.medias !== null || rRH.participantes.length !== 2 || rRH.visao_parcial !== false) throw new Error("reação parcial: " + jsonDe([rGil, rRH]).slice(0, 400));
+  // Histórico de ações: nada sobre os participantes de outras equipes nem sobre a turma
+  const hGil = await espera("gil", "treinamento_historico", { treinamento_id: TG }, 200), hRH = await espera("rh", "treinamento_historico", { treinamento_id: TG }, 200);
+  const txt = jsonDe(hGil);
+  if (/Caio|Eva|ata-da-turma|Férias|reservado/.test(txt) || !/Davi/.test(txt) || !/Caio/.test(jsonDe(hRH)) || hGil.some((e: any) => /Evidência|Lista de presença/.test(e.rotulo))) throw new Error("histórico do Gil: " + txt.slice(0, 500));
+});
+await t("Sem poderes administrativos: nem como Gestor, nem como Gestor HABILITADO para outros treinamentos (o vínculo ao treinamento é que dá o poder)", async () => {
+  const admin: [string, Record<string, unknown>][] = [
+    ["treinamento_iniciar", { id: TG }], ["treinamento_salvar", cad({ id: TG, titulo: "Alterado", responsavel_colaborador_id: 1 })], ["participantes_adicionar", { treinamento_id: TG, colaborador_ids: [9] }],
+    ["presenca_manual", { treinamento_id: TG, participante_ids: [(await part(TG, 4)).id], presenca: "ausente", motivo: "x" }], ["qr_gerar", { treinamento_id: TG }],
+    ["ausencia_encaminhar", { participante_id: (await part(TG, 4)).id, justificativa: "x", encaminhamento: "reposicao" }], ["treinamento_conferir", { id: TG }], ["treinamento_concluir", { id: TG }],
+    ["treinamento_cancelar", { id: TG, motivo: "x" }], ["evidencia_upload_url", { treinamento_id: TG, tipo: "ata", file_name: "a.pdf", mime: "application/pdf", tamanho_bytes: 10 }],
+    ["necessidades_vincular", { treinamento_id: TG, necessidade_ids: [nDavi] }], ["treinamento_transferir", { treinamento_id: TG, para_colaborador_id: 8, motivo_tipo: "outro", motivo: "x" }], ["reposicao_faltantes", { treinamento_id: TG }],
+  ];
+  for (const [acao, corpo] of admin) await espera("gil", acao, corpo, 403);
+  // Gil habilitado pelo RH para os treinamentos DELE: continua sem poder sobre este (não é responsável nem instrutor)
+  await espera("rh", "habilitacao_conceder", { colaborador_id: 6, gestor_colaborador_id: 1, referencia: REF }, 200);
+  for (const [acao, corpo] of admin) await espera("gil", acao, corpo, 403);
+  await espera("gil", "evidencia_url", { id: (await q(`select id from public.peopleflow_dev_evidencias where treinamento_id=${TG} and participante_id is null limit 1`))[0].id }, 403);
+  const hid = (await q("select id from public.peopleflow_dev_responsaveis_gestao where colaborador_id=6 and ativo"))[0].id;
+  await espera("rh", "habilitacao_revogar", { id: hid, motivo: "Fim da conferência de visibilidade" }, 200);
+  // revogar a habilitação de um GESTOR não pode apagar a sua equipe: ele segue acompanhando a própria área (só perde o poder de administrar)
+  if (!(await ids(U.gil)).includes(TG) || (await col(U.gil)) !== "4") throw new Error("o Gestor segue acompanhando os liderados depois de perder a habilitação");
+  await espera("gil", "pendencias_listar", {}, 200);
+});
+
+await t("Sessão concluída: a lista de presença gerada (todos os nomes) e as pendências dos demais participantes também ficam fora do alcance do Gestor da outra área", async () => {
+  // Concluída a sessão, a lista de presença gerada (todos os nomes) também fica fora do alcance do Gil
+  await espera("rh", "treinamento_concluir", { id: TG }, 200);
+  if (jsonDe(await evs(U.gil)) !== jsonDe([evDavi])) throw new Error("depois de concluir: Gil continua só com a evidência do Davi: " + jsonDe(await evs(U.gil)));
+  const lista = (await q(`select id from public.peopleflow_dev_evidencias where treinamento_id=${TG} and tipo='lista_presenca' and substituida_em is null`))[0].id;
+  await espera("gil", "evidencia_url", { id: lista }, 403);
+  await espera("ge", "evidencia_url", { id: lista }, 403);
+  await espera("rh", "evidencia_url", { id: lista }, 200);
+  // Pendências: a reposição da Eva (Produção) é da Bia, não do Gil
+  const pend = async (tok: string) => (await espera(tok, "pendencias_listar", {}, 200)).reposicoes.filter((r: any) => r.treinamento_id === TG).map((r: any) => r.colaborador_id).join();
+  if ((await pend("gil")) !== "" || (await pend("ge")) !== "5" || (await pend("rh")) !== "5") throw new Error(`pendências: gil=${await pend("gil")} ge=${await pend("ge")}`);
+});
+
+console.log("9. Instrutor externo ≠ treinamento externo: os requisitos documentais seguem a MODALIDADE cadastrada");
+await t("Interno com palestrante de fora: não exige certificado nem evidência individual (a lista é gerada pelo PeopleFlow). Externo: exige UMA evidência da turma, de qualquer tipo, não certificado por participante", async () => {
+  const semEvid = await espera("rh", "treinamento_salvar", cad({ titulo: "Interno com palestrante externo, sem anexos", responsavel_colaborador_id: 1, instrutor_externo: "Palestrante de Fora" }), 200);
+  await espera("rh", "participantes_adicionar", { treinamento_id: semEvid.id, colaborador_ids: [3, 5] }, 200);
+  await espera("rh", "treinamento_iniciar", { id: semEvid.id }, 200);
+  await espera("rh", "presenca_manual", { treinamento_id: semEvid.id, participante_ids: [(await part(semEvid.id, 3)).id, (await part(semEvid.id, 5)).id], presenca: "presente", motivo: "Lista física" }, 200);
+  const cG = await espera("rh", "treinamento_conferir", { id: semEvid.id }, 200);
+  if (cG.impedimentos.some((i: any) => i.codigo === "evidencia_externo") || !cG.pode_concluir) throw new Error("interno + instrutor externo não exige evidência: " + jsonDe(cG));
+  await espera("rh", "treinamento_concluir", { id: semEvid.id }, 200);
+  if ((await q(`select count(*)::int n from public.peopleflow_dev_evidencias where treinamento_id=${semEvid.id} and tipo='certificado'`))[0].n !== 0) throw new Error("nenhum certificado exigido nem criado");
+  // Externo (realizado fora), instrutor interno: exige evidência — uma só, da turma, do tipo que o RH tiver (aqui: comprovante), sem certificado individual
+  const ext = (await espera("rh", "treinamento_salvar", cad({ titulo: "Curso realizado fora da empresa", modalidade: "externo", responsavel_colaborador_id: 1, instrutor_colaborador_id: 7 }), 200)).id;
+  await espera("rh", "participantes_adicionar", { treinamento_id: ext, colaborador_ids: [3, 5] }, 200);
+  await espera("rh", "presenca_manual", { treinamento_id: ext, participante_ids: [(await part(ext, 3)).id, (await part(ext, 5)).id], presenca: "presente", motivo: "Declaração do curso" }, 200);
+  await espera("rh", "treinamento_realizacao", { id: ext, data_realizacao: hojeSP, carga_realizada_min: 120 }, 200);
+  const antes = await espera("rh", "treinamento_conferir", { id: ext }, 200);
+  if (jsonDe(antes.impedimentos.map((i: any) => i.codigo)) !== '["evidencia_externo"]') throw new Error("externo: só falta a evidência: " + jsonDe(antes));
+  const u = await espera("rh", "evidencia_upload_url", { treinamento_id: ext, tipo: "comprovante", file_name: "comprovante-do-curso.pdf", mime: "application/pdf", tamanho_bytes: 700 }, 200);
+  fake.storage.from("desenvolvimento-evidencias")._simularUpload(u.path, 700, "application/pdf");
+  await espera("rh", "evidencia_registrar", { treinamento_id: ext, path: u.path, tipo: "comprovante", file_name: "comprovante-do-curso.pdf" }, 200);
+  await espera("rh", "treinamento_concluir", { id: ext }, 200);
+  if ((await q(`select count(*)::int n from public.peopleflow_dev_evidencias where treinamento_id=${ext} and participante_id is not null`))[0].n !== 0) throw new Error("sem exigir evidência por participante");
 });
 
 console.log(`\n${ok} passaram, ${falhas} falharam`);

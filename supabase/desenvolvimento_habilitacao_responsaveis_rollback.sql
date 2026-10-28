@@ -43,6 +43,14 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 drop function if exists public.peopleflow_dev_habilitado_agora();
 
+-- 1b. Evidências: política anterior (fase 1)
+drop policy if exists dev_evidencias_leitura on public.peopleflow_dev_evidencias;
+create policy dev_evidencias_leitura on public.peopleflow_dev_evidencias for select to authenticated
+  using (
+    public.peopleflow_dev_treinamento_visivel(treinamento_id)
+    and (participante_id is null or public.peopleflow_dev_participante_visivel(participante_id))
+  );
+
 -- 2. Ausências (colunas vazias, conferido acima)
 alter table public.peopleflow_dev_participantes
   drop constraint if exists peopleflow_dev_part_ausencia_enc_chk,

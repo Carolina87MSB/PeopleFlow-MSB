@@ -103,6 +103,8 @@ export interface DetalheReacao extends IndicadorReacao {
   minimo_respostas_para_medias: number;
   questoes: string[];
   treinamento: { id: number; codigo: string; titulo: string; status: StatusTreinamento } | null;
+  /** Gestor que acompanha só por participação de liderados (treinamento de outra área): vê apenas os seus liderados e não as médias da turma. */
+  visao_parcial?: boolean;
   /** Controle de adesão: quem respondeu e quando — as NOTAS nunca vêm associadas a uma pessoa. */
   participantes: { participante_id: number; colaborador_id: number; nome: string; cargo: string; departamento: string; situacao: "pendente" | "vencida" | "respondida"; prazo: string; respondido_em: string | null; fora_do_prazo: boolean }[];
 }

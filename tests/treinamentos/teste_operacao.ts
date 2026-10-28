@@ -219,13 +219,13 @@ await t("Presença manual (com justificativa) pelo responsável designado e pelo
   const a = await q(`select count(*)::int n from public.peopleflow_dev_auditoria where acao='presenca_manual' and detalhe->>'motivo' = 'Faltou — atestado'`);
   if (a[0].n !== 1) throw new Error("auditoria da presença manual");
 });
-await t("Evidência anexada pelo responsável designado (bucket privado), visível a quem conduz e ao gestor com liderado na turma; não ao Responsável não designado", async () => {
+await t("Evidência anexada pelo responsável designado (bucket privado), visível a quem conduz e à gestão que registrou; o gestor de OUTRA área (só liderado na turma) e o Responsável não designado não abrem a evidência da turma", async () => {
   const u = await espera("resp", "evidencia_upload_url", { treinamento_id: tPop, tipo: "foto", file_name: "Sala.pdf", mime: "application/pdf", tamanho_bytes: 1200 }, 200);
   fake.storage.from("desenvolvimento-evidencias")._simularUpload(u.path, 1200, "application/pdf");
   const e = await espera("resp", "evidencia_registrar", { treinamento_id: tPop, path: u.path, tipo: "foto", file_name: "Sala.pdf" }, 200);
   await espera("ge", "evidencia_url", { id: e.id }, 200);
   await espera("resp", "evidencia_url", { id: e.id }, 200);
-  await espera("gil", "evidencia_url", { id: e.id }, 200); // gestor com liderado (Davi) na turma acompanha o treinamento, como na tela
+  await espera("gil", "evidencia_url", { id: e.id }, 403); // gestor com liderado (Davi) na turma acompanha o treinamento, mas a evidência da TURMA é da gestão dona do treinamento
   await espera("hugo", "evidencia_url", { id: e.id }, 403); // Responsável indicado, mas não designado neste treinamento
   await espera("p3", "evidencia_url", { id: e.id }, 401);
 });
@@ -785,7 +785,8 @@ await t("Privacidade: RH vê quem respondeu (adesão) mas NUNCA a nota de uma pe
   for (const [quem, st] of [["ge", 200], ["gil", 200], ["resp", 200], ["hugo", 403]] as const) {
     const dt = await chamar(quem, "reacao_detalhe", { treinamento_id: tPop });
     if (dt.c !== st) throw new Error(`${quem}: reacao_detalhe esperado ${st}, veio ${dt.c}`);
-    if (st === 200 && (/"respostas"|"nota"|"q[1-5]"/.test(JSON.stringify(dt.b)) || JSON.stringify(dt.b.dados.medias) !== JSON.stringify(det.medias))) throw new Error(`${quem}: o acompanhamento também só traz o consolidado (a partir de 3 respostas)`);
+    const parcial = quem === "gil"; // gestor de outra área (só um liderado na turma): vê apenas o liderado e não as médias da turma
+    if (st === 200 && (/"respostas"|"nota"|"q[1-5]"/.test(JSON.stringify(dt.b)) || JSON.stringify(dt.b.dados.medias) !== JSON.stringify(parcial ? null : det.medias) || Boolean(dt.b.dados.visao_parcial) !== parcial)) throw new Error(`${quem}: o acompanhamento também só traz o consolidado (a partir de 3 respostas)`);
   }
   await espera("p3", "reacao_resumo", {}, 401);
   // a conclusão não depende das respostas: um treinamento oficial com avaliação pendente conclui normalmente

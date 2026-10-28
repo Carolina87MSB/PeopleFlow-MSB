@@ -739,6 +739,11 @@ async function gestorAcompanha(conta: ContaDev, t: Treinamento): Promise<boolean
   if ([t.responsavel_colaborador_id, t.instrutor_colaborador_id].some((id) => id != null && escopo.has(Number(id)))) return true;
   return (await participantesAtivos(t.id)).some((p) => escopo.has(Number(p.colaborador_id)));
 }
+/** Visão COMPLETA do treinamento (todos os participantes, evidências da turma, vínculos): RH, quem o administra e o Gestor da gestão que o registrou.
+ * O Gestor que acompanha só porque liderados seus participam (treinamento de outra área) vê apenas os próprios liderados. */
+async function visaoCompleta(conta: ContaDev, t: Treinamento): Promise<boolean> {
+  return conta.perfil === "RH" || ehAdministrador(conta, t) || (await ehDaGestao(conta, t));
+}
 /** Planejamento (editar/cancelar): RH sempre; quem administra o treinamento enquanto a realização não começou. Sem aprovação do RH. */
 async function podeEditarTreinamento(conta: ContaDev, t: Treinamento): Promise<boolean> {
   if (conta.perfil === "RH") return true;
@@ -1505,10 +1510,15 @@ async function vinculosListar(conta: ContaDev, corpo: Corpo) {
     .select("id, necessidade_id, ativo, situacao, indicado_por_colaborador_id, vinculado_em, analisado_em, analise_motivo")
     .eq("treinamento_id", t.id);
   if (error) erroBanco(error, "Vínculos");
-  const linhas = (data ?? []).filter((v) => v.ativo || v.situacao === "rejeitada");
-  if (!linhas.length) return [];
-  const { data: nec, error: nErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, colaborador_id, descricao, categoria, prioridade, status").in("id", linhas.map((v) => Number(v.necessidade_id)));
+  const todas = (data ?? []).filter((v) => v.ativo || v.situacao === "rejeitada");
+  if (!todas.length) return [];
+  const { data: nec, error: nErro } = await supabaseAdmin.from("peopleflow_dev_necessidades").select("id, colaborador_id, descricao, categoria, prioridade, status").in("id", todas.map((v) => Number(v.necessidade_id)));
   if (nErro) erroBanco(nErro, "Necessidade de Desenvolvimento");
+  // Gestor que acompanha só por participação de liderados: apenas as necessidades dos próprios liderados.
+  const escopo = (await visaoCompleta(conta, t)) ? null : await idsNoEscopo(conta);
+  const visiveis = new Set((nec ?? []).filter((n) => !escopo || escopo.has(Number(n.colaborador_id))).map((n) => Number(n.id)));
+  const linhas = todas.filter((v) => visiveis.has(Number(v.necessidade_id)));
+  if (!linhas.length) return [];
   const porId = new Map((nec ?? []).map((n) => [Number(n.id), n]));
   const ids = [...new Set([...(nec ?? []).map((n) => Number(n.colaborador_id)), ...linhas.map((v) => Number(v.indicado_por_colaborador_id)).filter(Boolean)])];
   const { data: pessoas } = ids.length ? await supabaseAdmin.from("colaboradores").select("id, nome").in("id", ids) : { data: [] };
@@ -1896,7 +1906,7 @@ async function evidenciaUrl(conta: ContaDev, corpo: Corpo) {
   if (!pode && conta.perfil === "Gestor") {
     const escopo = await idsNoEscopo(conta);
     if (ev.participante_id) pode = escopo.has(Number((await lerParticipante(ev.participante_id)).colaborador_id));
-    else pode = (await participantesAtivos(t.id)).some((p) => escopo.has(Number(p.colaborador_id))) || ehSolicitante(conta, t);
+    else pode = await ehDaGestao(conta, t); // lista de presença, ata e materiais da turma: só a gestão dona do treinamento
   }
   if (!pode) throw new ErroHttp(403, "Sem acesso a esta evidência.");
   // "visualizar": abre no navegador; padrão: baixa com o nome original. Link válido por 5 minutos.
@@ -2112,12 +2122,17 @@ async function habilitacaoRevogar(conta: ContaDev, corpo: Corpo) {
   const agora = new Date().toISOString();
   const { error: uErro } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").update({ ativo: false, revogado_em: agora, revogado_por: conta.userId, revogado_motivo: motivo }).eq("id", id);
   if (uErro) erroBanco(uErro, "Habilitação");
-  // Encerra os poderes na hora: o escopo e a sessão do módulo são cópias derivadas (recriadas na próxima entrada, se ainda couber).
+  // Encerra os poderes na hora. Para quem só entra no módulo pela habilitação (perfil Responsavel), o escopo e a sessão do módulo são cópias derivadas
+  // e são removidos agora. Gestor e RH continuam no módulo (a habilitação dava só o poder de administrar): o escopo da liderança NÃO pode ser apagado.
   const colaboradorId = Number(r.colaborador_id);
-  const { error: eErro } = await supabaseAdmin.from("peopleflow_dev_escopo").delete().eq("gestor_colaborador_id", colaboradorId);
-  if (eErro) erroBanco(eErro, "Escopo");
-  const { error: sErro } = await supabaseAdmin.from("peopleflow_dev_contas").delete().eq("colaborador_id", colaboradorId).eq("perfil", "Responsavel");
-  if (sErro) erroBanco(sErro, "Sessão do módulo");
+  const { data: contasDele, error: cErro } = await supabaseAdmin.from("peopleflow_dev_contas").select("perfil").eq("colaborador_id", colaboradorId);
+  if (cErro) erroBanco(cErro, "Sessão do módulo");
+  if ((contasDele ?? []).some((c) => c.perfil === "Responsavel")) {
+    const { error: eErro } = await supabaseAdmin.from("peopleflow_dev_escopo").delete().eq("gestor_colaborador_id", colaboradorId);
+    if (eErro) erroBanco(eErro, "Escopo");
+    const { error: sErro } = await supabaseAdmin.from("peopleflow_dev_contas").delete().eq("colaborador_id", colaboradorId).eq("perfil", "Responsavel");
+    if (sErro) erroBanco(sErro, "Sessão do módulo");
+  }
   const pendentes = await treinamentosPendentesDe(colaboradorId);
   await auditar(conta, "habilitacao_revogada", "peopleflow_dev_responsaveis_gestao", String(id), { colaborador_id: colaboradorId, gestor_colaborador_id: Number(r.gestor_colaborador_id), motivo, treinamentos_pendentes: pendentes.map((p) => p.id) });
   return { ok: true, pendentes };
@@ -2337,8 +2352,11 @@ async function treinamentoHistorico(conta: ContaDev, corpo: Corpo) {
   }
   const colabDoPart = new Map((ps ?? []).map((p) => [String(p.id), Number(p.colaborador_id)]));
   const nomes = await nomesDeColaboradores([...linhas.map((l) => Number(l.colaborador_id)).filter((x) => x > 0), ...colabDoPart.values(), ...linhas.flatMap((l) => [l.detalhe?.de, l.detalhe?.para]).filter((x): x is number => typeof x === "number")]);
+  // Gestor que acompanha só por participação de liderados: nada sobre participantes de outras equipes nem sobre as evidências da turma.
+  const escopoHist = (await visaoCompleta(conta, t)) ? null : await idsNoEscopo(conta);
   return linhas
     .filter((l) => ROTULOS_HISTORICO[String(l.acao)])
+    .filter((l) => !escopoHist || (l.entidade !== "peopleflow_dev_evidencias" && (l.entidade !== "peopleflow_dev_participantes" || escopoHist.has(colabDoPart.get(String(l.entidade_id)) ?? 0))))
     .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
     .map((l) => {
       const d = (l.detalhe ?? {}) as Record<string, any>;
@@ -2381,6 +2399,10 @@ async function pendenciasListar(conta: ContaDev, corpo: Corpo = {}) {
     (conta.perfil === "Gestor" &&
       (Number(t.solicitado_por_colaborador_id) === eu || escopo.has(Number(t.solicitado_por_colaborador_id)) || [t.responsavel_colaborador_id, t.instrutor_colaborador_id].some((v) => v != null && escopo.has(Number(v))) ||
         (porTreino.get(Number(t.id)) ?? []).some((p) => escopo.has(Number(p.colaborador_id)))));
+  // Visão completa do treinamento (todos os participantes): RH, quem o administra e o Gestor da gestão que o registrou. O Gestor que o acompanha só porque
+  // liderados participam (treinamento de outra área) vê as pendências dos próprios liderados, não as dos demais participantes.
+  const completa = (t: Record<string, any>) =>
+    ehRH || (conta.habilitado === true && [t.responsavel_colaborador_id, t.instrutor_colaborador_id].some((v) => v != null && Number(v) === eu)) || (conta.perfil === "Gestor" && (Number(t.solicitado_por_colaborador_id) === eu || escopo.has(Number(t.solicitado_por_colaborador_id))));
   const { data: cs, error: cErro } = await supabaseAdmin.from("colaboradores").select(`id, nome, ${COLUNAS_SITUACAO}`);
   if (cErro) erroBanco(cErro, "Colaboradores");
   const nomes = new Map((cs ?? []).map((c) => [Number(c.id), String(c.nome)]));
@@ -2399,7 +2421,7 @@ async function pendenciasListar(conta: ContaDev, corpo: Corpo = {}) {
       if (dele.some((l) => l.presenca_status === "presente")) continue; // regularizado
       if (dele.some((l) => l.ausencia_encaminhamento === "dispensa")) continue; // dispensado pelo RH, com justificativa
       const ultimo = dele.filter((l) => l.presenca_status === "ausente" && l.t.status === "concluido").sort((a, b) => Number(b.treinamento_id) - Number(a.treinamento_id))[0];
-      if (!visivel(ultimo.t)) continue;
+      if (!visivel(ultimo.t) || (!completa(ultimo.t) && !escopo.has(colab))) continue;
       const programada = dele.find((l) => l.presenca_status === "pendente" && ["planejado", "em_andamento"].includes(String(l.t.status)));
       reposicoes.push({
         tipo: "reposicao",
@@ -2418,7 +2440,7 @@ async function pendenciasListar(conta: ContaDev, corpo: Corpo = {}) {
   const hoje = hojeSaoPaulo();
   const eficacia = oficiais
     .filter((t) => t.status === "concluido" && t.exige_eficacia && visivel(t))
-    .map((t) => ({ t, faltam: (porTreino.get(Number(t.id)) ?? []).filter((p) => p.presenca_status === "presente" && !p.eficacia_resultado).length }))
+    .map((t) => ({ t, faltam: (porTreino.get(Number(t.id)) ?? []).filter((p) => p.presenca_status === "presente" && !p.eficacia_resultado && (completa(t) || escopo.has(Number(p.colaborador_id)))).length }))
     .filter((x) => x.faltam > 0)
     .map(({ t, faltam }) => ({ tipo: "eficacia_pendente", teste: Boolean(t.homologacao), treinamento_id: Number(t.id), codigo: t.codigo, titulo: t.titulo, faltam, prazo: dia(t.eficacia_prazo), vencida: Boolean(t.eficacia_prazo && String(t.eficacia_prazo) < hoje) }));
 
@@ -2757,7 +2779,10 @@ async function reacaoDetalhe(conta: ContaDev, corpo: Corpo) {
   const pessoa = new Map((pessoas ?? []).map((c) => [Number(c.id), c]));
   const agora = new Date();
   const ordem = { vencida: 0, pendente: 1, respondida: 2 } as const;
+  // Gestor que acompanha só por participação de liderados: nomes e situação apenas dos próprios liderados (as médias seguem consolidadas, com o mínimo de respostas).
+  const escopoReacao = (await visaoCompleta(conta, tr)) ? null : await idsNoEscopo(conta);
   const participantes = elegiveis
+    .filter((p) => !escopoReacao || escopoReacao.has(Number(p.colaborador_id)))
     .map((p) => {
       const r = resp.get(Number(p.id));
       const c = pessoa.get(Number(p.colaborador_id));
@@ -2771,7 +2796,7 @@ async function reacaoDetalhe(conta: ContaDev, corpo: Corpo) {
     .sort((a, b) => ordem[a.situacao] - ordem[b.situacao] || a.nome.localeCompare(b.nome, "pt-BR"));
   const respondidos = participantes.filter((x) => x.situacao === "respondida").length;
   const ns = notas.map(arrayDeNotas);
-  return { ...base, treinamento: { id: Number(t.id), codigo: t.codigo, titulo: t.titulo, status: t.status }, ...indicadorAdesao(participantes.length, respondidos), vencidas: participantes.filter((x) => x.situacao === "vencida").length, medias: mediasConsolidadas(ns), participantes };
+  return { ...base, treinamento: { id: Number(t.id), codigo: t.codigo, titulo: t.titulo, status: t.status }, ...indicadorAdesao(participantes.length, respondidos), vencidas: participantes.filter((x) => x.situacao === "vencida").length, medias: escopoReacao ? null : mediasConsolidadas(ns), visao_parcial: Boolean(escopoReacao), participantes };
 }
 
 async function presencaViaQr(acao: "presenca_info" | "presenca_confirmar", req: VercelRequest) {

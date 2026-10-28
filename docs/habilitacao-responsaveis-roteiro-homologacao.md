@@ -15,7 +15,7 @@ Marque ✓ / ✗ e anote observações em cada linha.
 | 1.4 | Tentar habilitar A de novo | Recusado ("já está habilitado") | |
 | 1.5 | Habilitar **B** e **C** (C em outra gestão) | Ambos listados | |
 | 1.6 | (Opcional) Habilitar pessoa **sem conta e com menos de seis meses** | Pede para marcar "Criar acesso ao portal (somente Treinamentos)"; após habilitar, a pessoa entra e vê **só** "Meus treinamentos" e Treinamentos (sem AVD e sem outros módulos) | |
-| 1.7 | Entrar como o **gestor de A** → Treinamentos | Botão "Responsáveis habilitados" mostra A e B **somente leitura**; **sem** botão "Registrar treinamento" | |
+| 1.7 | Entrar como o **gestor de A** → Treinamentos | Botão **"Habilitados na minha área"** mostra A e B **somente leitura** (a habilitação é do RH); **sem** botão "Registrar treinamento" e **sem** o filtro "Só os que conduzo" | |
 
 ## 2. Responsável e instrutor administram (e só o seu treinamento)
 | # | Passo | Esperado | Resultado |
@@ -95,3 +95,16 @@ Para ver as telas reais com dados **fictícios** (banco em memória, nada toca o
 O menu lateral da demonstração é simplificado; as telas do módulo (Treinamentos, Treinamento, Meus treinamentos) são as reais. A conferência no celular e a do menu real continuam no roteiro acima.
 
 **Histórico de ações:** cada treinamento tem o cartão *Histórico de ações* (botão *Ver histórico*), com quem fez cada ação e quando (RH, quem administra e a liderança que acompanha).
+
+## Ajustes de usabilidade e validações (segunda rodada)
+| # | Passo | Esperado | Resultado |
+|---|---|---|---|
+| 9.1 | Treinamento em andamento → marcar participantes | O botão é **"Registrar presença"** | |
+| 9.2 | Resumo dos participantes | Ex.: "1 presente (1 por gravação) · 0 ausentes · 0 pendentes" | |
+| 9.3 | RH abre um treinamento pendente | O botão **"Transferir responsabilidade"** está visível (fora de "Mais detalhes") | |
+| 9.4 | Habilitações (RH) → escolher o colaborador | O campo **"Área e liderança que solicitou"** lista áreas com a liderança (não todos os colaboradores) e já vem preenchido pela liderança imediata | |
+| 9.5 | Registrar/editar treinamento | O campo se chama **"Local"**, com ícone de informação e exemplos; o valor antigo (inclusive link) segue no campo | |
+| 9.6 | Cabeçalho do treinamento com link cadastrado | Aparece "Ambiente virtual — SharePoint", "Microsoft Teams" ou "Link online (site)", nunca a URL inteira | |
+| 9.7 | Gestor abre treinamento de **outra área** em que só um liderado participa | Vê só o liderado (participantes, reação, histórico, pendências, vínculos); **sem** lista de presença, ata nem materiais da turma; sem botões de administração | |
+| 9.8 | Treinamento **interno com palestrante de fora** (campo "Instrutor / instituição externa") | Conclui sem certificado nem evidência individual; a lista é gerada pelo PeopleFlow | |
+| 9.9 | Treinamento de modalidade **Externo** | Exige uma evidência (certificado, comprovante, lista ou declaração) antes de concluir — não uma por participante | |

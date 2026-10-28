@@ -21,7 +21,10 @@
 --   3. peopleflow_dev_participantes: justificativa da ausência, encaminhamento (reposição | dispensa), data prevista da
 --      reposição e dispensa autorizada pelo RH — colunas NOVAS, vazias para todos os registros existentes.
 --   4. Leitura (RLS): o perfil Responsavel (habilitado) lê SOMENTE os treinamentos em que é responsável ou instrutor, e só
---      enquanto a habilitação estiver ativa — não mais a gestão inteira. RH e Gestor: sem perda de leitura.
+--      enquanto a habilitação estiver ativa — não mais a gestão inteira. RH e Gestor: sem perda de leitura de participantes.
+--   5. Leitura de evidências da TURMA (lista de presença, ata, materiais): o Gestor que acompanha um treinamento de OUTRA área
+--      só porque liderados seus participam passa a ver apenas as evidências individuais dos seus liderados; as da turma
+--      ficam com RH, quem administra e a gestão que registrou o treinamento (o servidor aplica a mesma regra ao abrir o arquivo).
 --
 -- Transacional e idempotente. Rodar em Supabase > SQL Editor > New query.
 -- Pré-checagem (somente leitura): supabase/desenvolvimento_habilitacao_responsaveis_prechecagem.sql
@@ -236,6 +239,22 @@ begin
     execute format('grant execute on function public.%s to authenticated, service_role', f);
   end loop;
 end $$;
+
+-- ── 5. Evidências da turma: não vazam para a liderança de outra área ─────
+-- Antes: quem via o treinamento (inclusive o Gestor com um liderado na turma) via as evidências sem participante (lista de presença
+-- com TODOS os nomes, ata, materiais). Agora: evidência individual → como antes; evidência da turma → RH, Responsavel do treinamento
+-- ou quem "gere" o treinamento (gestão que o registrou).
+drop policy if exists dev_evidencias_leitura on public.peopleflow_dev_evidencias;
+create policy dev_evidencias_leitura on public.peopleflow_dev_evidencias for select to authenticated
+  using (
+    public.peopleflow_dev_treinamento_visivel(treinamento_id)
+    and (
+      case when participante_id is not null
+        then public.peopleflow_dev_participante_visivel(participante_id)
+        else (select public.peopleflow_dev_meu_perfil()) in ('RH', 'Responsavel') or public.peopleflow_dev_gere_treinamento(treinamento_id)
+      end
+    )
+  );
 
 -- Atualiza o cache da API (PostgREST).
 notify pgrst, 'reload schema';

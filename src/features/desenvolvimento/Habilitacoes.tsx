@@ -23,6 +23,23 @@ function destinosDe(habilitados: Habilitacao[], opcoes: OpcaoHabilitacao[] | nul
   return [...mapa.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
 }
 
+/** Áreas e lideranças: uma opção por liderança (quem aparece como gestor de alguém), com as áreas que ela lidera — nada de lista indistinta de colaboradores. */
+function liderancasDe(opcoes: OpcaoHabilitacao[] | null) {
+  const porId = new Map((opcoes ?? []).map((o) => [o.id, o]));
+  const areas = new Map<number, Set<string>>();
+  for (const o of opcoes ?? []) {
+    if (!o.gestor_id || !porId.has(o.gestor_id)) continue;
+    areas.set(o.gestor_id, (areas.get(o.gestor_id) ?? new Set()).add(o.departamento || o.cargo || "—"));
+  }
+  return [...areas.entries()]
+    .map(([id, set]) => {
+      const lista = [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
+      const area = lista.length > 3 ? `${lista.slice(0, 3).join(", ")} e mais ${lista.length - 3}` : lista.join(", ");
+      return { id, area, nome: porId.get(id)!.nome };
+    })
+    .sort((a, b) => a.area.localeCompare(b.area, "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
 /** RH: transfere o responsável principal de um treinamento pendente, com motivo e histórico. */
 export function TransferirResponsabilidade({ treinamentoId, tipoSugerido = "mudanca_responsabilidade", onTransferido }: { treinamentoId: number; tipoSugerido?: (typeof MOTIVOS_TRANSFERENCIA)[number]["valor"]; onTransferido: () => void }) {
   const { flash } = useToast();
@@ -105,6 +122,7 @@ export function HabilitacoesDrawer({ onFechar }: { onFechar: () => void }) {
   const [salvando, setSalvando] = useState(false);
   const [pendentes, setPendentes] = useState<{ nome: string; itens: PendenteDe[] } | null>(null);
 
+  const liderancas = useMemo(() => liderancasDe(opcoes.dados), [opcoes.dados]);
   const candidatos = (opcoes.dados ?? []).filter((o) => !o.habilitado);
   const escolhido = candidatos.find((o) => String(o.id) === colaborador) ?? null;
   const ativas = (lista.dados ?? []).filter((h) => h.ativa);
@@ -124,7 +142,7 @@ export function HabilitacoesDrawer({ onFechar }: { onFechar: () => void }) {
         <CabecalhoDrawer
           eyebrow="Treinamentos"
           titulo="Responsáveis habilitados"
-          sub={ehRH ? "A liderança informa o RH por e-mail; o RH habilita e revoga aqui. A habilitação vale até ser revogada e só dá acesso aos Treinamentos." : "Colaboradores habilitados pelo RH na sua área (somente consulta). Para habilitar ou revogar, fale com o RH."}
+          sub={ehRH ? "A liderança informa o RH por e-mail; o RH habilita e revoga aqui. A habilitação vale até ser revogada e só dá acesso aos Treinamentos." : "Colaboradores da sua área habilitados pelo RH (somente consulta). Habilitar e revogar é feito pelo RH, a partir da solicitação da liderança por e-mail."}
         />
       }
     >
@@ -172,16 +190,16 @@ export function HabilitacoesDrawer({ onFechar }: { onFechar: () => void }) {
                 </select>
               </label>
               <label className={styles.campo}>
-                Gestão / área *
+                Área e liderança que solicitou *
                 <select value={gestao} onChange={(e) => setGestao(e.target.value)} required>
-                  <option value="">{escolhido && !escolhido.gestor_id ? "Informe a liderança" : "Selecione"}</option>
-                  {(opcoes.dados ?? []).map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.nome}
+                  <option value="">{escolhido && !escolhido.gestor_id ? "Escolha a área e a liderança" : "Selecione"}</option>
+                  {liderancas.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.area} — liderança: {l.nome}
                     </option>
                   ))}
                 </select>
-                {escolhido?.gestor_nome && <span className={styles.dica}>Liderança imediata cadastrada: {escolhido.gestor_nome}</span>}
+                {escolhido?.gestor_nome && <span className={styles.dica}>{escolhido.gestor_id ? `Já selecionada a liderança imediata cadastrada: ${escolhido.gestor_nome}.` : `Liderança imediata cadastrada: ${escolhido.gestor_nome} (não localizada de forma única; escolha acima).`}</span>}
               </label>
               <label className={[styles.campo, styles.cheio].join(" ")}>
                 Referência da solicitação da liderança *

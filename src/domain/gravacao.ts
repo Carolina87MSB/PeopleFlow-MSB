@@ -68,3 +68,22 @@ export function localParaLista(localLink: string | null | undefined, permiteGrav
   if (local) return ehEnderecoSharePoint(local) ? LOCAL_AMBIENTE_VIRTUAL : local;
   return permiteGravacao ? LOCAL_AMBIENTE_VIRTUAL : "";
 }
+
+/**
+ * "Local" para EXIBIÇÃO (cabeçalho do treinamento): o valor cadastrado nunca é alterado; só a exibição evita URLs extensas.
+ * Texto livre (sala, endereço, "Microsoft Teams") sai como está; link do SharePoint vira "Ambiente virtual — SharePoint";
+ * link do Teams vira "Microsoft Teams"; qualquer outro link vira o nome do site.
+ */
+export function localParaExibicao(localLink: string | null | undefined): string {
+  const local = (localLink ?? "").trim();
+  if (!local) return "";
+  if (!/^https?:\/\//i.test(local)) return local;
+  if (ehEnderecoSharePoint(local)) return LOCAL_AMBIENTE_VIRTUAL;
+  try {
+    const host = new URL(local).hostname.toLowerCase().replace(/^www\./, "");
+    if (host === "teams.microsoft.com" || host.endsWith(".teams.microsoft.com") || host === "teams.live.com") return "Microsoft Teams";
+    return `Link online (${host})`;
+  } catch {
+    return local.length > 60 ? `${local.slice(0, 57)}…` : local;
+  }
+}

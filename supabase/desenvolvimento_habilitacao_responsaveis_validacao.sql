@@ -32,6 +32,8 @@ union all select 'função de leitura nova (gere_treinamento usa a habilitação
        and (select pg_get_functiondef('public.peopleflow_dev_gere_treinamento(bigint)'::regprocedure)) like '%peopleflow_dev_habilitado_agora%'
        and not has_function_privilege('anon', 'public.peopleflow_dev_habilitado_agora()', 'execute')
        and has_function_privilege('authenticated', 'public.peopleflow_dev_habilitado_agora()', 'execute')
+union all select 'evidências da turma: a política de leitura usa a regra nova (gere_treinamento)',
+       exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'peopleflow_dev_evidencias' and policyname = 'dev_evidencias_leitura' and qual like '%peopleflow_dev_gere_treinamento%')
 union all select 'o navegador continua sem permissão de gravação em habilitações (só o servidor)',
        not has_table_privilege('authenticated', 'public.peopleflow_dev_responsaveis_gestao', 'select')
        and not has_table_privilege('authenticated', 'public.peopleflow_dev_responsaveis_gestao', 'insert');

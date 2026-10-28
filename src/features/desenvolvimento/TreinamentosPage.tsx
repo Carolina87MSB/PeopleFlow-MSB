@@ -85,7 +85,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
       : perfil === "Gestor"
         ? habilitado
           ? "Acompanhamento da sua área, mais os treinamentos que você administra como responsável ou instrutor"
-          : "Acompanhamento dos treinamentos da sua área (somente consulta). Para registrar e administrar, o RH precisa habilitá-lo."
+          : "Acompanhamento dos treinamentos da sua área (somente consulta). A habilitação de responsáveis é feita pelo RH, a partir da solicitação da liderança por e-mail."
         : aba === "agenda"
           ? "Planejados e em andamento"
           : "Realizados e encerrados, do mais recente para o mais antigo";
@@ -100,7 +100,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
         <div className={styles.acoes}>
           {(perfil === "Gestor" || perfil === "RH") && aba === "agenda" && (
             <Button variant="ghost" onClick={() => setHabilitacoes(true)}>
-              {perfil === "RH" ? "Habilitações" : "Responsáveis habilitados"}
+              {perfil === "RH" ? "Habilitações" : "Habilitados na minha área"}
             </Button>
           )}
           {podeRegistrar && aba === "agenda" && (
@@ -127,7 +127,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
               </option>
             ))}
           </select>
-          {perfil !== "Responsavel" && (
+          {(perfil === "RH" || (perfil === "Gestor" && habilitado)) && (
             <label className={styles.check}>
               <input type="checkbox" checked={soConduzo} onChange={(e) => setSoConduzo(e.target.checked)} /> Só os que conduzo
             </label>

@@ -53,6 +53,7 @@ import { TransferirResponsabilidade } from "./Habilitacoes";
 import { GravacaoDoTreinamento } from "./ParticipacaoGravacao";
 import { alternar as alternarSelecao, departamentosDe, desmarcarTodos, filtrarOpcoes, selecionarTodos, TODOS_DEPARTAMENTOS } from "./selecaoParticipantes";
 import { dataEfetivaDeRealizacao } from "../../domain/dataRealizacao";
+import { localParaExibicao } from "../../domain/gravacao";
 import styles from "./Desenvolvimento.module.css";
 
 function formatarDataHora(iso: string | null | undefined): string {
@@ -288,7 +289,7 @@ export default function TreinamentoPage() {
             </li>
             {t.local_link && (
               <li>
-                <MapPin size={15} /> {t.local_link}
+                <MapPin size={15} /> {localParaExibicao(t.local_link)}
               </li>
             )}
             <li>
@@ -322,6 +323,8 @@ export default function TreinamentoPage() {
             {p.podeConcluir && <PainelConclusao t={t} versao={(participantes.dados ?? []).length + presentes * 1000 + ausentes * 100000} onConcluir={() => acao("treinamento_concluir", { id: t.id }, "Treinamento concluído.")} />}
           </div>
 
+          {p.ehRH && ["solicitado", "planejado", "em_andamento"].includes(t.status) && <TransferenciaDoTreinamento t={t} onAlterado={recarregarTudo} />}
+
           <details className={styles.maisDetalhes}>
             <summary>Mais detalhes</summary>
             <dl className={styles.detalhe}>
@@ -354,7 +357,6 @@ export default function TreinamentoPage() {
                 </>
               )}
             </dl>
-            {p.ehRH && ["solicitado", "planejado", "em_andamento"].includes(t.status) && <TransferenciaDoTreinamento t={t} onAlterado={recarregarTudo} />}
             {p.ehRH && <HistoricoTransferencias treinamentoId={t.id} versao={t.responsavel_colaborador_id ?? 0} nome={nome} />}
             {p.podeCancelar && (
               <div className={styles.acoes} style={{ justifyContent: "flex-start", marginTop: 10 }}>
@@ -386,7 +388,7 @@ function TransferenciaDoTreinamento({ t, onAlterado }: { t: Treinamento; onAlter
   const [aberto, setAberto] = useState(false);
   return (
     <div style={{ marginTop: 10 }}>
-      <Button variant="ghost" onClick={() => setAberto((v) => !v)}>
+      <Button variant="secondary" onClick={() => setAberto((v) => !v)}>
         {aberto ? "Fechar" : "Transferir responsabilidade"}
       </Button>
       {aberto && (
@@ -905,8 +907,9 @@ function Participantes(props: {
         <div>
           <h3 className={styles.cardTitle}>Participantes ({ativos.length})</h3>
           <p className={styles.cardSubtitle}>
-            {resumo.presente} presente{resumo.presente === 1 ? "" : "s"} · {resumo.ausente} ausente{resumo.ausente === 1 ? "" : "s"} · {resumo.pendente} pendente{resumo.pendente === 1 ? "" : "s"}
+            {resumo.presente} presente{resumo.presente === 1 ? "" : "s"}
             {resumo.presente > 0 ? ` (${["qr", "gravacao", "manual"].map((m) => [METODO_PRESENCA[m], ativos.filter((x) => x.presenca_status === "presente" && x.presenca_metodo === m).length] as const).filter(([, n]) => n > 0).map(([rot, n]) => `${n} por ${rot.toLowerCase()}`).join(" · ")})` : ""}
+            {" · "}{resumo.ausente} ausente{resumo.ausente === 1 ? "" : "s"} · {resumo.pendente} pendente{resumo.pendente === 1 ? "" : "s"}
             {perfil === "Gestor" ? " — você vê os participantes da sua equipe" : ""}
           </p>
         </div>
@@ -939,7 +942,7 @@ function Participantes(props: {
                   .catch(() => undefined)
               }
             >
-              Registrar
+              Registrar presença
             </Button>
           </div>
         </div>
@@ -1284,8 +1287,10 @@ function EficaciaDrawer({ participante, onFechar, onSalvar }: { participante: Pa
 // ── Evidências ──────────────────────────────────────────────────────────
 function Evidencias({ t, podeAnexar, participantes, versao }: { t: Treinamento; podeAnexar: boolean; participantes: Participante[]; versao: number }) {
   const { flash } = useToast();
-  const { perfil } = useDesenvolvimento();
+  const { perfil, pessoaPorId } = useDesenvolvimento();
   const interno = t.modalidade === "interno";
+  // Gestor de OUTRA área (só liderados na turma): vê apenas as evidências individuais dos seus liderados; a lista e o material da turma são da gestão dona do treinamento.
+  const parcial = perfil === "Gestor" && !podeAnexar && t.solicitado_por_colaborador_id != null && !pessoaPorId.has(t.solicitado_por_colaborador_id);
   const lista = useConsulta(() => listarEvidencias(t.id), [t.id, t.status, t.updated_at, versao]);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [tipo, setTipo] = useState<TipoEvidencia>(interno ? "material" : "certificado");
@@ -1330,7 +1335,8 @@ function Evidencias({ t, podeAnexar, participantes, versao }: { t: Treinamento; 
         </div>
       </div>
       {erro && <Erro mensagem={erro} />}
-      {interno && (
+      {parcial && <p className={styles.dica}>Treinamento de outra área: você vê apenas as evidências dos seus liderados. A lista de presença e o material da turma ficam com a área responsável e o RH.</p>}
+      {interno && !parcial && (
         <div className={styles.secao}>
           <h4 className={styles.secaoTitulo}>Lista de Presença</h4>
           {listaAtual ? (
@@ -1402,13 +1408,13 @@ function Evidencias({ t, podeAnexar, participantes, versao }: { t: Treinamento; 
           )}
         </div>
       )}
-      {interno && <h4 className={styles.secaoTitulo}>Outras evidências</h4>}
+      {interno && !parcial && <h4 className={styles.secaoTitulo}>Outras evidências</h4>}
       {lista.erro ? (
         <Erro mensagem={lista.erro} />
       ) : lista.carregando && !lista.dados ? (
         <Carregando />
       ) : manuais.length === 0 ? (
-        <p className={styles.secundario}>Nenhuma evidência anexada.</p>
+        <p className={styles.secundario}>{parcial ? "Nenhuma evidência individual dos seus liderados." : "Nenhuma evidência anexada."}</p>
       ) : (
         <div className={tableStyles.wrap}>
           <table className={tableStyles.table}>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Info } from "lucide-react";
 import { Button, Drawer } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import { faltantesParaReposicao, gravar, opcoesListaMestra, type Formato, type Modalidade, type TipoTreinamento, type Treinamento } from "./devRepository";
@@ -9,6 +10,8 @@ import { FORMATO, MODALIDADE, TIPO_TREINAMENTO, TIPOS_COM_DOCUMENTO, hojeISO, le
 import { CampoDuracao } from "./CampoDuracao";
 import { validarLinkGravacao } from "../../domain/gravacao";
 import styles from "./Desenvolvimento.module.css";
+
+const DICA_LOCAL = "Onde o treinamento acontece. Exemplos: Microsoft Teams, Sala de Treinamento, Ambiente virtual — SharePoint.";
 
 /** novo: registrar treinamento (nasce PLANEJADO) · editar: alterar/retificar · reposicao: agendar para os faltantes de `item`. */
 type Modo = "novo" | "editar" | "reposicao";
@@ -205,6 +208,11 @@ export function TreinamentoDrawer({
                 </option>
               ))}
             </select>
+            <span className={styles.dica}>
+              {form.modalidade === "externo"
+                ? "Realizado fora da empresa (curso, congresso, instituição): exige ao menos uma evidência (certificado, comprovante, lista ou declaração) antes de concluir."
+                : "Realizado pela empresa: a presença é controlada pelo PeopleFlow, mesmo com palestrante de fora. “Externo” é só para treinamento feito fora."}
+            </span>
           </label>
           <label className={styles.campo}>
             Formato
@@ -300,11 +308,17 @@ export function TreinamentoDrawer({
           <label className={styles.campo}>
             Instrutor / instituição externa
             <input value={form.instrutor_externo} onChange={set("instrutor_externo")} maxLength={200} />
+            <span className={styles.dica}>Nome do palestrante ou da instituição. Informar um instrutor de fora não torna o treinamento externo nem exige certificado individual.</span>
           </label>
           <label className={[styles.campo, styles.cheio].join(" ")}>
-            Local ou link
-            <input value={form.local_link} onChange={set("local_link")} maxLength={500} />
-            <span className={styles.dica}>Endereço físico ou link da reunião online. Pode ficar em branco quando o treinamento ocorre somente por gravação.</span>
+            <span className={styles.rotuloComIcone}>
+              Local
+              <span className={styles.iconeInfo} tabIndex={0} role="img" aria-label={DICA_LOCAL} title={DICA_LOCAL}>
+                <Info size={14} />
+              </span>
+            </span>
+            <input value={form.local_link} onChange={set("local_link")} maxLength={500} placeholder="Ex.: Sala de Treinamento" />
+            <span className={styles.dica}>Exemplos: Microsoft Teams · Sala de Treinamento · Ambiente virtual — SharePoint. Pode ficar em branco quando o treinamento ocorre somente por gravação.</span>
           </label>
           <label className={[styles.campo, styles.cheio].join(" ")}>
             Justificativa

@@ -73,3 +73,11 @@ Não altera treinamentos, presenças, avaliações, evidências, auditoria nem d
 5. **Habilitações:** o RH habilita, pelo portal, quem as lideranças informaram por e-mail (ex.: gestores que continuarão operando).
 6. **Piloto** com treinamento marcado como **homologação/teste** (fora dos indicadores) seguindo o roteiro.
 7. **Reversão (se necessário), em ordem inversa:** primeiro o código (revert do merge/deploy anterior), depois `..._rollback.sql` (recusa-se se já houver transferência ou ausência encaminhada — registros que nunca são apagados).
+
+## Gestor que acompanha liderados em treinamento de outra área
+O Gestor vê um treinamento de outra área quando um liderado seu participa, **somente para consulta** e **só do que diz respeito aos seus liderados**: participantes, pendências de reposição, situação da avaliação de reação (sem as médias da turma), histórico de ações, Necessidades vinculadas e evidências individuais. A lista de presença, a ata e os materiais **da turma** ficam com RH, quem administra e a gestão que registrou o treinamento (regra aplicada no servidor e na leitura do banco: política `dev_evidencias_leitura`, seção 5 da migration). Nenhum poder administrativo vem dessa visão, nem para o Gestor habilitado em outros treinamentos.
+
+Ao revogar a habilitação de um **Gestor**, a equipe dele (escopo) é preservada: só quem entrava no módulo pela habilitação (perfil Responsável) perde escopo e sessão.
+
+## Instrutor externo × treinamento externo
+São campos diferentes. **Modalidade** (Interno/Externo) define os requisitos documentais: Externo exige ao menos uma evidência da turma (certificado, comprovante, lista ou declaração); Interno tem a lista de presença gerada pelo PeopleFlow. **Instrutor / instituição externa** é só o nome do palestrante: não torna o treinamento externo nem exige certificado individual.
