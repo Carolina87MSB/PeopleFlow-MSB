@@ -10,6 +10,12 @@
   background: var(--color-surface-alt, #f6fafb);
 }
 
+.cabecalho {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .eyebrow {
   margin: 0;
   font-size: 11px;
@@ -20,7 +26,7 @@
 }
 
 .titulo {
-  margin: 4px 0 0 0;
+  margin: 0;
   font-size: 16px;
   font-weight: 700;
   line-height: 1.3;
@@ -29,32 +35,107 @@
 }
 
 .ajuda {
-  margin: 6px 0 0 0;
+  margin: 0;
   font-size: 13px;
   line-height: 1.45;
   color: var(--color-text, #51606b);
 }
 
 .prazo {
-  margin: 6px 0 0 0;
+  margin: 0;
   font-size: 13px;
   font-weight: 700;
   color: var(--color-navy, #33485a);
 }
 
-.pergunta {
+/* Legenda da escala: o significado de 1 a 5 fica visível antes das perguntas. */
+.legenda {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-soft, #e2ebee);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface, #fff);
+}
+
+.legendaTitulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted, #7d8c93);
+}
+
+.legendaLista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   margin: 0;
   padding: 0;
-  border: 0;
+  list-style: none;
+}
+
+.legendaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--color-text, #51606b);
+}
+
+.legendaNota {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--color-brand, #17a398);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Cada pergunta é um cartão: número, afirmação e a escala em largura total. */
+.pergunta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
   min-width: 0;
+  border: 1px solid var(--color-border-soft, #e2ebee);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface, #fff);
 }
 
 .enunciado {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 10px;
   padding: 0;
-  margin-bottom: 8px;
   font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
+  color: var(--color-navy, #33485a);
+}
+
+.numero {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-surface-alt, #f6fafb);
+  border: 1px solid var(--color-border-strong, #c9d8dd);
+  font-size: 12px;
+  font-weight: 700;
   color: var(--color-navy, #33485a);
 }
 
@@ -62,23 +143,28 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
-  max-width: 360px;
+  max-width: 720px;
 }
 
 .opcao {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   min-height: 44px;
+  padding: 6px 4px;
   border: 1px solid var(--color-border-strong, #c9d8dd);
   border-radius: 10px;
   background: var(--color-surface, #fff);
-  font-size: 16px;
-  font-weight: 700;
   color: var(--color-text, #51606b);
   cursor: pointer;
   user-select: none;
+}
+
+.opcao:hover {
+  border-color: var(--color-brand, #17a398);
 }
 
 .opcao input {
@@ -94,10 +180,33 @@
   outline-offset: 2px;
 }
 
+.nota {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rotulo {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .marcada {
   background: var(--color-brand, #17a398);
   border-color: var(--color-brand, #17a398);
   color: #fff;
+}
+
+/* No celular os cinco botões ficam lado a lado só com o número; as pontas da escala aparecem logo abaixo. */
+.extremos {
+  display: none;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--color-muted, #7d8c93);
 }
 
 .erro {
@@ -106,20 +215,33 @@
   color: #a23b3b;
 }
 
+.rodape {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.progresso {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-muted, #7d8c93);
+}
+
+/* Hierarquia: "Enviar avaliação" é a ação principal (cheia); "Responder depois" é secundária (contorno, sem competir). */
 .acoes {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 16px;
   align-items: center;
+  gap: 10px;
 }
 
 .enviar {
   font: inherit;
   font-size: 15px;
   font-weight: 700;
-  min-height: 44px;
-  padding: 0 20px;
-  border: 0;
+  min-height: 46px;
+  padding: 0 24px;
+  border: 1px solid var(--color-brand, #17a398);
   border-radius: 10px;
   background: var(--color-brand, #17a398);
   color: #fff;
@@ -133,11 +255,52 @@
 
 .cancelar {
   font: inherit;
-  font-size: 13px;
-  background: none;
-  border: 0;
-  padding: 0;
-  color: var(--color-muted, #7d8c93);
-  text-decoration: underline;
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--color-border-strong, #c9d8dd);
+  border-radius: 10px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #51606b);
   cursor: pointer;
+}
+
+.cancelar:hover:not(:disabled) {
+  border-color: var(--color-muted, #7d8c93);
+}
+
+.cancelar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.enviar:focus-visible,
+.cancelar:focus-visible {
+  outline: 2px solid var(--color-brand, #17a398);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .formulario {
+    padding: 12px;
+  }
+
+  .rotulo {
+    display: none;
+  }
+
+  .extremos {
+    display: flex;
+  }
+
+  .acoes {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .enviar,
+  .cancelar {
+    width: 100%;
+  }
 }

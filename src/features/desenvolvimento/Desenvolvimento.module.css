@@ -1348,3 +1348,79 @@
   font-weight: 600;
   color: var(--color-navy);
 }
+
+/* Opções do formulário de treinamento: caixa de seleção + título + explicação alinhados em duas colunas (nada de input 100% largura). */
+.opcoes {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.opcao {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.opcaoLinha {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+  cursor: pointer;
+}
+
+.opcaoLinha input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0 0;
+  accent-color: var(--color-brand);
+  cursor: pointer;
+}
+
+.opcaoLinha input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.opcaoTexto {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.opcaoTitulo {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-navy);
+}
+
+.opcaoDica {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+
+.opcaoDetalhe {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-left: 28px;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .opcao {
+    padding: 12px;
+  }
+  .opcaoDetalhe {
+    margin-left: 0;
+  }
+}
