@@ -1208,6 +1208,17 @@ await t("PDF da lista de presença por gravação: sem URL extensa no 'Local' (r
   if (!td.includes("https://teams.microsoft.com/l/meetup-join/19-reuniao") || td.includes("Ambiente virtual")) throw new Error("reunião online preservada");
 });
 
+await t("PDF e registros HISTÓRICOS com URL no Local: a geração não quebra; link do SharePoint vira rótulo, sala segue como cadastrada; link de reunião curto sai inteiro e o MUITO longo sai cortado (comportamento já publicado, registrado como limitação); o campo gravado nunca é alterado", async () => {
+  const teamsLongo = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_ZGQ4NzI5YjktMDBhNC00YjVmLWI5M2MtMTIzNDU2Nzg5MGFi%40thread.v2/0?context=%7b%22Tid%22%3a%22aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%22%2c%22Oid%22%3a%2211111111-2222-3333-4444-555555555555%22%7d";
+  for (const [local, esperado] of [[teamsLongo, teamsLongo.slice(0, 80)], ["https://empresa.sharepoint.com/sites/treinamentos/Shared%20Documents/gravacao.mp4?web=1", "Ambiente virtual — SharePoint"], ["Sala de Treinamento", "Sala de Treinamento"]] as const) {
+    const id = await realizado({ local_link: local });
+    await encaminharAusentes(id); await espera("rh", "treinamento_concluir", { id }, 200);
+    const texto = (await textoDaLista(id)).replace(/\s+/g, "");
+    if (!texto.includes(`LOCAL${esperado.replace(/\s+/g, "")}`)) throw new Error(`Local no PDF (${local.slice(0, 40)}…): ${texto.slice(texto.indexOf("LOCAL"), texto.indexOf("LOCAL") + 200)}`);
+    if ((await linhaTrein(id)).local_link !== local) throw new Error("o valor cadastrado não pode mudar");
+  }
+});
+
 await t("Avaliação de Reação: consolidação a partir de 3 respostas (1 e 2 não expõem média nem nota); indicadores, controle de respondentes e notas consistentes entre si; sem alterar o que já foi enviado", async () => {
   const id = (await espera("ge", "treinamento_salvar", { ...BASE_CAD, titulo: "Turma de consolidação", permite_gravacao: true, gravacao_url: LINK }, 200)).id as number;
   await espera("ge", "participantes_adicionar", { treinamento_id: id, colaborador_ids: [3, 5, 4] }, 200);

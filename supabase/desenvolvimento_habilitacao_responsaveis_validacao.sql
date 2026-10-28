@@ -1,8 +1,11 @@
 -- ════════════════════════════════════════════════════════════════════════
 -- Validação (SOMENTE LEITURA) — Habilitação de Responsáveis por Treinamentos
 -- Rodar em Supabase > SQL Editor DEPOIS de aplicar supabase/desenvolvimento_habilitacao_responsaveis.sql. Não altera nada.
--- Cada linha deve retornar ok = true.
+-- É UMA consulta só (o SQL Editor mostra uma por vez): copie a tabela inteira de volta.
+-- Linhas tipo 'verificação': todas devem ter ok = true. Linhas tipo 'contagem': devem coincidir com a pré-checagem.
 -- ════════════════════════════════════════════════════════════════════════
+
+with v as (
 select 'colunas novas em responsaveis_gestao (situacao, departamento, referencia, habilitado_em, habilitado_por)' as verificacao,
        (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'peopleflow_dev_responsaveis_gestao'
           and column_name in ('situacao', 'departamento', 'referencia', 'habilitado_em', 'habilitado_por')) = 5 as ok
@@ -36,11 +39,13 @@ union all select 'evidências da turma: a política de leitura usa a regra nova 
        exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'peopleflow_dev_evidencias' and policyname = 'dev_evidencias_leitura' and qual like '%peopleflow_dev_gere_treinamento%')
 union all select 'o navegador continua sem permissão de gravação em habilitações (só o servidor)',
        not has_table_privilege('authenticated', 'public.peopleflow_dev_responsaveis_gestao', 'select')
-       and not has_table_privilege('authenticated', 'public.peopleflow_dev_responsaveis_gestao', 'insert');
--- Contagens: devem coincidir com a pré-checagem (a migration não altera treinamentos, participantes, evidências nem auditoria).
-select 'treinamentos' as tabela, count(*) as linhas from public.peopleflow_dev_treinamentos
-union all select 'participantes', count(*) from public.peopleflow_dev_participantes
-union all select 'evidencias', count(*) from public.peopleflow_dev_evidencias
-union all select 'auditoria', count(*) from public.peopleflow_dev_auditoria
-union all select 'responsaveis_gestao', count(*) from public.peopleflow_dev_responsaveis_gestao
-union all select 'transferencias_responsabilidade', count(*) from public.peopleflow_dev_transferencias_responsabilidade;
+       and not has_table_privilege('authenticated', 'public.peopleflow_dev_responsaveis_gestao', 'insert')
+)
+select 'verificação' as tipo, verificacao, ok, null::text as detalhe from v
+union all select 'contagem', 'treinamentos', null, count(*)::text from public.peopleflow_dev_treinamentos
+union all select 'contagem', 'participantes', null, count(*)::text from public.peopleflow_dev_participantes
+union all select 'contagem', 'evidencias (total / listas de presença do sistema)', null, count(*)::text || ' / ' || count(*) filter (where storage_path ~ '^treinamentos/[0-9]+/sistema/') from public.peopleflow_dev_evidencias
+union all select 'contagem', 'auditoria', null, count(*)::text from public.peopleflow_dev_auditoria
+union all select 'contagem', 'habilitacoes (responsaveis_gestao)', null, count(*)::text from public.peopleflow_dev_responsaveis_gestao
+union all select 'contagem', 'transferencias_responsabilidade (nova: começa em 0)', null, count(*)::text from public.peopleflow_dev_transferencias_responsabilidade
+order by 1 desc, 2;

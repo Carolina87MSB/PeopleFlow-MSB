@@ -94,8 +94,8 @@ const aplicar = async (sql: string) => { try { await db.exec(sql); } catch (e) {
 const HAB = "public.peopleflow_dev_responsaveis_gestao";
 
 console.log("Preparação: dados no modelo ANTERIOR à migration (habilitações gravadas como o código antigo gravava: só `ativo`)");
-let TA = 0, TB = 0, TC = 0, TD = 0;
-const NOME_T = () => ({ [TA]: "A", [TB]: "B", [TC]: "C", [TD]: "D" } as Record<number, string>);
+let TA = 0, TB = 0, TC = 0, TD = 0, TE = 0;
+const NOME_T = () => ({ [TA]: "A", [TB]: "B", [TC]: "C", [TD]: "D", [TE]: "E" } as Record<number, string>);
 const salvarT = async (tok: string, titulo: string, extra: Record<string, unknown>) => (await espera(tok, "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", titulo, data_inicio: hojeSP, ...extra }, 200)).id as number;
 await t("Dados anteriores: habilitações antigas (ativa e revogada), treinamentos de gestão, de instrutor e de outra área", async () => {
   // o que o código anterior gravava: linha com gestão e colaborador; revogar = ativo false + dados da revogação
@@ -112,6 +112,11 @@ await t("Dados anteriores: habilitações antigas (ativa e revogada), treinament
   await espera("ge", "participantes_adicionar", { treinamento_id: TB, colaborador_ids: [5] }, 200);
   await espera("ge", "participantes_adicionar", { treinamento_id: TC, colaborador_ids: [3] }, 200);
   await espera("gil", "participantes_adicionar", { treinamento_id: TD, colaborador_ids: [4] }, 200);
+  // E: treinamento de OUTRA área (registrado pelo RH) com um liderado do Gil na turma — material da turma e comprovante individual do liderado
+  TE = await salvarT("rh", "Treinamento E", { responsavel_colaborador_id: 1 });
+  await espera("rh", "participantes_adicionar", { treinamento_id: TE, colaborador_ids: [4] }, 200);
+  await db.exec(`insert into public.peopleflow_dev_evidencias (treinamento_id, tipo, storage_path, file_name) values (${TE}, 'material', 'zz/e-turma', 'material-da-turma-e.pdf')`);
+  await db.exec(`insert into public.peopleflow_dev_evidencias (treinamento_id, participante_id, tipo, storage_path, file_name) select ${TE}, id, 'comprovante', 'zz/e-individual', 'comprovante-individual-e.pdf' from public.peopleflow_dev_participantes where treinamento_id=${TE} and colaborador_id=4`);
   for (const [tid, nome] of [[TA, "a"], [TB, "b"], [TD, "d"]] as const) await db.exec(`insert into public.peopleflow_dev_evidencias (treinamento_id, tipo, storage_path, file_name) values (${tid}, 'material', 'zz/${nome}', 'apostila-${nome}.pdf')`);
   await db.exec(`insert into public.peopleflow_dev_necessidades (colaborador_id,origem,descricao,justificativa,status,validada_em,categoria,prioridade) values (3,'gestor','Montagem','x','validada',now(),'tecnica','alta')`);
   const necId = (await q("select id from public.peopleflow_dev_necessidades limit 1"))[0].id;
@@ -142,7 +147,8 @@ const matriz = async () => {
   for (const [quem, uid] of Object.entries({ rh: U.rh, ge: U.ge, hugo: U.hugo, gil: U.gil })) {
     r[quem] = {
       treinamentos: await letras(uid, "select id as treinamento_id from public.peopleflow_dev_treinamentos"),
-      evidencias: await letras(uid, "select distinct treinamento_id from public.peopleflow_dev_evidencias"),
+      evidencias: await letras(uid, "select distinct treinamento_id from public.peopleflow_dev_evidencias where participante_id is null"), // da TURMA (lista, ata, materiais)
+      individuais: await letras(uid, "select distinct treinamento_id from public.peopleflow_dev_evidencias where participante_id is not null"),
       turma: await letras(uid, "select distinct treinamento_id from public.peopleflow_dev_participantes"),
       vinculos: await letras(uid, "select distinct treinamento_id from public.peopleflow_dev_treinamento_necessidades"),
     };
@@ -155,11 +161,39 @@ const antesEstrutura = await estrutura();
 const matrizAntes = await matriz();
 console.log("  matriz ANTES  :", jsonDe(matrizAntes));
 
+console.log("Backup lógico (antes da migration)");
+await t("Backup: cópia de TODAS as tabelas do módulo no schema isolado (mesmas linhas e hash), definições anteriores registradas, nada alterado em public, schema inacessível ao navegador, e recusa-se a sobrescrever", async () => {
+  const f0 = jsonDe(await foto()), e0 = jsonDe(await estrutura());
+  const r = await db.exec(SQL("desenvolvimento_habilitacao_responsaveis_backup.sql"));
+  if (jsonDe(await foto()) !== f0 || jsonDe(await estrutura()) !== e0) throw new Error("o backup não pode alterar nada em public");
+  const resumo = await q("select tabela, linhas::int n, hash_md5 from backup_pre_habilitacao.resumo order by tabela");
+  const publicas = (await q("select table_name from information_schema.tables where table_schema='public' and table_type='BASE TABLE' and table_name like 'peopleflow\_dev\_%' order by 1")).map((x) => x.table_name);
+  if (jsonDe(resumo.map((x) => x.tabela)) !== jsonDe(publicas) || publicas.length < 15) throw new Error("todas as tabelas peopleflow_dev_* copiadas: " + jsonDe({ publicas, copiadas: resumo.map((x) => x.tabela) }));
+  for (const x of resumo) {
+    const vivo = (await q(`select count(*)::int n, md5(coalesce(string_agg(to_jsonb(y)::text, '|' order by to_jsonb(y)::text), '')) h from public.${x.tabela} y`))[0];
+    const copia = (await q(`select count(*)::int n from backup_pre_habilitacao.${x.tabela}`))[0].n;
+    if (vivo.n !== x.n || vivo.h !== x.hash_md5 || copia !== x.n) throw new Error("cópia diferente da origem: " + x.tabela);
+  }
+  const def = await q("select tipo, objeto, definicao from backup_pre_habilitacao.definicoes");
+  if (!def.some((d) => d.tipo === "função" && d.objeto.startsWith("peopleflow_dev_gere_treinamento") && !d.definicao.includes("habilitado_agora")) || !def.some((d) => d.tipo === "política" && d.objeto === "peopleflow_dev_evidencias.dev_evidencias_leitura" && !d.definicao.includes("gere_treinamento"))) throw new Error("definições anteriores registradas");
+  if ((r[r.length - 1].rows as unknown[]).length < 15) throw new Error("a conferência final lista as tabelas");
+  // o navegador (authenticated) não enxerga o schema
+  await db.exec("set role authenticated");
+  try { await q("select count(*) from backup_pre_habilitacao.resumo"); throw new Error("authenticated leu o backup"); } catch (e) { if ((e as Error).message === "authenticated leu o backup") throw e; } finally { await db.exec("reset role"); }
+  // não sobrescreve
+  try { await db.exec(SQL("desenvolvimento_habilitacao_responsaveis_backup.sql")); throw new Error("sobrescreveu"); } catch (e) { await db.exec("rollback"); if ((e as Error).message === "sobrescreveu") throw e; }
+  if ((await q("select count(*)::int n from backup_pre_habilitacao.resumo"))[0].n !== resumo.length) throw new Error("backup preservado após a recusa");
+});
+
 console.log("Migration: aplicação, dados preservados e impacto nas permissões");
 await t("A pré-checagem (somente leitura) roda no banco ANTES da migration e mostra o ponto de partida: 4 habilitações antigas, 3 ativas e 1 revogada, nenhuma duplicada", async () => {
   const r = await db.exec(SQL("desenvolvimento_habilitacao_responsaveis_prechecagem.sql"));
-  const total = r[1].rows[0] as { total: number; ativas: number; revogadas: number };
-  if (Number(total.total) !== 4 || Number(total.ativas) !== 3 || Number(total.revogadas) !== 1 || r[2].rows.length !== 0) throw new Error("ponto de partida: " + jsonDe(r.map((x) => x.rows)));
+  if (r.length !== 1) throw new Error("a pré-checagem é UMA consulta só (o SQL Editor mostra uma por vez)");
+  const linhas = r[0].rows as { verificacao: string; resultado: string; situacao: string }[];
+  const de = (parte: string) => linhas.find((l) => l.verificacao.startsWith(parte));
+  if (de("Habilitações hoje")?.resultado !== "4 / 3 / 1" || de("Colaboradores com mais de uma")?.resultado !== "0") throw new Error("ponto de partida: " + jsonDe(linhas));
+  if (linhas.some((l) => l.situacao === "BLOQUEIA")) throw new Error("nada deveria bloquear neste banco: " + jsonDe(linhas.filter((l) => l.situacao === "BLOQUEIA")));
+  if (de("Função de leitura atual")?.resultado !== "fase 5c" || de("Política de leitura de evidências")?.resultado !== "fase 1") throw new Error("estado-base: " + jsonDe(linhas.filter((l) => l.verificacao.startsWith("Função") || l.verificacao.startsWith("Política"))));
 });
 await t("Aplicar a migration NÃO altera nenhum dado existente (treinamentos, participantes, evidências, auditoria, necessidades, contas, escopo, QR, avaliações) e converte as habilitações antigas", async () => {
   await aplicar(MIG);
@@ -178,27 +212,31 @@ await t("Idempotente: aplicar de novo não altera dados nem estrutura", async ()
 await t("Pré-checagem e validação (somente leitura): rodam sem alterar nada e a validação devolve ok = true em TODAS as linhas", async () => {
   const antes = jsonDe(await foto());
   const pre = await db.exec(SQL("desenvolvimento_habilitacao_responsaveis_prechecagem.sql"));
-  if (pre.length < 5) throw new Error("a pré-checagem devolve os resultados esperados");
+  if (pre.length !== 1 || (pre[0].rows as { situacao: string }[]).length < 20) throw new Error("a pré-checagem devolve os resultados esperados");
+  // depois da migration a pré-checagem reconhece o novo estado (e não bloqueia)
+  const prel = pre[0].rows as { verificacao: string; resultado: string; situacao: string }[];
+  if (prel.find((l) => l.verificacao.startsWith("Função de leitura atual"))?.resultado !== "já é a nova" || prel.some((l) => l.situacao === "BLOQUEIA")) throw new Error("pré-checagem após a migration: " + jsonDe(prel.slice(0, 8)));
   const val = await db.exec(SQL("desenvolvimento_habilitacao_responsaveis_validacao.sql"));
-  const linhas = val[0].rows as { verificacao: string; ok: boolean }[];
+  if (val.length !== 1) throw new Error("a validação é UMA consulta só (o SQL Editor mostra uma por vez)");
+  const linhas = (val[0].rows as { tipo: string; verificacao: string; ok: boolean }[]).filter((l) => l.tipo === "verificação");
   if (linhas.length < 9 || linhas.some((l) => l.ok !== true)) throw new Error("validação: " + jsonDe(linhas.filter((l) => l.ok !== true)));
   if (jsonDe(await foto()) !== antes) throw new Error("as consultas de conferência não podem alterar nada");
 });
 const matrizDepois = await matriz();
 console.log("  matriz DEPOIS :", jsonDe(matrizDepois));
 const ESPERADO_ANTES = {
-  rh: { treinamentos: "ABCD", evidencias: "ABD", turma: "ABCD", vinculos: "AD" },
-  ge: { treinamentos: "ABCD", evidencias: "ABD", turma: "ABCD", vinculos: "AD" },
-  hugo: { treinamentos: "ABC", evidencias: "AB", turma: "ABC", vinculos: "" },
-  gil: { treinamentos: "D", evidencias: "D", turma: "D", vinculos: "D" },
+  rh: { treinamentos: "ABCDE", evidencias: "ABDE", individuais: "E", turma: "ABCDE", vinculos: "AD" },
+  ge: { treinamentos: "ABCD", evidencias: "ABD", individuais: "", turma: "ABCD", vinculos: "AD" },
+  hugo: { treinamentos: "ABC", evidencias: "AB", individuais: "", turma: "ABC", vinculos: "" },
+  gil: { treinamentos: "DE", evidencias: "DE", individuais: "E", turma: "DE", vinculos: "D" }, // E: vê o treinamento de outra área, o material da turma e o comprovante do liderado
 };
 const ESPERADO_DEPOIS = {
-  rh: { treinamentos: "ABCD", evidencias: "ABD", turma: "ABCD", vinculos: "AD" }, // igual
-  ge: { treinamentos: "ABCD", evidencias: "ABD", turma: "ABCD", vinculos: "AD" }, // Gestor: acompanhamento da área, igual
-  hugo: { treinamentos: "AB", evidencias: "AB", turma: "AB", vinculos: "" }, // Responsável habilitado: só o que administra (responsável ou instrutor); perde C (gestão alheia)
-  gil: { treinamentos: "D", evidencias: "D", turma: "D", vinculos: "D" }, // igual
+  rh: { treinamentos: "ABCDE", evidencias: "ABDE", individuais: "E", turma: "ABCDE", vinculos: "AD" }, // igual
+  ge: { treinamentos: "ABCD", evidencias: "ABD", individuais: "", turma: "ABCD", vinculos: "AD" }, // Gestor: acompanhamento da área, igual
+  hugo: { treinamentos: "AB", evidencias: "AB", individuais: "", turma: "AB", vinculos: "" }, // Responsável habilitado: só o que administra (responsável ou instrutor); perde C (gestão alheia)
+  gil: { treinamentos: "DE", evidencias: "D", individuais: "E", turma: "DE", vinculos: "D" }, // Gestor de OUTRA área (E): segue vendo o treinamento e o comprovante do liderado; o material da TURMA deixa de ser lido (mudança intencional: política dev_evidencias_leitura)
 };
-await t("Impacto nas permissões de LEITURA (matriz real, antes × depois): RH e Gestor sem perda; Responsável só vê o que administra — enquanto habilitado", async () => {
+await t("Impacto nas permissões de LEITURA (matriz real, antes × depois): RH e Gestor sem perda — exceto o material da TURMA de treinamento de OUTRA área, que o Gestor deixa de ler (intencional); Responsável só vê o que administra — enquanto habilitado", async () => {
   if (jsonDe(matrizAntes) !== jsonDe(ESPERADO_ANTES)) throw new Error("comportamento anterior diferente do documentado: " + jsonDe(matrizAntes));
   if (jsonDe(matrizDepois) !== jsonDe(ESPERADO_DEPOIS)) throw new Error("comportamento novo diferente do esperado: " + jsonDe(matrizDepois));
 });
