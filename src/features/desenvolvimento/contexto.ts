@@ -6,8 +6,10 @@ export interface ContextoDesenvolvimento {
   colaboradorId: number;
   pessoas: PessoaDesenvolvimento[];
   pessoaPorId: Map<number, PessoaDesenvolvimento>;
-  /** Pode registrar treinamento: RH, Gestor ou Responsável por Treinamentos indicado por um Gestor. */
+  /** Pode registrar treinamento: RH ou colaborador (inclusive Gestor) com a habilitação concedida pelo RH. */
   podeRegistrar: boolean;
+  /** Habilitação permanente concedida pelo RH (o RH não depende dela). Só o habilitado administra treinamentos; o Gestor sem habilitação acompanha. */
+  habilitado: boolean;
 }
 
 export const ContextoDesenvolvimentoCtx = createContext<ContextoDesenvolvimento | null>(null);

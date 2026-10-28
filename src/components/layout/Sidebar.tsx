@@ -81,7 +81,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <span className={styles.brandDot} />
             <div>
               <div className={styles.brandName}>Portal PeopleFlow</div>
-              <div className={styles.brandSub}>Avaliação de Desempenho</div>
+              <div className={styles.brandSub}>{conta.acesso === "treinamentos" ? "Treinamentos" : "Avaliação de Desempenho"}</div>
             </div>
           </div>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Fechar menu">
@@ -90,7 +90,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         <nav className={styles.nav} onClick={onClose}>
-          <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Minhas Avaliações" />
+          {conta.acesso !== "treinamentos" && <NavItem to="/desempenho" icon={<Target size={18} strokeWidth={1.9} />} label="Minhas Avaliações" />}
           <NavItem to="/meus-treinamentos" icon={<GraduationCap size={18} strokeWidth={1.9} />} label="Meus treinamentos" />
           <NavTreinamentos />
         </nav>

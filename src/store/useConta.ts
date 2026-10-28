@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { buildAccess, buildAccessAvd } from "../domain/hierarquia";
+import { buildAccess, buildAccessAvd, emailOf } from "../domain/hierarquia";
+import { estaAtivoHoje } from "../domain/situacaoFuncional";
 import { usePortalStore } from "./PortalStoreContext";
 import type { Conta } from "../types/domain";
 
@@ -20,10 +21,11 @@ export function useConta(): Conta | null {
 
   return useMemo(() => {
     if (!email || state.colaboradores.length === 0) return null;
-    return (
-      buildAccess(state.colaboradores).find((a) => a.email === email) ??
-      buildAccessAvd(state.colaboradores).find((a) => a.email === email) ??
-      null
-    );
+    const completa = buildAccess(state.colaboradores).find((a) => a.email === email) ?? buildAccessAvd(state.colaboradores).find((a) => a.email === email);
+    if (completa) return completa;
+    // Acesso específico a Treinamentos: colaborador ativo que ainda não é elegível à AVD (ex.: menos de seis meses de empresa) e que o RH
+    // habilitou ou que apenas consulta "Meus treinamentos". Nada de AVD nem de outros módulos (ver AppShell e Sidebar).
+    const restrita = state.colaboradores.find((c) => emailOf(c.nome) === email && estaAtivoHoje(c, "acesso"));
+    return restrita ? { nome: restrita.nome, cargo: restrita.cargo, depto: restrita.depto, email, perfil: "Colaborador" as const, acesso: "treinamentos" as const } : null;
   }, [email, state.colaboradores]);
 }

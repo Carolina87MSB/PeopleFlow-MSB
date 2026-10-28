@@ -147,6 +147,7 @@ class Consulta {
 export function criarFake(db: PGlite, usuarios: Record<string, string | { id: string; email: string }>) {
   const objetos = new Map<string, { size: number; mimetype: string }>();
   const conteudos = new Map<string, Uint8Array>();
+  const criadas: { id: string; email: string }[] = [];
   return {
     from: (tabela: string) => new Consulta(db, tabela),
     /** Chamada de função do banco com argumentos nomeados (PostgREST /rpc). */
@@ -161,6 +162,16 @@ export function criarFake(db: PGlite, usuarios: Record<string, string | { id: st
       }
     },
     auth: {
+      admin: {
+        /** Contas do Auth: as dos tokens do teste + as criadas por createUser (que também entram em auth.users). */
+        listUsers: async () => ({ data: { users: [...Object.entries(usuarios).map(([token, u]) => (typeof u === "string" ? { id: u, email: `${token}@teste` } : u)), ...criadas] }, error: null }),
+        createUser: async ({ email }: { email: string; email_confirm?: boolean }) => {
+          const id = `00000000-0000-0000-0000-${String(900000000000 + criadas.length + 1)}`;
+          criadas.push({ id, email });
+          await db.exec(`insert into auth.users (id) values ('${id}')`);
+          return { data: { user: { id, email } }, error: null };
+        },
+      },
       getUser: async (token: string) => {
         const u = usuarios[token];
         if (!u) return { data: { user: null }, error: { message: "invalid" } };

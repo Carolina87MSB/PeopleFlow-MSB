@@ -72,11 +72,13 @@ export function TreinamentoDrawer({
   onFechar: () => void;
   onSalvo: (t: Treinamento) => void;
 }) {
-  const { perfil, pessoas, pessoaPorId } = useDesenvolvimento();
+  const { perfil, pessoas, pessoaPorId, colaboradorId } = useDesenvolvimento();
   const { flash } = useToast();
   const ehRH = perfil === "RH";
   const [form, setForm] = useState(() => {
     const f = paraForm(item, modo);
+    // O responsável habilitado registra o que ele mesmo vai administrar: já nasce como responsável principal.
+    if (modo === "novo" && perfil === "Responsavel") f.responsavel_colaborador_id = String(colaboradorId);
     if (inicial?.lista_mestra_codigo) f.lista_mestra_codigo = inicial.lista_mestra_codigo;
     if (inicial?.tipo) f.tipo = inicial.tipo;
     return f;
@@ -269,8 +271,8 @@ export function TreinamentoDrawer({
             onChange={(horas, minutos) => setForm((f) => ({ ...f, carga_horas: horas, carga_minutos: minutos }))}
           />
           <label className={styles.campo}>
-            Responsável *
-            <select value={form.responsavel_colaborador_id} onChange={set("responsavel_colaborador_id")} required={item?.status !== "solicitado"}>
+            Responsável principal *
+            <select value={form.responsavel_colaborador_id} onChange={set("responsavel_colaborador_id")} required={item?.status !== "solicitado"} disabled={modo === "editar" && item?.status !== "solicitado"}>
               <option value="">Selecione</option>
               {opcoesPessoa.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -278,6 +280,11 @@ export function TreinamentoDrawer({
                 </option>
               ))}
             </select>
+            <span className={styles.dica}>
+              {modo === "editar" && item?.status !== "solicitado"
+                ? "A troca do responsável é feita pelo RH, em \"Transferir responsabilidade\" (com motivo e histórico)."
+                : "Precisa ser do RH ou ter a habilitação concedida pelo RH. Responsável e instrutor internos habilitados administram o treinamento."}
+            </span>
           </label>
           <label className={styles.campo}>
             Instrutor interno

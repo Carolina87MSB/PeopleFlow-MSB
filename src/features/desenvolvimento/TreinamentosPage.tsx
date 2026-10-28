@@ -11,10 +11,11 @@ import { FORMATO, formatarCarga, formatarData, MODALIDADE, STATUS_TREINAMENTO, T
 import { ListaMestraAba } from "./ListaMestraAba";
 import { ReacaoAba } from "./ReacaoRH";
 import { TreinamentoDrawer } from "./TreinamentoForm";
-import { ResponsaveisGestaoDrawer } from "./ResponsaveisGestao";
+import { HabilitacoesDrawer } from "./Habilitacoes";
+import { PendenciasAba } from "./PendenciasAba";
 import styles from "./Desenvolvimento.module.css";
 
-type AbaTreinamentos = "agenda" | "concluidos" | "avaliacao-reacao" | "lista-mestra";
+type AbaTreinamentos = "agenda" | "concluidos" | "pendencias" | "avaliacao-reacao" | "lista-mestra";
 
 const FILTROS: Record<"agenda" | "concluidos", { rotulo: string; status: StatusTreinamento[] }[]> = {
   agenda: [
@@ -30,11 +31,13 @@ const FILTROS: Record<"agenda" | "concluidos", { rotulo: string; status: StatusT
 };
 
 export default function TreinamentosPage() {
-  const { perfil } = useDesenvolvimento();
+  const { perfil, habilitado } = useDesenvolvimento();
   const { aba } = useParams<{ aba?: string }>();
   const abas: AbaDef<AbaTreinamentos>[] = [
     { id: "agenda", rotulo: "Agenda" },
     { id: "concluidos", rotulo: "Concluídos" },
+    // Pendências: RH (todas), liderança (da sua área) e responsável habilitado (dos treinamentos que administra)
+    ...(perfil === "RH" || perfil === "Gestor" || habilitado ? [{ id: "pendencias" as const, rotulo: "Pendências" }] : []),
     ...(perfil === "RH" ? [{ id: "avaliacao-reacao" as const, rotulo: "Avaliação de reação" }, { id: "lista-mestra" as const, rotulo: "Lista Mestra" }] : []),
   ];
   const atual = abas.find((a) => a.id === aba)?.id;
@@ -46,6 +49,7 @@ export default function TreinamentosPage() {
       <Abas base="/desenvolvimento/treinamentos" abas={abas} atual={atual} />
       {atual === "agenda" && <ListaTreinamentos key="agenda" aba="agenda" />}
       {atual === "concluidos" && <ListaTreinamentos key="concluidos" aba="concluidos" />}
+      {atual === "pendencias" && <PendenciasAba />}
       {atual === "avaliacao-reacao" && <ReacaoAba />}
       {atual === "lista-mestra" && <ListaMestraAba />}
     </>
@@ -53,10 +57,10 @@ export default function TreinamentosPage() {
 }
 
 function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
-  const { perfil, colaboradorId, podeRegistrar } = useDesenvolvimento();
+  const { perfil, colaboradorId, podeRegistrar, habilitado } = useDesenvolvimento();
   const navigate = useNavigate();
   const filtros = FILTROS[aba];
-  const [responsaveis, setResponsaveis] = useState(false);
+  const [habilitacoes, setHabilitacoes] = useState(false);
   const [filtro, setFiltro] = useState(filtros[0].rotulo);
   const [busca, setBusca] = useState("");
   const [termo, setTermo] = useState("");
@@ -77,11 +81,11 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
   );
   const subtitulo =
     perfil === "Responsavel"
-      ? podeRegistrar
-        ? "Treinamentos da gestão que você acompanha e os que você conduz"
-        : "Treinamentos em que você é responsável ou instrutor"
+      ? "Treinamentos sob a sua responsabilidade (responsável principal ou instrutor interno habilitado)"
       : perfil === "Gestor"
-        ? "Da sua gestão, com participantes da sua equipe e os que você conduz"
+        ? habilitado
+          ? "Acompanhamento da sua área, mais os treinamentos que você administra como responsável ou instrutor"
+          : "Acompanhamento dos treinamentos da sua área (somente consulta). Para registrar e administrar, o RH precisa habilitá-lo."
         : aba === "agenda"
           ? "Planejados e em andamento"
           : "Realizados e encerrados, do mais recente para o mais antigo";
@@ -95,8 +99,8 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
         </div>
         <div className={styles.acoes}>
           {(perfil === "Gestor" || perfil === "RH") && aba === "agenda" && (
-            <Button variant="ghost" onClick={() => setResponsaveis(true)}>
-              Responsáveis da gestão
+            <Button variant="ghost" onClick={() => setHabilitacoes(true)}>
+              {perfil === "RH" ? "Habilitações" : "Responsáveis habilitados"}
             </Button>
           )}
           {podeRegistrar && aba === "agenda" && (
@@ -195,7 +199,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
           <Paginacao pagina={lista.pagina} total={lista.dados.total} onChange={lista.setPagina} />
         </>
       )}
-      {responsaveis && <ResponsaveisGestaoDrawer onFechar={() => setResponsaveis(false)} />}
+      {habilitacoes && <HabilitacoesDrawer onFechar={() => setHabilitacoes(false)} />}
       {novo && <TreinamentoDrawer item={null} onFechar={() => setNovo(false)} onSalvo={(t) => navigate(`/desenvolvimento/treinamento/${t.id}?participantes=1`)} />}
     </Card>
   );
