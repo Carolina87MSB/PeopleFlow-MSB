@@ -7,6 +7,7 @@ import { CabecalhoDrawer, Carregando, Erro } from "./componentes";
 import { useConsulta } from "./hooks";
 import { FORMATO, MODALIDADE, TIPO_TREINAMENTO, TIPOS_COM_DOCUMENTO, hojeISO, lerHorasMinutos, paraHorasMinutos } from "./rotulos";
 import { CampoDuracao } from "./CampoDuracao";
+import { validarLinkGravacao } from "../../domain/gravacao";
 import styles from "./Desenvolvimento.module.css";
 
 /** novo: registrar treinamento (nasce PLANEJADO) · editar: alterar/retificar · reposicao: agendar para os faltantes de `item`. */
@@ -33,10 +34,27 @@ function paraForm(t: Treinamento | null, modo: Modo) {
     observacao: reposicao ? "" : (t?.observacao ?? ""),
     exige_eficacia: t?.exige_eficacia ?? false,
     permite_gravacao: t?.permite_gravacao ?? false,
+    gravacao_url: t?.gravacao_url ?? "",
     homologacao: t?.homologacao ?? false,
     eficacia_prazo: reposicao ? "" : (t?.eficacia_prazo ?? ""),
     motivo: "",
   };
+}
+
+/** Opção do formulário (caixa de seleção): título e explicação alinhados ao texto, mais um detalhe opcional que aparece quando marcada. */
+function OpcaoForm({ titulo, dica, checked, onChange, disabled, children }: { titulo: string; dica?: React.ReactNode; checked: boolean; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; disabled?: boolean; children?: React.ReactNode }) {
+  return (
+    <div className={styles.opcao}>
+      <label className={styles.opcaoLinha}>
+        <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} />
+        <span className={styles.opcaoTexto}>
+          <span className={styles.opcaoTitulo}>{titulo}</span>
+          {dica && <span className={styles.opcaoDica}>{dica}</span>}
+        </span>
+      </label>
+      {children && <div className={styles.opcaoDetalhe}>{children}</div>}
+    </div>
+  );
 }
 
 /** Solicitar, editar ou agendar reposição. Toda regra é conferida de novo no servidor. */
@@ -86,6 +104,8 @@ export function TreinamentoDrawer({
 
   // Novo registro e reposição: data prevista a partir de hoje (o servidor confere de novo). Edição não é travada.
   const novoRegistro = modo !== "editar";
+  // O link da gravação é informado no cadastro (e na edição antes da conclusão); depois da conclusão só o RH o corrige, na página do treinamento.
+  const mostraLinkGravacao = form.permite_gravacao && (modo === "novo" || (modo === "editar" && ["planejado", "em_andamento"].includes(item?.status ?? "")));
 
   async function salvar() {
     setErro(null);
@@ -95,12 +115,16 @@ export function TreinamentoDrawer({
       if (novoRegistro && form.data_inicio && form.data_inicio < hojeISO()) throw new Error("A data prevista não pode ser anterior à data de registro do treinamento. O treinamento deve ser registrado antes de sua realização.");
       if (modo === "reposicao" && !form.data_inicio) throw new Error("Defina a nova data da reposição.");
       if (exigeDoc && !tituloDoc) throw new Error("Selecione um documento vigente da Lista Mestra.");
-      const { carga_horas: _h, carga_minutos: _m, permite_gravacao: permiteGravacao, ...resto } = form;
+      const linkGravacao = form.gravacao_url.trim();
+      if (mostraLinkGravacao && linkGravacao && !validarLinkGravacao(linkGravacao)) throw new Error("Informe o link da gravação no SharePoint (https://…sharepoint.com/…).");
+      const { carga_horas: _h, carga_minutos: _m, permite_gravacao: permiteGravacao, gravacao_url: _g, ...resto } = form;
       const corpo = {
         ...resto,
         titulo: tituloEfetivo,
         // só envia quando ligada ou quando já estava ligada (para poder desligar): treinamentos sem gravação seguem exatamente como antes
         ...(permiteGravacao || item?.permite_gravacao ? { permite_gravacao: permiteGravacao } : {}),
+        // o link vai direto para o registro da gravação (mesma regra da página do treinamento); vazio = ainda sem link
+        ...(mostraLinkGravacao ? { gravacao_url: linkGravacao } : {}),
         carga_horaria_min: carga,
         responsavel_colaborador_id: form.responsavel_colaborador_id || null,
         instrutor_colaborador_id: form.instrutor_colaborador_id || null,
@@ -273,6 +297,7 @@ export function TreinamentoDrawer({
           <label className={[styles.campo, styles.cheio].join(" ")}>
             Local ou link
             <input value={form.local_link} onChange={set("local_link")} maxLength={500} />
+            <span className={styles.dica}>Endereço físico ou link da reunião online. Pode ficar em branco quando o treinamento ocorre somente por gravação.</span>
           </label>
           <label className={[styles.campo, styles.cheio].join(" ")}>
             Justificativa
@@ -282,36 +307,46 @@ export function TreinamentoDrawer({
             Observação
             <textarea value={form.observacao} onChange={set("observacao")} maxLength={2000} />
           </label>
-          <label className={styles.check}>
-            <input type="checkbox" checked={form.exige_eficacia} onChange={set("exige_eficacia")} /> Exige avaliação de eficácia
-          </label>
-          {modo !== "reposicao" && (
-            <label className={[styles.campo, styles.cheio].join(" ")}>
-              <span className={styles.check}>
-                <input type="checkbox" checked={form.permite_gravacao} onChange={set("permite_gravacao")} /> Permitir participação por gravação
-              </span>
-              <span className={styles.dica}>
-                Participantes assistem à gravação (link do SharePoint, informado na página do treinamento) e confirmam a participação pelo PeopleFlow, enquanto o treinamento estiver em andamento. A confirmação é uma declaração do colaborador, não comprova a visualização integral.
-              </span>
-            </label>
-          )}
-          {ehRH && (
-            <label className={[styles.campo, styles.cheio].join(" ")}>
-              <span className={styles.check}>
-                <input type="checkbox" checked={form.homologacao} onChange={set("homologacao")} disabled={homologacaoTravada} /> Treinamento de homologação/teste
-              </span>
-              <span className={styles.dica}>
-                Utilizado exclusivamente para testes do fluxo. Não será considerado como capacitação oficial, conformidade ou atendimento de Necessidades de Desenvolvimento.
-                {homologacaoTravada && (modo === "reposicao" ? " Na reposição, a condição é herdada do treinamento original." : " Não pode ser alterada depois do início da realização.")}
-              </span>
-            </label>
-          )}
-          {form.exige_eficacia && (
-            <label className={styles.campo}>
-              Prazo da eficácia
-              <input type="date" value={form.eficacia_prazo} onChange={set("eficacia_prazo")} />
-            </label>
-          )}
+          <div className={styles.opcoes}>
+            <OpcaoForm titulo="Exige avaliação de eficácia" dica="Depois da realização, o RH ou o gestor do participante registra se o treinamento foi eficaz." checked={form.exige_eficacia} onChange={set("exige_eficacia")}>
+              {form.exige_eficacia && (
+                <label className={styles.campo}>
+                  Prazo da eficácia
+                  <input type="date" value={form.eficacia_prazo} onChange={set("eficacia_prazo")} />
+                </label>
+              )}
+            </OpcaoForm>
+            {modo !== "reposicao" && (
+              <OpcaoForm
+                titulo="Permitir participação por gravação"
+                dica="Participantes assistem à gravação (link do SharePoint) e confirmam a participação pelo PeopleFlow enquanto o treinamento estiver em andamento. A confirmação é uma declaração do colaborador, não comprova a visualização integral."
+                checked={form.permite_gravacao}
+                onChange={set("permite_gravacao")}
+              >
+                {mostraLinkGravacao && (
+                  <label className={styles.campo}>
+                    Link da gravação (SharePoint)
+                    <input type="url" inputMode="url" value={form.gravacao_url} onChange={set("gravacao_url")} maxLength={1000} placeholder="https://suaempresa.sharepoint.com/…" />
+                    <span className={styles.dica}>Só links https do SharePoint. Se a gravação ainda não existe, deixe em branco: o link pode ser informado depois, na página do treinamento.</span>
+                  </label>
+                )}
+              </OpcaoForm>
+            )}
+            {ehRH && (
+              <OpcaoForm
+                titulo="Treinamento de homologação/teste"
+                dica={
+                  <>
+                    Utilizado exclusivamente para testes do fluxo. Não será considerado como capacitação oficial, conformidade ou atendimento de Necessidades de Desenvolvimento.
+                    {homologacaoTravada && (modo === "reposicao" ? " Na reposição, a condição é herdada do treinamento original." : " Não pode ser alterada depois do início da realização.")}
+                  </>
+                }
+                checked={form.homologacao}
+                onChange={set("homologacao")}
+                disabled={homologacaoTravada}
+              />
+            )}
+          </div>
           {modo === "editar" && item?.status === "concluido" && (
             <label className={[styles.campo, styles.cheio].join(" ")}>
               Justificativa da retificação *

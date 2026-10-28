@@ -46,3 +46,25 @@ export interface GravacaoDoTreinamento {
 export function podeConfirmarPorGravacao(t: GravacaoDoTreinamento & { status: string }, presencaStatus: string): boolean {
   return t.permite_gravacao && Boolean(t.gravacao_url) && t.status === "em_andamento" && presencaStatus !== "presente";
 }
+
+/** Identificação legível do local quando o treinamento é pela gravação (a URL do SharePoint fica guardada no sistema, nunca impressa). */
+export const LOCAL_AMBIENTE_VIRTUAL = "Ambiente virtual — SharePoint";
+
+function ehEnderecoSharePoint(texto: string): boolean {
+  try {
+    const host = new URL(texto).hostname.toLowerCase();
+    return host === DOMINIO_GRAVACAO || host.endsWith(`.${DOMINIO_GRAVACAO}`);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * "Local" da lista de presença (PDF): endereço físico, sala ou link de reunião saem exatamente como cadastrados; link do SharePoint
+ * (URL extensa) e treinamento só por gravação, sem local informado, saem como "Ambiente virtual — SharePoint".
+ */
+export function localParaLista(localLink: string | null | undefined, permiteGravacao: boolean): string {
+  const local = (localLink ?? "").trim();
+  if (local) return ehEnderecoSharePoint(local) ? LOCAL_AMBIENTE_VIRTUAL : local;
+  return permiteGravacao ? LOCAL_AMBIENTE_VIRTUAL : "";
+}

@@ -31,25 +31,33 @@ const textoPrazo = (t: LinhaMeuHistorico) =>
 
 /** Avaliação de reação: Pendente ou Vencida (com prazo e botão, também depois da conclusão), Respondida (data e hora) ou nada quando não se aplica. */
 function CelulaAvaliacao({ t, onAvaliar }: { t: LinhaMeuHistorico; onAvaliar: () => void }) {
-  if (t.avaliacao === "pendente" || t.avaliacao === "vencida")
+  if (t.avaliacao === "pendente" || t.avaliacao === "vencida") {
+    const vencida = t.avaliacao === "vencida";
     return (
       <div className={mobile.avaliacao}>
-        <Selo tom={t.avaliacao === "vencida" ? "danger" : "warning"}>{t.avaliacao === "vencida" ? "Vencida" : "Pendente"}</Selo>
-        {t.avaliacao_prazo && (
-          <span className={styles.secundario}>
-            {t.avaliacao === "vencida" ? "Prazo encerrou em" : "Prazo:"} {formatarData(t.avaliacao_prazo)}
-          </span>
-        )}
-        <button type="button" className={styles.linkAcao} onClick={onAvaliar}>
-          Avaliar treinamento
+        <div className={mobile.avaliacaoLinha}>
+          <Selo tom={vencida ? "danger" : "warning"}>{vencida ? "Vencida" : "Pendente"}</Selo>
+          {t.avaliacao_prazo && (
+            <span className={mobile.avaliacaoPrazo}>
+              {vencida ? "Prazo encerrado em " : "Prazo: "}
+              <strong>{formatarData(t.avaliacao_prazo)}</strong>
+            </span>
+          )}
+        </div>
+        {vencida && <span className={mobile.avaliacaoPrazo}>Você ainda pode responder.</span>}
+        <button type="button" className={mobile.responder} onClick={onAvaliar}>
+          Responder avaliação
         </button>
       </div>
     );
+  }
   if (t.avaliacao === "respondida")
     return (
       <div className={mobile.avaliacao}>
-        <Selo tom="success">Respondida</Selo>
-        {t.avaliacao_em && <span className={styles.secundario}>em {dataHora.format(new Date(t.avaliacao_em))}</span>}
+        <div className={mobile.avaliacaoLinha}>
+          <Selo tom="success">Respondida</Selo>
+        </div>
+        {t.avaliacao_em && <span className={mobile.avaliacaoPrazo}>em {dataHora.format(new Date(t.avaliacao_em))}</span>}
       </div>
     );
   return <span className={styles.secundario}>—</span>;

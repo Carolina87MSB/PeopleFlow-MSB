@@ -14,7 +14,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./adminAuth.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
 import { dataEfetivaDeRealizacao } from "../../src/domain/dataRealizacao.js";
-import { DECLARACAO_GRAVACAO, NOTA_LISTA_GRAVACAO, podeConfirmarPorGravacao, validarLinkGravacao } from "../../src/domain/gravacao.js";
+import { DECLARACAO_GRAVACAO, NOTA_LISTA_GRAVACAO, localParaLista, podeConfirmarPorGravacao, validarLinkGravacao } from "../../src/domain/gravacao.js";
 import { diaEmBrasilia, elegivelParaReacao, fimDoPrazoDaReacao, indicadorAdesao, mediasConsolidadas, MINIMO_RESPOSTAS_PARA_MEDIAS, QUESTOES, situacaoDaReacao, validarRespostas, VERSAO_FORMULARIO, type SituacaoReacao } from "../../src/domain/avaliacaoReacao.js";
 import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPdf.js";
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
@@ -895,6 +895,16 @@ async function processarNecessidadesDoParticipante(conta: ContaDev, t: Treinamen
 }
 
 // ── Solicitação / edição ───────────────────────────────────────────────
+/** Link da gravação enviado no cadastro/edição: undefined = campo ausente (nada muda); null = vazio; senão a URL já validada (SharePoint, https). */
+function linkGravacaoDoCorpo(corpo: Corpo): string | null | undefined {
+  if (!("gravacao_url" in corpo) || corpo.gravacao_url === undefined) return undefined;
+  const bruto = typeof corpo.gravacao_url === "string" ? corpo.gravacao_url.trim() : corpo.gravacao_url;
+  if (bruto === null || bruto === "") return null;
+  const valido = validarLinkGravacao(bruto);
+  if (!valido) throw new ErroHttp(422, "Informe o link da gravação no SharePoint (https://…sharepoint.com/…).");
+  return valido;
+}
+
 async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
   const id = corpo.id == null || corpo.id === "" ? null : idObrigatorio(corpo, "id", "Treinamento");
   const campos = lerCamposTreinamento(corpo);
@@ -912,6 +922,7 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
     if (homologacao && conta.perfil !== "RH") throw new ErroHttp(403, "Somente o RH marca treinamento de homologação/teste.");
     // "Permitir participação por gravação": só envia a coluna quando ligada (treinamento existente nunca é afetado; sem a migration, recusa com clareza).
     const querGravacao = corpo.permite_gravacao === true;
+    const linkGravacao = querGravacao ? linkGravacaoDoCorpo(corpo) : undefined;
     if (querGravacao) {
       const { error: colErro } = await supabaseAdmin.from("peopleflow_dev_treinamentos").select("permite_gravacao").limit(1);
       if (colErro && colunaGravacaoAusente(colErro)) throw new ErroHttp(422, "A participação por gravação ainda não está disponível (recurso não ativado).");
@@ -936,13 +947,15 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
       .single();
     if (error) erroBanco(error, "Treinamento");
     await auditar(conta, "treinamento_planejado", "peopleflow_dev_treinamentos", String(data.id), { registro: true, perfil: conta.perfil, depois: data });
-    if (querGravacao) await atualizarGravacao(conta, data as Treinamento, { permitir: true });
+    // O link informado no próprio cadastro vai direto para o registro da gravação (mesma regra e auditoria da página do treinamento).
+    if (querGravacao) await atualizarGravacao(conta, data as Treinamento, { permitir: true, url: linkGravacao });
     return data;
   }
 
   const antes = await lerTreinamento(id);
   if (antes.status === "cancelado") throw new ErroHttp(422, "Treinamento cancelado não pode ser editado.");
   if (!(await podeEditarTreinamento(conta, antes))) throw new ErroHttp(403, "Somente o RH ou a gestão que registrou o treinamento (antes do início da realização) pode editar.");
+  const linkGravacao = linkGravacaoDoCorpo(corpo);
   const motivo = texto(corpo, "motivo", { max: 1000 });
   if (antes.status === "concluido" && !motivo) throw new ErroHttp(422, "Alteração em treinamento concluído exige justificativa.");
   // Documento: só refotografa quando o código muda — a revisão treinada nunca é atualizada retroativamente.
@@ -968,10 +981,18 @@ async function treinamentoSalvar(conta: ContaDev, corpo: Corpo) {
   await auditar(conta, antes.status === "concluido" ? "treinamento_retificado" : "treinamento_editado", "peopleflow_dev_treinamentos", String(id), { alteracoes: mudou, motivo });
   if (antes.status === "concluido" && data.modalidade === "interno") await gerarListaPresenca(conta, data, `Retificação do treinamento: ${motivo}`);
   // Permissão de gravação (só quando o formulário a envia): aplica depois de gravar o resto, com auditoria própria.
-  if (typeof corpo.permite_gravacao === "boolean" && ["planejado", "em_andamento"].includes(data.status)) {
+  if ((typeof corpo.permite_gravacao === "boolean" || linkGravacao !== undefined) && ["planejado", "em_andamento"].includes(data.status)) {
     const atual = await lerGravacao(id);
-    if (atual && atual.permite_gravacao !== corpo.permite_gravacao) await atualizarGravacao(conta, data as Treinamento, { permitir: corpo.permite_gravacao });
-    else if (!atual && corpo.permite_gravacao) throw new ErroHttp(422, "A participação por gravação ainda não está disponível (recurso não ativado).");
+    const permitir = typeof corpo.permite_gravacao === "boolean" ? corpo.permite_gravacao : undefined;
+    if (!atual) {
+      if (permitir || linkGravacao) throw new ErroHttp(422, "A participação por gravação ainda não está disponível (recurso não ativado).");
+    } else {
+      const mudanca: { permitir?: boolean; url?: string | null } = {};
+      if (permitir !== undefined && atual.permite_gravacao !== permitir) mudanca.permitir = permitir;
+      // o link só é gravado com a participação por gravação habilitada (o formulário só o envia nesse caso)
+      if (linkGravacao !== undefined && (permitir ?? atual.permite_gravacao)) mudanca.url = linkGravacao;
+      if (mudanca.permitir !== undefined || mudanca.url !== undefined) await atualizarGravacao(conta, data as Treinamento, mudanca);
+    }
   }
   return data;
 }
@@ -1775,7 +1796,7 @@ async function prepararListaPresenca(conta: ContaDev, t: Treinamento, participan
     formato: t.formato ? (ROTULO_FORMATO[t.formato] ?? t.formato) : "—",
     dataRealizacao: dataBR(t.data_realizacao),
     cargaRealizada: cargaBR(t.carga_realizada_min ?? t.carga_horaria_min),
-    local: t.local_link ?? "",
+    local: localParaLista(t.local_link, Boolean((await lerGravacao(t.id))?.permite_gravacao)),
     responsavel: nomeDe(t.responsavel_colaborador_id) ?? "—",
     instrutor: nomeDe(t.instrutor_colaborador_id) ?? t.instrutor_externo ?? "—",
     // Fotografia do treinamento (revisão treinada) — nunca a revisão atual da Lista Mestra.

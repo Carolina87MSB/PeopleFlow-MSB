@@ -790,7 +790,7 @@ await t("Telas: formulário de 5 perguntas na escala 1–5 (envio só completo) 
   const form = lerTela("src/features/desenvolvimento/FormularioReacao.tsx");
   if (!/QUESTOES\.map/.test(form) || !/ESCALA\.map/.test(form) || !/type="radio"/.test(form) || !/disabled=\{!completo \|\| enviando\}/.test(form) || !/Responder depois/.test(form) || !/textoPrazo/.test(form) || !/não vê a nota de cada pessoa/.test(form)) throw new Error("formulário");
   const meus = lerTela("src/features/desenvolvimento/MeusTreinamentosPage.tsx");
-  if (!/<FormularioReacao/.test(meus) || !/Avaliar treinamento/.test(meus) || !/t\.avaliacao === "pendente" \|\| t\.avaliacao === "vencida"/.test(meus) || !/Respondida/.test(meus) || !/Vencida/.test(meus) || !/ainda pode responder/.test(meus)) throw new Error("Meus treinamentos");
+  if (!/<FormularioReacao/.test(meus) || !/Responder avaliação/.test(meus) || !/t\.avaliacao === "pendente" \|\| t\.avaliacao === "vencida"/.test(meus) || !/Respondida/.test(meus) || !/Vencida/.test(meus) || !/ainda pode responder/.test(meus)) throw new Error("Meus treinamentos");
   const part2 = lerTela("src/participar/Participar.tsx");
   if (!/<FormularioReacao/.test(part2) || !/avaliacao === "pendente" \|\| estado\.info\.avaliacao === "vencida"/.test(part2) || !/reacao_responder/.test(part2) || !/ainda pode responder/.test(part2)) throw new Error("página de presença");
   const rh = lerTela("src/features/desenvolvimento/ReacaoRH.tsx");
@@ -1085,6 +1085,183 @@ await t("A tela 'Meus treinamentos' e o menu valem para qualquer perfil: nada na
   if (a.presenca_metodo !== "manual" || a.presenca_motivo !== "Ajuste administrativo") throw new Error("registro manual do RH preservado: " + jsonDe(a));
   const aud = await q(`select count(*)::int n from public.peopleflow_dev_auditoria where acao='presenca_manual' and entidade_id='${p}'`);
   if (aud[0].n < 1) throw new Error("registro manual auditado");
+});
+
+console.log("Ajustes de interface: link da gravação no cadastro, rótulo do PDF, consolidação da avaliação");
+const BASE_CAD = { tipo: "desenvolvimento", modalidade: "interno", formato: "online", data_inicio: hojeSP, responsavel_colaborador_id: 7 };
+const linhaTrein = async (id: number) => (await q(`select permite_gravacao, gravacao_url, gravacao_definida_por, local_link from public.peopleflow_dev_treinamentos where id=${id}`))[0];
+const textoDaLista = async (tid: number) => {
+  const ls = await q(`select storage_path from public.peopleflow_dev_evidencias where treinamento_id=${tid} and tipo='lista_presenca' and substituida_em is null`);
+  if (ls.length !== 1) throw new Error("lista vigente do treinamento " + tid);
+  // o extrator lê os bytes como latin1: o travessão (WinAnsi 0x97) chega como U+0097
+  return textoDoPdf(fake.storage.conteudos.get(`desenvolvimento-evidencias/${ls[0].storage_path}`)!).replace(/\u0097/g, "—").replace(/\s+/g, " ");
+};
+
+await t("Link da gravação no CADASTRO: vai direto para o registro da gravação (mesma regra e auditoria); link inválido recusa e não cria nada; em branco é aceito; sem a opção marcada o link é ignorado", async () => {
+  const total = async () => (await q(`select count(*)::int n from public.peopleflow_dev_treinamentos`))[0].n as number;
+  const antes = await total();
+  for (const ruim of ["http://msbbrasil.sharepoint.com/x", "https://exemplo.com/video", "https://sharepoint.com.alheio.com/x", "texto qualquer", "https://user:senha@msbbrasil.sharepoint.com/x"])
+    await espera("ge", "treinamento_salvar", { ...BASE_CAD, titulo: "Link ruim", permite_gravacao: true, gravacao_url: ruim }, 422);
+  if ((await total()) !== antes) throw new Error("link inválido não pode deixar treinamento criado pela metade");
+  // com link e SEM "Local ou link": não é exigido quando o treinamento é só por gravação
+  const a = (await espera("ge", "treinamento_salvar", { ...BASE_CAD, titulo: "Cadastro com link", permite_gravacao: true, gravacao_url: ` ${LINK} `, local_link: "" }, 200)).id;
+  let l = await linhaTrein(a);
+  if (l.permite_gravacao !== true || l.gravacao_url !== LINK || !l.gravacao_definida_por || (l.local_link ?? "") !== "") throw new Error("registro da gravação: " + jsonDe(l));
+  const aud = await q(`select detalhe from public.peopleflow_dev_auditoria where acao='gravacao_configurada' and entidade_id='${a}'`);
+  if (aud.length !== 1 || aud[0].detalhe.depois.gravacao_url !== LINK) throw new Error("auditoria da gravação: " + jsonDe(aud));
+  // em branco: habilita sem link (o link pode vir depois, na página do treinamento)
+  const b = (await espera("ge", "treinamento_salvar", { ...BASE_CAD, titulo: "Cadastro sem link", permite_gravacao: true, gravacao_url: "" }, 200)).id;
+  l = await linhaTrein(b);
+  if (l.permite_gravacao !== true || l.gravacao_url !== null) throw new Error("em branco = sem link: " + jsonDe(l));
+  await espera("resp", "gravacao_definir", { treinamento_id: b, url: LINK }, 200); // a página do treinamento continua permitindo informar/editar
+  if ((await linhaTrein(b)).gravacao_url !== LINK) throw new Error("edição pela página do treinamento");
+  // sem marcar a opção, um link enviado é ignorado
+  const c = (await espera("ge", "treinamento_salvar", { ...BASE_CAD, titulo: "Sem gravação", gravacao_url: LINK }, 200)).id;
+  l = await linhaTrein(c);
+  if (l.permite_gravacao !== false || l.gravacao_url !== null) throw new Error("link sem a opção marcada: " + jsonDe(l));
+  // edição antes da conclusão: o link do cadastro pode ser trocado/limpo; quem não registrou não edita
+  const outro = "https://msbbrasil.sharepoint.com/:v:/g/personal/rh/OUTRA-gravacao";
+  await espera("ge", "treinamento_salvar", { ...BASE_CAD, id: a, titulo: "Cadastro com link", permite_gravacao: true, gravacao_url: outro }, 200);
+  if ((await linhaTrein(a)).gravacao_url !== outro) throw new Error("troca do link na edição");
+  await espera("gil", "treinamento_salvar", { ...BASE_CAD, id: a, titulo: "Cadastro com link", permite_gravacao: true, gravacao_url: LINK }, 403);
+  await espera("ge", "treinamento_salvar", { ...BASE_CAD, id: a, titulo: "Cadastro com link", permite_gravacao: true, gravacao_url: "https://exemplo.com/x" }, 422);
+  if ((await linhaTrein(a)).gravacao_url !== outro) throw new Error("link inválido não altera o registro");
+  await espera("ge", "treinamento_salvar", { ...BASE_CAD, id: a, titulo: "Cadastro com link", permite_gravacao: true, gravacao_url: "" }, 200);
+  if ((await linhaTrein(a)).gravacao_url !== null) throw new Error("link limpo");
+  // desmarcar a opção desliga a gravação sem apagar o link já informado
+  await espera("ge", "treinamento_salvar", { ...BASE_CAD, id: b, titulo: "Cadastro sem link", permite_gravacao: false }, 200);
+  l = await linhaTrein(b);
+  if (l.permite_gravacao !== false || l.gravacao_url !== LINK) throw new Error("desligar preserva o link: " + jsonDe(l));
+  // depois da conclusão o formulário não altera o link: só o RH, pela página (regra existente)
+  const concluido = await realizado({});
+  await espera("rh", "treinamento_concluir", { id: concluido }, 200);
+  if ((await linhaTrein(concluido)).gravacao_url !== null) throw new Error("treinamento sem gravação segue sem link");
+});
+
+await t("Regras puras do 'Local' da lista de presença: link do SharePoint e treinamento só gravado saem como 'Ambiente virtual — SharePoint'; sala, endereço e reunião online saem como cadastrados", async () => {
+  const L = grav.localParaLista;
+  const longo = "https://msbbrasil-my.sharepoint.com/:v:/g/personal/rh_msbbrasil_com/EXEMPLO-de-um-endereco-bem-extenso?e=abc123&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAifX0";
+  if (grav.LOCAL_AMBIENTE_VIRTUAL !== "Ambiente virtual — SharePoint") throw new Error("rótulo");
+  if (L(longo, true) !== grav.LOCAL_AMBIENTE_VIRTUAL || L(longo, false) !== grav.LOCAL_AMBIENTE_VIRTUAL) throw new Error("link do SharePoint no Local");
+  if (L("", true) !== grav.LOCAL_AMBIENTE_VIRTUAL || L(null, true) !== grav.LOCAL_AMBIENTE_VIRTUAL || L("   ", true) !== grav.LOCAL_AMBIENTE_VIRTUAL) throw new Error("só gravação, sem local");
+  if (L("", false) !== "" || L(null, false) !== "") throw new Error("sem local e sem gravação: nada a mostrar");
+  for (const normal of ["Sala de treinamento 2", "Av. Exemplo, 100 — Galpão B", "https://teams.microsoft.com/l/meetup-join/19%3ameeting", "https://sharepoint.com.alheio.com/x"]) if (L(normal, true) !== normal) throw new Error("preserva o cadastrado: " + normal);
+});
+
+await t("PDF da lista de presença por gravação: sem URL extensa no 'Local' (rótulo legível), endereço original preservado no sistema; identificação, participantes, método, data e horário mantidos; presencial e reunião online seguem como cadastrados", async () => {
+  const longo = "https://msbbrasil-my.sharepoint.com/:v:/g/personal/rh_msbbrasil_com/EXEMPLO-de-um-endereco-bem-extenso?e=abc123&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJTdHJlYW1XZWJBcHAifX0";
+  const concluirPorGravacao = async (extra: Record<string, unknown>) => {
+    const id = (await espera("ge", "treinamento_salvar", { ...BASE_CAD, titulo: "Aula gravada", permite_gravacao: true, gravacao_url: LINK, ...extra }, 200)).id as number;
+    await espera("ge", "participantes_adicionar", { treinamento_id: id, colaborador_ids: [3, 5] }, 200);
+    await espera("resp", "treinamento_iniciar", { id }, 200);
+    const cod = await codigoDe(id);
+    await espera("p3", "gravacao_confirmar", { codigo: cod, declaro: true }, 200);
+    await espera("p5", "gravacao_confirmar", { codigo: cod, declaro: true }, 200);
+    await espera("rh", "treinamento_concluir", { id }, 200);
+    return { id, texto: await textoDaLista(id) };
+  };
+  // (1) o "Local ou link" cadastrado é o endereço da gravação (cadastro antigo): o PDF não imprime a URL
+  const a = await concluirPorGravacao({ local_link: longo });
+  if (/sharepoint\.com|EXEMPLO-de-um|https?:/i.test(a.texto)) throw new Error("URL extensa no PDF: " + a.texto.slice(0, 300));
+  if (!a.texto.includes("LOCAL Ambiente virtual — SharePoint")) throw new Error("rótulo do local ausente: " + a.texto.slice(0, 400));
+  if ((await linhaTrein(a.id)).local_link !== longo) throw new Error("o endereço original continua guardado no sistema");
+  for (const e of ["Caio Operador", "Eva", "Gravação", "Presente", "Aula gravada", "CÓDIGO", "MODALIDADE", "DATA DA REALIZAÇÃO", "Data/hora", "Participação por gravação"]) if (!a.texto.includes(e) && !a.texto.toLowerCase().includes(e.toLowerCase())) throw new Error(`PDF sem "${e}"`);
+  if (!/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/.test(a.texto)) throw new Error("data e horário da confirmação mantidos");
+  // (2) só gravação, sem local informado: o PDF traz o rótulo
+  const b = await concluirPorGravacao({});
+  if (!b.texto.includes("LOCAL Ambiente virtual — SharePoint")) throw new Error("só gravação, sem local");
+  // (3) ao vivo + gravação, com sala informada: a sala é preservada
+  const c = await concluirPorGravacao({ local_link: "Sala de treinamento 2" });
+  if (!c.texto.includes("LOCAL Sala de treinamento 2") || c.texto.includes("Ambiente virtual")) throw new Error("sala preservada: " + c.texto.slice(0, 400));
+  // (4) sem gravação e com link de reunião online: como cadastrado
+  const d = await realizado({ local_link: "https://teams.microsoft.com/l/meetup-join/19-reuniao" });
+  await espera("rh", "treinamento_concluir", { id: d }, 200);
+  const td = await textoDaLista(d);
+  if (!td.includes("https://teams.microsoft.com/l/meetup-join/19-reuniao") || td.includes("Ambiente virtual")) throw new Error("reunião online preservada");
+});
+
+await t("Avaliação de Reação: consolidação a partir de 3 respostas (1 e 2 não expõem média nem nota); indicadores, controle de respondentes e notas consistentes entre si; sem alterar o que já foi enviado", async () => {
+  const id = (await espera("ge", "treinamento_salvar", { ...BASE_CAD, titulo: "Turma de consolidação", permite_gravacao: true, gravacao_url: LINK }, 200)).id as number;
+  await espera("ge", "participantes_adicionar", { treinamento_id: id, colaborador_ids: [3, 5, 4] }, 200);
+  await espera("resp", "treinamento_iniciar", { id }, 200);
+  const cod = await codigoDe(id);
+  for (const tok of ["p3", "p5", "p4"]) await espera(tok, "gravacao_confirmar", { codigo: cod, declaro: true }, 200);
+  const antesNotas = await q(`select * from public.peopleflow_dev_reacao_respostas order by id`);
+  const antesAdesoes = await q(`select * from public.peopleflow_dev_avaliacoes_reacao order by id`);
+  const mediaSql = async (tid: number) => {
+    const r = (await q(`select count(*)::int n, round(avg(q1)::numeric,1) a1, round(avg(q2)::numeric,1) a2, round(avg(q3)::numeric,1) a3, round(avg(q4)::numeric,1) a4, round(avg(q5)::numeric,1) a5 from public.peopleflow_dev_reacao_respostas where treinamento_id=${tid}`))[0];
+    return { n: r.n as number, medias: [r.a1, r.a2, r.a3, r.a4, r.a5].map(Number) };
+  };
+  const conferir = async (esperadoResp: number, esperadoMedias: number[] | null) => {
+    const resumo = await espera("rh", "reacao_resumo", {}, 200);
+    const det = await espera("rh", "reacao_detalhe", { treinamento_id: id }, 200);
+    const li = resumo.treinamentos.find((x: any) => x.id === id);
+    // indicadores do treinamento: elegíveis = respondidos + pendentes; taxa; vencidas ≤ pendentes; detalhe e resumo concordam
+    if (li.elegiveis !== 3 || li.respondidos !== esperadoResp || li.pendentes !== 3 - esperadoResp || li.taxa !== Math.round((esperadoResp / 3) * 100) || li.vencidas > li.pendentes) throw new Error("indicadores: " + jsonDe(li));
+    if (det.elegiveis !== li.elegiveis || det.respondidos !== li.respondidos || det.pendentes !== li.pendentes || det.taxa !== li.taxa) throw new Error("detalhe × resumo: " + jsonDe([det.elegiveis, det.respondidos, det.pendentes, det.taxa]));
+    if (det.participantes.filter((x: any) => x.situacao === "respondida").length !== esperadoResp) throw new Error("controle de respondentes");
+    // o controle de respondentes (quem) e as notas (o quê) têm a mesma contagem
+    const db = await mediaSql(id);
+    const adesoes = (await q(`select count(*)::int n from public.peopleflow_dev_avaliacoes_reacao where treinamento_id=${id}`))[0].n;
+    if (db.n !== esperadoResp || adesoes !== esperadoResp) throw new Error(`notas ${db.n} × adesões ${adesoes} × esperado ${esperadoResp}`);
+    // médias: nulas abaixo de 3; a partir de 3, iguais ao cálculo independente no banco
+    if (jsonDe(li.medias) !== jsonDe(esperadoMedias) || jsonDe(det.medias) !== jsonDe(esperadoMedias)) throw new Error("médias: " + jsonDe([li.medias, det.medias]));
+    if (esperadoMedias && jsonDe(esperadoMedias) !== jsonDe(db.medias)) throw new Error("médias × banco: " + jsonDe([esperadoMedias, db.medias]));
+    // nada de nota individual nem lista de notas em NENHUMA resposta da API
+    const tudo = jsonDe([det, resumo]);
+    if (/"respostas"|"nota"|"notas"|"q[1-5]"/.test(tudo)) throw new Error("nota individual exposta na API");
+    // geral: soma dos treinamentos e média só com o mínimo de respostas no conjunto
+    const somaEleg = resumo.treinamentos.reduce((s: number, x: any) => s + x.elegiveis, 0);
+    const somaResp = resumo.treinamentos.reduce((s: number, x: any) => s + x.respondidos, 0);
+    if (resumo.geral.elegiveis !== somaEleg || resumo.geral.respondidos !== somaResp || resumo.geral.pendentes !== somaEleg - somaResp) throw new Error("geral × soma: " + jsonDe(resumo.geral));
+    const totalNotas = (await q(`select count(*)::int n from public.peopleflow_dev_reacao_respostas`))[0].n as number;
+    if ((resumo.geral.medias === null) !== (totalNotas < 3)) throw new Error("média geral só com o mínimo de respostas");
+    for (const x of resumo.treinamentos) if ((x.medias === null) !== (x.respondidos < 3)) throw new Error("média por treinamento só com o mínimo: " + jsonDe(x));
+  };
+  await conferir(0, null);
+  await espera("p3", "reacao_responder", { codigo: cod, respostas: [5, 5, 5, 5, 5] }, 200);
+  await conferir(1, null); // 1 resposta: nenhuma média (seria a nota da pessoa)
+  await espera("p5", "reacao_responder", { codigo: cod, respostas: [1, 2, 3, 4, 5] }, 200);
+  await conferir(2, null); // 2 respostas: ainda nenhuma média
+  await espera("p4", "reacao_responder", { codigo: cod, respostas: [3, 3, 4, 2, 1] }, 200);
+  await conferir(3, [3, 3.3, 4, 3.7, 3.7]); // 3 respostas: médias consolidadas, iguais ao cálculo independente
+  // as respostas já enviadas não mudam, não se repetem e não se apagam
+  await espera("p3", "reacao_responder", { codigo: cod, respostas: [1, 1, 1, 1, 1] }, 409);
+  await conferir(3, [3, 3.3, 4, 3.7, 3.7]);
+  const depoisNotas = await q(`select * from public.peopleflow_dev_reacao_respostas order by id`);
+  const depoisAdesoes = await q(`select * from public.peopleflow_dev_avaliacoes_reacao order by id`);
+  // (os ids das notas são uuid aleatórios: a comparação é por conjunto, linha a linha, e não por ordem)
+  const conjunto = (l: Record<string, unknown>[]) => new Set(l.map((x) => jsonDe(x)));
+  const dn = conjunto(depoisNotas), da = conjunto(depoisAdesoes);
+  if (antesNotas.some((x) => !dn.has(jsonDe(x))) || antesAdesoes.some((x) => !da.has(jsonDe(x)))) throw new Error("registros anteriores alterados");
+  if (depoisNotas.length !== antesNotas.length + 3 || depoisAdesoes.length !== antesAdesoes.length + 3) throw new Error("só as 3 novas respostas foram acrescentadas");
+});
+
+await t("Telas: formulário de cadastro (opções alinhadas, link da gravação), Meus treinamentos (coluna Avaliação), formulário de reação (legenda e hierarquia) e PDF usam as regras acima", async () => {
+  const lerTela = (f: string) => fs.readFileSync(`${PF}/${f}`, "utf8");
+  const form = lerTela("src/features/desenvolvimento/TreinamentoForm.tsx");
+  if ((form.match(/<OpcaoForm/g) ?? []).length !== 3 || !/Exige avaliação de eficácia/.test(form) || !/Permitir participação por gravação/.test(form) || !/Treinamento de homologação\/teste/.test(form)) throw new Error("as 3 opções usam o mesmo componente");
+  if (/<span className=\{styles\.check\}>/.test(form)) throw new Error("checkbox dentro de .campo (input 100% largura) não pode voltar");
+  if (!/Link da gravação \(SharePoint\)/.test(form) || !/mostraLinkGravacao/.test(form) || !/gravacao_url/.test(form) || !/validarLinkGravacao/.test(form)) throw new Error("campo do link no cadastro");
+  if (!/mostraLinkGravacao = form\.permite_gravacao &&/.test(form)) throw new Error("o link só aparece com a gravação marcada");
+  if (/local_link[^\n]*required/.test(form)) throw new Error("'Local ou link' não pode ser exigido");
+  if (!/Pode ficar em branco quando o treinamento ocorre somente por gravação/.test(form)) throw new Error("orientação do local");
+  const css = lerTela("src/features/desenvolvimento/Desenvolvimento.module.css");
+  for (const c of [".opcao {", ".opcaoLinha {", ".opcaoTitulo {", ".opcaoDica {", ".opcaoDetalhe {"]) if (!css.includes(c)) throw new Error("estilo " + c);
+  if (!/@media \(max-width: 640px\)[\s\S]*\.opcaoDetalhe/.test(css)) throw new Error("opções no celular");
+  const meus = lerTela("src/features/desenvolvimento/MeusTreinamentosPage.tsx");
+  if (!/Responder avaliação/.test(meus) || /Avaliar treinamento/.test(meus) || !/mobile\.responder/.test(meus) || !/Prazo encerrado em/.test(meus) || !/Você ainda pode responder/.test(meus)) throw new Error("coluna Avaliação");
+  const mcss = lerTela("src/features/desenvolvimento/MeusTreinamentos.module.css");
+  if (!/\.responder \{[\s\S]*min-height: 32px/.test(mcss) || !/@media \(max-width: 700px\)[\s\S]*\.responder \{[\s\S]*min-height: 44px/.test(mcss)) throw new Error("botão da avaliação no desktop e no celular");
+  const rea = lerTela("src/features/desenvolvimento/FormularioReacao.tsx");
+  if (!/Escala de resposta/.test(rea) || !/ESCALA\.map/.test(rea) || !/QUESTOES\.map/.test(rea) || !/perguntas respondidas/.test(rea) || !/Enviar avaliação/.test(rea) || !/Responder depois/.test(rea)) throw new Error("formulário de reação");
+  if (!/não vê a nota de cada pessoa/.test(rea)) throw new Error("confidencialidade preservada");
+  const rcss = lerTela("src/features/desenvolvimento/FormularioReacao.module.css");
+  if (!/\.enviar \{[\s\S]*min-height: 46px/.test(rcss) || !/\.cancelar \{[\s\S]*border: 1px solid/.test(rcss) || !/@media \(max-width: 640px\)[\s\S]*\.enviar,[\s\S]*width: 100%/.test(rcss)) throw new Error("hierarquia dos botões");
+  // as perguntas e a escala não mudaram
+  if (reac.QUESTOES.length !== 5 || reac.ESCALA.map((e: any) => e.valor).join() !== "1,2,3,4,5" || reac.QUESTOES[0] !== "Os objetivos do treinamento ficaram claros.") throw new Error("perguntas/escala preservadas");
+  const api = lerTela("api/_lib/desenvolvimentoAcoes.ts");
+  if (!/local: localParaLista\(t\.local_link/.test(api)) throw new Error("PDF usa a regra do Local");
 });
 
 console.log("Rastreabilidade");
