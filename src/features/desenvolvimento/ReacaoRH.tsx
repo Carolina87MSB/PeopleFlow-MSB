@@ -151,7 +151,11 @@ export function ReacaoDoTreinamento({ treinamentoId }: { treinamentoId: number }
           </p>
         </div>
       </div>
-      <Medias questoes={d.questoes} medias={d.medias} minimo={d.minimo_respostas_para_medias} />
+      {d.visao_parcial ? (
+        <p className={visual.reserva}>Treinamento de outra área: você vê apenas a situação dos seus liderados. Os resultados consolidados ficam com a área responsável e o RH.</p>
+      ) : (
+        <Medias questoes={d.questoes} medias={d.medias} minimo={d.minimo_respostas_para_medias} />
+      )}
       <div className={tableStyles.wrap}>
         <table className={tableStyles.table}>
           <thead>

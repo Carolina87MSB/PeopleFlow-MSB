@@ -11,6 +11,7 @@ import {
   listarEvidencias,
   listarParticipantes,
   listarReposicoes,
+  listarTransferencias,
   listarVinculosTreinamento,
   opcoesNecessidades,
   obterGravacao,
@@ -46,9 +47,13 @@ import {
 import { TreinamentoDrawer } from "./TreinamentoForm";
 import { CampoDuracao } from "./CampoDuracao";
 import { ReacaoDoTreinamento } from "./ReacaoRH";
+import { HistoricoDaSessao } from "./HistoricoDaSessao";
+import { AusenciaDrawer, PainelConclusao, SituacaoAusencia } from "./ConclusaoEAusencias";
+import { TransferirResponsabilidade } from "./Habilitacoes";
 import { GravacaoDoTreinamento } from "./ParticipacaoGravacao";
 import { alternar as alternarSelecao, departamentosDe, desmarcarTodos, filtrarOpcoes, selecionarTodos, TODOS_DEPARTAMENTOS } from "./selecaoParticipantes";
 import { dataEfetivaDeRealizacao } from "../../domain/dataRealizacao";
+import { localParaExibicao } from "../../domain/gravacao";
 import styles from "./Desenvolvimento.module.css";
 
 function formatarDataHora(iso: string | null | undefined): string {
@@ -61,38 +66,46 @@ function mensagem(e: unknown) {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Permissões exibidas na tela — espelho das regras do servidor, que sempre confere de novo. */
-function permissoes(t: Treinamento, perfil: string, colaboradorId: number, daGestao: boolean) {
+/** Permissões exibidas na tela — espelho das regras do servidor, que sempre confere de novo.
+ * ADMINISTRA: RH, ou colaborador com a habilitação do RH vinculado ao treinamento como responsável principal ou instrutor interno.
+ * A liderança (Gestor) ACOMPANHA a sua área, somente leitura, a menos que também administre por estar habilitada e vinculada. */
+function permissoes(t: Treinamento, perfil: string, colaboradorId: number, daGestao: boolean, habilitado: boolean) {
   const ehRH = perfil === "RH";
-  const conduz = t.responsavel_colaborador_id === colaboradorId || t.instrutor_colaborador_id === colaboradorId;
+  const vinculo = t.responsavel_colaborador_id === colaboradorId || t.instrutor_colaborador_id === colaboradorId;
+  const conduz = vinculo && habilitado;
   const encerrado = t.status === "concluido" || t.status === "cancelado";
   const externo = t.modalidade === "externo";
-  // Planejamento (editar/cancelar): a gestão até o início da realização; RH sempre (retificação após concluído).
+  // Planejamento (editar/cancelar): quem administra até o início da realização; RH sempre (retificação após concluído).
   const antesDoInicio = (t.status === "solicitado" || t.status === "planejado") && !t.iniciado_em;
-  // Condução e registro operacional (iniciar, presença, QR, evidências): RH, responsável/instrutor designado ou o Gestor que registrou.
-  const opera = ehRH || conduz || (perfil === "Gestor" && daGestao);
+  // Condução e registro operacional (iniciar, presença, QR, evidências, concluir): RH ou quem administra.
+  const opera = ehRH || conduz;
+  const emExecucao = t.status === "em_andamento" || (externo && t.status === "planejado");
   return {
     ehRH,
     conduz,
     opera,
     daGestao,
-    podeEditar: t.status !== "cancelado" && (ehRH || (antesDoInicio && daGestao)),
-    // Montar a turma: RH, quem conduz ou a gestão que registrou (qualquer colaborador ativo, de qualquer área).
-    podeParticipantes: !encerrado && (ehRH || conduz || daGestao),
-    podeCancelar: !encerrado && (ehRH || (antesDoInicio && daGestao)),
-    podePresenca: (opera && (t.status === "em_andamento" || (externo && t.status === "planejado"))) || (ehRH && t.status === "concluido"),
+    acompanha: !opera && (perfil === "Gestor" || vinculo),
+    podeEditar: t.status !== "cancelado" && (ehRH || (antesDoInicio && conduz)),
+    // Montar a turma: RH ou quem administra (qualquer colaborador ativo, de qualquer área).
+    podeParticipantes: !encerrado && opera,
+    podeCancelar: !encerrado && (ehRH || (antesDoInicio && conduz)),
+    podePresenca: (opera && emExecucao) || (ehRH && t.status === "concluido"),
     podeRealizacao: opera && (t.status === "planejado" || t.status === "em_andamento"),
     podeQr: opera && !externo && t.status === "em_andamento",
-    podeRepor: (ehRH || conduz || daGestao) && t.status === "concluido",
+    podeRepor: opera && t.status === "concluido",
     podeAnexar: opera && t.status !== "cancelado" && (t.status !== "concluido" || ehRH),
-    veNecessidades: ehRH || perfil === "Gestor" || daGestao,
+    podeConcluir: opera && emExecucao,
+    podeEncaminhar: opera && (emExecucao || t.status === "concluido"),
+    veReacao: ehRH || conduz || perfil === "Gestor",
+    veNecessidades: ehRH || perfil === "Gestor" || conduz,
   };
 }
 
 export default function TreinamentoPage() {
   const { id } = useParams<{ id: string }>();
   const tid = Number(id);
-  const { perfil, colaboradorId, pessoaPorId } = useDesenvolvimento();
+  const { perfil, colaboradorId, pessoaPorId, habilitado } = useDesenvolvimento();
   const navigate = useNavigate();
   const { flash } = useToast();
   const treino = useConsulta(() => obterTreinamento(tid), [tid]);
@@ -128,9 +141,9 @@ export default function TreinamentoPage() {
   }
   if (!t) return <SemTreinamento />;
 
-  // Gestão: registrado por mim ou por alguém do meu escopo (Gestor ou Responsável indicado).
-  const daGestao = t.solicitado_por_colaborador_id === colaboradorId || (perfil !== "RH" && t.solicitado_por_colaborador_id != null && pessoaPorId.has(t.solicitado_por_colaborador_id));
-  const p = permissoes(t, perfil, colaboradorId, daGestao);
+  // Área acompanhada pela liderança: registrado por mim ou por alguém do meu escopo (somente consulta).
+  const daGestao = perfil === "Gestor" && (t.solicitado_por_colaborador_id === colaboradorId || (t.solicitado_por_colaborador_id != null && pessoaPorId.has(t.solicitado_por_colaborador_id)));
+  const p = permissoes(t, perfil, colaboradorId, daGestao, habilitado);
   const nome = (cid: number | null) => (cid ? (pessoasDoTreino.dados?.get(cid)?.nome ?? `#${cid}`) : "—");
   const ativos = (participantes.dados ?? []).filter((x) => !x.removido_em);
 
@@ -206,7 +219,8 @@ export default function TreinamentoPage() {
       />
     ),
     // Avaliação de reação: acompanhamento só do RH, só de treinamento oficial (teste/homologação fora).
-    reacao: p.ehRH && !t.homologacao && (t.status === "em_andamento" || t.status === "concluido") ? <ReacaoDoTreinamento key="reacao" treinamentoId={t.id} /> : null,
+    reacao: p.veReacao && !t.homologacao && (t.status === "em_andamento" || t.status === "concluido") ? <ReacaoDoTreinamento key="reacao" treinamentoId={t.id} /> : null,
+    historico: p.ehRH || p.conduz || p.acompanha ? <HistoricoDaSessao key="historico" treinamentoId={t.id} versao={(participantes.dados ?? []).length + presentes * 1000 + ausentes * 100000 + (t.status.length)} /> : null,
     reposicoes: <Reposicoes key="reposicoes" t={t} podeRepor={p.podeRepor} ausentes={ausentes} />,
     evidencias: <Evidencias key="evidencias" t={t} podeAnexar={p.podeAnexar} participantes={ativos} versao={versaoVinculos} />,
     necessidades: !p.veNecessidades ? null : t.homologacao ? (
@@ -217,15 +231,15 @@ export default function TreinamentoPage() {
         <p className={styles.secundario}>Treinamento de homologação/teste não é vinculado a Necessidades de Desenvolvimento.</p>
       </Card>
     ) : (
-      <NecessidadesVinculadas key="necessidades" t={t} podeIndicar={!p.ehRH && (p.daGestao || p.conduz)} versao={versaoVinculos} onAlterado={recarregarTudo} />
+      <NecessidadesVinculadas key="necessidades" t={t} podeIndicar={!p.ehRH && p.conduz} versao={versaoVinculos} onAlterado={recarregarTudo} />
     ),
   };
   const ordem =
     t.status === "em_andamento"
-      ? ["qr", "gravacao", "participantes", "reacao", "evidencias", "necessidades"]
+      ? ["qr", "gravacao", "participantes", "reacao", "evidencias", "necessidades", "historico"]
       : t.status === "concluido"
-        ? ["resultado", "reposicoes", "participantes", "gravacao", "reacao", "evidencias", "necessidades"]
-        : ["gravacao", "participantes", "evidencias", "necessidades"];
+        ? ["resultado", "reposicoes", "participantes", "gravacao", "reacao", "evidencias", "necessidades", "historico"]
+        : ["gravacao", "participantes", "evidencias", "necessidades", "historico"];
 
   return (
     <>
@@ -275,7 +289,7 @@ export default function TreinamentoPage() {
             </li>
             {t.local_link && (
               <li>
-                <MapPin size={15} /> {t.local_link}
+                <MapPin size={15} /> {localParaExibicao(t.local_link)}
               </li>
             )}
             <li>
@@ -293,6 +307,7 @@ export default function TreinamentoPage() {
             <RealizacaoResumo t={t} podeAlterar={p.podeRealizacao} onSalvar={(corpo) => acao("treinamento_realizacao", { id: t.id, ...corpo }, "Dados da realização atualizados.")} />
           )}
 
+          {p.acompanha && <p className={styles.dica}>Você acompanha este treinamento (somente consulta). Quem o administra é o responsável principal ou o instrutor habilitado; o RH pode intervir.</p>}
           {erroAcao && <Erro mensagem={erroAcao} />}
           <div className={styles.acoesResumo}>
             {p.ehRH && t.status === "solicitado" && (
@@ -305,12 +320,10 @@ export default function TreinamentoPage() {
                 Iniciar realização
               </Button>
             )}
-            {p.ehRH && (t.status === "em_andamento" || externoPlanejado) && (
-              <Button variant="success" onClick={() => void acao("treinamento_concluir", { id: t.id }, "Treinamento concluído.").catch(() => undefined)}>
-                Concluir treinamento
-              </Button>
-            )}
+            {p.podeConcluir && <PainelConclusao t={t} versao={(participantes.dados ?? []).length + presentes * 1000 + ausentes * 100000} onConcluir={() => acao("treinamento_concluir", { id: t.id }, "Treinamento concluído.")} />}
           </div>
+
+          {p.ehRH && ["solicitado", "planejado", "em_andamento"].includes(t.status) && <TransferenciaDoTreinamento t={t} onAlterado={recarregarTudo} />}
 
           <details className={styles.maisDetalhes}>
             <summary>Mais detalhes</summary>
@@ -344,6 +357,7 @@ export default function TreinamentoPage() {
                 </>
               )}
             </dl>
+            {p.ehRH && <HistoricoTransferencias treinamentoId={t.id} versao={t.responsavel_colaborador_id ?? 0} nome={nome} />}
             {p.podeCancelar && (
               <div className={styles.acoes} style={{ justifyContent: "flex-start", marginTop: 10 }}>
                 <ConfirmarComMotivo rotulo="Cancelar treinamento" confirmar="Confirmar cancelamento" variante="danger" motivoObrigatorio onConfirmar={(motivo) => acao("treinamento_cancelar", { id: t.id, motivo }, "Treinamento cancelado.")} />
@@ -366,6 +380,45 @@ export default function TreinamentoPage() {
         />
       )}
     </>
+  );
+}
+
+/** RH: transferir o responsável principal (treinamento pendente), com motivo e histórico. */
+function TransferenciaDoTreinamento({ t, onAlterado }: { t: Treinamento; onAlterado: () => void }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <div style={{ marginTop: 10 }}>
+      <Button variant="secondary" onClick={() => setAberto((v) => !v)}>
+        {aberto ? "Fechar" : "Transferir responsabilidade"}
+      </Button>
+      {aberto && (
+        <TransferirResponsabilidade
+          treinamentoId={t.id}
+          onTransferido={() => {
+            setAberto(false);
+            onAlterado();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function HistoricoTransferencias({ treinamentoId, versao, nome }: { treinamentoId: number; versao: number; nome: (id: number | null) => string }) {
+  const lista = useConsulta(() => listarTransferencias(treinamentoId), [treinamentoId, versao]);
+  void nome;
+  if (lista.erro || !lista.dados || lista.dados.length === 0) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <strong>Histórico de transferências de responsabilidade</strong>
+      <ul className={styles.historico}>
+        {lista.dados.map((x) => (
+          <li key={x.id} className={styles.secundario}>
+            {formatarData(x.transferido_em)} · {x.de ?? "—"} → {x.para} · por {x.por ?? "—"} · {x.motivo_tipo.replace("_", " ")}: {x.motivo}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -830,6 +883,7 @@ function Participantes(props: {
   const [presenca, setPresenca] = useState<"presente" | "ausente" | "pendente">("presente");
   const [motivo, setMotivo] = useState("");
   const [avaliando, setAvaliando] = useState<Participante | null>(null);
+  const [ausencia, setAusencia] = useState<Participante | null>(null);
   const [mostrarRetirados, setMostrarRetirados] = useState(false);
   const ativos = (lista ?? []).filter((x) => !x.removido_em);
   const retirados = (lista ?? []).filter((x) => x.removido_em);
@@ -853,8 +907,9 @@ function Participantes(props: {
         <div>
           <h3 className={styles.cardTitle}>Participantes ({ativos.length})</h3>
           <p className={styles.cardSubtitle}>
-            {resumo.presente} presente{resumo.presente === 1 ? "" : "s"} · {resumo.ausente} ausente{resumo.ausente === 1 ? "" : "s"} · {resumo.pendente} pendente{resumo.pendente === 1 ? "" : "s"}
+            {resumo.presente} presente{resumo.presente === 1 ? "" : "s"}
             {resumo.presente > 0 ? ` (${["qr", "gravacao", "manual"].map((m) => [METODO_PRESENCA[m], ativos.filter((x) => x.presenca_status === "presente" && x.presenca_metodo === m).length] as const).filter(([, n]) => n > 0).map(([rot, n]) => `${n} por ${rot.toLowerCase()}`).join(" · ")})` : ""}
+            {" · "}{resumo.ausente} ausente{resumo.ausente === 1 ? "" : "s"} · {resumo.pendente} pendente{resumo.pendente === 1 ? "" : "s"}
             {perfil === "Gestor" ? " — você vê os participantes da sua equipe" : ""}
           </p>
         </div>
@@ -887,7 +942,7 @@ function Participantes(props: {
                   .catch(() => undefined)
               }
             >
-              Registrar
+              Registrar presença
             </Button>
           </div>
         </div>
@@ -918,7 +973,7 @@ function Participantes(props: {
                 <th>Inclusão</th>
                 <th>Presença</th>
                 {t.exige_eficacia && <th>Eficácia</th>}
-                {(p.podeParticipantes || t.exige_eficacia) && <th />}
+                {(p.podeParticipantes || p.podeEncaminhar || t.exige_eficacia) && <th />}
               </tr>
             </thead>
             <tbody>
@@ -944,21 +999,27 @@ function Participantes(props: {
                         {METODO_PRESENCA[x.presenca_metodo] ?? x.presenca_metodo} · {formatarDataHora(x.presenca_em)}
                       </div>
                     )}
+                    <SituacaoAusencia x={x} />
                   </td>
                   {t.exige_eficacia && (
                     <td>
                       {x.eficacia_resultado ? <Selo tom={EFICACIA[x.eficacia_resultado].tom}>{EFICACIA[x.eficacia_resultado].rotulo}</Selo> : <span className={styles.secundario}>{x.presenca_status === "presente" ? "A avaliar" : "—"}</span>}
                     </td>
                   )}
-                  {(p.podeParticipantes || t.exige_eficacia) && (
+                  {(p.podeParticipantes || p.podeEncaminhar || t.exige_eficacia) && (
                     <td style={{ minWidth: 140 }}>
                       <div className={styles.acoes}>
+                        {x.presenca_status === "ausente" && p.podeEncaminhar && x.ausencia_encaminhamento !== "dispensa" && (
+                          <Button variant="ghost" onClick={() => setAusencia(x)}>
+                            {x.ausencia_encaminhamento ? "Editar encaminhamento" : "Justificar e encaminhar"}
+                          </Button>
+                        )}
                         {podeAvaliar(x) && (
                           <Button variant="ghost" onClick={() => setAvaliando(x)}>
                             {x.eficacia_resultado ? "Reavaliar" : "Avaliar eficácia"}
                           </Button>
                         )}
-                        {p.podeParticipantes && (
+                        {p.podeParticipantes && x.presenca_status !== "ausente" && (
                           <ConfirmarComMotivo rotulo="Retirar" confirmar="Retirar" variante="secondary" motivoObrigatorio onConfirmar={(m) => acao("participante_remover", { participante_id: x.id, motivo: m }, "Participante retirado.")} />
                         )}
                       </div>
@@ -994,6 +1055,17 @@ function Participantes(props: {
           onIncluir={async (ids) => {
             await acao("participantes_adicionar", { treinamento_id: t.id, colaborador_ids: ids }, "Participantes incluídos.");
             setAdicionando(false);
+          }}
+        />
+      )}
+      {ausencia && (
+        <AusenciaDrawer
+          participante={ausencia}
+          ehRH={perfil === "RH"}
+          onFechar={() => setAusencia(null)}
+          onSalvar={async (corpo) => {
+            await acao("ausencia_encaminhar", { participante_id: ausencia.id, ...corpo }, corpo.encaminhamento === "dispensa" ? "Dispensa registrada." : "Encaminhamento da ausência registrado.");
+            setAusencia(null);
           }}
         />
       )}
@@ -1215,8 +1287,10 @@ function EficaciaDrawer({ participante, onFechar, onSalvar }: { participante: Pa
 // ── Evidências ──────────────────────────────────────────────────────────
 function Evidencias({ t, podeAnexar, participantes, versao }: { t: Treinamento; podeAnexar: boolean; participantes: Participante[]; versao: number }) {
   const { flash } = useToast();
-  const { perfil } = useDesenvolvimento();
+  const { perfil, pessoaPorId } = useDesenvolvimento();
   const interno = t.modalidade === "interno";
+  // Gestor de OUTRA área (só liderados na turma): vê apenas as evidências individuais dos seus liderados; a lista e o material da turma são da gestão dona do treinamento.
+  const parcial = perfil === "Gestor" && !podeAnexar && t.solicitado_por_colaborador_id != null && !pessoaPorId.has(t.solicitado_por_colaborador_id);
   const lista = useConsulta(() => listarEvidencias(t.id), [t.id, t.status, t.updated_at, versao]);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [tipo, setTipo] = useState<TipoEvidencia>(interno ? "material" : "certificado");
@@ -1261,7 +1335,8 @@ function Evidencias({ t, podeAnexar, participantes, versao }: { t: Treinamento; 
         </div>
       </div>
       {erro && <Erro mensagem={erro} />}
-      {interno && (
+      {parcial && <p className={styles.dica}>Treinamento de outra área: você vê apenas as evidências dos seus liderados. A lista de presença e o material da turma ficam com a área responsável e o RH.</p>}
+      {interno && !parcial && (
         <div className={styles.secao}>
           <h4 className={styles.secaoTitulo}>Lista de Presença</h4>
           {listaAtual ? (
@@ -1333,13 +1408,13 @@ function Evidencias({ t, podeAnexar, participantes, versao }: { t: Treinamento; 
           )}
         </div>
       )}
-      {interno && <h4 className={styles.secaoTitulo}>Outras evidências</h4>}
+      {interno && !parcial && <h4 className={styles.secaoTitulo}>Outras evidências</h4>}
       {lista.erro ? (
         <Erro mensagem={lista.erro} />
       ) : lista.carregando && !lista.dados ? (
         <Carregando />
       ) : manuais.length === 0 ? (
-        <p className={styles.secundario}>Nenhuma evidência anexada.</p>
+        <p className={styles.secundario}>{parcial ? "Nenhuma evidência individual dos seus liderados." : "Nenhuma evidência anexada."}</p>
       ) : (
         <div className={tableStyles.wrap}>
           <table className={tableStyles.table}>

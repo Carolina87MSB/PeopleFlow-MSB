@@ -125,10 +125,9 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
   const ativos = linhas.filter((r) => linhaAtiva(r));
 
   // RH e Gestor: regras do PeopleFlow. Demais perfis (Colaborador/Diretoria):
-  // perfil "Responsavel" — SOMENTE Gestão de Treinamentos — para quem foi
-  // indicado por um Gestor como Responsável por Treinamentos da gestão (escopo =
-  // equipe desse Gestor) ou conduz algum treinamento (responsável/instrutor).
-  // Não vira Gestor nem RH (sem AVD, PDI, salários, movimentações).
+  // perfil "Responsavel" — SOMENTE Gestão de Treinamentos — para quem tem a
+  // habilitação permanente concedida pelo RH (vinculada à gestão/área; escopo =
+  // equipe dessa gestão). Não vira Gestor nem RH (sem AVD, PDI, salários, movimentações).
   let perfil: "RH" | "Gestor" | "Responsavel";
   let nomeConta: string;
   let gestoresQueIndicaram: number[] = [];
@@ -147,14 +146,9 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
       .eq("colaborador_id", candidatos[0].id)
       .eq("ativo", true);
     if (!indErro) gestoresQueIndicaram = [...new Set((indicacoes ?? []).map((r) => Number(r.gestor_colaborador_id)))];
-    const { data: conduz, error: conduzErro } = await supabaseAdmin
-      .from("peopleflow_dev_treinamentos")
-      .select("id")
-      .or(`responsavel_colaborador_id.eq.${candidatos[0].id},instrutor_colaborador_id.eq.${candidatos[0].id}`)
-      .in("status", ["planejado", "em_andamento", "concluido"])
-      .limit(1);
-    const conduzAlgum = !tabelaInexistente(conduzErro) && !conduzErro && (conduz?.length ?? 0) > 0;
-    if (gestoresQueIndicaram.length === 0 && !conduzAlgum) {
+    // Só a HABILITAÇÃO concedida pelo RH abre o módulo para quem não é RH nem Gestor: ser responsável/instrutor de um treinamento,
+    // sozinho, não dá acesso administrativo. Quem não tem habilitação segue com "Meus treinamentos" (próprias participações).
+    if (gestoresQueIndicaram.length === 0) {
       res.status(403).json({ error: "O módulo Desenvolvimento ainda não está liberado para este perfil.", codigo: "sem_acesso" });
       return;
     }
@@ -246,9 +240,16 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
     .map((r) => ({ id: r.id, nome: r.nome, cargo: r.cargo ?? "", departamento: r.departamento ?? "" }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  // Registrar treinamento: RH, Gestor ou Responsável indicado por um Gestor.
-  const podeRegistrar = conta.perfil !== "Responsavel" || gestoresQueIndicaram.length > 0;
-  res.status(200).json({ instalado: true, perfil: conta.perfil, colaboradorId: eu.id, pessoas, podeRegistrar });
+  // Habilitado = RH, ou colaborador (inclusive Gestor) com habilitação ativa. Só o habilitado registra e administra treinamentos;
+  // o Gestor sem habilitação acompanha a sua área (somente leitura).
+  let habilitado = conta.perfil === "RH";
+  if (conta.perfil === "Gestor") {
+    const { data: hab, error: habErro } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("id").eq("colaborador_id", eu.id).eq("ativo", true).limit(1);
+    habilitado = !habErro && (hab?.length ?? 0) > 0;
+  } else if (conta.perfil === "Responsavel") {
+    habilitado = true;
+  }
+  res.status(200).json({ instalado: true, perfil: conta.perfil, colaboradorId: eu.id, pessoas, podeRegistrar: habilitado, habilitado });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

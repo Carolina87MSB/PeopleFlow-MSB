@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Info } from "lucide-react";
 import { Button, Drawer } from "../../components/ui";
 import { useToast } from "../../components/shared/ToastContext";
 import { faltantesParaReposicao, gravar, opcoesListaMestra, type Formato, type Modalidade, type TipoTreinamento, type Treinamento } from "./devRepository";
@@ -9,6 +10,8 @@ import { FORMATO, MODALIDADE, TIPO_TREINAMENTO, TIPOS_COM_DOCUMENTO, hojeISO, le
 import { CampoDuracao } from "./CampoDuracao";
 import { validarLinkGravacao } from "../../domain/gravacao";
 import styles from "./Desenvolvimento.module.css";
+
+const DICA_LOCAL = "Onde o treinamento acontece. Exemplos: Microsoft Teams, Sala de Treinamento, Ambiente virtual — SharePoint.";
 
 /** novo: registrar treinamento (nasce PLANEJADO) · editar: alterar/retificar · reposicao: agendar para os faltantes de `item`. */
 type Modo = "novo" | "editar" | "reposicao";
@@ -72,11 +75,13 @@ export function TreinamentoDrawer({
   onFechar: () => void;
   onSalvo: (t: Treinamento) => void;
 }) {
-  const { perfil, pessoas, pessoaPorId } = useDesenvolvimento();
+  const { perfil, pessoas, pessoaPorId, colaboradorId } = useDesenvolvimento();
   const { flash } = useToast();
   const ehRH = perfil === "RH";
   const [form, setForm] = useState(() => {
     const f = paraForm(item, modo);
+    // O responsável habilitado registra o que ele mesmo vai administrar: já nasce como responsável principal.
+    if (modo === "novo" && perfil === "Responsavel") f.responsavel_colaborador_id = String(colaboradorId);
     if (inicial?.lista_mestra_codigo) f.lista_mestra_codigo = inicial.lista_mestra_codigo;
     if (inicial?.tipo) f.tipo = inicial.tipo;
     return f;
@@ -203,6 +208,11 @@ export function TreinamentoDrawer({
                 </option>
               ))}
             </select>
+            <span className={styles.dica}>
+              {form.modalidade === "externo"
+                ? "Realizado fora da empresa (curso, congresso, instituição): exige ao menos uma evidência (certificado, comprovante, lista ou declaração) antes de concluir."
+                : "Realizado pela empresa: a presença é controlada pelo PeopleFlow, mesmo com palestrante de fora. “Externo” é só para treinamento feito fora."}
+            </span>
           </label>
           <label className={styles.campo}>
             Formato
@@ -269,8 +279,8 @@ export function TreinamentoDrawer({
             onChange={(horas, minutos) => setForm((f) => ({ ...f, carga_horas: horas, carga_minutos: minutos }))}
           />
           <label className={styles.campo}>
-            Responsável *
-            <select value={form.responsavel_colaborador_id} onChange={set("responsavel_colaborador_id")} required={item?.status !== "solicitado"}>
+            Responsável principal *
+            <select value={form.responsavel_colaborador_id} onChange={set("responsavel_colaborador_id")} required={item?.status !== "solicitado"} disabled={modo === "editar" && item?.status !== "solicitado"}>
               <option value="">Selecione</option>
               {opcoesPessoa.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -278,6 +288,11 @@ export function TreinamentoDrawer({
                 </option>
               ))}
             </select>
+            <span className={styles.dica}>
+              {modo === "editar" && item?.status !== "solicitado"
+                ? "A troca do responsável é feita pelo RH, em \"Transferir responsabilidade\" (com motivo e histórico)."
+                : "Precisa ser do RH ou ter a habilitação concedida pelo RH. Responsável e instrutor internos habilitados administram o treinamento."}
+            </span>
           </label>
           <label className={styles.campo}>
             Instrutor interno
@@ -293,11 +308,17 @@ export function TreinamentoDrawer({
           <label className={styles.campo}>
             Instrutor / instituição externa
             <input value={form.instrutor_externo} onChange={set("instrutor_externo")} maxLength={200} />
+            <span className={styles.dica}>Nome do palestrante ou da instituição. Informar um instrutor de fora não torna o treinamento externo nem exige certificado individual.</span>
           </label>
           <label className={[styles.campo, styles.cheio].join(" ")}>
-            Local ou link
-            <input value={form.local_link} onChange={set("local_link")} maxLength={500} />
-            <span className={styles.dica}>Endereço físico ou link da reunião online. Pode ficar em branco quando o treinamento ocorre somente por gravação.</span>
+            <span className={styles.rotuloComIcone}>
+              Local
+              <span className={styles.iconeInfo} tabIndex={0} role="img" aria-label={DICA_LOCAL} title={DICA_LOCAL}>
+                <Info size={14} />
+              </span>
+            </span>
+            <input value={form.local_link} onChange={set("local_link")} maxLength={500} placeholder="Ex.: Sala de Treinamento" />
+            <span className={styles.dica}>Exemplos: Microsoft Teams · Sala de Treinamento · Ambiente virtual — SharePoint. Pode ficar em branco quando o treinamento ocorre somente por gravação.</span>
           </label>
           <label className={[styles.campo, styles.cheio].join(" ")}>
             Justificativa

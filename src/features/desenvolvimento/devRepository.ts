@@ -21,7 +21,7 @@ export interface PessoaDesenvolvimento {
 
 export type SessaoDesenvolvimento =
   | { instalado: false; perfil: PerfilDesenvolvimento }
-  | { instalado: true; perfil: PerfilDesenvolvimento; colaboradorId: number; pessoas: PessoaDesenvolvimento[]; podeRegistrar?: boolean };
+  | { instalado: true; perfil: PerfilDesenvolvimento; colaboradorId: number; pessoas: PessoaDesenvolvimento[]; podeRegistrar?: boolean; habilitado?: boolean };
 
 export class SemAcessoDesenvolvimentoError extends Error {}
 
@@ -103,6 +103,8 @@ export interface DetalheReacao extends IndicadorReacao {
   minimo_respostas_para_medias: number;
   questoes: string[];
   treinamento: { id: number; codigo: string; titulo: string; status: StatusTreinamento } | null;
+  /** Gestor que acompanha só por participação de liderados (treinamento de outra área): vê apenas os seus liderados e não as médias da turma. */
+  visao_parcial?: boolean;
   /** Controle de adesão: quem respondeu e quando — as NOTAS nunca vêm associadas a uma pessoa. */
   participantes: { participante_id: number; colaborador_id: number; nome: string; cargo: string; departamento: string; situacao: "pendente" | "vencida" | "respondida"; prazo: string; respondido_em: string | null; fora_do_prazo: boolean }[];
 }
@@ -514,6 +516,12 @@ export interface Participante {
   eficacia_em: string | null;
   removido_em: string | null;
   removido_motivo: string | null;
+  /** Ausência: justificativa, encaminhamento (reposição | dispensa pelo RH) e data prevista. A pendência individual não se encerra com a sessão. */
+  ausencia_justificativa: string | null;
+  ausencia_encaminhamento: "reposicao" | "dispensa" | null;
+  reposicao_prevista_em: string | null;
+  dispensado_em: string | null;
+  dispensa_justificativa: string | null;
   pessoa: PessoaDesenvolvimento | null;
 }
 
@@ -532,7 +540,7 @@ export async function listarParticipantes(treinamentoId: number): Promise<Partic
   const { data, error } = await supabase
     .from("peopleflow_dev_participantes")
     .select(
-      "id, treinamento_id, colaborador_id, origem_inclusao, presenca_status, presenca_metodo, presenca_em, presenca_motivo, eficacia_resultado, eficacia_observacao, eficacia_em, removido_em, removido_motivo",
+      "id, treinamento_id, colaborador_id, origem_inclusao, presenca_status, presenca_metodo, presenca_em, presenca_motivo, eficacia_resultado, eficacia_observacao, eficacia_em, removido_em, removido_motivo, ausencia_justificativa, ausencia_encaminhamento, reposicao_prevista_em, dispensado_em, dispensa_justificativa",
     )
     .eq("treinamento_id", treinamentoId)
     .order("id")
@@ -874,9 +882,17 @@ export type AcaoGravacao =
   | "necessidade_associacao_rejeitar"
   | "vinculos_listar"
   | "necessidades_opcoes"
-  | "responsaveis_gestao_listar"
-  | "responsavel_gestao_indicar"
-  | "responsavel_gestao_revogar"
+  | "habilitacao_listar"
+  | "habilitacao_opcoes"
+  | "habilitacao_conceder"
+  | "habilitacao_revogar"
+  | "habilitacao_pendencias"
+  | "treinamento_transferir"
+  | "transferencias_listar"
+  | "ausencia_encaminhar"
+  | "treinamento_conferir"
+  | "pendencias_listar"
+  | "treinamento_historico"
   | "dc_habilidade_adicionar"
   | "dc_habilidade_sugerir"
   | "dc_habilidade_remover"
@@ -916,3 +932,93 @@ export async function gravar<T>(acao: AcaoGravacao, corpo: Record<string, unknow
   if (!res.ok) throw new Error(body.error ?? `Falha ao salvar (${res.status}).`);
   return body.dados as T;
 }
+
+// ── Habilitação de Responsáveis, ausências, conferência e pendências ───────
+export interface Habilitacao {
+  id: number;
+  ativa: boolean;
+  colaborador: { id: number; nome: string };
+  gestao: { id: number; nome: string };
+  departamento: string;
+  referencia: string;
+  habilitado_em: string | null;
+  habilitado_por: string | null;
+  revogado_em: string | null;
+  revogado_por: string | null;
+  revogado_motivo: string;
+}
+export interface OpcaoHabilitacao {
+  id: number;
+  nome: string;
+  cargo: string;
+  departamento: string;
+  gestor_nome: string;
+  gestor_id: number | null;
+  admissao: string | null;
+  habilitado: boolean;
+  tem_acesso: boolean;
+}
+export interface PendenteDe {
+  id: number;
+  codigo: string;
+  titulo: string;
+  status: string;
+  data_inicio: string | null;
+  papel: "responsavel" | "instrutor";
+}
+export interface ItemConferencia {
+  codigo: string;
+  mensagem: string;
+  participantes?: number[];
+}
+export interface Conferencia {
+  pode_concluir: boolean;
+  impedimentos: ItemConferencia[];
+  pendencias_apos: ItemConferencia[];
+  resumo: { total: number; presentes: number; ausentes: number; pendentes: number };
+}
+export interface PendenciaReposicao {
+  tipo: "reposicao";
+  teste: boolean;
+  situacao: "sem_encaminhamento" | "a_programar" | "programada";
+  treinamento_id: number;
+  codigo: string;
+  titulo: string;
+  data_realizacao: string | null;
+  colaborador_id: number;
+  nome: string;
+  participante_id: number;
+  justificativa: string;
+  prevista_em: string | null;
+  reposicao: { id: number; codigo: string; data_inicio: string | null; status: string } | null;
+  responsavel_id: number | null;
+}
+export interface Pendencias {
+  reposicoes: PendenciaReposicao[];
+  eficacia: { teste: boolean; treinamento_id: number; codigo: string; titulo: string; faltam: number; prazo: string | null; vencida: boolean }[];
+  sem_responsavel: { teste: boolean; treinamento_id: number; codigo: string; titulo: string; status: string; motivo: "sem_responsavel" | "responsavel_desligado" | "responsavel_sem_habilitacao"; responsavel: string | null; responsavel_id: number | null }[];
+  inconsistencias: { teste: boolean; treinamento_id: number; codigo: string; titulo: string; motivo: string; mensagem: string }[];
+}
+export interface Transferencia {
+  id: number;
+  treinamento_id: number;
+  motivo_tipo: "revogacao" | "desligamento" | "mudanca_responsabilidade" | "outro";
+  motivo: string;
+  status_treinamento: string;
+  transferido_em: string;
+  de: string | null;
+  para: string;
+  por: string | null;
+}
+export const listarHabilitacoes = () => gravar<Habilitacao[]>("habilitacao_listar", {});
+export const opcoesHabilitacao = () => gravar<OpcaoHabilitacao[]>("habilitacao_opcoes", {});
+export const listarPendencias = (incluirTeste = false) => gravar<Pendencias>("pendencias_listar", { incluir_teste: incluirTeste });
+export const conferirConclusao = (id: number) => gravar<Conferencia>("treinamento_conferir", { id });
+export const listarTransferencias = (treinamentoId: number) => gravar<Transferencia[]>("transferencias_listar", { treinamento_id: treinamentoId });
+export interface EventoHistorico {
+  em: string;
+  rotulo: string;
+  por: string;
+  resumo: string;
+}
+export const historicoDoTreinamento = (treinamentoId: number) => gravar<EventoHistorico[]>("treinamento_historico", { treinamento_id: treinamentoId });

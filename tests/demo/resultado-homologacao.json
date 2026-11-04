@@ -1,0 +1,153 @@
+{
+  "passos": [
+    {
+      "cenario": 0,
+      "descricao": "Preparação: treinamento histórico concluído, com um ausente SEM encaminhamento (como os registros anteriores a esta entrega) e um externo concluído sem evidência",
+      "esperado": "Registros históricos existem para o cenário 7",
+      "ok": true,
+      "observado": "conforme o esperado"
+    },
+    {
+      "cenario": 1,
+      "descricao": "Antes: Manuela não abre o módulo; Gustavo (gestor) abre como Gestor e não está habilitado",
+      "esperado": "Manuela 403; Gustavo perfil Gestor, habilitado=false",
+      "ok": true,
+      "observado": "Gustavo antes: {\"necessidade_registrar\":200,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403}; tentativa de registrar → 403 (acompanha, não administra)"
+    },
+    {
+      "cenario": 1,
+      "descricao": "RH habilita Manuela (gestão: Beatriz) e Gustavo (gestão: Henrique) pela tela de Habilitações, com a referência da liderança",
+      "esperado": "Duas habilitações ativas, com área, gestão, data e quem habilitou",
+      "ok": true,
+      "observado": "Manuela e Gustavo listados como habilitados, com gestão, data e autor"
+    },
+    {
+      "cenario": 1,
+      "descricao": "Permissões nos demais módulos NÃO mudam: Gustavo segue Gestor e faz o mesmo que antes; Manuela não ganha nada além dos Treinamentos",
+      "esperado": "Gustavo: mesmos resultados de antes; Manuela: tudo fora dos Treinamentos recusado",
+      "ok": true,
+      "observado": "Gustavo depois: {\"necessidade_registrar\":200,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403} (igual ao de antes) · Manuela: {\"necessidade_registrar\":403,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403} · acessos a módulos inalterados (2 cada)"
+    },
+    {
+      "cenario": 1,
+      "descricao": "Colaboradora com menos de seis meses e sem conta (Camila): o RH habilita criando SOMENTE o acesso ao PeopleFlow",
+      "esperado": "Pede confirmação explícita; conta criada só com o módulo peopleflow (sem SST)",
+      "ok": true,
+      "observado": "Conta criada com o módulo peopleflow apenas; o acesso do SST não foi concedido"
+    },
+    {
+      "cenario": 2,
+      "descricao": "O RH habilita Juliana; Manuela registra o treinamento da Garantia da Qualidade com Juliana como instrutora interna",
+      "esperado": "Treinamento planejado: responsável Manuela, instrutora Juliana, ambas identificadas",
+      "ok": true,
+      "observado": "TRN-2026-0003: Manuela (responsável) e Juliana (instrutora) enxergam; Davi (outra área) não"
+    },
+    {
+      "cenario": 3,
+      "descricao": "Manuela monta a turma e inicia; Juliana gera o QR, registra presença manual, atualiza a realização; Manuela anexa a ata; participante confirma pelo QR",
+      "esperado": "As duas administram; nenhum terceiro consegue",
+      "ok": true,
+      "observado": "Manuela e Juliana fizeram o ciclo; Gustavo e Beatriz (que acompanha) recebem 403 nas ações administrativas; Davi (sem habilitação) nem abre o módulo"
+    },
+    {
+      "cenario": 5,
+      "descricao": "Renata e Rafael ficam ausentes: Manuela registra a ausência; sem encaminhamento a sessão NÃO conclui e a conferência explica o motivo",
+      "esperado": "Impedimento: ausentes sem encaminhamento",
+      "ok": true,
+      "observado": "Mensagem do servidor: \"Indique o encaminhamento (reposição ou dispensa) de 2 ausentes.\""
+    },
+    {
+      "cenario": 5,
+      "descricao": "Com as ausências justificadas e encaminhadas, a conferência libera; JULIANA (instrutora) conclui a sessão original",
+      "esperado": "Concluída por Juliana; as 2 reposições seguem pendentes e a reação não se confunde com a conclusão",
+      "ok": true,
+      "observado": "Sessão concluída por Juliana; pendências após a conclusão: 2 reposição(ões) individual(is) seguem pendentes após a conclusão (1 com data prevista). | 2 avaliação(ões) de reação ainda não respondida(s); a conclusão da sessão não as encerra."
+    },
+    {
+      "cenario": 3,
+      "descricao": "Identificação de quem realizou cada ação (Histórico de ações da sessão), visível ao RH, ao responsável, à instrutora e à gestora que acompanha",
+      "esperado": "Cada ação com o nome do autor; o participante aparece como autor da própria confirmação por QR",
+      "ok": true,
+      "observado": "14 ações registradas, cada uma com autor e horário"
+    },
+    {
+      "cenario": 4,
+      "descricao": "Manuela registra o treinamento com palestrante EXTERNO (João da Silva); conduz e conclui sem que ele tenha login",
+      "esperado": "Instrutor externo é só um nome; nenhuma conta criada para ele; Manuela administra e conclui",
+      "ok": true,
+      "observado": "João não é colaborador nem tem conta; a lista de presença foi gerada com o nome dele como instrutor"
+    },
+    {
+      "cenario": 8,
+      "descricao": "Avaliação de Reação do treinamento externo-palestrante: 1ª e 2ª respostas NÃO mostram média; a 3ª mostra médias consolidadas; ninguém vê nota individual",
+      "esperado": "Responsável, gestora e RH acompanham quem respondeu; anonimato e regra de 3 preservados; Juliana/Davi sem acesso",
+      "ok": true,
+      "observado": "1 resposta(s): sem média · 2 resposta(s): sem média · 3 resposta(s): sem média · com 3: médias [3, 3,3, 4, 3,7, 3,7] para RH, Manuela e Beatriz"
+    },
+    {
+      "cenario": 6,
+      "descricao": "Acompanhamento: Renata e Rafael aparecem como reposição a programar (com a data prevista de Renata) para o RH, Manuela, Juliana e Beatriz",
+      "esperado": "A sessão está concluída, mas os participantes seguem pendentes",
+      "ok": true,
+      "observado": "Vista por rh, manuela, juliana, bia"
+    },
+    {
+      "cenario": 6,
+      "descricao": "Manuela programa a reposição de Renata; depois a executa; Renata confirma por QR e a reposição é concluída",
+      "esperado": "Renata sai das pendências; no original continua ausente; Rafael segue pendente",
+      "ok": true,
+      "observado": "Reposição TRN-2026-0005 concluída; Renata regularizada; no original continua \"ausente\" (histórico preservado)"
+    },
+    {
+      "cenario": 7,
+      "descricao": "O RH vê, em Pendências, o registro HISTÓRICO sem encaminhamento, o externo sem evidência e a reposição de Rafael ainda a programar",
+      "esperado": "Sessão concluída ≠ participante pendente: o treinamento está Concluído e o participante aparece pendente",
+      "ok": true,
+      "observado": "2 reposição(ões) pendente(s) [Rafael Teixeira: a_programar · Sérgio Dias: sem_encaminhamento] · 1 registro(s) inconsistente(s) · as sessões de origem estão CONCLUÍDAS"
+    },
+    {
+      "cenario": 7,
+      "descricao": "RH dispensa a ausência histórica de Sérgio (com justificativa): sai da fila sem apagar o participante",
+      "esperado": "Pendência encerrada pela dispensa, registro preservado",
+      "ok": true,
+      "observado": "Dispensado pelo RH; participante e ausência preservados"
+    },
+    {
+      "cenario": 10,
+      "descricao": "Davi (habilitado, Logística) registra treinamentos próprios — um concluído e um pendente — para o cenário de revogação",
+      "esperado": "Treinamentos de Davi existem",
+      "ok": true,
+      "observado": "TRN-2026-0006 (concluído) e TRN-2026-0007 (planejado)"
+    },
+    {
+      "cenario": 9,
+      "descricao": "Visão do gestor restrita à sua área e visão geral do RH",
+      "esperado": "Beatriz vê a Qualidade; Gustavo vê a Logística (e treinamentos com gente da equipe dele); RH vê tudo",
+      "ok": true,
+      "observado": "Beatriz vê 5 treinamento(s) (Qualidade; sem os de Davi) e pendências de [Rafael Teixeira]; Gustavo vê 4 (Logística + a palestra, onde Sérgio participa; sem a sessão da Qualidade) e pendências de []; RH vê 7"
+    },
+    {
+      "cenario": 10,
+      "descricao": "RH revoga a habilitação de Davi (com motivo): poderes encerram na hora, o concluído fica íntegro, aparece a lista de pendentes",
+      "esperado": "Pendente listado; concluído e evidências intactos; Davi mantém Meus treinamentos",
+      "ok": true,
+      "observado": "Pendente de transferir: TRN-2026-0007; treinamento concluído intacto; Davi segue vendo as próprias participações"
+    },
+    {
+      "cenario": 10,
+      "descricao": "RH transfere o treinamento pendente para Gustavo (habilitado), com motivo; tenta transferir para quem não é habilitado e para um concluído",
+      "esperado": "Transferência registrada com histórico; as inválidas são recusadas; quem registrou não muda",
+      "ok": true,
+      "observado": "Transferido de Davi para Gustavo; histórico da transferência e da revogação preservados"
+    }
+  ],
+  "ids": {
+    "historico": 1,
+    "historicoExterno": 2,
+    "sessao": 3,
+    "externo": 4,
+    "reposicao": 5,
+    "davi1": 6,
+    "davi2": 7
+  }
+}

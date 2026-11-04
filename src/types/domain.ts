@@ -75,6 +75,8 @@ export interface Conta {
   depto: string;
   email: string;
   perfil: Perfil;
+  /** "treinamentos": acesso específico para quem ainda não é elegível à AVD (ex.: menos de seis meses de empresa) — só "Meus treinamentos" e, se habilitado pelo RH, a Gestão de Treinamentos. */
+  acesso?: "treinamentos";
 }
 
 /** Configuração do Dashboard Executivo de RH — linha única. `headcountPlanejado`

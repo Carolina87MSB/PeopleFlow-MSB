@@ -39,9 +39,10 @@ insert into public.colaboradores (id, nome, cargo, departamento, gestor) values
  (7,'${NOMES[7]}','Técnico','Qualidade','Outro'),(8,'${NOMES[8]}','Auxiliar','Produção','${NOMES[2]}'),(9,'${NOMES[9]}','Operador','Produção','${NOMES[2]}');
 insert into public.peopleflow_descricoes_cargo (cargo_nome) values ('Operador'),('Supervisora'),('Supervisor'),('Conferente'),('Técnico'),('Analista de RH'),('Auxiliar');
 `);
-for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql"]) await db.exec(SQL(f));
+for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_habilitacao_responsaveis.sql"]) await db.exec(SQL(f));
 await db.exec(`
 insert into public.peopleflow_dev_lista_mestra (codigo,titulo,revisao_atual,situacao) values ('P-PR-001','Montagem da sonda','03','vigente'),('I-PR-010','Inspeção final','01','vigente');
+insert into public.peopleflow_dev_responsaveis_gestao (gestor_colaborador_id, colaborador_id, referencia) values (1,2,'fixture do teste: habilitação concedida pelo RH'),(1,6,'fixture do teste: habilitação concedida pelo RH');
 `);
 const fake = criarFake(db, {
   rh: { id: U.rh, email: emailOf(NOMES[1]) }, ge: { id: U.ge, email: emailOf(NOMES[2]) }, gil: { id: U.gil, email: emailOf(NOMES[6]) },
@@ -71,6 +72,11 @@ const espera = async (tok: string, acao: string, body: Record<string, unknown>, 
   const r = await chamar(tok, acao, body);
   if (r.c !== st) throw new Error(`${tok} → ${acao}: esperado ${st}, veio ${r.c}: ${JSON.stringify(r.b)}`);
   return r.b?.dados;
+};
+/** A sessão só conclui com os ausentes justificados e encaminhados (reposição ou dispensa): o teste encaminha quem ainda não tem encaminhamento. */
+const encaminharAusentes = async (tid: number) => {
+  for (const p of await q(`select id from public.peopleflow_dev_participantes where treinamento_id=${tid} and presenca_status='ausente' and removido_em is null and ausencia_encaminhamento is null`))
+    await espera("rh", "ausencia_encaminhar", { participante_id: p.id, justificativa: "Ausência justificada no teste", encaminhamento: "reposicao" }, 200);
 };
 const part = async (tid: number, cid: number) => (await q(`select * from public.peopleflow_dev_participantes where treinamento_id=${tid} and colaborador_id=${cid}`))[0];
 const hoje = new Date().toISOString().slice(0, 10);
@@ -102,18 +108,20 @@ await t("RH e Gestor entram pelas regras do PeopleFlow; colaborador comum e quem
   if ((await sessao("p4")).c !== 403) throw new Error("colaborador comum não deve abrir o módulo");
   if ((await sessao("semcadastro")).c !== 403) throw new Error("conta sem colaborador no cadastro não entra");
 });
-await t("Responsável SÓ vira perfil Responsavel quando indicado pelo gestor ou designado num treinamento — antes disso, 403", async () => {
-  if ((await sessao("hugo")).c !== 403) throw new Error("hugo antes da indicação");
-  if ((await sessao("resp")).c !== 403) throw new Error("fabio antes da designação");
-  const ind = await espera("ge", "responsavel_gestao_indicar", { colaborador_id: 8 }, 200);
-  if (!ind.id) throw new Error("indicação");
+await t("Só a HABILITAÇÃO concedida pelo RH abre o módulo para quem não é RH nem Gestor: antes dela, 403 (mesmo sendo designado em um treinamento); depois, perfil Responsavel", async () => {
+  if ((await sessao("hugo")).c !== 403) throw new Error("hugo antes da habilitação");
+  if ((await sessao("resp")).c !== 403) throw new Error("fabio antes da habilitação");
+  await espera("ge", "habilitacao_conceder", { colaborador_id: 8, referencia: "x" }, 403); // quem habilita é o RH, não a liderança
+  const hab8 = await espera("rh", "habilitacao_conceder", { colaborador_id: 8, gestor_colaborador_id: 2, referencia: "E-mail da Bia (Produção) ao RH, 20/10" }, 200);
+  const hab7 = await espera("rh", "habilitacao_conceder", { colaborador_id: 7, gestor_colaborador_id: 2, referencia: "E-mail da Bia (Produção) ao RH, 20/10" }, 200);
+  if (!hab8.id || !hab7.id || hab8.acesso !== "existente") throw new Error("habilitação");
   const h = await sessao("hugo");
-  if (h.c !== 200 || h.b.perfil !== "Responsavel" || h.b.podeRegistrar !== true) throw new Error(JSON.stringify(h.b));
+  if (h.c !== 200 || h.b.perfil !== "Responsavel" || h.b.podeRegistrar !== true || h.b.habilitado !== true) throw new Error(JSON.stringify(h.b));
 });
 
 console.log("Planejamento de um treinamento de POP");
 const baseDoPop = { tipo: "novo_pop", modalidade: "interno", formato: "presencial", data_inicio: hoje, carga_horaria_min: 90, lista_mestra_codigo: "P-PR-001", responsavel_colaborador_id: 7, instrutor_colaborador_id: 7, exige_eficacia: true };
-await t("Gestor registra o treinamento do POP: código, título oficial, revisão, data, carga, responsável/instrutor — nasce PLANEJADO", async () => {
+await t("Gestora habilitada registra o treinamento do POP para o responsável Fabio: código, título oficial, revisão, data, carga — nasce PLANEJADO", async () => {
   await espera("p4", "treinamento_salvar", baseDoPop, 401);
   await espera("resp", "treinamento_salvar", baseDoPop, 401); // ainda sem sessão do módulo
   const d = await espera("ge", "treinamento_salvar", baseDoPop, 200);
@@ -122,17 +130,18 @@ await t("Gestor registra o treinamento do POP: código, título oficial, revisã
   await espera("ge", "treinamento_salvar", { ...baseDoPop, titulo: "x", lista_mestra_codigo: null }, 422); // POP sem documento
   await espera("ge", "treinamento_salvar", { ...baseDoPop, responsavel_colaborador_id: null }, 422); // sem responsável designado
 });
-await t("O responsável designado passa a abrir o módulo como Responsavel (sem escopo de equipe, sem registrar treinamentos)", async () => {
+await t("O habilitado abre o módulo como Responsavel, com a equipe da gestão a que está vinculado; só registra treinamento em que ele mesmo será responsável ou instrutor", async () => {
   const f = await sessao("resp");
-  if (f.c !== 200 || f.b.perfil !== "Responsavel" || f.b.podeRegistrar !== false || f.b.pessoas.length !== 0) throw new Error(JSON.stringify(f.b));
-  const outro = await chamar("resp", "treinamento_salvar", { ...baseDoPop, titulo: "x" });
-  if (outro.c !== 403) throw new Error("designado sem indicação não registra treinamento: " + outro.c);
+  if (f.c !== 200 || f.b.perfil !== "Responsavel" || f.b.podeRegistrar !== true || f.b.pessoas.map((p: any) => p.id).sort().join() !== "2,3,5,8,9") throw new Error(JSON.stringify(f.b));
+  const outro = await chamar("resp", "treinamento_salvar", { ...baseDoPop, titulo: "x", responsavel_colaborador_id: 8, instrutor_colaborador_id: null });
+  if (outro.c !== 422) throw new Error("habilitado não registra para outra pessoa: " + outro.c);
 });
-await t("Seleção de participantes pela gestão; colaborador sem conta do módulo e gestor de outra área não montam turma", async () => {
-  await espera("ge", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [3, 5, 4] }, 200);
+await t("Quem administra (responsável/instrutor habilitado) monta a turma; a Gestora acompanha, e colaborador sem conta do módulo e gestor de outra área não montam turma", async () => {
+  await espera("ge", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [3, 5, 4] }, 403); // a Gestora que registrou acompanha, não administra
+  await espera("resp", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [3, 5, 4] }, 200);
   await espera("gil", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [9] }, 403);
   await espera("p3", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [9] }, 401);
-  await espera("ge", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [999] }, 422);
+  await espera("resp", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [999] }, 422);
   if ((await q(`select count(*)::int n from public.peopleflow_dev_participantes where treinamento_id=${tPop}`))[0].n !== 3) throw new Error("turma");
 });
 
@@ -148,7 +157,7 @@ await t("Documento revisado ENTRE o planejamento e o início: a revisão treinad
 });
 await t("Depois do início a revisão treinada NUNCA mais muda, mesmo que o documento receba novas revisões", async () => {
   await db.exec("update public.peopleflow_dev_lista_mestra set revisao_atual='05' where codigo='P-PR-001'");
-  await espera("ge", "presenca_manual", { treinamento_id: tPop, participante_ids: [(await part(tPop, 4)).id], presenca: "ausente", motivo: "Em férias" }, 200);
+  await espera("resp", "presenca_manual", { treinamento_id: tPop, participante_ids: [(await part(tPop, 4)).id], presenca: "ausente", motivo: "Em férias" }, 200);
   const d = (await q(`select lista_mestra_revisao, titulo from public.peopleflow_dev_treinamentos where id=${tPop}`))[0];
   if (d.lista_mestra_revisao !== "04") throw new Error(JSON.stringify(d));
   await espera("ge", "treinamento_salvar", { ...baseDoPop, id: tPop }, 403); // gestão não edita depois do início
@@ -162,17 +171,17 @@ await t("Documento que ficou obsoleto antes do início: o treinamento não inici
 });
 
 console.log("Matriz de permissões — treinamento EM ANDAMENTO");
-// resultado esperado por perfil: rh | ge (gestor que registrou) | resp (responsável designado) | hugo (Responsável indicado pela gestão, NÃO designado)
+// resultado esperado por perfil: rh | ge (gestora que registrou: ACOMPANHA, não administra) | resp (responsável/instrutor habilitado) | hugo (habilitado, mas de OUTRO treinamento)
 // | gil (gestor de outra área) | p4 (colaborador comum, sem sessão do módulo)
 const matriz: { acao: string; corpo: () => Record<string, unknown>; esperado: Record<string, number> }[] = [
-  { acao: "qr_gerar", corpo: () => ({ treinamento_id: tPop }), esperado: { rh: 200, ge: 200, resp: 200, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "treinamento_realizacao", corpo: () => ({ id: tPop, data_realizacao: hoje, carga_realizada_min: 90 }), esperado: { rh: 200, ge: 200, resp: 200, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "evidencia_upload_url", corpo: () => ({ treinamento_id: tPop, tipo: "material", file_name: "Treinamento.pdf", mime: "application/pdf", tamanho_bytes: 1200 }), esperado: { rh: 200, ge: 200, resp: 200, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "participantes_adicionar", corpo: () => ({ treinamento_id: tPop, colaborador_ids: [9] }), esperado: { rh: 200, ge: 200, resp: 200, hugo: 200, gil: 403, p4: 401 } },
-  { acao: "treinamento_concluir", corpo: () => ({ id: tPop }), esperado: { rh: 422, ge: 403, resp: 403, hugo: 403, gil: 403, p4: 401 } }, // RH recebe 422 porque ainda há presença pendente
+  { acao: "qr_gerar", corpo: () => ({ treinamento_id: tPop }), esperado: { rh: 200, ge: 403, resp: 200, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "treinamento_realizacao", corpo: () => ({ id: tPop, data_realizacao: hoje, carga_realizada_min: 90 }), esperado: { rh: 200, ge: 403, resp: 200, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "evidencia_upload_url", corpo: () => ({ treinamento_id: tPop, tipo: "material", file_name: "Treinamento.pdf", mime: "application/pdf", tamanho_bytes: 1200 }), esperado: { rh: 200, ge: 403, resp: 200, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "participantes_adicionar", corpo: () => ({ treinamento_id: tPop, colaborador_ids: [9] }), esperado: { rh: 200, ge: 403, resp: 200, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "treinamento_concluir", corpo: () => ({ id: tPop }), esperado: { rh: 422, ge: 403, resp: 422, hugo: 403, gil: 403, p4: 401 } }, // RH e o responsável habilitado recebem 422: a conferência aponta a presença pendente
   { acao: "treinamento_cancelar", corpo: () => ({ id: tPop, motivo: "teste" }), esperado: { ge: 403, resp: 403, hugo: 403, gil: 403, p4: 401 } },
   { acao: "treinamento_salvar", corpo: () => ({ ...baseDoPop, id: tPop }), esperado: { ge: 403, resp: 403, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "lista_presenca_gerar", corpo: () => ({ treinamento_id: tPop }), esperado: { ge: 403, resp: 403, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "lista_presenca_gerar", corpo: () => ({ treinamento_id: tPop }), esperado: { ge: 403, resp: 422, hugo: 403, gil: 403, p4: 401 } }, // a lista só se gera de treinamento interno concluído
   { acao: "lista_mestra_salvar", corpo: () => ({ codigo: "X-1", titulo: "x", revisao_atual: "01", novo: true }), esperado: { ge: 403, resp: 403, hugo: 403, p4: 401 } },
   { acao: "habilidade_ativo", corpo: () => ({ id: 1, ativo: false, motivo: "x" }), esperado: { ge: 403, resp: 403, hugo: 403, p4: 401 } },
   { acao: "treinamento_planejar", corpo: () => ({ id: tPop }), esperado: { ge: 403, resp: 403, hugo: 403, p4: 401 } },
@@ -210,27 +219,38 @@ await t("Presença manual (com justificativa) pelo responsável designado e pelo
   const a = await q(`select count(*)::int n from public.peopleflow_dev_auditoria where acao='presenca_manual' and detalhe->>'motivo' = 'Faltou — atestado'`);
   if (a[0].n !== 1) throw new Error("auditoria da presença manual");
 });
-await t("Evidência anexada pelo responsável designado (bucket privado), visível a quem conduz e ao gestor com liderado na turma; não ao Responsável não designado", async () => {
+await t("Evidência anexada pelo responsável designado (bucket privado), visível a quem conduz e à gestão que registrou; o gestor de OUTRA área (só liderado na turma) e o Responsável não designado não abrem a evidência da turma", async () => {
   const u = await espera("resp", "evidencia_upload_url", { treinamento_id: tPop, tipo: "foto", file_name: "Sala.pdf", mime: "application/pdf", tamanho_bytes: 1200 }, 200);
   fake.storage.from("desenvolvimento-evidencias")._simularUpload(u.path, 1200, "application/pdf");
   const e = await espera("resp", "evidencia_registrar", { treinamento_id: tPop, path: u.path, tipo: "foto", file_name: "Sala.pdf" }, 200);
   await espera("ge", "evidencia_url", { id: e.id }, 200);
   await espera("resp", "evidencia_url", { id: e.id }, 200);
-  await espera("gil", "evidencia_url", { id: e.id }, 200); // gestor com liderado (Davi) na turma acompanha o treinamento, como na tela
+  await espera("gil", "evidencia_url", { id: e.id }, 403); // gestor com liderado (Davi) na turma acompanha o treinamento, mas a evidência da TURMA é da gestão dona do treinamento
   await espera("hugo", "evidencia_url", { id: e.id }, 403); // Responsável indicado, mas não designado neste treinamento
   await espera("p3", "evidencia_url", { id: e.id }, 401);
 });
 
 console.log("Conclusão pelo RH e Lista de Presença");
-await t("Com presença pendente o RH não conclui; resolvida, o RH conclui — sem exigir certificado", async () => {
+await t("Com presença pendente a sessão não conclui; resolvida e com os ausentes encaminhados, o responsável habilitado conclui — sem exigir certificado", async () => {
   // Íris (9) está ausente, Davi (4) ausente, Caio e Eva presentes; Íris foi incluída depois e já resolvida. Reabre uma pendência de propósito:
-  await espera("hugo", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [2] }, 200);
+  await espera("resp", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [2] }, 200);
   const r = await chamar("rh", "treinamento_concluir", { id: tPop });
   if (r.c !== 422 || !/pendente/.test(r.b.error)) throw new Error(JSON.stringify(r));
-  await espera("ge", "presenca_manual", { treinamento_id: tPop, participante_ids: [(await part(tPop, 2)).id], presenca: "presente", motivo: "Supervisora acompanhou a turma" }, 200);
-  await espera("ge", "treinamento_concluir", { id: tPop }, 403);
-  await espera("resp", "treinamento_concluir", { id: tPop }, 403);
-  const d = await espera("rh", "treinamento_concluir", { id: tPop }, 200);
+  await espera("resp", "presenca_manual", { treinamento_id: tPop, participante_ids: [(await part(tPop, 2)).id], presenca: "presente", motivo: "Supervisora acompanhou a turma" }, 200);
+  await espera("ge", "treinamento_concluir", { id: tPop }, 403); // a Gestora acompanha, não conclui
+  await espera("hugo", "treinamento_concluir", { id: tPop }, 403); // habilitado, mas de outro treinamento
+  // Davi (férias) e Íris (atestado) estão ausentes: a conferência exige encaminhamento — e a pendência individual de cada um continua aberta
+  const conf = await espera("resp", "treinamento_conferir", { id: tPop }, 200);
+  if (conf.pode_concluir || !conf.impedimentos.some((i: any) => i.codigo === "ausencia_sem_encaminhamento")) throw new Error("ausentes sem encaminhamento impedem concluir: " + JSON.stringify(conf));
+  const rc = await chamar("resp", "treinamento_concluir", { id: tPop });
+  if (rc.c !== 422 || !/encaminhamento/.test(rc.b.error)) throw new Error(JSON.stringify(rc));
+  await espera("hugo", "ausencia_encaminhar", { participante_id: (await part(tPop, 4)).id, justificativa: "x", encaminhamento: "reposicao" }, 403);
+  await espera("resp", "ausencia_encaminhar", { participante_id: (await part(tPop, 4)).id, justificativa: "Em férias", encaminhamento: "dispensa" }, 403); // dispensa é autorizada pelo RH
+  await espera("resp", "ausencia_encaminhar", { participante_id: (await part(tPop, 4)).id, justificativa: "Em férias", encaminhamento: "reposicao", reposicao_prevista_em: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10) }, 200);
+  await espera("resp", "ausencia_encaminhar", { participante_id: (await part(tPop, 9)).id, justificativa: "Atestado", encaminhamento: "reposicao" }, 200);
+  const conf2 = await espera("resp", "treinamento_conferir", { id: tPop }, 200);
+  if (!conf2.pode_concluir || !conf2.pendencias_apos.some((i: any) => i.codigo === "reposicao_pendente")) throw new Error("com reposição encaminhada pode concluir e a pendência permanece: " + JSON.stringify(conf2));
+  const d = await espera("resp", "treinamento_concluir", { id: tPop }, 200);
   if (d.status !== "concluido" || d.lista_mestra_revisao !== "04") throw new Error(JSON.stringify(d));
   if ((await q(`select count(*)::int n from public.peopleflow_dev_evidencias where treinamento_id=${tPop} and tipo='certificado'`))[0].n !== 0) throw new Error("não deveria exigir certificado");
   await espera("p3", "presenca_info", { token: tokenQr }, 404); // QR encerrado na conclusão
@@ -268,10 +288,11 @@ await t("Eficácia (exigida): RH ou gestor do participante; responsável designa
   await espera("ge", "eficacia_registrar", { participante_id: (await part(tPop, 4)).id, resultado: "eficaz" }, 403); // Davi é da equipe de outro gestor
 });
 await t("Faltante (Íris) volta numa REPOSIÇÃO agendada pela gestão; o treinamento original não é reaberto", async () => {
-  const f = await espera("ge", "reposicao_faltantes", { treinamento_id: tPop }, 200);
+  const f = await espera("resp", "reposicao_faltantes", { treinamento_id: tPop }, 200);
   if (f.length !== 1 || Number(f[0].colaborador_id ?? f[0].id) !== 9) throw new Error(JSON.stringify(f));
   await espera("gil", "reposicao_faltantes", { treinamento_id: tPop }, 403);
-  const r = await espera("ge", "treinamento_reposicao", { ...baseDoPop, treinamento_id: tPop, colaborador_ids: [9] }, 200);
+  await espera("ge", "treinamento_reposicao", { ...baseDoPop, treinamento_id: tPop, colaborador_ids: [9] }, 403); // a Gestora acompanha, não programa
+  const r = await espera("resp", "treinamento_reposicao", { ...baseDoPop, treinamento_id: tPop, colaborador_ids: [9] }, 200);
   if (r.status !== "planejado" || Number(r.reposicao_de_id) !== tPop) throw new Error(JSON.stringify(r));
   if ((await q(`select status from public.peopleflow_dev_treinamentos where id=${tPop}`))[0].status !== "concluido") throw new Error("original reaberto");
 });
@@ -279,8 +300,8 @@ await t("Faltante (Íris) volta numa REPOSIÇÃO agendada pela gestão; o treina
 console.log("Confirmação de presença por QR: identidade, prazo, duplicidade e auditoria");
 await t("Só a pessoa autenticada confirma, e só a PRÓPRIA presença (o corpo da requisição não escolhe a pessoa); duplicidade não duplica nada", async () => {
   const rep = (await q(`select id from public.peopleflow_dev_treinamentos where reposicao_de_id=${tPop}`))[0].id as number;
-  await espera("ge", "treinamento_iniciar", { id: rep }, 200);
-  await espera("hugo", "participantes_adicionar", { treinamento_id: rep, colaborador_ids: [3] }, 200); // Caio entra na turma, mas só ELE poderá confirmar a própria presença
+  await espera("resp", "treinamento_iniciar", { id: rep }, 200);
+  await espera("resp", "participantes_adicionar", { treinamento_id: rep, colaborador_ids: [3] }, 200); // Caio entra na turma, mas só ELE poderá confirmar a própria presença
   const tk = (await espera("resp", "qr_gerar", { treinamento_id: rep }, 200)).token;
   await espera("", "presenca_confirmar", { token: tk }, 401); // anônimo
   await espera("semcadastro", "presenca_confirmar", { token: tk }, 409); // conta que não bate com o cadastro
@@ -306,7 +327,7 @@ await t("Só a pessoa autenticada confirma, e só a PRÓPRIA presença (o corpo 
   await espera("resp", "qr_encerrar", { treinamento_id: rep }, 200);
   await espera("p3", "presenca_confirmar", { token: tk }, 404);
   if ((await part(rep, 3)).presenca_status !== "pendente") throw new Error("registrou com QR encerrado");
-  await espera("ge", "participante_remover", { participante_id: pCaioRep, motivo: "Só para o teste de identidade" }, 200); // mantém o histórico dos testes seguintes
+  await espera("resp", "participante_remover", { participante_id: pCaioRep, motivo: "Só para o teste de identidade" }, 200); // mantém o histórico dos testes seguintes
 });
 
 console.log("Data de realização: efetiva ≠ planejada");
@@ -759,7 +780,14 @@ await t("Privacidade: RH vê quem respondeu (adesão) mas NUNCA a nota de uma pe
   if (/"respostas"|"nota"|"q[1-5]"/.test(tudo)) throw new Error("a API não pode expor nota por pessoa: " + tudo.slice(0, 200));
   if (jsonDe(det.medias) !== jsonDe([4, 3.7, 4.3, 3.7, 4.3])) throw new Error("médias do detalhe: " + jsonDe(det.medias));
   if ((await espera("rh", "reacao_detalhe", { treinamento_id: tHom }, 200)).treinamento !== null) throw new Error("detalhe de teste");
-  for (const quem of ["ge", "gil", "resp", "hugo"]) { await espera(quem, "reacao_resumo", {}, 403); await espera(quem, "reacao_detalhe", { treinamento_id: tPop }, 403); }
+  for (const quem of ["ge", "gil", "resp", "hugo"]) await espera(quem, "reacao_resumo", {}, 403); // o resumo geral é do RH
+  // Detalhe do treinamento: RH; quem o administra (Fabio); a Gestora que o registrou e o Gestor com liderado na turma ACOMPANHAM; habilitado de outro treinamento não
+  for (const [quem, st] of [["ge", 200], ["gil", 200], ["resp", 200], ["hugo", 403]] as const) {
+    const dt = await chamar(quem, "reacao_detalhe", { treinamento_id: tPop });
+    if (dt.c !== st) throw new Error(`${quem}: reacao_detalhe esperado ${st}, veio ${dt.c}`);
+    const parcial = quem === "gil"; // gestor de outra área (só um liderado na turma): vê apenas o liderado e não as médias da turma
+    if (st === 200 && (/"respostas"|"nota"|"q[1-5]"/.test(JSON.stringify(dt.b)) || JSON.stringify(dt.b.dados.medias) !== JSON.stringify(parcial ? null : det.medias) || Boolean(dt.b.dados.visao_parcial) !== parcial)) throw new Error(`${quem}: o acompanhamento também só traz o consolidado (a partir de 3 respostas)`);
+  }
   await espera("p3", "reacao_resumo", {}, 401);
   // a conclusão não depende das respostas: um treinamento oficial com avaliação pendente conclui normalmente
   const id = await realizado({});
@@ -798,7 +826,7 @@ await t("Telas: formulário de 5 perguntas na escala 1–5 (envio só completo) 
   const lista = lerTela("src/features/desenvolvimento/TreinamentosPage.tsx");
   if (!/perfil === "RH" \? \[\{ id: "avaliacao-reacao"/.test(lista) || !/<ReacaoAba \/>/.test(lista)) throw new Error("aba do RH");
   const pag = lerTela("src/features/desenvolvimento/TreinamentoPage.tsx");
-  if (!/p\.ehRH && !t\.homologacao && \(t\.status === "em_andamento" \|\| t\.status === "concluido"\) \? <ReacaoDoTreinamento/.test(pag)) throw new Error("seção do treinamento");
+  if (!/p\.veReacao && !t\.homologacao && \(t\.status === "em_andamento" \|\| t\.status === "concluido"\) \? <ReacaoDoTreinamento/.test(pag) || !/veReacao: ehRH \|\| conduz \|\| perfil === "Gestor"/.test(pag)) throw new Error("seção do treinamento: RH, quem administra e a liderança acompanham");
   const css = lerTela("src/features/desenvolvimento/FormularioReacao.module.css");
   if (!/min-height:\s*44px/.test(css) || !/repeat\(5, 1fr\)/.test(css)) throw new Error("alvos de toque / escala em 5 colunas");
 });
@@ -901,7 +929,7 @@ await t("O treinamento fica ABERTO até o RH concluir (sem encerramento automát
   await espera("ge", "treinamento_concluir", { id: g1 }, 403); // só o RH
   await espera("rh", "treinamento_concluir", { id: g1 }, 422); // Íris ainda não confirmou: o RH decide o momento
   await espera("rh", "presenca_manual", { treinamento_id: g1, participante_ids: [(await part(g1, 9)).id], presenca: "ausente", motivo: "Não assistiu dentro do prazo" }, 200);
-  await espera("rh", "treinamento_concluir", { id: g1 }, 200);
+  await encaminharAusentes(g1); await espera("rh", "treinamento_concluir", { id: g1 }, 200);
   await espera("p9", "gravacao_confirmar", { codigo: await codigoDe(g1), declaro: true }, 422); // concluído: encerrada
   const m = await metodosDe(g1);
   if (m[9] !== "ausente/manual") throw new Error("ausente registrado manualmente (funcionalidade existente): " + jsonDe(m));
@@ -923,9 +951,9 @@ await t("Lista de presença, histórico e RH: método 'Gravação' identificado 
 });
 
 await t("Cenário 2 — só gravado: cadastra com 'Permitir participação por gravação', link do SharePoint, participantes confirmam SEM QR; o RH não cria presença 'por gravação'; conclusão pelo RH", async () => {
-  g2 = (await espera("ge", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", formato: "online", titulo: "Treinamento gravado", data_inicio: hojeSP, responsavel_colaborador_id: 7, permite_gravacao: true }, 200)).id;
+  g2 = (await espera("ge", "treinamento_salvar", { tipo: "desenvolvimento", modalidade: "interno", formato: "online", titulo: "Treinamento gravado", data_inicio: hojeSP, responsavel_colaborador_id: 2, instrutor_colaborador_id: 7, permite_gravacao: true }, 200)).id;
   await espera("ge", "participantes_adicionar", { treinamento_id: g2, colaborador_ids: [3, 5, 8] }, 200);
-  await espera("ge", "gravacao_definir", { treinamento_id: g2, url: LINK }, 200); // a gestão que registrou também configura
+  await espera("ge", "gravacao_definir", { treinamento_id: g2, url: LINK }, 200); // a responsável principal (Gestora habilitada) também configura
   await espera("resp", "treinamento_iniciar", { id: g2 }, 200);
   const cod = await codigoDe(g2);
   // Eva "tenta" confirmar pelo Caio: o servidor ignora o corpo e confirma só a dela
@@ -938,7 +966,7 @@ await t("Cenário 2 — só gravado: cadastra com 'Permitir participação por g
   m = await metodosDe(g2);
   if (m[8] !== "presente/manual") throw new Error("o RH não gera método 'gravacao': " + jsonDe(m));
   if ((await q(`select count(*)::int n from public.peopleflow_dev_qr_tokens where treinamento_id=${g2}`))[0].n !== 0) throw new Error("gravação exclusiva não usa QR");
-  await espera("rh", "treinamento_concluir", { id: g2 }, 200);
+  await encaminharAusentes(g2); await espera("rh", "treinamento_concluir", { id: g2 }, 200);
   m = await metodosDe(g2);
   if (jsonDe(m) !== jsonDe({ 3: "presente/gravacao", 5: "presente/gravacao", 8: "presente/manual" })) throw new Error(jsonDe(m));
 });
@@ -1088,7 +1116,7 @@ await t("A tela 'Meus treinamentos' e o menu valem para qualquer perfil: nada na
 });
 
 console.log("Ajustes de interface: link da gravação no cadastro, rótulo do PDF, consolidação da avaliação");
-const BASE_CAD = { tipo: "desenvolvimento", modalidade: "interno", formato: "online", data_inicio: hojeSP, responsavel_colaborador_id: 7 };
+const BASE_CAD = { tipo: "desenvolvimento", modalidade: "interno", formato: "online", data_inicio: hojeSP, responsavel_colaborador_id: 2, instrutor_colaborador_id: 7 };
 const linhaTrein = async (id: number) => (await q(`select permite_gravacao, gravacao_url, gravacao_definida_por, local_link from public.peopleflow_dev_treinamentos where id=${id}`))[0];
 const textoDaLista = async (tid: number) => {
   const ls = await q(`select storage_path from public.peopleflow_dev_evidencias where treinamento_id=${tid} and tipo='lista_presenca' and substituida_em is null`);
@@ -1134,7 +1162,7 @@ await t("Link da gravação no CADASTRO: vai direto para o registro da gravaçã
   if (l.permite_gravacao !== false || l.gravacao_url !== LINK) throw new Error("desligar preserva o link: " + jsonDe(l));
   // depois da conclusão o formulário não altera o link: só o RH, pela página (regra existente)
   const concluido = await realizado({});
-  await espera("rh", "treinamento_concluir", { id: concluido }, 200);
+  await encaminharAusentes(concluido); await espera("rh", "treinamento_concluir", { id: concluido }, 200);
   if ((await linhaTrein(concluido)).gravacao_url !== null) throw new Error("treinamento sem gravação segue sem link");
 });
 
@@ -1175,9 +1203,20 @@ await t("PDF da lista de presença por gravação: sem URL extensa no 'Local' (r
   if (!c.texto.includes("LOCAL Sala de treinamento 2") || c.texto.includes("Ambiente virtual")) throw new Error("sala preservada: " + c.texto.slice(0, 400));
   // (4) sem gravação e com link de reunião online: como cadastrado
   const d = await realizado({ local_link: "https://teams.microsoft.com/l/meetup-join/19-reuniao" });
-  await espera("rh", "treinamento_concluir", { id: d }, 200);
+  await encaminharAusentes(d); await espera("rh", "treinamento_concluir", { id: d }, 200);
   const td = await textoDaLista(d);
   if (!td.includes("https://teams.microsoft.com/l/meetup-join/19-reuniao") || td.includes("Ambiente virtual")) throw new Error("reunião online preservada");
+});
+
+await t("PDF e registros HISTÓRICOS com URL no Local: a geração não quebra; link do SharePoint vira rótulo, sala segue como cadastrada; link de reunião curto sai inteiro e o MUITO longo sai cortado (comportamento já publicado, registrado como limitação); o campo gravado nunca é alterado", async () => {
+  const teamsLongo = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_ZGQ4NzI5YjktMDBhNC00YjVmLWI5M2MtMTIzNDU2Nzg5MGFi%40thread.v2/0?context=%7b%22Tid%22%3a%22aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%22%2c%22Oid%22%3a%2211111111-2222-3333-4444-555555555555%22%7d";
+  for (const [local, esperado] of [[teamsLongo, teamsLongo.slice(0, 80)], ["https://empresa.sharepoint.com/sites/treinamentos/Shared%20Documents/gravacao.mp4?web=1", "Ambiente virtual — SharePoint"], ["Sala de Treinamento", "Sala de Treinamento"]] as const) {
+    const id = await realizado({ local_link: local });
+    await encaminharAusentes(id); await espera("rh", "treinamento_concluir", { id }, 200);
+    const texto = (await textoDaLista(id)).replace(/\s+/g, "");
+    if (!texto.includes(`LOCAL${esperado.replace(/\s+/g, "")}`)) throw new Error(`Local no PDF (${local.slice(0, 40)}…): ${texto.slice(texto.indexOf("LOCAL"), texto.indexOf("LOCAL") + 200)}`);
+    if ((await linhaTrein(id)).local_link !== local) throw new Error("o valor cadastrado não pode mudar");
+  }
 });
 
 await t("Avaliação de Reação: consolidação a partir de 3 respostas (1 e 2 não expõem média nem nota); indicadores, controle de respondentes e notas consistentes entre si; sem alterar o que já foi enviado", async () => {
@@ -1267,7 +1306,7 @@ await t("Telas: formulário de cadastro (opções alinhadas, link da gravação)
 console.log("Rastreabilidade");
 await t("Auditoria cobre cada etapa do fluxo do POP", async () => {
   const acoesAud = new Set((await q(`select distinct acao from public.peopleflow_dev_auditoria`)).map((x) => x.acao));
-  for (const e of ["treinamento_planejado", "participantes_incluidos", "treinamento_revisao_atualizada", "treinamento_iniciado", "qr_gerado", "presenca_qr", "presenca_manual", "evidencia_anexada", "treinamento_concluido", "lista_presenca_gerada", "presenca_retificada", "eficacia_registrada", "reposicao_criada", "responsavel_gestao_indicado", "sessao_iniciada"]) if (!acoesAud.has(e)) throw new Error("faltou auditar " + e);
+  for (const e of ["treinamento_planejado", "participantes_incluidos", "treinamento_revisao_atualizada", "treinamento_iniciado", "qr_gerado", "presenca_qr", "presenca_manual", "evidencia_anexada", "treinamento_concluido", "lista_presenca_gerada", "presenca_retificada", "eficacia_registrada", "reposicao_criada", "habilitacao_concedida", "sessao_iniciada"]) if (!acoesAud.has(e)) throw new Error("faltou auditar " + e);
 });
 await t("Nada é apagado: sem exclusão física em treinamentos, participantes e evidências", async () => {
   for (const tabela of ["peopleflow_dev_treinamentos", "peopleflow_dev_participantes", "peopleflow_dev_evidencias"]) {

@@ -59,7 +59,11 @@ export function AppShell() {
   // Exceções: Treinamentos do módulo Desenvolvimento, para quem é responsável/
   // instrutor de um treinamento (o servidor confere; os demais recebem "sem acesso"),
   // e "Meus treinamentos" (o próprio histórico, identificado pelo servidor).
-  if (conta.perfil === "Colaborador" && !location.pathname.startsWith("/desempenho") && !location.pathname.startsWith("/meus-treinamentos") && !/^\/desenvolvimento\/treinamentos?(\/|$)/.test(location.pathname)) {
+  // Acesso específico a Treinamentos (ainda sem AVD): só "Meus treinamentos" e a Gestão de Treinamentos (o servidor libera só quem o RH habilitou).
+  if (conta.acesso === "treinamentos" && !location.pathname.startsWith("/meus-treinamentos") && !/^\/desenvolvimento\/treinamentos?(\/|$)/.test(location.pathname)) {
+    return <Navigate to="/meus-treinamentos" replace />;
+  }
+  if (conta.perfil === "Colaborador" && conta.acesso !== "treinamentos" && !location.pathname.startsWith("/desempenho") && !location.pathname.startsWith("/meus-treinamentos") && !/^\/desenvolvimento\/treinamentos?(\/|$)/.test(location.pathname)) {
     return <Navigate to="/desempenho" replace />;
   }
 
