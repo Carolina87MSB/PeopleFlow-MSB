@@ -39,7 +39,7 @@ insert into public.colaboradores (id, nome, cargo, departamento, gestor) values
  (7,'${NOMES[7]}','Técnico','Qualidade','Outro'),(8,'${NOMES[8]}','Auxiliar','Produção','${NOMES[2]}'),(9,'${NOMES[9]}','Operador','Produção','${NOMES[2]}');
 insert into public.peopleflow_descricoes_cargo (cargo_nome) values ('Operador'),('Supervisora'),('Supervisor'),('Conferente'),('Técnico'),('Analista de RH'),('Auxiliar');
 `);
-for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_habilitacao_responsaveis.sql"]) await db.exec(SQL(f));
+for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_habilitacao_responsaveis.sql", "desenvolvimento_solicitacao_habilitacao.sql"]) await db.exec(SQL(f));
 await db.exec(`
 insert into public.peopleflow_dev_lista_mestra (codigo,titulo,revisao_atual,situacao) values ('P-PR-001','Montagem da sonda','03','vigente'),('I-PR-010','Inspeção final','01','vigente');
 insert into public.peopleflow_dev_responsaveis_gestao (gestor_colaborador_id, colaborador_id, referencia) values (1,2,'fixture do teste: habilitação concedida pelo RH'),(1,6,'fixture do teste: habilitação concedida pelo RH');
@@ -136,8 +136,8 @@ await t("O habilitado abre o módulo como Responsavel, com a equipe da gestão a
   const outro = await chamar("resp", "treinamento_salvar", { ...baseDoPop, titulo: "x", responsavel_colaborador_id: 8, instrutor_colaborador_id: null });
   if (outro.c !== 422) throw new Error("habilitado não registra para outra pessoa: " + outro.c);
 });
-await t("Quem administra (responsável/instrutor habilitado) monta a turma; a Gestora acompanha, e colaborador sem conta do módulo e gestor de outra área não montam turma", async () => {
-  await espera("ge", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [3, 5, 4] }, 403); // a Gestora que registrou acompanha, não administra
+await t("Quem administra (responsável/instrutor habilitado e a Gestora da área) monta a turma; colaborador sem conta do módulo e gestor de outra área não montam turma", async () => {
+  await espera("ge", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [3, 5, 4] }, 200); // a Gestora que registrou (e é da área) administra, automaticamente
   await espera("resp", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [3, 5, 4] }, 200);
   await espera("gil", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [9] }, 403);
   await espera("p3", "participantes_adicionar", { treinamento_id: tPop, colaborador_ids: [9] }, 401);
@@ -171,17 +171,17 @@ await t("Documento que ficou obsoleto antes do início: o treinamento não inici
 });
 
 console.log("Matriz de permissões — treinamento EM ANDAMENTO");
-// resultado esperado por perfil: rh | ge (gestora que registrou: ACOMPANHA, não administra) | resp (responsável/instrutor habilitado) | hugo (habilitado, mas de OUTRO treinamento)
+// resultado esperado por perfil: rh | ge (gestora da área: ADMINISTRA automaticamente; depois do início não edita nem cancela) | resp (responsável/instrutor habilitado) | hugo (habilitado, mas de OUTRO treinamento)
 // | gil (gestor de outra área) | p4 (colaborador comum, sem sessão do módulo)
 const matriz: { acao: string; corpo: () => Record<string, unknown>; esperado: Record<string, number> }[] = [
-  { acao: "qr_gerar", corpo: () => ({ treinamento_id: tPop }), esperado: { rh: 200, ge: 403, resp: 200, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "treinamento_realizacao", corpo: () => ({ id: tPop, data_realizacao: hoje, carga_realizada_min: 90 }), esperado: { rh: 200, ge: 403, resp: 200, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "evidencia_upload_url", corpo: () => ({ treinamento_id: tPop, tipo: "material", file_name: "Treinamento.pdf", mime: "application/pdf", tamanho_bytes: 1200 }), esperado: { rh: 200, ge: 403, resp: 200, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "participantes_adicionar", corpo: () => ({ treinamento_id: tPop, colaborador_ids: [9] }), esperado: { rh: 200, ge: 403, resp: 200, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "treinamento_concluir", corpo: () => ({ id: tPop }), esperado: { rh: 422, ge: 403, resp: 422, hugo: 403, gil: 403, p4: 401 } }, // RH e o responsável habilitado recebem 422: a conferência aponta a presença pendente
+  { acao: "qr_gerar", corpo: () => ({ treinamento_id: tPop }), esperado: { rh: 200, ge: 200, resp: 200, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "treinamento_realizacao", corpo: () => ({ id: tPop, data_realizacao: hoje, carga_realizada_min: 90 }), esperado: { rh: 200, ge: 200, resp: 200, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "evidencia_upload_url", corpo: () => ({ treinamento_id: tPop, tipo: "material", file_name: "Treinamento.pdf", mime: "application/pdf", tamanho_bytes: 1200 }), esperado: { rh: 200, ge: 200, resp: 200, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "participantes_adicionar", corpo: () => ({ treinamento_id: tPop, colaborador_ids: [9] }), esperado: { rh: 200, ge: 200, resp: 200, hugo: 403, gil: 403, p4: 401 } },
+  { acao: "treinamento_concluir", corpo: () => ({ id: tPop }), esperado: { rh: 422, ge: 422, resp: 422, hugo: 403, gil: 403, p4: 401 } }, // RH, a Gestora da área e o responsável habilitado recebem 422: a conferência aponta a presença pendente
   { acao: "treinamento_cancelar", corpo: () => ({ id: tPop, motivo: "teste" }), esperado: { ge: 403, resp: 403, hugo: 403, gil: 403, p4: 401 } },
   { acao: "treinamento_salvar", corpo: () => ({ ...baseDoPop, id: tPop }), esperado: { ge: 403, resp: 403, hugo: 403, gil: 403, p4: 401 } },
-  { acao: "lista_presenca_gerar", corpo: () => ({ treinamento_id: tPop }), esperado: { ge: 403, resp: 422, hugo: 403, gil: 403, p4: 401 } }, // a lista só se gera de treinamento interno concluído
+  { acao: "lista_presenca_gerar", corpo: () => ({ treinamento_id: tPop }), esperado: { ge: 422, resp: 422, hugo: 403, gil: 403, p4: 401 } }, // a lista só se gera de treinamento interno concluído
   { acao: "lista_mestra_salvar", corpo: () => ({ codigo: "X-1", titulo: "x", revisao_atual: "01", novo: true }), esperado: { ge: 403, resp: 403, hugo: 403, p4: 401 } },
   { acao: "habilidade_ativo", corpo: () => ({ id: 1, ativo: false, motivo: "x" }), esperado: { ge: 403, resp: 403, hugo: 403, p4: 401 } },
   { acao: "treinamento_planejar", corpo: () => ({ id: tPop }), esperado: { ge: 403, resp: 403, hugo: 403, p4: 401 } },
@@ -237,7 +237,7 @@ await t("Com presença pendente a sessão não conclui; resolvida e com os ausen
   const r = await chamar("rh", "treinamento_concluir", { id: tPop });
   if (r.c !== 422 || !/pendente/.test(r.b.error)) throw new Error(JSON.stringify(r));
   await espera("resp", "presenca_manual", { treinamento_id: tPop, participante_ids: [(await part(tPop, 2)).id], presenca: "presente", motivo: "Supervisora acompanhou a turma" }, 200);
-  await espera("ge", "treinamento_concluir", { id: tPop }, 403); // a Gestora acompanha, não conclui
+  await espera("ge", "treinamento_concluir", { id: tPop }, 422); // a Gestora da área pode concluir, mas a conferência ainda aponta os ausentes sem encaminhamento
   await espera("hugo", "treinamento_concluir", { id: tPop }, 403); // habilitado, mas de outro treinamento
   // Davi (férias) e Íris (atestado) estão ausentes: a conferência exige encaminhamento — e a pendência individual de cada um continua aberta
   const conf = await espera("resp", "treinamento_conferir", { id: tPop }, 200);
@@ -291,7 +291,7 @@ await t("Faltante (Íris) volta numa REPOSIÇÃO agendada pela gestão; o treina
   const f = await espera("resp", "reposicao_faltantes", { treinamento_id: tPop }, 200);
   if (f.length !== 1 || Number(f[0].colaborador_id ?? f[0].id) !== 9) throw new Error(JSON.stringify(f));
   await espera("gil", "reposicao_faltantes", { treinamento_id: tPop }, 403);
-  await espera("ge", "treinamento_reposicao", { ...baseDoPop, treinamento_id: tPop, colaborador_ids: [9] }, 403); // a Gestora acompanha, não programa
+  await espera("ge", "reposicao_faltantes", { treinamento_id: tPop }, 200); // a Gestora da área também acompanha os faltantes (e pode programar a reposição)
   const r = await espera("resp", "treinamento_reposicao", { ...baseDoPop, treinamento_id: tPop, colaborador_ids: [9] }, 200);
   if (r.status !== "planejado" || Number(r.reposicao_de_id) !== tPop) throw new Error(JSON.stringify(r));
   if ((await q(`select status from public.peopleflow_dev_treinamentos where id=${tPop}`))[0].status !== "concluido") throw new Error("original reaberto");
@@ -504,7 +504,7 @@ await t("Evidências: lista de presença vigente e certificado individual aparec
   await espera("rh", "evidencia_url", { id: lista[0].id }, 200);
   await espera("ge", "evidencia_url", { id: certCaio }, 200); // Caio é da equipe da Bia
   await espera("ge", "evidencia_url", { id: lista[0].id }, 200);
-  await espera("ge", "evidencia_url", { id: certDavi }, 403); // Davi é da equipe do Gil
+  await espera("ge", "evidencia_url", { id: certDavi }, 200); // a Gestora da área administra este treinamento: como o responsável, abre as evidências da turma toda
   await espera("gil", "evidencia_url", { id: certDavi }, 200);
   await espera("gil", "evidencia_url", { id: certCaio }, 403);
   await espera("p3", "evidencia_url", { id: certCaio }, 401); // colaborador comum não abre evidência (nem a própria) nesta etapa

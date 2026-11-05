@@ -887,6 +887,10 @@ export type AcaoGravacao =
   | "habilitacao_conceder"
   | "habilitacao_revogar"
   | "habilitacao_pendencias"
+  | "habilitacao_solicitacao_opcoes"
+  | "habilitacao_solicitar"
+  | "habilitacao_solicitacoes_listar"
+  | "habilitacao_solicitacao_decidir"
   | "treinamento_transferir"
   | "transferencias_listar"
   | "ausencia_encaminhar"
@@ -1010,6 +1014,34 @@ export interface Transferencia {
   para: string;
   por: string | null;
 }
+export interface SolicitacaoHabilitacao {
+  id: number;
+  status: "pendente" | "aprovada" | "rejeitada";
+  colaborador: { id: number; nome: string };
+  solicitante: { id: number; nome: string };
+  departamento: string;
+  justificativa: string;
+  solicitado_em: string;
+  decidido_em: string | null;
+  decisor: string | null;
+  decisao_justificativa: string;
+  habilitacao_id: number | null;
+  /** Só para o RH: a pessoa já tem acesso ao portal? / já foi habilitada por outro caminho enquanto o pedido esperava? */
+  tem_acesso?: boolean;
+  ja_habilitado?: boolean;
+}
+export interface OpcaoSolicitacao {
+  id: number;
+  nome: string;
+  cargo: string;
+  departamento: string;
+}
+export const opcoesSolicitacaoHabilitacao = () => gravar<OpcaoSolicitacao[]>("habilitacao_solicitacao_opcoes", {});
+export const listarSolicitacoesHabilitacao = () => gravar<SolicitacaoHabilitacao[]>("habilitacao_solicitacoes_listar", {});
+export const solicitarHabilitacao = (colaboradorId: number, justificativa: string) =>
+  gravar<{ id: number; notificacao: { enviados: number; falhas: number; destinatarios: number } }>("habilitacao_solicitar", { colaborador_id: colaboradorId, justificativa });
+export const decidirSolicitacaoHabilitacao = (id: number, decisao: "aprovar" | "rejeitar", justificativa: string, criarAcesso: boolean) =>
+  gravar<{ ok: boolean; status: string }>("habilitacao_solicitacao_decidir", { id, decisao, justificativa, criar_acesso: criarAcesso });
 export const listarHabilitacoes = () => gravar<Habilitacao[]>("habilitacao_listar", {});
 export const opcoesHabilitacao = () => gravar<OpcaoHabilitacao[]>("habilitacao_opcoes", {});
 export const listarPendencias = (incluirTeste = false) => gravar<Pendencias>("pendencias_listar", { incluir_teste: incluirTeste });

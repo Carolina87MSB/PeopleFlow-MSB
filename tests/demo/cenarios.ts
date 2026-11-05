@@ -84,31 +84,39 @@ export async function executarCenarios(d: Demo): Promise<Resultado> {
   const sondas = ["necessidade_registrar", "habilidade_ativo", "habilitacao_opcoes", "reacao_resumo", "lista_mestra_salvar"] as const;
   const corpoSonda = (acao: string, alvo: number) => (acao === "necessidade_registrar" ? { colaborador_id: alvo, descricao: "Necessidade de teste (homologação)", categoria: "tecnica", justificativa: "Teste da permissão" } : acao === "habilidade_ativo" ? { id: 1, ativo: false, motivo: "x" } : acao === "lista_mestra_salvar" ? { codigo: "X-1", titulo: "x", revisao_atual: "01", novo: true } : {});
   const antesGustavo: Record<string, number> = {};
-  await passo("Antes: Manuela não abre o módulo; Gustavo (gestor) abre como Gestor e não está habilitado", "Manuela 403; Gustavo perfil Gestor, habilitado=false", async () => {
+  await passo("Antes: Manuela não abre o módulo; Gustavo (gestor) abre como Gestor e JÁ é autorizado a registrar treinamentos, sem habilitação do RH", "Manuela 403; Gustavo perfil Gestor, habilitado=true (perfil + escopo de liderança) e nenhuma habilitação criada", async () => {
     if ((await d.chamar("manuela", "sessao")).c !== 403) throw new Error("Manuela deveria estar sem acesso");
     const g = await d.chamar("gustavo", "sessao");
-    if (g.b.perfil !== "Gestor" || g.b.habilitado !== false || g.b.podeRegistrar !== false) throw new Error(json(g.b));
+    if (g.b.perfil !== "Gestor" || g.b.habilitado !== true || g.b.podeRegistrar !== true) throw new Error(json(g.b));
+    if ((await d.q("select count(*)::int n from public.peopleflow_dev_responsaveis_gestao"))[0].n !== 0) throw new Error("o gestor não depende de habilitação");
     for (const a of sondas) antesGustavo[a] = (await d.chamar("gustavo", a, corpoSonda(a, 8))).c;
-    await espera("gustavo", "treinamento_salvar", cad({ titulo: "Sem habilitação", responsavel_colaborador_id: 7 }), 403);
-    return `Gustavo antes: ${json(antesGustavo)}; tentativa de registrar → 403 (acompanha, não administra)`;
+    return `Gustavo registra e administra a área dele sem habilitação; nos outros módulos: ${json(antesGustavo)}`;
   });
-  await passo("RH habilita Manuela (gestão: Beatriz) e Gustavo (gestão: Henrique) pela tela de Habilitações, com a referência da liderança", "Duas habilitações ativas, com área, gestão, data e quem habilitou", async () => {
-    const opc = await espera("rh", "habilitacao_opcoes", {}, 200);
-    const m = opc.find((o: any) => o.id === 3);
-    igual([m.gestor_id, m.habilitado, m.tem_acesso], [2, false, true], "opções de Manuela");
-    await espera("rh", "habilitacao_conceder", { colaborador_id: 3, gestor_colaborador_id: 2, referencia: REF }, 200);
-    await espera("rh", "habilitacao_conceder", { colaborador_id: 7, gestor_colaborador_id: 11, referencia: REF + " — gestor operando treinamentos" }, 200);
+  await passo("Beatriz (gestora) SOLICITA a habilitação de Manuela com justificativa; o RH é avisado por e-mail; a solicitação fica Pendente e ainda não vale", "Solicitação pendente; e-mail ao RH com colaborador, gestora, área, justificativa e link; Manuela segue sem acesso; pedido duplicado recusado", async () => {
+    const r = await espera("bia", "habilitacao_solicitar", { colaborador_id: 3, justificativa: "Manuela conduz as sessões de Garantia da Qualidade e precisa registrar e concluir treinamentos." }, 200);
+    ids.solicitacaoManuela = r.id;
+    await espera("bia", "habilitacao_solicitar", { colaborador_id: 3, justificativa: "de novo" }, 409);
+    await espera("gustavo", "habilitacao_solicitar", { colaborador_id: 3, justificativa: "não é da minha equipe" }, 403);
+    if (d.emails.length !== 1 || !/^ana\./i.test(d.emails[0].to)) throw new Error("e-mail ao RH (Ana): " + json(d.emails));
+    for (const x of ["Manuela Castro", "Beatriz Gomes", "Qualidade", "Garantia da Qualidade", "/desenvolvimento/treinamentos/pendencias"]) if (!d.emails[0].text.includes(x)) throw new Error(`o e-mail não traz "${x}"`);
+    if ((await d.chamar("manuela", "sessao")).c !== 403) throw new Error("antes da aprovação Manuela não tem acesso");
+    return `Pendente (nº ${r.id}); e-mail enviado ao RH: "${d.emails[0].subject}"; duplicidade e equipe alheia recusadas`;
+  });
+  await passo("O RH aprova a solicitação em Pendências (autor, data, justificativa); só então Manuela é habilitada, com a gestão de Beatriz", "Habilitação ativa criada pela aprovação; solicitação aprovada com decisor e data", async () => {
+    const pend = (await espera("rh", "habilitacao_solicitacoes_listar", {}, 200)).filter((x: any) => x.status === "pendente");
+    igual(pend.map((x: any) => x.colaborador.nome), ["Manuela Castro"], "pendentes do RH");
+    await espera("rh", "habilitacao_solicitacao_decidir", { id: ids.solicitacaoManuela, decisao: "aprovar", justificativa: "De acordo com a liderança." }, 200);
     const l = await espera("rh", "habilitacao_listar", {}, 200);
     const mm = l.find((x: any) => x.colaborador.id === 3);
-    if (!mm?.ativa || mm.gestao.nome !== "Beatriz Gomes" || mm.habilitado_por !== "Ana Ribeiro" || !mm.habilitado_em) throw new Error(json(mm));
-    return "Manuela e Gustavo listados como habilitados, com gestão, data e autor";
+    if (!mm?.ativa || mm.gestao.nome !== "Beatriz Gomes" || mm.habilitado_por !== "Ana Ribeiro" || !mm.habilitado_em || !/^Solicitação nº/.test(mm.referencia)) throw new Error(json(mm));
+    const s = (await espera("bia", "habilitacao_solicitacoes_listar", {}, 200))[0];
+    if (s.status !== "aprovada" || s.decisor !== "Ana Ribeiro") throw new Error(json(s));
+    return "Manuela habilitada (gestão Beatriz) pela aprovação; a decisão aparece para a Beatriz e para o RH";
   });
-  await passo("Permissões nos demais módulos NÃO mudam: Gustavo segue Gestor e faz o mesmo que antes; Manuela não ganha nada além dos Treinamentos", "Gustavo: mesmos resultados de antes; Manuela: tudo fora dos Treinamentos recusado", async () => {
-    const g = await d.chamar("gustavo", "sessao");
-    if (g.b.perfil !== "Gestor" || g.b.habilitado !== true) throw new Error(json(g.b));
+  await passo("Permissões nos demais módulos NÃO mudam: Gustavo (autorizado pelo perfil) e Manuela (habilitada) só ganham os Treinamentos", "Gustavo: mesmos resultados; Manuela: tudo fora dos Treinamentos recusado", async () => {
     const depois: Record<string, number> = {};
     for (const a of sondas) depois[a] = (await d.chamar("gustavo", a, corpoSonda(a, 8))).c;
-    igual(depois, antesGustavo, "ações do Gustavo antes × depois");
+    igual(depois, antesGustavo, "ações do Gustavo");
     const m = await d.chamar("manuela", "sessao");
     if (m.b.perfil !== "Responsavel" || m.b.habilitado !== true) throw new Error(json(m.b));
     const manu: Record<string, number> = {};
@@ -116,7 +124,7 @@ export async function executarCenarios(d: Demo): Promise<Resultado> {
     if (Object.values(manu).some((c) => c !== 403)) throw new Error("Manuela deveria ser recusada: " + json(manu));
     const mods = await d.q("select user_id::text u, count(*)::int n from public.module_access where user_id in ('" + porToken("gustavo")!.uuid + "','" + porToken("manuela")!.uuid + "') group by 1");
     if (mods.some((x) => x.n !== 2)) throw new Error("módulos de acesso inalterados: " + json(mods));
-    return `Gustavo depois: ${json(depois)} (igual ao de antes) · Manuela: ${json(manu)} · acessos a módulos inalterados (2 cada)`;
+    return `Gustavo: ${json(depois)} · Manuela: ${json(manu)} · acessos a módulos inalterados (2 cada)`;
   });
   await passo("Colaboradora com menos de seis meses e sem conta (Camila): o RH habilita criando SOMENTE o acesso ao PeopleFlow", "Pede confirmação explícita; conta criada só com o módulo peopleflow (sem SST)", async () => {
     await espera("rh", "habilitacao_conceder", { colaborador_id: 10, gestor_colaborador_id: 2, referencia: REF }, 422);
@@ -151,9 +159,10 @@ export async function executarCenarios(d: Demo): Promise<Resultado> {
     await qrConfirma("juliana", s, ["paulo"]);
     await espera("juliana", "presenca_manual", { treinamento_id: s, participante_ids: [(await part(s, 10)).id], presenca: "presente", motivo: "Sem acesso ao celular: lista física" }, 200);
     await anexar("manuela", s, "ata", "ata-da-sessao.pdf");
-    for (const tok of ["gustavo", "bia"]) await espera(tok, "qr_gerar", { treinamento_id: s }, 403);
+    await espera("gustavo", "qr_gerar", { treinamento_id: s }, 403); // gestor de OUTRA área
+    await espera("bia", "qr_gerar", { treinamento_id: s }, 200); // a gestora da ÁREA administra o treinamento, sem habilitação
     await espera("davi", "qr_gerar", { treinamento_id: s }, 401); // Davi nem abre o módulo ainda
-    return "Manuela e Juliana fizeram o ciclo; Gustavo e Beatriz (que acompanha) recebem 403 nas ações administrativas; Davi (sem habilitação) nem abre o módulo";
+    return "Manuela e Juliana fizeram o ciclo; Beatriz (gestora da área) também administra e Gustavo (outra área) recebe 403; Davi (sem habilitação) nem abre o módulo";
   });
   cen = 5;
   await passo("Renata e Rafael ficam ausentes: Manuela registra a ausência; sem encaminhamento a sessão NÃO conclui e a conferência explica o motivo", "Impedimento: ausentes sem encaminhamento", async () => {
@@ -334,7 +343,7 @@ export async function executarCenarios(d: Demo): Promise<Resultado> {
     if (!mine.treinamentos.length) throw new Error("Meus treinamentos segue funcionando");
     return `Pendente de transferir: ${rev.pendentes[0].codigo}; treinamento concluído intacto; Davi segue vendo as próprias participações`;
   });
-  await passo("RH transfere o treinamento pendente para Gustavo (habilitado), com motivo; tenta transferir para quem não é habilitado e para um concluído", "Transferência registrada com histórico; as inválidas são recusadas; quem registrou não muda", async () => {
+  await passo("RH transfere o treinamento pendente para Gustavo (gestor, elegível como responsável), com motivo; tenta transferir para quem não é habilitado e para um concluído", "Transferência registrada com histórico; as inválidas são recusadas; quem registrou não muda", async () => {
     const T = (extra: Record<string, unknown>) => ({ treinamento_id: ids.davi2, para_colaborador_id: 7, motivo_tipo: "revogacao", motivo: "Revogação da habilitação do responsável anterior", ...extra });
     await espera("rh", "treinamento_transferir", T({ para_colaborador_id: 9 }), 422);
     await espera("rh", "treinamento_transferir", T({ treinamento_id: ids.davi1 }), 422);
@@ -344,7 +353,7 @@ export async function executarCenarios(d: Demo): Promise<Resultado> {
     igual([Number(nova.responsavel_colaborador_id), Number(nova.solicitado_por_colaborador_id)], [7, 8], "novo responsável; quem registrou permanece");
     const h = await espera("rh", "transferencias_listar", { treinamento_id: ids.davi2 }, 200);
     igual([h[0].de, h[0].para, h[0].por, h[0].motivo_tipo], ["Davi Moura", "Gustavo Reis", "Ana Ribeiro", "revogacao"], "histórico da transferência");
-    await espera("gustavo", "treinamento_conferir", { id: ids.davi2 }, 200); // Gustavo, habilitado e agora responsável, administra
+    await espera("gustavo", "treinamento_conferir", { id: ids.davi2 }, 200); // Gustavo, gestor e agora responsável, administra
     const hist = await espera("gustavo", "treinamento_historico", { treinamento_id: ids.davi2 }, 200);
     if (!hist.some((e: any) => e.rotulo === "Responsabilidade transferida pelo RH")) throw new Error("a transferência aparece no histórico");
     const l = (await espera("rh", "habilitacao_listar", {}, 200)).find((x: any) => x.colaborador.id === 8);

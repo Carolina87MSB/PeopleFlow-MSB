@@ -67,12 +67,13 @@ function mensagem(e: unknown) {
 }
 
 /** Permissões exibidas na tela — espelho das regras do servidor, que sempre confere de novo.
- * ADMINISTRA: RH, ou colaborador com a habilitação do RH vinculado ao treinamento como responsável principal ou instrutor interno.
- * A liderança (Gestor) ACOMPANHA a sua área, somente leitura, a menos que também administre por estar habilitada e vinculada. */
+ * ADMINISTRA: RH; o Gestor, nos treinamentos da sua área (registrados por ele ou pelo seu escopo, ou com o responsável principal no seu escopo);
+ * ou colaborador com a habilitação do RH vinculado ao treinamento como responsável principal ou instrutor interno.
+ * O Gestor só ACOMPANHA (somente leitura) treinamento de outra área em que um liderado participa. */
 function permissoes(t: Treinamento, perfil: string, colaboradorId: number, daGestao: boolean, habilitado: boolean) {
   const ehRH = perfil === "RH";
   const vinculo = t.responsavel_colaborador_id === colaboradorId || t.instrutor_colaborador_id === colaboradorId;
-  const conduz = vinculo && habilitado;
+  const conduz = (vinculo && habilitado) || (perfil === "Gestor" && daGestao);
   const encerrado = t.status === "concluido" || t.status === "cancelado";
   const externo = t.modalidade === "externo";
   // Planejamento (editar/cancelar): quem administra até o início da realização; RH sempre (retificação após concluído).
@@ -142,7 +143,8 @@ export default function TreinamentoPage() {
   if (!t) return <SemTreinamento />;
 
   // Área acompanhada pela liderança: registrado por mim ou por alguém do meu escopo (somente consulta).
-  const daGestao = perfil === "Gestor" && (t.solicitado_por_colaborador_id === colaboradorId || (t.solicitado_por_colaborador_id != null && pessoaPorId.has(t.solicitado_por_colaborador_id)));
+  const daAreaDe = (id: number | null) => id != null && (id === colaboradorId || pessoaPorId.has(id));
+  const daGestao = perfil === "Gestor" && (daAreaDe(t.solicitado_por_colaborador_id) || daAreaDe(t.responsavel_colaborador_id));
   const p = permissoes(t, perfil, colaboradorId, daGestao, habilitado);
   const nome = (cid: number | null) => (cid ? (pessoasDoTreino.dados?.get(cid)?.nome ?? `#${cid}`) : "—");
   const ativos = (participantes.dados ?? []).filter((x) => !x.removido_em);
@@ -307,7 +309,7 @@ export default function TreinamentoPage() {
             <RealizacaoResumo t={t} podeAlterar={p.podeRealizacao} onSalvar={(corpo) => acao("treinamento_realizacao", { id: t.id, ...corpo }, "Dados da realização atualizados.")} />
           )}
 
-          {p.acompanha && <p className={styles.dica}>Você acompanha este treinamento (somente consulta). Quem o administra é o responsável principal ou o instrutor habilitado; o RH pode intervir.</p>}
+          {p.acompanha && <p className={styles.dica}>Você acompanha este treinamento (somente consulta), porque colaboradores da sua equipe participam. Ele é de outra área: quem o administra é o responsável principal, o instrutor habilitado, o gestor da área e o RH.</p>}
           {erroAcao && <Erro mensagem={erroAcao} />}
           <div className={styles.acoesResumo}>
             {p.ehRH && t.status === "solicitado" && (

@@ -240,15 +240,9 @@ async function sessao(req: VercelRequest, res: VercelResponse) {
     .map((r) => ({ id: r.id, nome: r.nome, cargo: r.cargo ?? "", departamento: r.departamento ?? "" }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  // Habilitado = RH, ou colaborador (inclusive Gestor) com habilitação ativa. Só o habilitado registra e administra treinamentos;
-  // o Gestor sem habilitação acompanha a sua área (somente leitura).
-  let habilitado = conta.perfil === "RH";
-  if (conta.perfil === "Gestor") {
-    const { data: hab, error: habErro } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("id").eq("colaborador_id", eu.id).eq("ativo", true).limit(1);
-    habilitado = !habErro && (hab?.length ?? 0) > 0;
-  } else if (conta.perfil === "Responsavel") {
-    habilitado = true;
-  }
+  // Autorizado a registrar e administrar treinamentos: RH e Gestor (automático, pelo perfil e pelo escopo de liderança) e o colaborador
+  // habilitado pelo RH (perfil Responsavel, só entra com habilitação ativa).
+  const habilitado = conta.perfil === "RH" || conta.perfil === "Gestor" || conta.perfil === "Responsavel";
   res.status(200).json({ instalado: true, perfil: conta.perfil, colaboradorId: eu.id, pessoas, podeRegistrar: habilitado, habilitado });
 }
 

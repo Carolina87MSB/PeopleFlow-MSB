@@ -39,7 +39,7 @@ insert into public.colaboradores (id, nome, cargo, departamento, gestor) values
  (7,'${NOMES[7]}','Técnico','Qualidade','Outro'),(8,'${NOMES[8]}','Auxiliar','Produção','${NOMES[2]}'),(9,'${NOMES[9]}','Operador','Produção','${NOMES[2]}');
 insert into public.peopleflow_descricoes_cargo (cargo_nome) values ('Operador'),('Supervisora'),('Supervisor'),('Conferente'),('Técnico'),('Analista de RH'),('Auxiliar');
 `);
-for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_habilitacao_responsaveis.sql"]) await db.exec(SQL(f));
+for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_habilitacao_responsaveis.sql", "desenvolvimento_solicitacao_habilitacao.sql"]) await db.exec(SQL(f));
 await db.exec(`
 insert into public.peopleflow_dev_lista_mestra (codigo,titulo,revisao_atual,situacao) values ('P-PR-001','Montagem da sonda','03','vigente'),('I-PR-010','Inspeção final','01','vigente');
 `);
@@ -104,12 +104,16 @@ const confirmaQr = async (tok: string, quem: string[], tid: number) => {
 const sessaoOk = async (tok: string) => { const r = await sessao(tok); if (r.c !== 200) throw new Error(`${tok}: sessão ${r.c} ${jsonDe(r.b)}`); return r.b; };
 
 console.log("1. Habilitação pelo RH (permanente, vinculada à gestão, rastreável; sem outros módulos)");
-await t("Antes da habilitação ninguém além de RH/Gestor abre o módulo, nem sendo designado; Gestor SEM habilitação acompanha mas não registra", async () => {
+await t("Antes da habilitação ninguém além de RH/Gestor abre o módulo, nem sendo designado; o Gestor é autorizado automaticamente (perfil + escopo), sem habilitação", async () => {
   await sessaoOk("rh"); await sessaoOk("ge"); await sessaoOk("gil");
   for (const tok of ["resp", "hugo", "p4", "p3"]) if ((await sessao(tok)).c !== 403) throw new Error(tok + " não deveria abrir o módulo sem habilitação");
   const bia = await sessaoOk("ge");
-  if (bia.perfil !== "Gestor" || bia.habilitado !== false || bia.podeRegistrar !== false) throw new Error("Gestora sem habilitação acompanha, não registra: " + jsonDe(bia));
-  await espera("ge", "treinamento_salvar", cad({ titulo: "Sem habilitação", responsavel_colaborador_id: 2 }), 403);
+  if (bia.perfil !== "Gestor" || bia.habilitado !== true || bia.podeRegistrar !== true) throw new Error("Gestora é autorizada pelo perfil e pelo escopo, sem habilitação do RH: " + jsonDe(bia));
+  const gil = await sessaoOk("gil");
+  if (gil.habilitado !== true || gil.podeRegistrar !== true) throw new Error("todo Gestor é autorizado: " + jsonDe(gil));
+  // a autorização do Gestor está liberada (422 de regra de negócio, não 403): o responsável precisa ser do RH, gestor ou habilitado
+  await espera("ge", "treinamento_salvar", cad({ titulo: "Responsável sem habilitação", responsavel_colaborador_id: 3 }), 422);
+  if ((await q("select count(*)::int n from public.peopleflow_dev_responsaveis_gestao"))[0].n !== 0) throw new Error("o Gestor não depende de habilitação (nenhuma foi criada)");
 });
 await t("O RH habilita com a referência da liderança; os demais perfis não; uma habilitação ativa por colaborador; sem a referência não habilita", async () => {
   for (const [tok, st] of [["ge", 403], ["gil", 403], ["resp", 401], ["p4", 401]] as const) await espera(tok, "habilitacao_conceder", { colaborador_id: 7, referencia: REF }, st); // quem ainda nem abriu o módulo recebe 401
@@ -177,8 +181,10 @@ await t("Os DOIS (responsável e instrutor internos habilitados) administram o c
     ["participantes_opcoes", { treinamento_id: TQ }], ["treinamento_conferir", { id: TQ }], ["participantes_adicionar", { treinamento_id: TQ, colaborador_ids: tok === "hugo" ? [3, 5, 9] : [2, 10] }],
   ];
   for (const tok of ["hugo", "resp"]) for (const [acao, corpo] of ops(tok)) await espera(tok, acao, corpo, 200);
-  // habilitado de OUTRA área (Davi), a Gestora que acompanha e a Gestora de outra área: nenhuma operação
-  for (const tok of ["p4", "ge", "gil"]) {
+  // a Gestora da ÁREA (Hugo é da equipe dela) administra, sem habilitação: o mesmo conjunto de leitura/conferência (sem alterar a turma aqui)
+  for (const [acao, corpo] of [["participantes_opcoes", { treinamento_id: TQ }], ["treinamento_conferir", { id: TQ }]] as [string, Record<string, unknown>][]) await espera("ge", acao, corpo, 200);
+  // habilitado de OUTRA área (Davi) e a Gestora de outra área (Gil): nenhuma operação
+  for (const tok of ["p4", "gil"]) {
     for (const [acao, corpo] of [["participantes_adicionar", { treinamento_id: TQ, colaborador_ids: [1] }], ["participantes_opcoes", { treinamento_id: TQ }], ["treinamento_iniciar", { id: TQ }], ["treinamento_realizacao", { id: TQ, carga_realizada_min: 60 }], ["qr_gerar", { treinamento_id: TQ }], ["treinamento_conferir", { id: TQ }], ["treinamento_concluir", { id: TQ }], ["treinamento_cancelar", { id: TQ, motivo: "x" }], ["lista_presenca_gerar", { treinamento_id: TQ }], ["gravacao_definir", { treinamento_id: TQ, permitir: true }], ["evidencia_upload_url", { treinamento_id: TQ, tipo: "ata", file_name: "a.pdf", mime: "application/pdf", tamanho_bytes: 10 }], ["treinamento_reposicao", { treinamento_id: TQ }], ["reposicao_faltantes", { treinamento_id: TQ }], ["treinamento_transferir", { treinamento_id: TQ, para_colaborador_id: 4, motivo_tipo: "outro", motivo: "x" }]] as const)
       await espera(tok, acao, corpo as Record<string, unknown>, 403);
   }
@@ -510,9 +516,9 @@ await t("Telas: Habilitações (RH habilita/revoga; liderança só consulta), Pe
   for (const x of ["habilitacao_conceder", "habilitacao_revogar", "Referência da solicitação da liderança", "Criar acesso ao portal (somente Treinamentos)", "Histórico de revogações", "treinamento_transferir", "ehRH &&"]) if (!hab.includes(x)) throw new Error("Habilitações sem " + x);
   if (/responsavel_gestao_indicar|responsaveis_gestao_listar/.test(hab + ler("src/features/desenvolvimento/devRepository.ts"))) throw new Error("ações antigas de indicação ainda referenciadas");
   const lista = ler("src/features/desenvolvimento/TreinamentosPage.tsx");
-  if (!/id: "pendencias" as const, rotulo: "Pendências"/.test(lista) || !/perfil === "RH" \|\| perfil === "Gestor" \|\| habilitado/.test(lista) || !/<PendenciasAba \/>/.test(lista) || !/perfil === "RH" \? "Habilitações" : "Habilitados na minha área"/.test(lista)) throw new Error("aba Pendências e botão de habilitações");
+  if (!/id: "pendencias" as const, rotulo: "Pendências"/.test(lista) || !/perfil === "RH" \|\| perfil === "Gestor" \|\| habilitado/.test(lista) || !/<PendenciasAba \/>/.test(lista) || !/perfil === "RH" \? "Habilitações" : "Habilitações da equipe"/.test(lista)) throw new Error("aba Pendências e botão de habilitações");
   const pag = ler("src/features/desenvolvimento/TreinamentoPage.tsx");
-  if (!/const conduz = vinculo && habilitado;/.test(pag) || !/podeConcluir: opera && emExecucao/.test(pag) || !/<PainelConclusao/.test(pag) || !/Você acompanha este treinamento \(somente consulta\)/.test(pag) || !/TransferirResponsabilidade/.test(pag)) throw new Error("permissões da página: administra = habilitado + vínculo; liderança acompanha");
+  if (!/const conduz = \(vinculo && habilitado\) \|\| \(perfil === "Gestor" && daGestao\);/.test(pag) || !/podeConcluir: opera && emExecucao/.test(pag) || !/<PainelConclusao/.test(pag) || !/Você acompanha este treinamento \(somente consulta\)/.test(pag) || !/TransferirResponsabilidade/.test(pag)) throw new Error("permissões da página: administra = habilitado + vínculo, ou Gestor da área; o Gestor de outra área acompanha");
   if (/ehRH && \(t\.status === "em_andamento" \|\| externoPlanejado\) && \(\s*<Button variant="success"/.test(pag)) throw new Error("concluir não é mais só do RH");
   const conc = ler("src/features/desenvolvimento/ConclusaoEAusencias.tsx");
   for (const x of ["Impede a conclusão", "Permanece pendente depois de concluir", "não encerra a reposição individual", "Dispensar da reposição", "Não registre dados de saúde", "Reposição pendente", "Sem encaminhamento"]) if (!conc.includes(x)) throw new Error("conferência/ausência sem " + x);
@@ -545,10 +551,10 @@ await t("Ajustes de usabilidade: botões e textos novos (presença, transferênc
   if (iTransf < 0 || (iTransf > iDet && iTransf < iFimDet)) throw new Error("transferência fora de 'Mais detalhes'");
   const lista = ler("src/features/desenvolvimento/TreinamentosPage.tsx");
   if (!/\(perfil === "RH" \|\| \(perfil === "Gestor" && habilitado\)\) && \(\s*<label className=\{styles\.check\}>/.test(lista)) throw new Error("filtro 'Só os que conduzo' só para quem pode conduzir");
-  if (!/perfil === "RH" \? "Habilitações" : "Habilitados na minha área"/.test(lista) || /Responsáveis habilitados"\}/.test(lista) || /precisa habilitá-lo/.test(lista)) throw new Error("textos do Gestor: consulta; habilitar é do RH");
+  if (!/perfil === "RH" \? "Habilitações" : "Habilitações da equipe"/.test(lista) || /Responsáveis habilitados"\}/.test(lista) || /precisa habilitá-lo/.test(lista)) throw new Error("textos do Gestor: solicita a habilitação; a decisão é do RH");
   const hab = ler("src/features/desenvolvimento/Habilitacoes.tsx");
   if (!/Área e liderança que solicitou \*/.test(hab) || !/liderança: \{l\.nome\}/.test(hab) || /\(opcoes\.dados \?\? \[\]\)\.map\(\(o\) => \(\s*<option key=\{o\.id\} value=\{o\.id\}>\s*\{o\.nome\}/.test(hab)) throw new Error("seleção por área e liderança (sem lista indistinta de colaboradores)");
-  if (!/habilitar e revogar é feito pelo RH|Habilitar e revogar é feito pelo RH/.test(hab)) throw new Error("o Gestor não habilita");
+  if (!/aprovar e revogar é do RH/.test(hab) || !/<SolicitarHabilitacao \/>/.test(hab)) throw new Error("o Gestor solicita; aprovar e revogar é do RH");
   const form = ler("src/features/desenvolvimento/TreinamentoForm.tsx");
   if (/Local ou link/.test(form) || !/>\s*Local\s*<span className=\{styles\.iconeInfo\}/.test(form) || !/Microsoft Teams, Sala de Treinamento, Ambiente virtual — SharePoint/.test(form) || !/<Info size=\{14\}/.test(form)) throw new Error("campo 'Local' com ícone de informação e exemplos");
   if (!/value=\{form\.local_link\}/.test(form)) throw new Error("o valor histórico segue no campo (nada é sobrescrito)");
@@ -668,6 +674,173 @@ await t("Interno com palestrante de fora: não exige certificado nem evidência 
   await espera("rh", "evidencia_registrar", { treinamento_id: ext, path: u.path, tipo: "comprovante", file_name: "comprovante-do-curso.pdf" }, 200);
   await espera("rh", "treinamento_concluir", { id: ext }, 200);
   if ((await q(`select count(*)::int n from public.peopleflow_dev_evidencias where treinamento_id=${ext} and participante_id is not null`))[0].n !== 0) throw new Error("sem exigir evidência por participante");
+});
+
+console.log("10. Gestor autorizado automaticamente (perfil + escopo) e solicitação de habilitação aprovada pelo RH");
+let TA1 = 0, TA2 = 0, TA3 = 0;
+await t("O Gestor registra e administra os treinamentos da SUA área sem habilitação: registrados por ele/pelo escopo ou com o responsável principal no escopo (mesmo registrados pelo RH); outra área não", async () => {
+  // registrados pelo RH: A1 (responsável do RH: fora da área), A2 (responsável = Bia: dentro da área da Bia), A3 (responsável = Gil: área do Gil)
+  TA1 = (await espera("rh", "treinamento_salvar", cad({ titulo: "A1 do RH", responsavel_colaborador_id: 1 }), 200)).id;
+  TA2 = (await espera("rh", "treinamento_salvar", cad({ titulo: "A2 responsável da equipe da Bia", responsavel_colaborador_id: 2 }), 200)).id;
+  TA3 = (await espera("rh", "treinamento_salvar", cad({ titulo: "A3 responsável da equipe do Gil", responsavel_colaborador_id: 6 }), 200)).id;
+  // Bia administra A2 (responsável na equipe dela, registrado pelo RH), mas não A1 nem A3
+  await espera("ge", "participantes_adicionar", { treinamento_id: TA2, colaborador_ids: [3, 5] }, 200);
+  await espera("ge", "treinamento_iniciar", { id: TA2 }, 200);
+  await espera("ge", "qr_gerar", { treinamento_id: TA2 }, 200);
+  for (const tid of [TA1, TA3]) {
+    await espera("ge", "participantes_adicionar", { treinamento_id: tid, colaborador_ids: [3] }, 403);
+    await espera("ge", "treinamento_iniciar", { id: tid }, 403);
+  }
+  // Gil administra A3 (responsável é ele) e nada da Bia
+  await espera("gil", "participantes_adicionar", { treinamento_id: TA3, colaborador_ids: [4] }, 200);
+  await espera("gil", "treinamento_iniciar", { id: TA2 }, 403);
+  // a leitura direta no banco acompanha: Bia lê A2 (e a turma toda), não A1 nem A3; Gil lê A3, não A2
+  if (jsonDe(await ids(U.ge, `select id from public.peopleflow_dev_treinamentos where id in (${TA1}, ${TA2}, ${TA3}) order by id`)) !== jsonDe([TA2])) throw new Error("Bia lê só a A2: " + jsonDe(await ids(U.ge, `select id from public.peopleflow_dev_treinamentos where id in (${TA1}, ${TA2}, ${TA3}) order by id`)));
+  if (jsonDe(await ids(U.gil, `select id from public.peopleflow_dev_treinamentos where id in (${TA1}, ${TA2}, ${TA3}) order by id`)) !== jsonDe([TA3])) throw new Error("Gil lê só a A3");
+  // registro pelo próprio Gestor, sem habilitação: nasce da área dele (ele administra), mesmo com responsável de outra pessoa elegível
+  const meu = (await espera("ge", "treinamento_salvar", cad({ titulo: "Registrado pela Bia", responsavel_colaborador_id: 2, instrutor_colaborador_id: 7 }), 200)).id;
+  await espera("ge", "participantes_adicionar", { treinamento_id: meu, colaborador_ids: [9] }, 200);
+  await espera("ge", "treinamento_salvar", cad({ id: meu, titulo: "Registrado pela Bia", responsavel_colaborador_id: 2, instrutor_colaborador_id: 7, observacao: "ok" }), 200);
+  await espera("gil", "treinamento_salvar", cad({ id: meu, titulo: "Registrado pela Bia" }), 403);
+  await espera("ge", "treinamento_cancelar", { id: meu, motivo: "Registro de teste da regra" }, 200);
+  // o Gestor é elegível como responsável principal; um colaborador comum sem habilitação continua não sendo
+  await espera("rh", "treinamento_salvar", cad({ titulo: "Responsável comum", responsavel_colaborador_id: 3 }), 422);
+});
+
+// ── solicitação de habilitação ──
+await db.exec(`create table if not exists public.peopleflow_notificacoes_email (
+  id bigint generated always as identity primary key, tipo text not null, destinatario_nome text not null, destinatario_email text, referencia_tipo text not null, referencia_id text not null,
+  chave_dedup text not null, status text not null default 'pendente_envio', tentativas integer not null default 0, erro text, motivo_ignorado text, contexto jsonb not null default '{}'::jsonb,
+  ultima_tentativa_em timestamptz, enviado_em timestamptz, criado_em timestamptz not null default now(),
+  constraint peopleflow_notificacoes_email_chave_unica unique (chave_dedup), constraint peopleflow_notificacoes_email_status_valido check (status in ('pendente_envio', 'enviado', 'erro', 'ignorado')))`);
+const emailsEnviados: { to: string; subject: string; text: string; html: string }[] = [];
+let falharEnvio = false;
+const depsNotif = {
+  supabase: fake as never,
+  resolverEmail: async (nome: string) => ({ email: emailOf(nome) }),
+  enviarEmail: async (m: { to: string; subject: string; text: string; html: string }) => { if (falharEnvio) throw new Error("SMTP indisponível"); emailsEnviados.push(m); },
+  baseUrl: "https://portal.exemplo.test",
+};
+acoes.definirDependenciasNotificacao(depsNotif);
+const gatilhos = await import(pathToFileURL(`${PF}/api/_lib/notificacoesGatilhos.ts`).href);
+/** Quem nunca abriu o módulo (ou perdeu a sessão) recebe 401; quem abriu e não pode, 403: nos dois casos, sem acesso. */
+const semAcesso = async (tok: string, acao: string, corpo: Record<string, unknown>) => { const r = await chamar(tok, acao, corpo); if (![401, 403].includes(r.c)) throw new Error(`${tok} → ${acao}: esperado 401/403, veio ${r.c}`); };
+let S1 = 0, S2 = 0;
+await t("Solicitar habilitação: só o Gestor, só colaborador da PRÓPRIA equipe, com justificativa; sem duplicidade enquanto pendente; não vale antes da decisão do RH", async () => {
+  const JUST = "Caio conduz as integrações da Produção e precisa registrar e concluir os treinamentos.";
+  await espera("rh", "habilitacao_solicitar", { colaborador_id: 3, justificativa: JUST }, 403); // quem decide não solicita
+  for (const tok of ["resp", "hugo", "p4"]) await semAcesso(tok, "habilitacao_solicitar", { colaborador_id: 3, justificativa: JUST });
+  await espera("p3", "habilitacao_solicitar", { colaborador_id: 5, justificativa: JUST }, 401); // sem sessão do módulo
+  await espera("ge", "habilitacao_solicitar", { colaborador_id: 3 }, 422); // justificativa obrigatória
+  await espera("ge", "habilitacao_solicitar", { colaborador_id: 2, justificativa: JUST }, 422); // o gestor já é autorizado
+  await espera("ge", "habilitacao_solicitar", { colaborador_id: 4, justificativa: JUST }, 403); // Davi é da equipe do Gil
+  await espera("gil", "habilitacao_solicitar", { colaborador_id: 3, justificativa: JUST }, 403); // Caio é da equipe da Bia
+  await espera("ge", "habilitacao_solicitar", { colaborador_id: 999, justificativa: JUST }, 403);
+  const opcoesAntes = await espera("ge", "habilitacao_solicitacao_opcoes", {}, 200);
+  if (!opcoesAntes.some((o: any) => o.id === 3) || opcoesAntes.some((o: any) => [2, 4].includes(o.id))) throw new Error("opções da Bia: só a equipe dela, sem ela mesma: " + jsonDe(opcoesAntes.map((o: any) => o.id)));
+  await espera("rh", "habilitacao_solicitacao_opcoes", {}, 403);
+  const r = await espera("ge", "habilitacao_solicitar", { colaborador_id: 3, justificativa: JUST }, 200);
+  S1 = r.id;
+  if (!S1 || r.notificacao.enviados !== 1 || r.notificacao.destinatarios !== 1) throw new Error("o RH foi avisado: " + jsonDe(r));
+  await espera("ge", "habilitacao_solicitar", { colaborador_id: 3, justificativa: "de novo" }, 409); // já há uma pendente
+  if ((await q("select count(*)::int n from public.peopleflow_dev_habilitacao_solicitacoes where colaborador_id=3 and status='pendente'"))[0].n !== 1) throw new Error("uma pendente por colaborador");
+  if ((await espera("ge", "habilitacao_solicitacao_opcoes", {}, 200)).some((o: any) => o.id === 3)) throw new Error("com pedido pendente o colaborador sai das opções");
+  // nada vale antes da aprovação: Caio ainda não abre o módulo nem registra
+  await espera("p3", "treinamento_salvar", cad({ titulo: "Antes da aprovação", responsavel_colaborador_id: 3 }), 401);
+  if ((await q("select count(*)::int n from public.peopleflow_dev_responsaveis_gestao where colaborador_id=3"))[0].n !== 0) throw new Error("a solicitação não cria habilitação");
+  // quem vê o quê: o RH vê tudo (com os sinais para decidir); Bia vê as suas; Gil nenhuma; leitura direta no banco igual
+  const lr = await espera("rh", "habilitacao_solicitacoes_listar", {}, 200);
+  const sr = lr.find((x: any) => x.id === S1);
+  if (!sr || sr.status !== "pendente" || sr.colaborador.nome !== NOMES[3] || sr.solicitante.nome !== NOMES[2] || sr.departamento !== "Produção" || sr.justificativa !== JUST || sr.tem_acesso !== true || sr.ja_habilitado !== false) throw new Error("RH vê o pedido completo: " + jsonDe(sr));
+  if ((await espera("ge", "habilitacao_solicitacoes_listar", {}, 200)).map((x: any) => x.id).join() !== String(S1)) throw new Error("Bia vê só as suas");
+  if ((await espera("gil", "habilitacao_solicitacoes_listar", {}, 200)).length !== 0) throw new Error("Gil não vê pedidos da Bia");
+  await semAcesso("resp", "habilitacao_solicitacoes_listar", {});
+  const lido = async (uid: string) => (await como(uid, "select id from public.peopleflow_dev_habilitacao_solicitacoes order by id")).map((x) => Number(x.id)).join();
+  if ((await lido(U.rh)) !== String(S1) || (await lido(U.ge)) !== String(S1) || (await lido(U.gil)) !== "" || (await lido(U.hugo)) !== "") throw new Error("leitura direta: RH tudo, solicitante as próprias, os demais nada");
+  await db.exec("set role authenticated");
+  try {
+    for (const sql of ["insert into public.peopleflow_dev_habilitacao_solicitacoes (colaborador_id, solicitante_colaborador_id, justificativa) values (5, 2, 'x')", "update public.peopleflow_dev_habilitacao_solicitacoes set status='aprovada'", "delete from public.peopleflow_dev_habilitacao_solicitacoes"]) {
+      try { await db.exec(sql); throw new Error("o navegador gravou"); } catch (e) { if ((e as Error).message === "o navegador gravou") throw e; }
+    }
+  } finally { await db.exec("reset role"); }
+});
+await t("E-mail ao RH: identifica colaborador, gestor, área, justificativa e o link; usa a infraestrutura existente (log com chave única); o log não guarda a justificativa; falha do e-mail não derruba o pedido", async () => {
+  if (emailsEnviados.length !== 1) throw new Error("um e-mail por pessoa do RH com conta no módulo: " + emailsEnviados.length);
+  const m = emailsEnviados[0];
+  if (m.to !== emailOf(NOMES[1]) || !/Solicitação de habilitação aguardando análise/.test(m.subject)) throw new Error("destinatário/assunto: " + m.to + " | " + m.subject);
+  for (const x of [NOMES[3], NOMES[2], "Produção", "Caio conduz as integrações da Produção", "https://portal.exemplo.test/desenvolvimento/treinamentos/pendencias"]) if (!m.text.includes(x) || !m.html.includes(x.replace(/&/g, "&amp;"))) throw new Error(`o e-mail não traz "${x}"`);
+  const log = await q(`select tipo, status, chave_dedup, contexto, destinatario_email from public.peopleflow_notificacoes_email where tipo='habilitacao_solicitada'`);
+  if (log.length !== 1 || log[0].status !== "enviado" || log[0].chave_dedup !== `habilitacao_solicitada:${S1}:1` || jsonDe(log[0].contexto) !== jsonDe({ solicitacao_id: S1 })) throw new Error("log de notificações: " + jsonDe(log));
+  if (/Caio conduz|integrações/.test(jsonDe(log))) throw new Error("o log não pode guardar a justificativa");
+  // reprocessar a mesma solicitação não reenvia (chave única)
+  const de_novo = await gatilhos.notificarSolicitacaoDeHabilitacao(S1, depsNotif);
+  if (de_novo.enviados !== 0 || emailsEnviados.length !== 1) throw new Error("reprocessar não reenvia: " + jsonDe(de_novo));
+  // falha do SMTP: o pedido segue registrado e o gestor é avisado de que o RH não foi notificado
+  falharEnvio = true;
+  const r = await espera("ge", "habilitacao_solicitar", { colaborador_id: 5, justificativa: "Eva substitui a Caio nas integrações." }, 200);
+  falharEnvio = false;
+  S2 = r.id;
+  if (r.notificacao.enviados !== 0 || r.notificacao.falhas !== 1) throw new Error("falha reportada: " + jsonDe(r));
+  if ((await q(`select status from public.peopleflow_dev_habilitacao_solicitacoes where id=${S2}`))[0].status !== "pendente") throw new Error("o pedido segue pendente");
+  const l2 = await q(`select status, erro from public.peopleflow_notificacoes_email where chave_dedup='habilitacao_solicitada:${S2}:1'`);
+  if (l2.length !== 1 || l2[0].status !== "erro" || !/SMTP/.test(l2[0].erro)) throw new Error("falha registrada no log: " + jsonDe(l2));
+});
+await t("RH decide: só o RH; rejeitar exige justificativa; a decisão registra autor, data e justificativa; aprovar cria a habilitação (gestão = o gestor solicitante) e só então vale; decidida não se decide de novo", async () => {
+  await espera("ge", "habilitacao_solicitacao_decidir", { id: S1, decisao: "aprovar" }, 403);
+  await semAcesso("resp", "habilitacao_solicitacao_decidir", { id: S1, decisao: "aprovar" });
+  await espera("rh", "habilitacao_solicitacao_decidir", { id: S2, decisao: "rejeitar" }, 422); // justificativa obrigatória ao rejeitar
+  await espera("rh", "habilitacao_solicitacao_decidir", { id: S2, decisao: "talvez", justificativa: "x" }, 422);
+  await espera("rh", "habilitacao_solicitacao_decidir", { id: 99999, decisao: "aprovar" }, 404);
+  await espera("rh", "habilitacao_solicitacao_decidir", { id: S2, decisao: "rejeitar", justificativa: "A Caio já cobre as integrações; reavaliar no próximo ciclo." }, 200);
+  const rej = (await q(`select status, decidido_por, decisor_colaborador_id, decidido_em, decisao_justificativa, habilitacao_id from public.peopleflow_dev_habilitacao_solicitacoes where id=${S2}`))[0];
+  if (rej.status !== "rejeitada" || rej.decidido_por !== U.rh || Number(rej.decisor_colaborador_id) !== 1 || !rej.decidido_em || !/próximo ciclo/.test(rej.decisao_justificativa) || rej.habilitacao_id !== null) throw new Error("rejeição registrada: " + jsonDe(rej));
+  if ((await q("select count(*)::int n from public.peopleflow_dev_responsaveis_gestao where colaborador_id=5"))[0].n !== 0) throw new Error("rejeitar não habilita");
+  await espera("rh", "habilitacao_solicitacao_decidir", { id: S2, decisao: "aprovar" }, 409); // já decidida
+  // aprovar (justificativa opcional): cria a habilitação com a gestão da solicitante e a referência da solicitação
+  const ap = await espera("rh", "habilitacao_solicitacao_decidir", { id: S1, decisao: "aprovar", justificativa: "De acordo." }, 200);
+  if (ap.status !== "aprovada" || !ap.habilitacao_id) throw new Error(jsonDe(ap));
+  const apr = (await q(`select status, decidido_por, decisor_colaborador_id, decisao_justificativa, habilitacao_id from public.peopleflow_dev_habilitacao_solicitacoes where id=${S1}`))[0];
+  if (apr.status !== "aprovada" || apr.decidido_por !== U.rh || Number(apr.decisor_colaborador_id) !== 1 || apr.decisao_justificativa !== "De acordo." || Number(apr.habilitacao_id) !== ap.habilitacao_id) throw new Error("aprovação registrada: " + jsonDe(apr));
+  const hab = (await espera("rh", "habilitacao_listar", {}, 200)).find((x: any) => x.colaborador.id === 3 && x.ativa);
+  if (!hab || hab.gestao.id !== 2 || !/^Solicitação nº \d+ do\(a\) gestor\(a\) Bia Gestora, em \d{2}\/\d{2}\/\d{4}$/.test(hab.referencia) || hab.habilitado_por !== NOMES[1]) throw new Error("habilitação criada pela aprovação: " + jsonDe(hab));
+  await espera("rh", "habilitacao_solicitacao_decidir", { id: S1, decisao: "rejeitar", justificativa: "x" }, 409);
+  // agora vale: Caio abre o módulo como Responsavel e registra o que ele mesmo vai administrar
+  const caio = await sessaoOk("p3");
+  if (caio.perfil !== "Responsavel" || caio.habilitado !== true) throw new Error(jsonDe(caio));
+  const tc = (await espera("p3", "treinamento_salvar", cad({ titulo: "Registrado pelo Caio", responsavel_colaborador_id: 3 }), 200)).id;
+  // …e a Bia, gestora da área dele, também administra esse treinamento (responsável da equipe dela)
+  await espera("ge", "participantes_adicionar", { treinamento_id: tc, colaborador_ids: [5] }, 200);
+  // a decisão fica no histórico: imutável no banco (não se altera, não se apaga)
+  for (const sql of [`update public.peopleflow_dev_habilitacao_solicitacoes set decisao_justificativa='outra' where id=${S1}`, `update public.peopleflow_dev_habilitacao_solicitacoes set status='pendente' where id=${S2}`, `delete from public.peopleflow_dev_habilitacao_solicitacoes where id=${S1}`, `update public.peopleflow_dev_habilitacao_solicitacoes set justificativa='x' where id=${S2}`]) {
+    try { await db.exec(sql); throw new Error("alterou o histórico"); } catch (e) { if ((e as Error).message === "alterou o histórico") throw e; }
+  }
+  // histórico para quem pediu e para o RH (com decisor e justificativa); auditoria de cada passo
+  const hb = (await espera("ge", "habilitacao_solicitacoes_listar", {}, 200)).map((x: any) => `${x.id}:${x.status}:${x.decisor ?? "-"}`).sort().join();
+  if (hb !== [`${S1}:aprovada:${NOMES[1]}`, `${S2}:rejeitada:${NOMES[1]}`].sort().join()) throw new Error("Bia acompanha o resultado: " + hb);
+  const aud = (await q("select acao, count(*)::int n from public.peopleflow_dev_auditoria where acao like 'habilitacao_solicit%' group by acao order by acao")).map((x) => `${x.acao}:${x.n}`).join();
+  if (aud !== "habilitacao_solicitacao_aprovada:1,habilitacao_solicitacao_rejeitada:1,habilitacao_solicitada:2") throw new Error("auditoria: " + aud);
+});
+await t("Revogar a habilitação aprovada continua só com o RH e preserva o histórico (solicitação aprovada e habilitação revogada); depois cabe um novo pedido", async () => {
+  const hab = (await espera("rh", "habilitacao_listar", {}, 200)).find((x: any) => x.colaborador.id === 3 && x.ativa);
+  await espera("ge", "habilitacao_revogar", { id: hab.id, motivo: "x" }, 403);
+  await espera("rh", "habilitacao_revogar", { id: hab.id, motivo: "Caio mudou de função" }, 200);
+  const l = (await espera("rh", "habilitacao_listar", {}, 200)).find((x: any) => x.id === hab.id);
+  if (l.ativa || l.revogado_motivo !== "Caio mudou de função") throw new Error("histórico da revogação");
+  if ((await q(`select status from public.peopleflow_dev_habilitacao_solicitacoes where id=${S1}`))[0].status !== "aprovada") throw new Error("a solicitação aprovada permanece no histórico");
+  const nova = await espera("ge", "habilitacao_solicitar", { colaborador_id: 3, justificativa: "Voltou a conduzir treinamentos." }, 200);
+  await espera("rh", "habilitacao_solicitacao_decidir", { id: nova.id, decisao: "rejeitar", justificativa: "Aguardar o próximo ciclo." }, 200);
+});
+await t("Telas e rotas: formulário e acompanhamento do Gestor, painel de decisão do RH em Pendências, permissões de área na página; sem nova função de API", async () => {
+  const ler = (f: string) => fs.readFileSync(`${PF}/${f}`, "utf8");
+  const sol = ler("src/features/desenvolvimento/SolicitacoesHabilitacao.tsx");
+  for (const x of ["Solicitar habilitação", "Colaborador da equipe *", "Justificativa *", "Minhas solicitações", "Solicitações de habilitação pendentes", "Aprovar", "Rejeitar", "Aprovar habilitação", "Rejeitar solicitação", "Histórico de solicitações", "decidirSolicitacaoHabilitacao"]) if (!sol.includes(x)) throw new Error("tela sem " + x);
+  if (!/<SolicitacoesPendentesRH \/>/.test(ler("src/features/desenvolvimento/PendenciasAba.tsx"))) throw new Error("RH decide em Pendências");
+  const pag = ler("src/features/desenvolvimento/TreinamentoPage.tsx");
+  if (!/const conduz = \(vinculo && habilitado\) \|\| \(perfil === "Gestor" && daGestao\);/.test(pag) || !/daAreaDe\(t\.responsavel_colaborador_id\)/.test(pag)) throw new Error("permissões da página: Gestor administra a área");
+  const api = ler("api/_lib/desenvolvimentoAcoes.ts");
+  if (!/function daAreaDoGestor/.test(api) || !/habilitacao_solicitar: habilitacaoSolicitar/.test(api)) throw new Error("servidor");
+  const funcoes = fs.readdirSync(`${PF}/api`).filter((f) => f.endsWith(".ts")).length;
+  if (funcoes !== 11) throw new Error("continuam 11 funções da Vercel: " + funcoes);
 });
 
 console.log(`\n${ok} passaram, ${falhas} falharam`);

@@ -42,6 +42,8 @@ export interface Demo {
   db: PGlite;
   fake: ReturnType<typeof criarFake>;
   chamar: (token: string, acao: string, corpo?: Record<string, unknown>) => Promise<{ c: number; b: any }>;
+  /** E-mails que o servidor enviaria ao RH (a demonstração nunca envia e-mail de verdade). */
+  emails: { to: string; subject: string; text: string }[];
   q: (sql: string) => Promise<any[]>;
 }
 
@@ -75,18 +77,31 @@ insert into public.colaboradores (id, nome, cargo, departamento, gestor, admissa
 insert into public.peopleflow_descricoes_cargo (cargo_nome) values ${[...new Set(PESSOAS.map((p) => p.cargo))].map((c) => `('${c}')`).join(",")};
 `);
   for (const p of PESSOAS.filter((x) => !x.semConta)) await db.exec(`insert into auth.users (id) values ('${p.uuid}'); insert into public.module_access (user_id, modulo, concedido_por) values ('${p.uuid}', 'peopleflow', 'demonstração'), ('${p.uuid}', 'sst', 'demonstração');`);
-  for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_habilitacao_responsaveis.sql"]) await db.exec(SQL(f));
+  for (const f of ["desenvolvimento_fase1.sql", "desenvolvimento_fase2.sql", "desenvolvimento_fase4.sql", "desenvolvimento_fase5.sql", "desenvolvimento_fase5b_homologacao.sql", "desenvolvimento_fase5c_registro.sql", "desenvolvimento_fase5d_habilidades_dc.sql", "desenvolvimento_avaliacao_reacao.sql", "desenvolvimento_participacao_gravacao.sql", "desenvolvimento_habilitacao_responsaveis.sql", "desenvolvimento_solicitacao_habilitacao.sql"]) await db.exec(SQL(f));
   await db.exec("insert into public.peopleflow_dev_lista_mestra (codigo,titulo,revisao_atual,situacao) values ('POP-QUA-012','Pesagem de insumos','02','vigente'),('IT-LOG-005','Recebimento de materiais','01','vigente')");
   const { emailOf } = await import(pathToFileURL(`${RAIZ}/src/domain/hierarquia.ts`).href);
   const usuarios: Record<string, { id: string; email: string }> = {};
   for (const p of PESSOAS.filter((x) => !x.semConta)) usuarios[p.token] = { id: p.uuid, email: emailOf(p.nome) };
   const fake = criarFake(db, usuarios);
   atual = fake;
+  await db.exec(`create table public.peopleflow_notificacoes_email (
+    id bigint generated always as identity primary key, tipo text not null, destinatario_nome text not null, destinatario_email text, referencia_tipo text not null, referencia_id text not null,
+    chave_dedup text not null, status text not null default 'pendente_envio', tentativas integer not null default 0, erro text, motivo_ignorado text, contexto jsonb not null default '{}'::jsonb,
+    ultima_tentativa_em timestamptz, enviado_em timestamptz, criado_em timestamptz not null default now(),
+    constraint peopleflow_notificacoes_email_chave_unica unique (chave_dedup), constraint peopleflow_notificacoes_email_status_valido check (status in ('pendente_envio', 'enviado', 'erro', 'ignorado')))`);
+  const emails: Demo["emails"] = [];
+  const acoes = await import(pathToFileURL(`${RAIZ}/api/_lib/desenvolvimentoAcoes.ts`).href);
+  acoes.definirDependenciasNotificacao({
+    supabase: fake as never,
+    resolverEmail: async (nome: string) => ({ email: emailOf(nome) }),
+    enviarEmail: async (m: { to: string; subject: string; text: string }) => { emails.push({ to: m.to, subject: m.subject, text: m.text }); },
+    baseUrl: "http://localhost:5191",
+  });
   const h = await handler();
   const chamar: Demo["chamar"] = async (token, acao, corpo = {}) => {
     const res: any = { c: 0, b: null, status(c: number) { this.c = c; return this; }, json(b: unknown) { this.b = b; } };
     await h({ method: "POST", query: { acao }, headers: token ? { authorization: `Bearer ${token}` } : {}, body: corpo }, res);
     return res;
   };
-  return { db, fake, chamar, q };
+  return { db, fake, chamar, q, emails };
 }

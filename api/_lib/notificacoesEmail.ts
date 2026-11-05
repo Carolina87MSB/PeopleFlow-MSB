@@ -23,7 +23,7 @@ import { buildEmailHtml } from "../../src/domain/emailTemplate.js";
 import { emailOf } from "../../src/domain/hierarquia.js";
 
 import { COLUNAS_SITUACAO, emailDeColaboradorDesligado, type LinhaSituacao } from "./situacaoColaboradores.js";
-export type TipoNotificacao = "mp_aguardando_acao" | "experiencia_vencimento" | "vaga_aprovacao";
+export type TipoNotificacao = "mp_aguardando_acao" | "experiencia_vencimento" | "vaga_aprovacao" | "habilitacao_solicitada";
 
 export const CATALOGO_NOTIFICACOES: Record<TipoNotificacao, { pendencia: string; referenciaTipo: string }> = {
   mp_aguardando_acao: {
@@ -37,6 +37,10 @@ export const CATALOGO_NOTIFICACOES: Record<TipoNotificacao, { pendencia: string;
   vaga_aprovacao: {
     pendencia: "Aprovação do preenchimento de uma vaga",
     referenciaTipo: "vaga",
+  },
+  habilitacao_solicitada: {
+    pendencia: "Solicitação de habilitação para administrar treinamentos",
+    referenciaTipo: "habilitacao_solicitacao",
   },
 };
 
@@ -85,6 +89,48 @@ export function montarEmailPendencia(p: { nome: string; pendencia: string; url: 
       detalhes: [{ label: "Pendência", valor: p.pendencia }],
       paragrafosAposDetalhes: [acesse],
       cta: { label: "Acessar o PeopleFlow", url: p.url },
+      rodape: [aviso, assinatura],
+    }),
+  };
+}
+
+export interface DadosSolicitacaoHabilitacao {
+  nomeRH: string;
+  colaborador: string;
+  gestor: string;
+  area: string;
+  justificativa: string;
+  url: string;
+}
+
+/** E-mail ao RH quando um gestor solicita a habilitação de um colaborador da equipe. Diferente do modelo genérico de pendência, este
+ * identifica as pessoas, a área e a justificativa (pedido do RH para esta solicitação). A justificativa só existe na tabela de solicitações:
+ * o log de notificações guarda apenas o id (contexto sem dado pessoal). Orientação ao gestor: não registrar dados de saúde. */
+export function montarEmailSolicitacaoHabilitacao(p: DadosSolicitacaoHabilitacao): EmailMontado {
+  const nome = primeiroNome(p.nomeRH);
+  const subject = "PeopleFlow | Solicitação de habilitação aguardando análise";
+  const intro = "Um gestor solicitou, pelo Portal de Treinamentos, a habilitação de um colaborador da equipe para administrar treinamentos.";
+  const acesse = "Acesse o PeopleFlow para aprovar ou rejeitar a solicitação:";
+  const aviso = "Este é um e-mail automático. Não é necessário respondê-lo.";
+  const assinatura = "RH | MSB – Medical System do Brasil";
+  const detalhes = [
+    { label: "Colaborador", valor: p.colaborador },
+    { label: "Gestor solicitante", valor: p.gestor },
+    { label: "Área", valor: p.area || "—" },
+    { label: "Justificativa", valor: p.justificativa },
+  ];
+  return {
+    subject,
+    text: [`Olá, ${nome}!`, ``, intro, ``, ...detalhes.map((d) => `${d.label}: ${d.valor}`), ``, acesse, p.url, ``, aviso, assinatura].join("\n"),
+    html: buildEmailHtml({
+      accentColor: COR_ACENTO,
+      accentBg: COR_ACENTO_BG,
+      badgeLabel: "Solicitação de habilitação",
+      title: `Olá, ${nome}!`,
+      paragrafos: [intro],
+      detalhes,
+      paragrafosAposDetalhes: [acesse],
+      cta: { label: "Analisar no PeopleFlow", url: p.url },
       rodape: [aviso, assinatura],
     }),
   };
@@ -180,6 +226,8 @@ export interface PedidoNotificacao {
    * enviada. Só compara com ESTA ação — participar de uma etapa anterior não
    * bloqueia nada. Omitido (ex.: cron) = nunca ignora. */
   atorEmail?: string;
+  /** Modelo de mensagem próprio do tipo (padrão: o modelo genérico de pendência, sem dado pessoal). */
+  montarEmail?: (ctx: { nome: string; url: string }) => EmailMontado;
   /** Quando quem chama já sabe que não há como notificar (ex.: colaborador sem
    * gestor cadastrado), registra a linha como "erro" com este motivo, sem
    * tentar resolver e-mail nem enviar — o caso fica visível no log. */
@@ -265,7 +313,7 @@ export async function notificar(pedido: PedidoNotificacao, deps: DependenciasNot
   if (id === null) return { resultado: "duplicada" };
 
   const url = `${(deps.baseUrl ?? baseUrlDoPortal()).replace(/\/+$/, "")}${pedido.rota}`;
-  const email = montarEmailPendencia({ nome: pedido.destinatarioNome, pendencia: catalogo.pendencia, url });
+  const email = pedido.montarEmail ? pedido.montarEmail({ nome: pedido.destinatarioNome, url }) : montarEmailPendencia({ nome: pedido.destinatarioNome, pendencia: catalogo.pendencia, url });
 
   try {
     await enviarEmail({ to: resolucao.email, ...email });

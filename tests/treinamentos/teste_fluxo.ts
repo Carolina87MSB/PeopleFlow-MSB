@@ -43,6 +43,7 @@ await db.exec(F5B);
 await db.exec(F5C);
 await db.exec(F5D);
 await db.exec(SQL("desenvolvimento_habilitacao_responsaveis.sql"));
+await db.exec(SQL("desenvolvimento_solicitacao_habilitacao.sql"));
 await db.exec(`
 insert into public.peopleflow_dev_contas values ('${U.rh}',1,'RH',now()),('${U.ge}',2,'Gestor',now()),('${U.resp}',7,'Responsavel',now());
 insert into public.peopleflow_dev_responsaveis_gestao (gestor_colaborador_id, colaborador_id, referencia) values (1,2,'fixture do teste: habilitação concedida pelo RH'),(1,7,'fixture do teste: habilitação concedida pelo RH');
@@ -631,8 +632,8 @@ await t("C4. Responsável habilitado registra (PLANEJADO), monta a turma e só v
   // treinamento de OUTRO responsável (a Gestora): o habilitado não o administra, mesmo sendo da mesma gestão
   tGe2 = (await espera("gestor", "treinamento_salvar", base("desenvolvimento", "interno", { titulo: "Do gestor", responsavel_colaborador_id: 2 }), 200)).id;
   await espera("p3", "participantes_adicionar", { treinamento_id: tGe2, colaborador_ids: [5] }, 403);
-  // …e a Gestora só ACOMPANHA o do habilitado (leitura): não monta a turma dele
-  await espera("gestor", "participantes_adicionar", { treinamento_id: tDel, colaborador_ids: [1] }, 403);
+  // …e a Gestora da ÁREA (o responsável principal é da equipe dela) administra o do habilitado, automaticamente
+  await espera("gestor", "participantes_adicionar", { treinamento_id: tDel, colaborador_ids: [2] }, 200);
   const vg = await como(U.ge, `select colaborador_id from public.peopleflow_dev_participantes where treinamento_id=${tDel} order by 1`);
   if (vg.map((x) => Number(x.colaborador_id)).join() !== "2,4,5") throw new Error("gestor deveria ver a turma do treinamento da gestão: " + JSON.stringify(vg));
   // visão do habilitado: só o que administra (responsável ou instrutor interno); nunca a gestão inteira nem a empresa
@@ -1160,6 +1161,7 @@ await t("rollback da Fase 5 aplica com dados, volta os nomes da Fase 1 e é repe
   // As reversões vão em ordem inversa: a da habilitação (mais nova) primeiro. Ela se recusa a apagar encaminhamentos de ausência reais;
   // nesta réplica de teste os encaminhamentos são limpos para exercitar a cadeia inteira (a recusa é testada em teste_habilitacao_banco.ts).
   await db.exec("update public.peopleflow_dev_participantes set ausencia_justificativa=null, ausencia_encaminhamento=null, reposicao_prevista_em=null, dispensado_em=null, dispensado_por=null, dispensa_justificativa=null");
+  await db.exec(SQL("desenvolvimento_solicitacao_habilitacao_rollback.sql"));
   await db.exec(SQL("desenvolvimento_habilitacao_responsaveis_rollback.sql"));
   await db.exec(RB5D);
   await db.exec(RB5D); // regra antiga volta NOT VALID: sugestões já decididas continuam gravadas
@@ -1187,6 +1189,7 @@ await t("reaplicar as Fases 5, 5b e 5c após o rollback (com dados)", async () =
   await db.exec(F5C);
   await db.exec(F5D);
   await db.exec(SQL("desenvolvimento_habilitacao_responsaveis.sql"));
+await db.exec(SQL("desenvolvimento_solicitacao_habilitacao.sql"));
   const m = (await q("select distinct modalidade from public.peopleflow_dev_treinamentos")).map((x) => x.modalidade).sort().join();
   if (m !== "externo,interno") throw new Error(m);
 });

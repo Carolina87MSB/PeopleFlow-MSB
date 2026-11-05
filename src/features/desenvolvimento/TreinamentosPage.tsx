@@ -83,9 +83,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
     perfil === "Responsavel"
       ? "Treinamentos sob a sua responsabilidade (responsável principal ou instrutor interno habilitado)"
       : perfil === "Gestor"
-        ? habilitado
-          ? "Acompanhamento da sua área, mais os treinamentos que você administra como responsável ou instrutor"
-          : "Acompanhamento dos treinamentos da sua área (somente consulta). A habilitação de responsáveis é feita pelo RH, a partir da solicitação da liderança por e-mail."
+        ? "Treinamentos da sua área: você registra e administra. Os de outras áreas em que a sua equipe participa aparecem somente para consulta."
         : aba === "agenda"
           ? "Planejados e em andamento"
           : "Realizados e encerrados, do mais recente para o mais antigo";
@@ -100,7 +98,7 @@ function ListaTreinamentos({ aba }: { aba: "agenda" | "concluidos" }) {
         <div className={styles.acoes}>
           {(perfil === "Gestor" || perfil === "RH") && aba === "agenda" && (
             <Button variant="ghost" onClick={() => setHabilitacoes(true)}>
-              {perfil === "RH" ? "Habilitações" : "Habilitados na minha área"}
+              {perfil === "RH" ? "Habilitações" : "Habilitações da equipe"}
             </Button>
           )}
           {podeRegistrar && aba === "agenda" && (

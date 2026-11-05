@@ -20,14 +20,19 @@ import { gerarPdfListaPresenca, type ParticipanteLista } from "./listaPresencaPd
 import { ACOES_LNT, ErroLnt } from "./lntAcoes.js";
 import { ACOES_PDI_ENCERRAMENTO } from "./pdiEncerramentoAcoes.js";
 import { criarTriagemPdi } from "./pdiTriagemAcoes.js";
+import { notificarSolicitacaoDeHabilitacao } from "./notificacoesGatilhos.js";
+import type { DependenciasNotificacao } from "./notificacoesEmail.js";
 
 import { COLUNAS_SITUACAO, linhaAtiva } from "./situacaoColaboradores.js";
 export interface ContaDev {
   userId: string;
   colaboradorId: number;
   perfil: "RH" | "Gestor" | "Responsavel";
-  /** Habilitação permanente concedida pelo RH (consulta ao vivo). O RH não depende dela; sem ela ninguém administra treinamentos. */
+  /** Pode registrar treinamentos e ser responsável: RH e Gestor (automático, pelo perfil e pelo escopo de liderança) ou colaborador com a
+   * habilitação permanente concedida pelo RH (consulta ao vivo). */
   habilitado?: boolean;
+  /** Só Gestor: ids do escopo de liderança (equipe, em todos os níveis, mais ele mesmo), lidos uma vez por requisição. */
+  escopo?: Set<number>;
 }
 
 class ErroHttp extends Error {
@@ -57,6 +62,12 @@ async function exigirConta(req: VercelRequest): Promise<ContaDev> {
   }
   const perfil = data.perfil as ContaDev["perfil"];
   const colaboradorId = data.colaborador_id as number;
+  if (perfil === "Gestor") {
+    // O Gestor é autorizado pelo perfil e pelo escopo de liderança cadastrado no PeopleFlow: não depende de habilitação do RH.
+    const { data: esc, error: eErro } = await supabaseAdmin.from("peopleflow_dev_escopo").select("colaborador_id").eq("gestor_colaborador_id", colaboradorId);
+    if (eErro) throw new ErroHttp(500, eErro.message);
+    return { userId: userData.user.id, colaboradorId, perfil, habilitado: true, escopo: new Set([colaboradorId, ...(esc ?? []).map((r) => Number(r.colaborador_id))]) };
+  }
   return { userId: userData.user.id, colaboradorId, perfil, habilitado: perfil === "RH" ? true : await temHabilitacaoAtiva(colaboradorId) };
 }
 
@@ -715,21 +726,24 @@ async function lerTreinamento(id: number): Promise<Treinamento> {
 function ehResponsavel(conta: ContaDev, t: Treinamento): boolean {
   return [t.responsavel_colaborador_id, t.instrutor_colaborador_id].some((v) => v != null && Number(v) === conta.colaboradorId);
 }
-function ehSolicitante(conta: ContaDev, t: Treinamento): boolean {
-  return t.solicitado_por_colaborador_id != null && Number(t.solicitado_por_colaborador_id) === conta.colaboradorId;
-}
-/** ADMINISTRA o treinamento: RH; ou colaborador com a habilitação permanente concedida pelo RH que esteja vinculado a ele como
- * responsável principal ou instrutor INTERNO. O vínculo sozinho não basta (sem habilitação não há poder administrativo) e a
- * habilitação sozinha não dá acesso a treinamentos de outros responsáveis. Instrutor externo é só um nome: não tem login. */
-function ehAdministrador(conta: ContaDev, t: Treinamento): boolean {
-  return conta.perfil === "RH" || (conta.habilitado === true && ehResponsavel(conta, t));
-}
-/** Treinamento da minha GESTÃO — só ACOMPANHAMENTO (leitura): registrado por mim ou por alguém da minha equipe (perfil Gestor). */
-async function ehDaGestao(conta: ContaDev, t: Treinamento): Promise<boolean> {
+/** Treinamento da ÁREA do Gestor (escopo de liderança): registrado por ele ou por alguém do seu escopo, OU com o responsável principal no seu
+ * escopo (mesmo registrado pelo RH). Espelha peopleflow_dev_gere_treinamento no banco. Não inclui o instrutor: instrutor sozinho não traz a área. */
+function daAreaDoGestor(conta: ContaDev, t: Treinamento): boolean {
   if (conta.perfil !== "Gestor") return false;
-  if (ehSolicitante(conta, t)) return true;
-  if (t.solicitado_por_colaborador_id == null) return false;
-  return (await idsNoEscopo(conta)).has(Number(t.solicitado_por_colaborador_id));
+  const escopo = conta.escopo ?? new Set<number>();
+  const meu = (id: unknown) => id != null && (Number(id) === conta.colaboradorId || escopo.has(Number(id)));
+  return meu(t.solicitado_por_colaborador_id) || meu(t.responsavel_colaborador_id);
+}
+/** ADMINISTRA o treinamento: RH; o Gestor, nos treinamentos da sua área (automático, sem habilitação); ou colaborador com a habilitação
+ * permanente concedida pelo RH que esteja vinculado a ele como responsável principal ou instrutor INTERNO. O vínculo sozinho não basta
+ * (sem habilitação não há poder administrativo) e a habilitação sozinha não dá acesso a treinamentos de outros responsáveis.
+ * Instrutor externo é só um nome: não tem login. */
+function ehAdministrador(conta: ContaDev, t: Treinamento): boolean {
+  return conta.perfil === "RH" || (conta.habilitado === true && ehResponsavel(conta, t)) || daAreaDoGestor(conta, t);
+}
+/** Treinamento da área do Gestor (visão completa dos participantes e das evidências da turma). */
+async function ehDaGestao(conta: ContaDev, t: Treinamento): Promise<boolean> {
+  return daAreaDoGestor(conta, t);
 }
 /** O Gestor acompanha (somente leitura) os treinamentos da sua área: que a gestão registrou, cujo responsável/instrutor é da equipe, ou com participante da equipe. */
 async function gestorAcompanha(conta: ContaDev, t: Treinamento): Promise<boolean> {
@@ -758,15 +772,15 @@ async function podeGerirParticipantes(conta: ContaDev, t: Treinamento): Promise<
 async function podeVerTreinamento(conta: ContaDev, t: Treinamento): Promise<boolean> {
   return ehAdministrador(conta, t) || (await gestorAcompanha(conta, t));
 }
-/** Registrar treinamento: RH ou colaborador habilitado pelo RH. */
+/** Registrar treinamento: RH, Gestor (automático) ou colaborador habilitado pelo RH. */
 async function exigirPodeRegistrar(conta: ContaDev) {
-  if (conta.perfil === "RH" || conta.habilitado === true) return;
-  throw new ErroHttp(403, "Registrar treinamento exige a habilitação concedida pelo RH. Peça à sua liderança para solicitá-la ao RH.");
+  if (conta.perfil === "RH" || conta.perfil === "Gestor" || conta.habilitado === true) return;
+  throw new ErroHttp(403, "Registrar treinamento exige a habilitação concedida pelo RH. Peça à sua liderança para solicitá-la.");
 }
-/** Condução e registro operacional (iniciar, realização, presença, QR, evidências, gravação, concluir): RH ou responsável/instrutor interno HABILITADO. */
+/** Condução e registro operacional (iniciar, realização, presença, QR, evidências, gravação, concluir): RH, Gestor da área ou responsável/instrutor interno HABILITADO. */
 async function exigirConduzir(conta: ContaDev, t: Treinamento) {
   if (ehAdministrador(conta, t)) return;
-  throw new ErroHttp(403, "Somente o RH ou o responsável/instrutor interno habilitado deste treinamento.");
+  throw new ErroHttp(403, "Somente o RH, o gestor da área ou o responsável/instrutor interno habilitado deste treinamento.");
 }
 
 function semTabela(error: { code?: string; message?: string } | null): boolean {
@@ -781,7 +795,7 @@ async function temHabilitacaoAtiva(colaboradorId: number): Promise<boolean> {
   }
   return (data ?? []).length > 0;
 }
-/** Quem pode ser responsável PRINCIPAL: integrante do RH ou colaborador com habilitação ativa. */
+/** Quem pode ser responsável PRINCIPAL: integrante do RH, Gestor (perfil do PeopleFlow, automático) ou colaborador com habilitação ativa. */
 async function podemSerResponsaveis(ids: number[]): Promise<Set<number>> {
   const ok = new Set<number>();
   if (ids.length === 0) return ok;
@@ -790,9 +804,13 @@ async function podemSerResponsaveis(ids: number[]): Promise<Set<number>> {
   for (const h of hab ?? []) ok.add(Number(h.colaborador_id));
   const { data: cs, error: cErro } = await supabaseAdmin.from("colaboradores").select("id, nome, cargo, departamento").in("id", ids);
   if (cErro) erroBanco(cErro, "Colaborador");
+  // Gestor = quem aparece como gestor imediato de alguém (mesma regra de perfilOf/buildAccess do PeopleFlow).
+  const { data: gs, error: gErro } = await supabaseAdmin.from("colaboradores").select("gestor");
+  if (gErro) erroBanco(gErro, "Colaboradores");
+  const gestoresImediatos = new Set((gs ?? []).map((g) => String(g.gestor ?? "")).filter(Boolean));
   for (const c of cs ?? []) {
-    const perfil = perfilOf({ nome: String(c.nome), cargo: String(c.cargo ?? ""), depto: String(c.departamento ?? "") } as never, new Set<string>());
-    if (perfil === "RH") ok.add(Number(c.id));
+    const perfil = perfilOf({ nome: String(c.nome), cargo: String(c.cargo ?? ""), depto: String(c.departamento ?? "") } as never, gestoresImediatos);
+    if (perfil === "RH" || perfil === "Gestor") ok.add(Number(c.id));
   }
   return ok;
 }
@@ -802,13 +820,14 @@ async function podemSerResponsaveis(ids: number[]): Promise<Set<number>> {
 async function exigirResponsavelPrincipal(campos: { responsavel_colaborador_id: number | null; instrutor_colaborador_id: number | null }, conta: ContaDev) {
   const resp = campos.responsavel_colaborador_id;
   if (!resp) throw new ErroHttp(422, "Defina o responsável principal pelo treinamento.");
-  if (!(await podemSerResponsaveis([resp])).has(resp)) throw new ErroHttp(422, "O responsável principal precisa ser do RH ou ter a habilitação concedida pelo RH.");
+  if (!(await podemSerResponsaveis([resp])).has(resp)) throw new ErroHttp(422, "O responsável principal precisa ser do RH, gestor ou ter a habilitação concedida pelo RH.");
   if (conta.perfil === "Responsavel" && resp !== conta.colaboradorId && campos.instrutor_colaborador_id !== conta.colaboradorId) {
     throw new ErroHttp(422, "Quem registra o treinamento precisa ser o responsável principal ou o instrutor interno dele (senão perderia o acesso ao que registrou).");
   }
 }
 
 async function idsNoEscopo(conta: ContaDev): Promise<Set<number>> {
+  if (conta.escopo) return conta.escopo;
   const { data, error } = await supabaseAdmin.from("peopleflow_dev_escopo").select("colaborador_id").eq("gestor_colaborador_id", conta.colaboradorId);
   if (error) erroBanco(error, "Escopo");
   return new Set((data ?? []).map((r) => Number(r.colaborador_id)));
@@ -2041,12 +2060,17 @@ async function habilitacaoConceder(conta: ContaDev, corpo: Corpo) {
   exigirRH(conta);
   const colaboradorId = idObrigatorio(corpo, "colaborador_id", "Colaborador");
   const referencia = texto(corpo, "referencia", { obrigatorio: true, max: 500, rotulo: "a referência da solicitação da liderança (ex.: e-mail recebido, com a data)" });
+  return concederHabilitacao(conta, colaboradorId, corpo.gestor_colaborador_id ? idObrigatorio(corpo, "gestor_colaborador_id", "Gestão") : null, referencia, corpo.criar_acesso === true);
+}
+
+/** Núcleo da habilitação: usado pela concessão direta do RH e pela APROVAÇÃO de uma solicitação do Gestor (a regra é uma só). */
+async function concederHabilitacao(conta: ContaDev, colaboradorId: number, gestaoInformada: number | null, referencia: string, criarAcesso: boolean, extraAuditoria: Record<string, unknown> = {}) {
   const { data: c, error } = await supabaseAdmin.from("colaboradores").select(`id, nome, cargo, departamento, gestor, ${COLUNAS_SITUACAO}`).eq("id", colaboradorId).maybeSingle();
   if (error) erroBanco(error, "Colaborador");
   if (!c || !linhaAtiva(c)) throw new ErroHttp(422, "Colaborador não encontrado ou desligado.");
   if (await temHabilitacaoAtiva(colaboradorId)) throw new ErroHttp(409, "Este colaborador já está habilitado. Revogue a habilitação atual (com motivo) para vinculá-lo a outra gestão.");
   // Gestão/área: informada pelo RH ou a liderança imediata cadastrada.
-  let gestaoId: number | null = corpo.gestor_colaborador_id ? idObrigatorio(corpo, "gestor_colaborador_id", "Gestão") : null;
+  let gestaoId: number | null = gestaoInformada;
   if (!gestaoId) {
     const { data: lideres, error: lErro } = await supabaseAdmin.from("colaboradores").select(`id, nome, ${COLUNAS_SITUACAO}`).eq("nome", String(c.gestor ?? ""));
     if (lErro) erroBanco(lErro, "Colaboradores");
@@ -2068,7 +2092,7 @@ async function habilitacaoConceder(conta: ContaDev, corpo: Corpo) {
     moduloConcedido = Boolean(mod);
   }
   if (!userId || !moduloConcedido) {
-    if (corpo.criar_acesso !== true) {
+    if (criarAcesso !== true) {
       throw new ErroHttp(422, `${String(c.nome).split(" ")[0]} ainda não tem acesso ao portal. Marque "Criar acesso ao portal (somente Treinamentos)" para habilitar.`);
     }
     if (!userId) {
@@ -2089,8 +2113,152 @@ async function habilitacaoConceder(conta: ContaDev, corpo: Corpo) {
     .select("id")
     .single();
   if (iErro) erroBanco(iErro, "Habilitação");
-  await auditar(conta, "habilitacao_concedida", "peopleflow_dev_responsaveis_gestao", String(data.id), { colaborador_id: colaboradorId, gestor_colaborador_id: gestaoId, departamento: c.departamento ?? null, referencia, acesso_ao_portal: acesso });
+  await auditar(conta, "habilitacao_concedida", "peopleflow_dev_responsaveis_gestao", String(data.id), { colaborador_id: colaboradorId, gestor_colaborador_id: gestaoId, departamento: c.departamento ?? null, referencia, acesso_ao_portal: acesso, ...extraAuditoria });
   return { id: Number(data.id), acesso };
+}
+
+// ── Solicitação de habilitação: o Gestor solicita, o RH decide ────────────────────────────────────────
+const COLS_SOLIC = "id, colaborador_id, solicitante_colaborador_id, departamento, justificativa, status, solicitado_em, solicitado_por, decidido_em, decidido_por, decisor_colaborador_id, decisao_justificativa, habilitacao_id";
+
+let dependenciasNotificacao: DependenciasNotificacao = {};
+/** Só para testes: troca o cliente do banco, o resolvedor de e-mail e o envio usados ao avisar o RH. */
+export function definirDependenciasNotificacao(deps: DependenciasNotificacao) {
+  dependenciasNotificacao = deps;
+}
+
+function exigirGestor(conta: ContaDev) {
+  if (conta.perfil !== "Gestor") throw new ErroHttp(403, "Somente a liderança (gestor) solicita a habilitação de um colaborador da sua equipe.");
+}
+
+/** Gestor: colaboradores da sua equipe que podem ser objeto de uma solicitação (ativos, sem habilitação, sem pedido pendente, fora do RH/Gestor). */
+async function solicitacaoOpcoes(conta: ContaDev) {
+  exigirGestor(conta);
+  const escopo = [...(await idsNoEscopo(conta))].filter((id) => id !== conta.colaboradorId);
+  if (escopo.length === 0) return [];
+  const { data, error } = await supabaseAdmin.from("colaboradores").select(`id, nome, cargo, departamento, ${COLUNAS_SITUACAO}`).in("id", escopo);
+  if (error) erroBanco(error, "Colaboradores");
+  const ativos = (data ?? []).filter((c) => linhaAtiva(c));
+  const { data: pend, error: pErro } = await supabaseAdmin.from("peopleflow_dev_habilitacao_solicitacoes").select("colaborador_id").eq("status", "pendente");
+  if (pErro) erroBanco(pErro, "Solicitações");
+  const pendentes = new Set((pend ?? []).map((p) => Number(p.colaborador_id)));
+  const jaPodem = await podemSerResponsaveis(ativos.map((c) => Number(c.id))); // habilitados, RH e outros gestores já podem
+  return ativos
+    .filter((c) => !pendentes.has(Number(c.id)) && !jaPodem.has(Number(c.id)))
+    .map((c) => ({ id: Number(c.id), nome: String(c.nome), cargo: (c.cargo as string | null) ?? "", departamento: (c.departamento as string | null) ?? "" }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+async function habilitacaoSolicitar(conta: ContaDev, corpo: Corpo) {
+  exigirGestor(conta);
+  const colaboradorId = idObrigatorio(corpo, "colaborador_id", "Colaborador");
+  const justificativa = texto(corpo, "justificativa", { obrigatorio: true, max: 1000, rotulo: "a justificativa da solicitação" });
+  if (colaboradorId === conta.colaboradorId) throw new ErroHttp(422, "Você já é autorizado pelo seu perfil de gestor: solicite a habilitação de um colaborador da sua equipe.");
+  if (!(await idsNoEscopo(conta)).has(colaboradorId)) throw new ErroHttp(403, "Só é possível solicitar a habilitação de colaborador da sua equipe.");
+  await exigirColaboradoresAtivos([colaboradorId]);
+  if (await temHabilitacaoAtiva(colaboradorId)) throw new ErroHttp(409, "Este colaborador já está habilitado.");
+  if ((await podemSerResponsaveis([colaboradorId])).has(colaboradorId)) throw new ErroHttp(422, "Este colaborador já é autorizado pelo próprio perfil (RH ou gestor): não precisa de habilitação.");
+  const { data: pendente, error: peErro } = await supabaseAdmin.from("peopleflow_dev_habilitacao_solicitacoes").select("id").eq("colaborador_id", colaboradorId).eq("status", "pendente").limit(1);
+  if (peErro) erroBanco(peErro, "Solicitações");
+  if ((pendente ?? []).length) throw new ErroHttp(409, "Já existe uma solicitação pendente para este colaborador. Aguarde a decisão do RH.");
+  const { data: c, error: cErro } = await supabaseAdmin.from("colaboradores").select("departamento").eq("id", colaboradorId).maybeSingle();
+  if (cErro) erroBanco(cErro, "Colaborador");
+  const { data, error } = await supabaseAdmin
+    .from("peopleflow_dev_habilitacao_solicitacoes")
+    .insert({ colaborador_id: colaboradorId, solicitante_colaborador_id: conta.colaboradorId, departamento: (c?.departamento as string | null) ?? null, justificativa, solicitado_por: conta.userId })
+    .select("id")
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new ErroHttp(409, "Já existe uma solicitação pendente para este colaborador. Aguarde a decisão do RH.");
+    erroBanco(error, "Solicitação");
+  }
+  const id = Number(data.id);
+  await auditar(conta, "habilitacao_solicitada", "peopleflow_dev_habilitacao_solicitacoes", String(id), { colaborador_id: colaboradorId, solicitante_colaborador_id: conta.colaboradorId });
+  // O pedido já está salvo: o aviso por e-mail ao RH nunca derruba o pedido (se falhar, o RH o vê em Pendências).
+  let notificacao = { enviados: 0, falhas: 0, destinatarios: 0 };
+  try {
+    notificacao = await notificarSolicitacaoDeHabilitacao(id, dependenciasNotificacao);
+  } catch {
+    notificacao = { enviados: 0, falhas: 1, destinatarios: 0 };
+  }
+  return { id, notificacao };
+}
+
+async function habilitacaoSolicitacoesListar(conta: ContaDev) {
+  if (conta.perfil !== "RH" && conta.perfil !== "Gestor") throw new ErroHttp(403, "Somente o RH e as lideranças acompanham as solicitações de habilitação.");
+  let query = supabaseAdmin.from("peopleflow_dev_habilitacao_solicitacoes").select(COLS_SOLIC);
+  if (conta.perfil === "Gestor") query = query.eq("solicitante_colaborador_id", conta.colaboradorId);
+  const { data, error } = await query;
+  if (error) erroBanco(error, "Solicitações");
+  const linhas = (data ?? []) as Record<string, any>[];
+  const nomes = await nomesDeColaboradores(linhas.flatMap((r) => [Number(r.colaborador_id), Number(r.solicitante_colaborador_id), r.decisor_colaborador_id != null ? Number(r.decisor_colaborador_id) : 0]).filter((n) => n > 0));
+  const contas = conta.perfil === "RH" ? await contasDeAcesso() : new Map<string, string>();
+  const habilitados = new Set<number>();
+  if (conta.perfil === "RH" && linhas.some((r) => r.status === "pendente")) {
+    const { data: hab, error: hErro } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("colaborador_id").eq("ativo", true);
+    if (hErro) erroBanco(hErro, "Habilitações");
+    for (const h of hab ?? []) habilitados.add(Number(h.colaborador_id));
+  }
+  return linhas
+    .sort((a, b) => Number(b.status === "pendente") - Number(a.status === "pendente") || String(b.solicitado_em).localeCompare(String(a.solicitado_em)) || Number(b.id) - Number(a.id))
+    .map((r) => ({
+      id: Number(r.id),
+      status: r.status as "pendente" | "aprovada" | "rejeitada",
+      colaborador: { id: Number(r.colaborador_id), nome: nomes.get(Number(r.colaborador_id)) ?? "" },
+      solicitante: { id: Number(r.solicitante_colaborador_id), nome: nomes.get(Number(r.solicitante_colaborador_id)) ?? "" },
+      departamento: (r.departamento as string | null) ?? "",
+      justificativa: String(r.justificativa ?? ""),
+      solicitado_em: r.solicitado_em as string,
+      decidido_em: (r.decidido_em as string | null) ?? null,
+      decisor: r.decisor_colaborador_id != null ? (nomes.get(Number(r.decisor_colaborador_id)) ?? null) : null,
+      decisao_justificativa: (r.decisao_justificativa as string | null) ?? "",
+      habilitacao_id: r.habilitacao_id != null ? Number(r.habilitacao_id) : null,
+      // só o RH vê (decide): se a pessoa já tem acesso ao portal e se já foi habilitada por outro caminho enquanto o pedido esperava
+      ...(conta.perfil === "RH" ? { tem_acesso: contas.has(emailOf(nomes.get(Number(r.colaborador_id)) ?? "")), ja_habilitado: habilitados.has(Number(r.colaborador_id)) } : {}),
+    }));
+}
+
+async function habilitacaoSolicitacaoDecidir(conta: ContaDev, corpo: Corpo) {
+  exigirRH(conta);
+  const id = idObrigatorio(corpo, "id", "Solicitação");
+  const decisao = umDe(texto(corpo, "decisao", { obrigatorio: true, rotulo: "a decisão" }), ["aprovar", "rejeitar"] as const, "Decisão");
+  const justificativa = texto(corpo, "justificativa", { obrigatorio: decisao === "rejeitar", max: 1000, rotulo: "a justificativa da rejeição" });
+  const { data: s, error } = await supabaseAdmin.from("peopleflow_dev_habilitacao_solicitacoes").select(COLS_SOLIC).eq("id", id).maybeSingle();
+  if (error) erroBanco(error, "Solicitação");
+  if (!s) throw new ErroHttp(404, "Solicitação não encontrada.");
+  if (s.status !== "pendente") throw new ErroHttp(409, "Esta solicitação já foi decidida.");
+  const agora = new Date().toISOString();
+  let habilitacaoId: number | null = null;
+  let acesso: string | null = null;
+  if (decisao === "aprovar") {
+    const nomes = await nomesDeColaboradores([Number(s.solicitante_colaborador_id)]);
+    const dia = new Date(String(s.solicitado_em)).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const referencia = `Solicitação nº ${s.id} do(a) gestor(a) ${nomes.get(Number(s.solicitante_colaborador_id)) ?? "—"}, em ${dia}`;
+    const r = await concederHabilitacao(conta, Number(s.colaborador_id), Number(s.solicitante_colaborador_id), referencia, corpo.criar_acesso === true, { solicitacao_id: Number(s.id) });
+    habilitacaoId = r.id;
+    acesso = r.acesso;
+  }
+  const { data: atualizada, error: uErro } = await supabaseAdmin
+    .from("peopleflow_dev_habilitacao_solicitacoes")
+    .update({
+      status: decisao === "aprovar" ? "aprovada" : "rejeitada",
+      decidido_em: agora,
+      decidido_por: conta.userId,
+      decisor_colaborador_id: conta.colaboradorId,
+      decisao_justificativa: justificativa || null,
+      habilitacao_id: habilitacaoId,
+    })
+    .eq("id", id)
+    .eq("status", "pendente")
+    .select("id");
+  if (uErro) erroBanco(uErro, "Solicitação");
+  if ((atualizada ?? []).length === 0) throw new ErroHttp(409, "Esta solicitação já foi decidida.");
+  await auditar(conta, decisao === "aprovar" ? "habilitacao_solicitacao_aprovada" : "habilitacao_solicitacao_rejeitada", "peopleflow_dev_habilitacao_solicitacoes", String(id), {
+    colaborador_id: Number(s.colaborador_id),
+    solicitante_colaborador_id: Number(s.solicitante_colaborador_id),
+    habilitacao_id: habilitacaoId,
+    justificativa: justificativa || null,
+  });
+  return { ok: true, status: decisao === "aprovar" ? "aprovada" : "rejeitada", habilitacao_id: habilitacaoId, acesso };
 }
 
 /** Treinamentos pendentes (solicitado, planejado, em andamento) em que a pessoa é responsável principal ou instrutor. */
@@ -2150,7 +2318,7 @@ async function treinamentoTransferir(conta: ContaDev, corpo: Corpo) {
   const de = t.responsavel_colaborador_id != null ? Number(t.responsavel_colaborador_id) : null;
   if (para === de) throw new ErroHttp(422, "O novo responsável é o mesmo que já responde pelo treinamento.");
   await exigirColaboradoresAtivos([para]);
-  if (!(await podemSerResponsaveis([para])).has(para)) throw new ErroHttp(422, "O novo responsável precisa ser do RH ou ter a habilitação concedida pelo RH.");
+  if (!(await podemSerResponsaveis([para])).has(para)) throw new ErroHttp(422, "O novo responsável precisa ser do RH, gestor ou ter a habilitação concedida pelo RH.");
   let habilitacaoId: number | null = null;
   if (de) {
     const { data: h } = await supabaseAdmin.from("peopleflow_dev_responsaveis_gestao").select("id").eq("colaborador_id", de).order("id", { ascending: false }).limit(1);
@@ -3219,6 +3387,10 @@ const ACOES: Record<string, (conta: ContaDev, corpo: Corpo) => Promise<unknown>>
   habilitacao_conceder: habilitacaoConceder,
   habilitacao_revogar: habilitacaoRevogar,
   habilitacao_pendencias: habilitacaoPendencias,
+  habilitacao_solicitacao_opcoes: solicitacaoOpcoes,
+  habilitacao_solicitar: habilitacaoSolicitar,
+  habilitacao_solicitacoes_listar: habilitacaoSolicitacoesListar,
+  habilitacao_solicitacao_decidir: habilitacaoSolicitacaoDecidir,
   treinamento_transferir: treinamentoTransferir,
   transferencias_listar: transferenciasListar,
   ausencia_encaminhar: ausenciaEncaminhar,

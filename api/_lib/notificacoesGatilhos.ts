@@ -9,7 +9,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "./adminAuth.js";
-import { notificar, criarResolvedorDeEmail } from "./notificacoesEmail.js";
+import { notificar, criarResolvedorDeEmail, montarEmailSolicitacaoHabilitacao } from "./notificacoesEmail.js";
 import type { DependenciasNotificacao, ResultadoNotificacao } from "./notificacoesEmail.js";
 import { avaliacoesAVencer } from "../../src/domain/experienciaDatas.js";
 import type { AvaliacaoExperiencia, DispensaAvaliacaoExperiencia } from "../../src/types/domain.js";
@@ -209,4 +209,57 @@ export async function executarCronExperiencia(
     else resumo.duplicadas++;
   }
   return resumo;
+}
+
+/** Gatilho 4 — solicitação de habilitação (Portal de Treinamentos). Avisa cada pessoa do RH com conta no módulo. O servidor relê a solicitação
+ * no banco (nada vem do navegador) e a chave de deduplicação é por solicitação + destinatário: reprocessar não envia de novo. Nunca lança. */
+export async function notificarSolicitacaoDeHabilitacao(solicitacaoId: number, deps: DependenciasNotificacao = {}): Promise<{ enviados: number; falhas: number; destinatarios: number }> {
+  const supabase = client(deps);
+  const { data: s, error } = await supabase
+    .from("peopleflow_dev_habilitacao_solicitacoes")
+    .select("id, colaborador_id, solicitante_colaborador_id, departamento, justificativa, status")
+    .eq("id", solicitacaoId)
+    .maybeSingle();
+  if (error || !s || s.status !== "pendente") return { enviados: 0, falhas: error ? 1 : 0, destinatarios: 0 };
+  const { data: contasRH, error: cErro } = await supabase.from("peopleflow_dev_contas").select("colaborador_id").eq("perfil", "RH");
+  if (cErro) return { enviados: 0, falhas: 1, destinatarios: 0 };
+  const idsRH = [...new Set((contasRH ?? []).map((c) => Number(c.colaborador_id)))];
+  const { data: pessoas, error: pErro } = await supabase
+    .from("colaboradores")
+    .select("id, nome")
+    .in("id", [...idsRH, Number(s.colaborador_id), Number(s.solicitante_colaborador_id)]);
+  if (pErro) return { enviados: 0, falhas: 1, destinatarios: 0 };
+  const nome = new Map((pessoas ?? []).map((p) => [Number(p.id), String(p.nome)]));
+  let enviados = 0, falhas = 0;
+  for (const rh of idsRH) {
+    const destinatario = nome.get(rh);
+    if (!destinatario) { falhas++; continue; }
+    try {
+      const r = await notificar(
+        {
+          tipo: "habilitacao_solicitada",
+          chaveDedup: `habilitacao_solicitada:${s.id}:${rh}`,
+          destinatarioNome: destinatario,
+          referenciaId: String(s.id),
+          rota: "/desenvolvimento/treinamentos/pendencias",
+          contexto: { solicitacao_id: Number(s.id) },
+          montarEmail: ({ nome: nomeRH, url }) =>
+            montarEmailSolicitacaoHabilitacao({
+              nomeRH,
+              colaborador: nome.get(Number(s.colaborador_id)) ?? "—",
+              gestor: nome.get(Number(s.solicitante_colaborador_id)) ?? "—",
+              area: String(s.departamento ?? ""),
+              justificativa: String(s.justificativa ?? ""),
+              url,
+            }),
+        },
+        deps,
+      );
+      if (r.resultado === "enviado") enviados++;
+      else if (r.resultado === "erro") falhas++;
+    } catch {
+      falhas++;
+    }
+  }
+  return { enviados, falhas, destinatarios: idsRH.length };
 }
