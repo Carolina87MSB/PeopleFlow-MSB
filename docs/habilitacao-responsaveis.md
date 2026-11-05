@@ -81,3 +81,6 @@ Ao revogar a habilitação de um **Gestor**, a equipe dele (escopo) é preservad
 
 ## Instrutor externo × treinamento externo
 São campos diferentes. **Modalidade** (Interno/Externo) define os requisitos documentais: Externo exige ao menos uma evidência da turma (certificado, comprovante, lista ou declaração); Interno tem a lista de presença gerada pelo PeopleFlow. **Instrutor / instituição externa** é só o nome do palestrante: não torna o treinamento externo nem exige certificado individual.
+
+## Atualização (2026-11): Gestor autorizado e solicitação de habilitação
+A regra "o Gestor só acompanha, a menos que o RH o habilite" foi **substituída**: o Gestor é autorizado automaticamente (perfil + escopo de liderança) a registrar e administrar os treinamentos da sua área, e passa a **solicitar** pelo portal a habilitação de colaboradores da equipe, com decisão do RH e aviso por e-mail. Detalhes, banco e plano de publicação em `docs/solicitacao-habilitacao.md`.

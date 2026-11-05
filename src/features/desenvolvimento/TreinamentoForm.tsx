@@ -291,7 +291,7 @@ export function TreinamentoDrawer({
             <span className={styles.dica}>
               {modo === "editar" && item?.status !== "solicitado"
                 ? "A troca do responsável é feita pelo RH, em \"Transferir responsabilidade\" (com motivo e histórico)."
-                : "Precisa ser do RH ou ter a habilitação concedida pelo RH. Responsável e instrutor internos habilitados administram o treinamento."}
+                : "Precisa ser do RH, gestor ou colaborador habilitado pelo RH (o gestor solicita a habilitação em \"Habilitações da equipe\"). O gestor da área também administra o treinamento."}
             </span>
           </label>
           <label className={styles.campo}>

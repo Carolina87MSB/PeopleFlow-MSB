@@ -6,6 +6,7 @@ import { useDesenvolvimento } from "./contexto";
 import { CabecalhoDrawer, Carregando, ConfirmarComMotivo, Erro, Selo } from "./componentes";
 import { useConsulta } from "./hooks";
 import { formatarData } from "./rotulos";
+import { HistoricoSolicitacoes, SolicitarHabilitacao } from "./SolicitacoesHabilitacao";
 import styles from "./Desenvolvimento.module.css";
 
 const MOTIVOS_TRANSFERENCIA = [
@@ -141,12 +142,13 @@ export function HabilitacoesDrawer({ onFechar }: { onFechar: () => void }) {
       header={
         <CabecalhoDrawer
           eyebrow="Treinamentos"
-          titulo="Responsáveis habilitados"
-          sub={ehRH ? "A liderança informa o RH por e-mail; o RH habilita e revoga aqui. A habilitação vale até ser revogada e só dá acesso aos Treinamentos." : "Colaboradores da sua área habilitados pelo RH (somente consulta). Habilitar e revogar é feito pelo RH, a partir da solicitação da liderança por e-mail."}
+          titulo={ehRH ? "Responsáveis habilitados" : "Habilitações da equipe"}
+          sub={ehRH ? "O gestor solicita a habilitação pelo portal e o RH decide em Pendências (também é possível habilitar direto aqui). A habilitação vale até ser revogada e só dá acesso aos Treinamentos." : "Você já registra e administra os treinamentos da sua área. Aqui você solicita ao RH a habilitação de colaboradores da sua equipe e acompanha os habilitados; aprovar e revogar é do RH."}
         />
       }
     >
       <div className={styles.secao}>
+        {!ehRH && <SolicitarHabilitacao />}
         {ehRH && (
           <form
             className={styles.secao}
@@ -286,6 +288,8 @@ export function HabilitacoesDrawer({ onFechar }: { onFechar: () => void }) {
             ))}
           </div>
         )}
+
+        {ehRH && <HistoricoSolicitacoes versao={ativas.length + historico.length} />}
 
         <h4 className={styles.secaoTitulo}>Histórico de revogações ({historico.length})</h4>
         {historico.length === 0 ? (

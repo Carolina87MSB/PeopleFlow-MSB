@@ -386,5 +386,93 @@ await t("Permissões: anon sem acesso a nada novo; authenticated só lê (polít
   if (!/permission denied/i.test(sem ?? "")) throw new Error("anon não lê transferências");
 });
 
+console.log("Migration da solicitação de habilitação + leitura do Gestor pela área (banco)");
+const MIG2 = SQL("desenvolvimento_solicitacao_habilitacao.sql");
+const ROLLBACK2 = SQL("desenvolvimento_solicitacao_habilitacao_rollback.sql");
+const SOL = "public.peopleflow_dev_habilitacao_solicitacoes";
+let TF = 0, TG2 = 0;
+let estruturaAntes2 = "", fotoAntes2 = "";
+await t("Pré-checagem da migration nova (uma consulta, somente leitura): estado esperado, nada bloqueia; a função de leitura atual é a do modelo de habilitação", async () => {
+  // o Hugo (equipe da Bia) precisa estar habilitado para poder ser responsável principal de um treinamento do RH
+  if ((await q(`select count(*)::int n from ${HAB} where colaborador_id=8 and ativo`))[0].n === 0) await db.exec(`insert into ${HAB} (gestor_colaborador_id, colaborador_id, indicado_por) values (2, 8, '${U.ge}')`);
+  // treinamentos registrados pelo RH: F tem o responsável principal na equipe da Bia; G, na equipe do Gil
+  TF = await salvarT("rh", "Treinamento F", { responsavel_colaborador_id: 8 }); // Hugo (habilitado, equipe da Bia)
+  TG2 = await salvarT("rh", "Treinamento G", { responsavel_colaborador_id: 6 });
+  estruturaAntes2 = jsonDe(await estrutura());
+  fotoAntes2 = jsonDe(await foto());
+  const r = await db.exec(SQL("desenvolvimento_solicitacao_habilitacao_prechecagem.sql"));
+  if (r.length !== 1) throw new Error("UMA consulta só");
+  const linhas = r[0].rows as { verificacao: string; resultado: string; situacao: string }[];
+  if (linhas.some((l) => l.situacao === "BLOQUEIA")) throw new Error("nada deveria bloquear: " + jsonDe(linhas.filter((l) => l.situacao === "BLOQUEIA")));
+  const f = linhas.find((l) => l.verificacao.startsWith("Função de leitura atual"));
+  const s = linhas.find((l) => l.verificacao.startsWith("Tabela de solicitações"));
+  if (f?.resultado !== "modelo de habilitação" || s?.resultado !== "não") throw new Error("ponto de partida: " + jsonDe([f, s]));
+  // antes da migration: a Bia NÃO lê o F (nem o G)
+  if ((await como(U.ge, `select id from public.peopleflow_dev_treinamentos where id in (${TF}, ${TG2})`)).length !== 0) throw new Error("antes: a Bia não lê o treinamento de responsável da equipe dela registrado pelo RH");
+});
+await t("Aplicar a migration nova NÃO altera nenhum dado existente; é idempotente; a validação (uma consulta) devolve ok = true em todas as verificações", async () => {
+  await aplicar(MIG2);
+  if (jsonDe(await foto()) !== fotoAntes2) throw new Error("dados alterados");
+  const a = jsonDe(await estrutura()), f = jsonDe(await foto());
+  await aplicar(MIG2);
+  if (jsonDe(await estrutura()) !== a || jsonDe(await foto()) !== f) throw new Error("a segunda aplicação mudou algo");
+  const val = await db.exec(SQL("desenvolvimento_solicitacao_habilitacao_validacao.sql"));
+  if (val.length !== 1) throw new Error("UMA consulta só");
+  const linhas = (val[0].rows as { tipo: string; verificacao: string; ok: boolean }[]).filter((l) => l.tipo === "verificação");
+  if (linhas.length < 7 || linhas.some((l) => l.ok !== true)) throw new Error("validação: " + jsonDe(linhas.filter((l) => l.ok !== true)));
+  const pre = (await db.exec(SQL("desenvolvimento_solicitacao_habilitacao_prechecagem.sql")))[0].rows as { verificacao: string; resultado: string; situacao: string }[];
+  if (pre.find((l) => l.verificacao.startsWith("Função de leitura atual"))?.resultado !== "já é a nova" || pre.some((l) => l.situacao === "BLOQUEIA")) throw new Error("pré-checagem depois da migration");
+});
+await t("Leitura do Gestor pela área: a Bia passa a ler o treinamento cujo responsável principal é da equipe dela (mesmo do RH), com a turma; não o do Gil; o Gil lê o dele; RH e Responsável sem mudança", async () => {
+  const lerIds = async (uid: string) => (await como(uid, `select id from public.peopleflow_dev_treinamentos where id in (${TF}, ${TG2}) order by id`)).map((x) => Number(x.id));
+  if (jsonDe(await lerIds(U.ge)) !== jsonDe([TF]) || jsonDe(await lerIds(U.gil)) !== jsonDe([TG2]) || jsonDe(await lerIds(U.rh)) !== jsonDe([TF, TG2]) || jsonDe(await lerIds(U.hugo)) !== jsonDe([TF])) throw new Error("leitura por papel: " + jsonDe([await lerIds(U.ge), await lerIds(U.gil), await lerIds(U.rh)]));
+  await espera("rh", "participantes_adicionar", { treinamento_id: TF, colaborador_ids: [3, 4] }, 200);
+  const turma = (await como(U.ge, `select colaborador_id from public.peopleflow_dev_participantes where treinamento_id=${TF} order by 1`)).map((x) => Number(x.colaborador_id)).join();
+  if (turma !== "3,4") throw new Error("a gestora da área lê a turma toda do treinamento da área: " + turma);
+  if ((await como(U.gil, `select id from public.peopleflow_dev_participantes where treinamento_id=${TF} and colaborador_id=3`)).length !== 0) throw new Error("o Gil não lê a turma da Bia (só o Davi, que é dele)");
+});
+await t("Reversão devolve função, políticas, colunas, índices e constraints EXATAMENTE ao estado anterior; depois reaplica", async () => {
+  const comMigracao = jsonDe(await estrutura());
+  await aplicar(ROLLBACK2);
+  if (jsonDe(await estrutura()) !== estruturaAntes2) throw new Error("estrutura diferente do estado anterior à migration nova");
+  await aplicar(ROLLBACK2); // repetível
+  await aplicar(MIG2);
+  if (jsonDe(await estrutura()) !== comMigracao) throw new Error("reaplicar devolve a mesma estrutura");
+});
+await t("Tabela de solicitações: uma pendente por colaborador, consistência da decisão, identidade imutável, sem exclusão; RH lê tudo e o solicitante as próprias; o navegador não grava", async () => {
+  await db.exec(`insert into ${SOL} (colaborador_id, solicitante_colaborador_id, departamento, justificativa) values (3, 2, 'Produção', 'Precisa conduzir treinamentos')`);
+  const id = Number((await q(`select id from ${SOL} limit 1`))[0].id);
+  for (const [sql, rx] of [
+    [`insert into ${SOL} (colaborador_id, solicitante_colaborador_id, justificativa) values (3, 2, 'duplicada')`, /uidx|unique|duplicate/i],
+    [`insert into ${SOL} (colaborador_id, solicitante_colaborador_id, justificativa) values (5, 2, '   ')`, /check/i],
+    [`insert into ${SOL} (colaborador_id, solicitante_colaborador_id, justificativa) values (2, 2, 'a si mesma')`, /check/i],
+    [`insert into ${SOL} (colaborador_id, solicitante_colaborador_id, justificativa, status) values (5, 2, 'x', 'aprovada')`, /check/i],
+    [`update ${SOL} set status='rejeitada', decidido_em=now(), decidido_por='${U.rh}' where id=${id}`, /check/i], // rejeitar exige justificativa
+    [`update ${SOL} set justificativa='outra' where id=${id}`, /identidade/i],
+    [`update ${SOL} set colaborador_id=5 where id=${id}`, /identidade/i],
+    [`update ${SOL} set status='pendente' where id=${id}`, /decidida|decidir/i],
+    [`delete from ${SOL} where id=${id}`, /exclus|apag|permitid/i],
+    [`truncate ${SOL}`, /exclus|apag|permitid/i],
+  ] as [string, RegExp][]) { const m = await falha(sql); await db.exec("rollback;").catch(() => undefined); if (!m || !rx.test(m)) throw new Error(`deveria recusar (${rx}): ${sql.slice(0, 80)} → ${m}`); }
+  await db.exec(`update ${SOL} set status='rejeitada', decidido_em=now(), decidido_por='${U.rh}', decisor_colaborador_id=1, decisao_justificativa='Não neste ciclo' where id=${id}`);
+  for (const sql of [`update ${SOL} set decisao_justificativa='outra' where id=${id}`, `update ${SOL} set status='aprovada' where id=${id}`]) { const m = await falha(sql); await db.exec("rollback;").catch(() => undefined); if (!m || !/decidida|histórico/i.test(m)) throw new Error("decidida é histórico: " + m); }
+  await db.exec(`insert into ${SOL} (colaborador_id, solicitante_colaborador_id, justificativa) values (3, 2, 'novo pedido depois da rejeição')`); // rejeitada libera novo pedido
+  const lido = async (uid: string) => (await como(uid, `select id from ${SOL} order by id`)).length;
+  if ((await lido(U.rh)) !== 2 || (await lido(U.ge)) !== 2 || (await lido(U.gil)) !== 0 || (await lido(U.hugo)) !== 0) throw new Error("leitura: RH tudo; solicitante as próprias; demais nada");
+  const priv = async (role: string, p: string) => (await q(`select has_table_privilege('${role}', '${SOL}', '${p}') as v`))[0].v as boolean;
+  for (const p of ["select", "insert", "update", "delete"]) if (await priv("anon", p)) throw new Error("anon " + p);
+  for (const p of ["insert", "update", "delete"]) if (await priv("authenticated", p)) throw new Error("authenticated " + p);
+  const m = await falha(`set role authenticated; insert into ${SOL} (colaborador_id, solicitante_colaborador_id, justificativa) values (9, 2, 'x');`);
+  await db.exec("reset role;");
+  if (!/permission denied/i.test(m ?? "")) throw new Error("o navegador não grava: " + m);
+});
+await t("Reversão da migration nova é RECUSADA (sem alterar nada) quando já existe solicitação registrada", async () => {
+  const antes = jsonDe(await estrutura());
+  const msg = await falha(ROLLBACK2);
+  await db.exec("rollback;").catch(() => undefined);
+  if (!msg || !/Reversão bloqueada.*solicitações/.test(msg)) throw new Error("deveria recusar: " + msg);
+  if (jsonDe(await estrutura()) !== antes) throw new Error("a recusa não pode alterar nada");
+});
+
 console.log(`\n${ok} passaram, ${falhas} falharam`);
 process.exit(falhas ? 1 : 0);

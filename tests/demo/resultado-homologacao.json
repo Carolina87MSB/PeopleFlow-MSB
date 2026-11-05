@@ -9,24 +9,31 @@
     },
     {
       "cenario": 1,
-      "descricao": "Antes: Manuela não abre o módulo; Gustavo (gestor) abre como Gestor e não está habilitado",
-      "esperado": "Manuela 403; Gustavo perfil Gestor, habilitado=false",
+      "descricao": "Antes: Manuela não abre o módulo; Gustavo (gestor) abre como Gestor e JÁ é autorizado a registrar treinamentos, sem habilitação do RH",
+      "esperado": "Manuela 403; Gustavo perfil Gestor, habilitado=true (perfil + escopo de liderança) e nenhuma habilitação criada",
       "ok": true,
-      "observado": "Gustavo antes: {\"necessidade_registrar\":200,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403}; tentativa de registrar → 403 (acompanha, não administra)"
+      "observado": "Gustavo registra e administra a área dele sem habilitação; nos outros módulos: {\"necessidade_registrar\":200,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403}"
     },
     {
       "cenario": 1,
-      "descricao": "RH habilita Manuela (gestão: Beatriz) e Gustavo (gestão: Henrique) pela tela de Habilitações, com a referência da liderança",
-      "esperado": "Duas habilitações ativas, com área, gestão, data e quem habilitou",
+      "descricao": "Beatriz (gestora) SOLICITA a habilitação de Manuela com justificativa; o RH é avisado por e-mail; a solicitação fica Pendente e ainda não vale",
+      "esperado": "Solicitação pendente; e-mail ao RH com colaborador, gestora, área, justificativa e link; Manuela segue sem acesso; pedido duplicado recusado",
       "ok": true,
-      "observado": "Manuela e Gustavo listados como habilitados, com gestão, data e autor"
+      "observado": "Pendente (nº 1); e-mail enviado ao RH: \"PeopleFlow | Solicitação de habilitação aguardando análise\"; duplicidade e equipe alheia recusadas"
     },
     {
       "cenario": 1,
-      "descricao": "Permissões nos demais módulos NÃO mudam: Gustavo segue Gestor e faz o mesmo que antes; Manuela não ganha nada além dos Treinamentos",
-      "esperado": "Gustavo: mesmos resultados de antes; Manuela: tudo fora dos Treinamentos recusado",
+      "descricao": "O RH aprova a solicitação em Pendências (autor, data, justificativa); só então Manuela é habilitada, com a gestão de Beatriz",
+      "esperado": "Habilitação ativa criada pela aprovação; solicitação aprovada com decisor e data",
       "ok": true,
-      "observado": "Gustavo depois: {\"necessidade_registrar\":200,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403} (igual ao de antes) · Manuela: {\"necessidade_registrar\":403,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403} · acessos a módulos inalterados (2 cada)"
+      "observado": "Manuela habilitada (gestão Beatriz) pela aprovação; a decisão aparece para a Beatriz e para o RH"
+    },
+    {
+      "cenario": 1,
+      "descricao": "Permissões nos demais módulos NÃO mudam: Gustavo (autorizado pelo perfil) e Manuela (habilitada) só ganham os Treinamentos",
+      "esperado": "Gustavo: mesmos resultados; Manuela: tudo fora dos Treinamentos recusado",
+      "ok": true,
+      "observado": "Gustavo: {\"necessidade_registrar\":200,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403} · Manuela: {\"necessidade_registrar\":403,\"habilidade_ativo\":403,\"habilitacao_opcoes\":403,\"reacao_resumo\":403,\"lista_mestra_salvar\":403} · acessos a módulos inalterados (2 cada)"
     },
     {
       "cenario": 1,
@@ -47,7 +54,7 @@
       "descricao": "Manuela monta a turma e inicia; Juliana gera o QR, registra presença manual, atualiza a realização; Manuela anexa a ata; participante confirma pelo QR",
       "esperado": "As duas administram; nenhum terceiro consegue",
       "ok": true,
-      "observado": "Manuela e Juliana fizeram o ciclo; Gustavo e Beatriz (que acompanha) recebem 403 nas ações administrativas; Davi (sem habilitação) nem abre o módulo"
+      "observado": "Manuela e Juliana fizeram o ciclo; Beatriz (gestora da área) também administra e Gustavo (outra área) recebe 403; Davi (sem habilitação) nem abre o módulo"
     },
     {
       "cenario": 5,
@@ -135,7 +142,7 @@
     },
     {
       "cenario": 10,
-      "descricao": "RH transfere o treinamento pendente para Gustavo (habilitado), com motivo; tenta transferir para quem não é habilitado e para um concluído",
+      "descricao": "RH transfere o treinamento pendente para Gustavo (gestor, elegível como responsável), com motivo; tenta transferir para quem não é habilitado e para um concluído",
       "esperado": "Transferência registrada com histórico; as inválidas são recusadas; quem registrou não muda",
       "ok": true,
       "observado": "Transferido de Davi para Gustavo; histórico da transferência e da revogação preservados"
@@ -144,6 +151,7 @@
   "ids": {
     "historico": 1,
     "historicoExterno": 2,
+    "solicitacaoManuela": 1,
     "sessao": 3,
     "externo": 4,
     "reposicao": 5,

@@ -7,6 +7,7 @@ import { Carregando, Erro, EstadoVazio, Selo, TagTeste } from "./componentes";
 import { useConsulta } from "./hooks";
 import { formatarData } from "./rotulos";
 import { TransferirResponsabilidade } from "./Habilitacoes";
+import { SolicitacoesPendentesRH } from "./SolicitacoesHabilitacao";
 import { CheckCircle2 } from "lucide-react";
 import styles from "./Desenvolvimento.module.css";
 
@@ -34,6 +35,8 @@ export function PendenciasAba() {
   const abrir = (id: number) => navigate(`/desenvolvimento/treinamento/${id}`);
   const vazio = d && d.reposicoes.length + d.eficacia.length + d.sem_responsavel.length + d.inconsistencias.length === 0;
   return (
+    <>
+    {ehRH && <SolicitacoesPendentesRH />}
     <Card>
       <div className={styles.cardHeader}>
         <div>
@@ -199,5 +202,6 @@ export function PendenciasAba() {
         </>
       )}
     </Card>
+    </>
   );
 }
